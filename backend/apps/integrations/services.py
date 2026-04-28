@@ -88,3 +88,35 @@ def fetch_api_price(api_url, api_token, part_number):
             "status": "error",
             "message": str(e)
         }
+from .models import PriceItem
+
+def import_price_to_db(supplier_config, parsed_records):
+    """
+    Зберігає розпакований Excel-прайс у базу даних.
+    Очищає старий прайс цього постачальника перед завантаженням нового.
+    """
+    try:
+        # 1. Видаляємо всі старі позиції цього постачальника
+        PriceItem.objects.filter(supplier=supplier_config).delete()
+        
+        # 2. Готуємо список об'єктів для масового збереження
+        items_to_create = []
+        for record in parsed_records:
+            items_to_create.append(
+                PriceItem(
+                    supplier=supplier_config,
+                    part_number=str(record.get('part_number', '')).strip(),
+                    brand=record.get('brand', 'Unknown'),
+                    name=record.get('name', 'Деталь'),
+                    price=record.get('price', 0.00),
+                    quantity=record.get('quantity', '>1')
+                )
+            )
+        
+        # 3. Зберігаємо всі рядки одним запитом у БД (batch_size=5000 береже оперативну пам'ять)
+        PriceItem.objects.bulk_create(items_to_create, batch_size=5000)
+        
+        return {"status": "success", "imported_count": len(items_to_create)}
+        
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

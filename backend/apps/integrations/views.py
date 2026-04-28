@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import SupplierConfig
+from .models import SupplierConfig, PriceItem
 from .services import fetch_api_price
 
 class UnifiedSearchView(APIView):
@@ -49,18 +49,20 @@ class UnifiedSearchView(APIView):
                         })
 
             elif supplier.supplier_type == 'EXCEL':
-                # ВАЖЛИВО: Ми не парсимо файл на кожен запит! Це "покладе" сервер.
-                # Ми будемо шукати в локальній таблиці PriceItem, куди прайс був імпортований раніше.
-                # Поки залишаємо заглушку для тестів:
-                results.append({
-                    "supplier": supplier.name,
-                    "brand": "TEST_BRAND",
-                    "part_number": part_number,
-                    "price": 1500.00,
-                    "currency": "UAH",
-                    "delivery_time": "В наявності",
-                    "type": "EXCEL"
-                })
+                # Шукаємо в нашій супершвидкій таблиці PriceItem
+                # Робимо пошук без врахування регістру (iexact)
+                local_items = PriceItem.objects.filter(supplier=supplier, part_number__iexact=part_number)
+                
+                for item in local_items:
+                    results.append({
+                        "supplier": supplier.name,
+                        "brand": item.brand,
+                        "part_number": item.part_number,
+                        "price": float(item.price),
+                        "currency": "UAH",
+                        "delivery_time": item.quantity,
+                        "type": "EXCEL"
+                    })
 
         # 4. Золоте правило: сортуємо від найдешевшого до найдорожчого
         results.sort(key=lambda x: float(x.get('price', 0)))

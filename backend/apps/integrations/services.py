@@ -51,3 +51,40 @@ def parse_supplier_excel(file_path, column_mapping, exchange_rate=1.0):
             "status": "error",
             "message": str(e)
         }
+import requests
+
+def fetch_api_price(api_url, api_token, part_number):
+    """
+    Базовий запит до API постачальника.
+    """
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
+    }
+    
+    # Це приклад (payload буде залежати від документації конкретного постачальника)
+    payload = {
+        "search": part_number,
+        "exact_match": True
+    }
+    
+    try:
+        response = requests.post(api_url, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            # Уявімо, що API повертає {"results": [{"brand": "LPR", "price": 45.5, "currency": "EUR"}]}
+            return {
+                "status": "success",
+                "data": data.get('results', [])
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"API Error: {response.status_code}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }

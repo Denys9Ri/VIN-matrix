@@ -1,23 +1,23 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
+import Dashboard from './pages/Dashboard'; // <--- Імпортуємо сторінку
 
-// Тимчасові заглушки для сторінок, поки ми їх не зверстаємо
-const DashboardPlaceholder = () => <h1 className="text-2xl font-bold text-slate-800">Dashboard (Головна)</h1>;
-const VisitsPlaceholder = () => <h1 className="text-2xl font-bold text-slate-800">Active Visits (Візити)</h1>;
+// Тимчасова заглушка для інших сторінок
+const Placeholder = ({ title }) => <h1 className="text-2xl font-bold text-slate-800">{title}</h1>;
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Всі маршрути всередині MainLayout будуть мати меню та шапку */}
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<DashboardPlaceholder />} />
-          <Route path="visits" element={<VisitsPlaceholder />} />
-          <Route path="inventory" element={<div>Inventory</div>} />
-          <Route path="analytics" element={<div>Analytics</div>} />
-          <Route path="settings" element={<div>Settings</div>} />
-          <Route path="clients" element={<div>Clients</div>} />
+          {/* Замінили заглушку на реальний Dashboard */}
+          <Route index element={<Dashboard />} />
+          <Route path="visits" element={<Placeholder title="Active Visits" />} />
+          <Route path="inventory" element={<Placeholder title="Inventory" />} />
+          <Route path="analytics" element={<Placeholder title="Analytics" />} />
+          <Route path="settings" element={<Placeholder title="Settings" />} />
+          <Route path="clients" element={<Placeholder title="Clients" />} />
         </Route>
       </Routes>
     </BrowserRouter>

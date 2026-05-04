@@ -3,7 +3,9 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # Підключаємо API маршрути:
+    
+    # Наші API маршрути:
     path('api/integrations/', include('apps.integrations.urls')),
-    path('api/crm/', include('apps.crm.urls')), # <--- Додано цей рядок
+    path('api/crm/', include('apps.crm.urls')),
+    path('api/analytics/', include('apps.analytics.urls')), # <--- Додана Аналітика
 ]

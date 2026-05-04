@@ -38,7 +38,7 @@ const VisitCard = ({ visit }) => {
           <Car size={40} strokeWidth={1.5} />
         </div>
         <div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">License Plate</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Номерний знак</p>
           <p className="text-xl font-bold text-slate-900 dark:text-white">{visit.plate}</p>
         </div>
       </div>

@@ -17,7 +17,18 @@ const Dashboard = () => {
     setModalOpen(false);
     setNewVisit({ plate: '', client: '', phone: '' });
   };
+  
+  useEffect(() => {
+  const savedVisits = localStorage.getItem('vin_matrix_visits');
+  if (savedVisits) {
+    setVisits(JSON.parse(savedVisits));
+  }
+}, []);
 
+useEffect(() => {
+  localStorage.setItem('vin_matrix_visits', JSON.stringify(visits));
+}, [visits]);
+  
   return (
     <div className="relative">
       <div className="flex justify-between items-center mb-8">

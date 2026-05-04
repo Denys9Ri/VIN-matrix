@@ -3,6 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import SupplierConfig, PriceItem
 from .services import fetch_api_price
+from rest_framework.parsers import MultiPartParser, FormParser
+from .serializers import SupplierConfigSerializer
+from .services import parse_supplier_excel, import_price_to_db
+import json
 
 class UnifiedSearchView(APIView):
     """
@@ -73,3 +77,54 @@ class UnifiedSearchView(APIView):
             "total_found": len(results),
             "results": results
         })
+        
+class UploadSupplierPriceView(APIView):
+    """
+    Ендпоінт для створення постачальника та завантаження Excel-прайсу.
+    """
+    parser_classes = (MultiPartParser, FormParser) # Дозволяє приймати файли
+
+    def post(self, request):
+        # 1. Створюємо конфігурацію постачальника
+        serializer = SupplierConfigSerializer(data=request.data)
+        if serializer.is_valid():
+            supplier_config = serializer.save()
+            
+            # 2. Якщо це Excel і користувач передав файл
+            if supplier_config.supplier_type == 'EXCEL' and 'excel_file' in request.FILES:
+                file_obj = request.FILES['excel_file']
+                
+                # Зберігаємо файл у модель
+                supplier_config.excel_file = file_obj
+                supplier_config.save()
+                
+                # 3. Розбираємо column_mapping (він приходить як JSON-рядок)
+                try:
+                    mapping = json.loads(request.data.get('column_mapping', '{}'))
+                except json.JSONDecodeError:
+                    mapping = {}
+                
+                # 4. Запускаємо наш парсер!
+                parsed_result = parse_supplier_excel(
+                    supplier_config.excel_file.path, 
+                    mapping, 
+                    supplier_config.custom_exchange_rate
+                )
+                
+                if parsed_result['status'] == 'success':
+                    # 5. Заливаємо в супершвидку базу
+                    import_result = import_price_to_db(supplier_config, parsed_result['data'])
+                    
+                    return Response({
+                        "message": "Прайс успішно завантажено та оброблено",
+                        "items_imported": import_result.get('imported_count', 0)
+                    }, status=status.HTTP_201_CREATED)
+                else:
+                    return Response({
+                        "error": "Помилка парсингу Excel", 
+                        "details": parsed_result['message']
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                    
+            return Response({"message": "Постачальника збережено (API)"}, status=status.HTTP_201_CREATED)
+            
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -19,9 +19,9 @@ class SupplierConfigViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # Шукаємо компанію, якщо немає — створюємо її "на льоту"
-        company = Company.objects.first()
+        company = request.user.company
         if not company:
-            company = Company.objects.create(
+            company = request.user.company(
                 name="Моє СТО", 
                 slug="my-sto"
             )

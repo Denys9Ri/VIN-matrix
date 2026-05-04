@@ -25,7 +25,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     
-    # Наші модулі (розкоментовано, оскільки ми їх вже використовуємо)
+    # Наші модулі
     'apps.core',
     'apps.integrations',
     'apps.crm',
@@ -50,6 +50,7 @@ TEMPLATES = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # Додано для роздачі стилів (CSS)
     'corsheaders.middleware.CorsMiddleware', # Важливо для роботи з React (має бути тут)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -84,6 +85,7 @@ else:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -93,4 +95,6 @@ REST_FRAMEWORK = {
     )
 }
 
+# Налаштування статики (CSS, JS, зображення для адмінки)
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'

@@ -1,9 +1,13 @@
+import openpyxl
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser
+
 from .models import SupplierConfig, PriceItem
 from .services import fetch_api_price
-from .omega_catalog import get_crosses_for_article 
+from .omega_catalog import get_crosses_for_article
+from apps.core.models import Company
 
 class UnifiedSearchView(APIView):
     """
@@ -16,20 +20,20 @@ class UnifiedSearchView(APIView):
         if not part_number:
             return Response({"error": "Введіть артикул для пошуку"}, status=status.HTTP_400_BAD_REQUEST)
 
-        from apps.core.models import Company
         company = Company.objects.first() 
         if not company:
             return Response({"error": "Профіль СТО не знайдено"}, status=status.HTTP_404_NOT_FOUND)
 
-        # 1. ГЕНЕРУЄМО КРОСИ
+        # 1. ГЕНЕРУЄМО КРОСИ ЧЕРЕЗ ОМЕГУ
         search_articles = get_crosses_for_article(part_number)
         
         results = []
         suppliers = SupplierConfig.objects.filter(company=company, is_active=True)
 
-        # 2. ШУКАЄМО ЦІНИ
+        # 2. ШУКАЄМО ЦІНИ В ЗАВАНТАЖЕНИХ ПРАЙСАХ ТА API
         for supplier in suppliers:
             if supplier.supplier_type == 'EXCEL':
+                # Шукаємо всі артикули зі списку кросів у базі PriceItem
                 local_items = PriceItem.objects.filter(
                     supplier=supplier, 
                     part_number__in=search_articles
@@ -48,6 +52,7 @@ class UnifiedSearchView(APIView):
                     })
                     
             elif supplier.supplier_type == 'API' and supplier.api_token:
+                # Тимчасовий приклад запиту до стороннього API
                 api_response = fetch_api_price("https://api.vesna.com/search", supplier.api_token, part_number)
                 
                 if api_response['status'] == 'success':
@@ -63,6 +68,7 @@ class UnifiedSearchView(APIView):
                             "is_cross": False
                         })
 
+        # Сортування: від найдешевшого до найдорожчого
         results.sort(key=lambda x: float(x.get('price', 0)))
 
         return Response({
@@ -72,3 +78,63 @@ class UnifiedSearchView(APIView):
             "total_results": len(results),
             "results": results
         })
+
+class UploadPricesView(APIView):
+    """
+    Приймає Excel файл, зчитує його та зберігає позиції в PriceItem.
+    """
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        file = request.FILES.get('file')
+        company = Company.objects.first()
+        
+        # Знаходимо конфігурацію для Excel постачальника
+        supplier = SupplierConfig.objects.filter(company=company, supplier_type='EXCEL').first()
+
+        if not file:
+            return Response({"error": "Файл не завантажено"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not supplier:
+            return Response({"error": "Налаштування для EXCEL постачальника не знайдено в базі"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            # Відкриваємо Excel
+            wb = openpyxl.load_workbook(file, data_only=True)
+            sheet = wb.active
+            
+            items_to_create = []
+            
+            # Видаляємо старі записи перед завантаженням нових
+            PriceItem.objects.filter(supplier=supplier).delete()
+
+            # Читаємо рядки: A:Бренд, B:Артикул, C:Назва, D:Ціна, E:Залишок
+            for row in sheet.iter_rows(min_row=2, values_only=True):
+                brand_val = row[0]
+                articul_val = row[1]
+                name_val = row[2]
+                price_val = row[3]
+                qty_val = row[4]
+
+                if not articul_val:
+                    continue
+                
+                items_to_create.append(PriceItem(
+                    supplier=supplier,
+                    brand=str(brand_val).strip() if brand_val else "",
+                    part_number=str(articul_val).strip().upper(),
+                    name=str(name_val).strip() if name_val else "",
+                    price=float(price_val) if price_val else 0.0,
+                    quantity=str(qty_val).strip() if qty_val else "В наявності"
+                ))
+
+            # Масове створення записів для швидкості
+            PriceItem.objects.bulk_create(items_to_create)
+
+            return Response({
+                "status": "success", 
+                "message": f"Оброблено рядків: {len(items_to_create)}"
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"error": f"Помилка файлу: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

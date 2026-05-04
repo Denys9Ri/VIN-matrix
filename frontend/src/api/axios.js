@@ -1,11 +1,16 @@
-import axios from 'axios';
+import axios from 'react';
 
 const api = axios.create({
-  // Беремо адресу з налаштувань Coolify. Якщо локально - стукаємо на 8000
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: import.meta.env.VITE_API_URL,
+});
+
+// Автоматично додаємо токен авторизації до кожного запиту
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export default api;

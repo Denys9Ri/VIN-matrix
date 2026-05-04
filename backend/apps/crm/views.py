@@ -111,3 +111,28 @@ class CheckoutVisitView(APIView):
             "message": "Обробка кошика завершена",
             "details": results
         }, status=status.HTTP_200_OK)
+
+class UpdateItemStatusView(APIView):
+    """
+    Ендпоінт для зміни логістичного статусу конкретної деталі (Світлофор).
+    """
+    def patch(self, request, item_id):
+        # Шукаємо деталь
+        item = get_object_or_404(VisitItem, id=item_id)
+        
+        # Отримуємо новий статус з фронтенда
+        new_status = request.data.get('logistics_status')
+        
+        # Перевіряємо, чи існує такий статус в системі
+        valid_statuses = [choice[0] for choice in VisitItem.LOGISTICS_CHOICES]
+        if new_status not in valid_statuses:
+            return Response({"error": "Невірний статус логістики"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Зберігаємо новий статус
+        item.logistics_status = new_status
+        item.save()
+        
+        return Response({
+            "message": "Статус успішно оновлено",
+            "new_status": item.get_logistics_status_display()
+        }, status=status.HTTP_200_OK)

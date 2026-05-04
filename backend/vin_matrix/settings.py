@@ -43,6 +43,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+ROOT_URLCONF = 'vin_matrix.urls'
+WSGI_APPLICATION = 'vin_matrix.wsgi.application'
+
 # Дозволяємо React-фронтенду робити запити до нашого API
 CORS_ALLOW_ALL_ORIGINS = True 
 

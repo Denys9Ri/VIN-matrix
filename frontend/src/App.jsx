@@ -2,8 +2,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
-import UniversalSearch from './pages/UniversalSearch'; // <--- Імпортуємо нову сторінку
+import UniversalSearch from './pages/UniversalSearch';
 
+// Тимчасова заглушка для сторінок, які ми ще не зверстали
 const Placeholder = ({ title }) => <h1 className="text-2xl font-bold text-slate-800">{title}</h1>;
 
 function App() {
@@ -12,7 +13,6 @@ function App() {
       <Routes>
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
-          {/* Додаємо новий маршрут для пошуку */}
           <Route path="search" element={<UniversalSearch />} />
           <Route path="visits" element={<Placeholder title="Active Visits" />} />
           <Route path="inventory" element={<Placeholder title="Inventory" />} />

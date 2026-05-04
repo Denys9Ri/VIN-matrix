@@ -1,7 +1,10 @@
 from django.urls import path
-from .views import UnifiedSearchView, UploadSupplierPriceView
+from .views import UnifiedSearchView, UploadPricesView
 
 urlpatterns = [
+    # Пошук запчастин (Омега + локальні прайси)
     path('search/', UnifiedSearchView.as_view(), name='unified_search'),
-    path('suppliers/upload/', UploadSupplierPriceView.as_view(), name='upload_supplier_price'),
+    
+    # Завантаження Excel-файлів із цінами
+    path('upload-prices/', UploadPricesView.as_view(), name='upload_prices'),
 ]

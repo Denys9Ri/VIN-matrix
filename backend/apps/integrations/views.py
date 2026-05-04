@@ -3,6 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
+from rest_framework import viewsets
+from .serializers import SupplierConfigSerializer
 
 from .models import SupplierConfig, PriceItem
 from .services import fetch_api_price
@@ -79,6 +81,14 @@ class UnifiedSearchView(APIView):
             "results": results
         })
 
+class SupplierConfigViewSet(viewsets.ModelViewSet):
+    queryset = SupplierConfig.objects.all()
+    serializer_class = SupplierConfigSerializer
+
+    def perform_create(self, serializer):
+        company = Company.objects.first()
+        serializer.save(company=company)
+        
 class UploadPricesView(APIView):
     """
     Приймає Excel файл, зчитує його та зберігає позиції в PriceItem.

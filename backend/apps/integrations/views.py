@@ -18,8 +18,13 @@ class SupplierConfigViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierConfigSerializer
 
     def perform_create(self, serializer):
-        # Автоматично прив'язуємо до першої компанії в базі
+        # Шукаємо компанію, якщо немає — створюємо її "на льоту"
         company = Company.objects.first()
+        if not company:
+            company = Company.objects.create(
+                name="Моє СТО", 
+                slug="my-sto"
+            )
         serializer.save(company=company)
 
 class UploadPricesView(APIView):

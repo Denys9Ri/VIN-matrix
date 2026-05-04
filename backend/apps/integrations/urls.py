@@ -1,12 +1,12 @@
-from django.urls import path
-from .views import UnifiedSearchView, UploadPricesView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import UnifiedSearchView, UploadPricesView, SupplierConfigViewSet
+
+router = DefaultRouter()
+router.register(r'suppliers', SupplierConfigViewSet, basename='suppliers')
 
 urlpatterns = [
-    # Пошук по артикулу (Омега + локальна база)
-    # URL: /api/integrations/search/?part_number=OC90
+    path('', include(router.urls)), # Тут будуть /suppliers/
     path('search/', UnifiedSearchView.as_view(), name='unified_search'),
-    
-    # Завантаження Excel прайсу
-    # URL: /api/integrations/upload-prices/
     path('upload-prices/', UploadPricesView.as_view(), name='upload_prices'),
 ]

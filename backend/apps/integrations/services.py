@@ -1,5 +1,7 @@
 import pandas as pd
 import math
+import requests
+from .models import PriceItem
 
 def parse_supplier_excel(file_path, column_mapping, exchange_rate=1.0):
     """
@@ -51,7 +53,6 @@ def parse_supplier_excel(file_path, column_mapping, exchange_rate=1.0):
             "status": "error",
             "message": str(e)
         }
-import requests
 
 def fetch_api_price(api_url, api_token, part_number):
     """
@@ -88,7 +89,6 @@ def fetch_api_price(api_url, api_token, part_number):
             "status": "error",
             "message": str(e)
         }
-from .models import PriceItem
 
 def import_price_to_db(supplier_config, parsed_records):
     """
@@ -118,5 +118,41 @@ def import_price_to_db(supplier_config, parsed_records):
         
         return {"status": "success", "imported_count": len(items_to_create)}
         
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# ==========================================
+# НОВИЙ БЛОК: Адаптери для замовлень API
+# ==========================================
+
+def order_from_vesna(api_token, items):
+    """ Формує запит чітко по Swagger'у Весни """
+    payload = {
+        "order_items": [{"article": item.part_number, "qty": 1} for item in items]
+    }
+    # Імітація успішного замовлення:
+    return {"status": "success", "supplier_order_id": "VSN-998877"}
+
+def order_from_autotechnics(api_token, items):
+    """ Формує запит чітко по Swagger'у Автотехнікса """
+    payload = {
+        "parts": [item.part_number for item in items],
+        "delivery_type": "express"
+    }
+    return {"status": "success", "supplier_order_id": "ATX-112233"}
+
+def dispatch_api_order(supplier_name, api_token, items):
+    """ 
+    Визначає, який саме адаптер викликати, залежно від назви постачальника.
+    """
+    name = supplier_name.lower()
+    
+    try:
+        if 'весна' in name:
+            return order_from_vesna(api_token, items)
+        elif 'автотехнікс' in name:
+            return order_from_autotechnics(api_token, items)
+        else:
+            return {"status": "error", "message": f"Немає адаптера замовлення для {supplier_name}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}

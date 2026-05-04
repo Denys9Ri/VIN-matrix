@@ -1,44 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import VisitCard from '../components/visits/VisitCard';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Loader2 } from 'lucide-react';
+import api from '../api/axios'; // Підключення до нашого бекенду
 
 const Dashboard = () => {
   const [isModalOpen, setModalOpen] = useState(false);
   const [visits, setVisits] = useState([]);
   const [newVisit, setNewVisit] = useState({ plate: '', client: '', phone: '' });
+  const [loading, setLoading] = useState(true);
 
-  // Завантаження при старті
-  useEffect(() => {
-    const saved = localStorage.getItem('vin_matrix_visits');
-    if (saved) {
-      try {
-        setVisits(JSON.parse(saved));
-      } catch (e) {
-        console.error("Помилка читання пам'яті", e);
-        setVisits([]);
-      }
+  // 1. Завантаження візитів з бази даних при старті
+  const fetchVisits = async () => {
+    try {
+      const res = await api.get('/core/visits/');
+      setVisits(res.data);
+    } catch (e) {
+      console.error("Помилка завантаження візитів", e);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    fetchVisits();
   }, []);
 
-  // Збереження при змінах
-  useEffect(() => {
-    localStorage.setItem('vin_matrix_visits', JSON.stringify(visits));
-  }, [visits]);
-
-  const handleAdd = (e) => {
+  // 2. Збереження нового візиту в базу даних
+  const handleAdd = async (e) => {
     e.preventDefault();
-    const id = Date.now(); // Унікальний ID
-    const visitToAdd = { 
-      ...newVisit, 
-      id, 
-      status: 'SELECTION', 
-      statusText: 'НОВИЙ ВІЗИТ', 
-      step: 'Тільки що додано' 
-    };
-    setVisits([visitToAdd, ...visits]);
-    setModalOpen(false);
-    setNewVisit({ plate: '', client: '', phone: '' });
+    try {
+      await api.post('/core/visits/', newVisit);
+      setModalOpen(false);
+      setNewVisit({ plate: '', client: '', phone: '' });
+      fetchVisits(); // Оновлюємо список, щоб побачити нову машину
+    } catch (e) {
+      alert("Сталася помилка при збереженні візиту");
+      console.error(e);
+    }
   };
+
+  // Показуємо спінер, поки дані завантажуються
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
+        <Loader2 className="animate-spin mb-4" size={48} />
+        <p className="font-bold uppercase tracking-widest text-sm">Завантаження візитів...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">
@@ -68,13 +77,38 @@ const Dashboard = () => {
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-8 relative shadow-2xl">
-            <button onClick={() => setModalOpen(false)} className="absolute right-4 top-4 text-slate-400 hover:text-red-500"><X/></button>
+            <button onClick={() => setModalOpen(false)} className="absolute right-4 top-4 text-slate-400 hover:text-red-500">
+              <X />
+            </button>
             <h2 className="text-2xl font-black mb-6 uppercase tracking-tight">Реєстрація авто</h2>
             <form onSubmit={handleAdd} className="space-y-4">
-              <input required value={newVisit.plate} onChange={e => setNewVisit({...newVisit, plate: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-blue-500" placeholder="Держ. Номер (AA0000BB)"/>
-              <input required value={newVisit.client} onChange={e => setNewVisit({...newVisit, client: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-blue-500" placeholder="Марка / Модель"/>
-              <input required value={newVisit.phone} onChange={e => setNewVisit({...newVisit, phone: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-blue-500" placeholder="Телефон клієнта"/>
-              <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase mt-4">Створити візит</button>
+              <input 
+                required 
+                value={newVisit.plate} 
+                onChange={e => setNewVisit({...newVisit, plate: e.target.value})} 
+                className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-all" 
+                placeholder="Держ. Номер (AA0000BB)"
+              />
+              <input 
+                required 
+                value={newVisit.client} 
+                onChange={e => setNewVisit({...newVisit, client: e.target.value})} 
+                className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-all" 
+                placeholder="Марка / Модель"
+              />
+              <input 
+                required 
+                value={newVisit.phone} 
+                onChange={e => setNewVisit({...newVisit, phone: e.target.value})} 
+                className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-all" 
+                placeholder="Телефон клієнта"
+              />
+              <button 
+                type="submit" 
+                className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-black uppercase mt-4 transition-all shadow-lg"
+              >
+                Створити візит
+              </button>
             </form>
           </div>
         </div>

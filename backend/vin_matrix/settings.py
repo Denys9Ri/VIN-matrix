@@ -25,16 +25,16 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     
-    # Наші модулі (створимо їх на наступному кроці)
-    # 'apps.core',
-    # 'apps.integrations',
-    # 'apps.crm',
-    # 'apps.analytics',
+    # Наші модулі (розкоментовано, оскільки ми їх вже використовуємо)
+    'apps.core',
+    'apps.integrations',
+    'apps.crm',
+    # 'apps.analytics', # Залишив закоментованим, поки не створимо цей додаток
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', # Важливо для роботи з React
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # Важливо для роботи з React (має бути тут)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

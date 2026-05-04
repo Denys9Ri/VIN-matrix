@@ -1,9 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
-import Dashboard from './pages/Dashboard'; // <--- Імпортуємо сторінку
+import Dashboard from './pages/Dashboard';
+import UniversalSearch from './pages/UniversalSearch'; // <--- Імпортуємо нову сторінку
 
-// Тимчасова заглушка для інших сторінок
 const Placeholder = ({ title }) => <h1 className="text-2xl font-bold text-slate-800">{title}</h1>;
 
 function App() {
@@ -11,8 +11,9 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<MainLayout />}>
-          {/* Замінили заглушку на реальний Dashboard */}
           <Route index element={<Dashboard />} />
+          {/* Додаємо новий маршрут для пошуку */}
+          <Route path="search" element={<UniversalSearch />} />
           <Route path="visits" element={<Placeholder title="Active Visits" />} />
           <Route path="inventory" element={<Placeholder title="Inventory" />} />
           <Route path="analytics" element={<Placeholder title="Analytics" />} />

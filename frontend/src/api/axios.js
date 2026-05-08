@@ -1,10 +1,11 @@
 import axios from 'react';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  // Ось тут ми підключили твій живий бекенд!
+  baseURL: 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io',
 });
 
-// Автоматично додаємо токен авторизації до кожного запиту
+// Цей блок автоматично додає "перепустку" (токен) до кожного запиту
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {

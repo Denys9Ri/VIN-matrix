@@ -64,7 +64,8 @@ ROOT_URLCONF = 'vin_matrix.urls'
 WSGI_APPLICATION = 'vin_matrix.wsgi.application'
 
 # Дозволяємо React-фронтенду робити запити до нашого API
-CORS_ALLOW_ALL_ORIGINS = True 
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True 
 
 # Налаштування Бази Даних (SQLite для локального тесту, Postgres для Coolify)
 if os.getenv('USE_POSTGRES') == 'True':
@@ -98,3 +99,12 @@ REST_FRAMEWORK = {
 # Налаштування статики (CSS, JS, зображення для адмінки)
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+# Дозволяємо JWT заголовки
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]

@@ -40,7 +40,8 @@ class ProfileSettingsView(APIView):
 
     def get(self, request):
         user_serializer = UserSerializer(request.user)
-        company_serializer = CompanySerializer(request.user.company)
+        # ВАЖЛИВО: додаємо context={'request': request} для коректних посилань на логотип
+        company_serializer = CompanySerializer(request.user.company, context={'request': request})
         return Response({
             "user": user_serializer.data,
             "company": company_serializer.data
@@ -50,7 +51,7 @@ class ProfileSettingsView(APIView):
         user = request.user
         company = user.company
 
-        # Обробка даних користувача (підтримка FormData ключів)
+        # Обробка даних користувача
         first_name = request.data.get('user[first_name]') or request.data.get('first_name')
         email = request.data.get('user[email]') or request.data.get('email')
         

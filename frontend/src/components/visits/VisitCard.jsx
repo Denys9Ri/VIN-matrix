@@ -1,8 +1,7 @@
 import React from 'react';
-import { Car, Phone } from 'lucide-react';
+import { Car, Phone, Clock } from 'lucide-react';
 
 const VisitCard = ({ visit, onClick }) => {
-  // Кольори для статусів
   const statusColors = {
     'PENDING': 'bg-slate-100 text-slate-600 border-slate-200',
     'SELECTION': 'bg-slate-100 text-slate-600 border-slate-200',
@@ -17,16 +16,31 @@ const VisitCard = ({ visit, onClick }) => {
     'DONE': 'Готово'
   };
 
+  const timeStr = visit.scheduled_datetime 
+    ? new Date(visit.scheduled_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+
   return (
     <div onClick={onClick} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group cursor-pointer hover:border-blue-300">
       <div className="absolute top-0 right-0 p-3">
          <Car className="text-slate-100 group-hover:text-blue-50/50 transition-colors" size={48} />
       </div>
       
-      <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">Номерний знак</p>
-      <h3 className="text-lg font-black text-slate-900 mb-4">{visit.plate}</h3>
+      <div className="flex justify-between items-start mb-4 relative z-10">
+        <div>
+          <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">Номер / Час</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-black text-slate-900">{visit.plate}</h3>
+            {timeStr && (
+              <span className="flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
+                <Clock size={12}/> {timeStr}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
       
-      <div className="space-y-3 mb-5">
+      <div className="space-y-3 mb-5 relative z-10">
         <div>
           <p className="text-[9px] font-bold text-slate-400 uppercase">Клієнт / Автомобіль</p>
           <p className="text-sm font-bold text-slate-700 truncate">{visit.client}</p>

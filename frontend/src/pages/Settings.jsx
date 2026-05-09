@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Store, Loader2, AlertTriangle } from 'lucide-react';
+import { LogOut, User, Store, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -10,19 +10,18 @@ const Settings = () => {
     company: { name: '' }
   });
   const [loading, setLoading] = useState(true);
-  const [debugError, setDebugError] = useState(null); // Новий стан для помилки
 
+  // Адреса твого бекенду
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        // ТУТ ВАЖЛИВО: перевір, як називається твій ключ у localStorage (може бути token, а не access)
-        const token = localStorage.getItem('access') || localStorage.getItem('token') || localStorage.getItem('accessToken');
+        // ВИПРАВЛЕНО: тепер шукаємо правильні назви ключів!
+        const token = localStorage.getItem('access_token');
         
         if (!token) {
-          setDebugError("Токен не знайдено в пам'яті браузера. Ти точно залогінений?");
-          setLoading(false);
+          navigate('/login');
           return;
         }
 
@@ -32,20 +31,13 @@ const Settings = () => {
         
         setProfile(response.data);
       } catch (error) {
-        console.error("Повна помилка:", error);
-        
-        // Збираємо інформацію про помилку, щоб вивести на екран
-        let errorDetails = `Код: ${error.response?.status}. `;
-        if (error.response?.data) {
-          errorDetails += `Деталі: ${JSON.stringify(error.response.data)}`;
-        } else {
-          errorDetails += `Повідомлення: ${error.message}`;
+        console.error("Помилка завантаження:", error);
+        if (error.response?.status === 401) {
+          // Якщо ключ прострочений - видаляємо правильні ключі
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          navigate('/login');
         }
-        
-        setDebugError(errorDetails);
-        
-        // ТИМЧАСОВО ВІДКЛЮЧИЛИ ВИХІД НА ЛОГІН, ЩОБ ПОБАЧИТИ ПОМИЛКУ
-        // if (error.response?.status === 401) { ... }
       } finally {
         setLoading(false);
       }
@@ -53,42 +45,83 @@ const Settings = () => {
     fetchSettings();
   }, [navigate]);
 
-  // (Функцію handleLogout я тут скоротив для економії місця, вона поки не потрібна)
+  const handleLogout = async () => {
+    try {
+      // ВИПРАВЛЕНО: беремо правильні ключі для виходу
+      const refreshToken = localStorage.getItem('refresh_token');
+      const accessToken = localStorage.getItem('access_token');
+      
+      await axios.post(`${API_BASE}/api/logout/`, 
+        { refresh: refreshToken },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+    } catch (e) {
+      console.log("Очищення сесії...");
+    } finally {
+      // ВИПРАВЛЕНО: видаляємо правильні ключі
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      navigate('/login');
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
         <Loader2 className="animate-spin text-blue-600" size={40} />
-        <p className="font-bold text-slate-600">Завантаження...</p>
-      </div>
-    );
-  }
-
-  // ЯКЩО Є ПОМИЛКА - ПОКАЗУЄМО ЇЇ ВЕЛИКИМ ЧЕРВОНИМ ТЕКСТОМ
-  if (debugError) {
-    return (
-      <div className="max-w-4xl mx-auto p-8 bg-red-50 border border-red-200 rounded-2xl">
-        <div className="flex items-center gap-4 text-red-600 mb-4">
-          <AlertTriangle size={32} />
-          <h2 className="text-xl font-black">Спіймали помилку!</h2>
-        </div>
-        <p className="text-slate-800 font-mono bg-white p-4 rounded border border-red-100">
-          {debugError}
-        </p>
-        <button 
-          onClick={() => navigate('/')}
-          className="mt-4 bg-slate-900 text-white px-4 py-2 rounded font-bold"
-        >
-          Повернутися на головну
-        </button>
+        <p className="font-bold text-slate-600">Завантаження профілю...</p>
       </div>
     );
   }
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-black uppercase mb-8 italic">Налаштування працюють!</h1>
-      <p>Твої дані: {profile.user.username} | {profile.company.name}</p>
+      <h1 className="text-2xl font-black uppercase mb-8 italic">Налаштування</h1>
+      
+      <div className="space-y-4">
+        {/* ПРОФІЛЬ */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-blue-100 p-3 rounded-xl text-blue-600"><User size={24}/></div>
+            <div>
+              <p className="font-black text-slate-900">
+                {profile.user.first_name || profile.user.username} (Власник)
+              </p>
+              <p className="text-slate-400 text-sm">{profile.user.email || 'Email не вказано'}</p>
+            </div>
+          </div>
+          <button className="text-blue-600 font-bold text-sm hover:underline">Редагувати</button>
+        </div>
+
+        {/* СТО */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-orange-100 p-3 rounded-xl text-orange-600"><Store size={24}/></div>
+            <div>
+              <p className="font-black text-slate-900">Мій Бізнес</p>
+              <p className="text-slate-400 text-sm">{profile.company.name}</p>
+            </div>
+          </div>
+          <button className="text-orange-600 font-bold text-sm hover:underline">Змінити назву</button>
+        </div>
+
+        {/* ВИХІД */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-red-100 p-3 rounded-xl text-red-600"><LogOut size={24}/></div>
+            <div>
+              <p className="font-black text-slate-900">Завершити роботу</p>
+              <p className="text-slate-400 text-sm">Вихід з акаунта</p>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="bg-red-50 text-red-600 px-6 py-2 rounded-lg font-bold text-sm hover:bg-red-100 transition-colors"
+          >
+            Вийти
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

@@ -75,6 +75,9 @@ const Login = () => {
           >
             {loading ? 'Вхід...' : 'Увійти'}
           </button>
+          <div style={{ textAlign: 'center', marginTop: '15px', fontSize: '14px', color: '#aaa' }}>
+   Ще не з нами? <Link to="/register" style={{ color: '#007bff', textDecoration: 'none' }}>Зареєструвати СТО</Link>
+</div>
         </form>
       </div>
     </div>

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
+import os
 
 # Завантажуємо змінні з .env файлу
 load_dotenv()
@@ -125,3 +126,7 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+# URL для звернення до файлів у браузері
+MEDIA_URL = '/media/'
+# Шлях до папки на сервері
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

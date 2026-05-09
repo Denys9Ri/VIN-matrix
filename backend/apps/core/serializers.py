@@ -16,11 +16,19 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'first_name', 'last_name']
         read_only_fields = ['username']
 
-# Серіалізатор для СТО (назва)
+# Серіалізатор для СТО (додано всі нові поля для налаштувань та акта)
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
-        fields = ['id', 'name']
+        fields = [
+            'id', 
+            'name', 
+            'logo', 
+            'phone', 
+            'address', 
+            'document_footer', 
+            'global_margin_percent'
+        ]
 
 # Серіалізатор для каталогу послуг
 class ServiceCatalogSerializer(serializers.ModelSerializer):

@@ -18,7 +18,6 @@ const Visits = () => {
   const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
   const [showManualPartForm, setShowManualPartForm] = useState(false); 
   
-  // Додали date та time в новий візит
   const [newVisitData, setNewVisitData] = useState({ plate: '', client: '', phone: '', date: '', time: '' });
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
@@ -58,11 +57,18 @@ const Visits = () => {
 
   const handleCreateVisit = async (e) => {
     e.preventDefault();
-    // Формуємо дату та час для відправки
-    const scheduled_datetime = newVisitData.date && newVisitData.time ? `${newVisitData.date}T${newVisitData.time}` : null;
+    // Чистий формат дати для бекенду
+    const scheduled_datetime = newVisitData.date && newVisitData.time ? `${newVisitData.date}T${newVisitData.time}:00` : null;
+
+    const payload = {
+        plate: newVisitData.plate.toUpperCase(),
+        client: newVisitData.client,
+        phone: newVisitData.phone,
+        scheduled_datetime: scheduled_datetime
+    };
 
     try {
-      await axios.post(`${API_BASE}/api/visits/`, { ...newVisitData, scheduled_datetime }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API_BASE}/api/visits/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
       setNewVisitData({ plate: '', client: '', phone: '', date: '', time: '' });
       setSearchQuery('');

@@ -109,3 +109,4 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Важливе налаштування, щоб база не видавала помилок про ключі
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"

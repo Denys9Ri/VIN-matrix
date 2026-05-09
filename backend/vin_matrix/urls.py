@@ -8,7 +8,8 @@ from apps.core.views import (
     VisitViewSet, 
     ServiceCatalogViewSet, 
     ProfileSettingsView, 
-    LogoutView
+    LogoutView,
+    ChangePasswordView # ДОДАНО: імпорт контролера зміни пароля
 )
 
 # Створюємо роутер для автоматичних маршрутів (CRUD)
@@ -41,6 +42,9 @@ urlpatterns = [
     
     # Налаштування профілю та СТО (Get/Patch)
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
+    
+    # Зміна пароля
+    path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     
     # Всі API маршрути з роутера (visits та services)
     path('api/', include(router.urls)),

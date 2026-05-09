@@ -99,3 +99,20 @@ class LogoutView(APIView):
             return Response({"message": "Вихід успішний"}, status=205)
         except Exception as e:
             return Response({"error": "Помилка при виході"}, status=400)
+
+# 6. ЗМІНА ПАРОЛЯ
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        old_password = request.data.get("old_password")
+        new_password = request.data.get("new_password")
+        
+        # Перевіряємо старий пароль
+        if not request.user.check_password(old_password):
+            return Response({"error": "Старий пароль невірний"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Встановлюємо новий
+        request.user.set_password(new_password)
+        request.user.save()
+        return Response({"message": "Пароль успішно змінено!"}, status=status.HTTP_200_OK)

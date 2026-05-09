@@ -16,6 +16,14 @@ class Company(models.Model):
 
     def __str__(self): return self.name
 
+# --- МОДЕЛЬ ДЛЯ ПРАЦІВНИКІВ (МАЙСТРІВ) ---
+class Employee(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employee_profile')
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='employees')
+    role = models.CharField(max_length=20, default='mechanic')
+
+    def __str__(self): return f"{self.user.username} - {self.company.name}"
+
 class Visit(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='visits')
     plate = models.CharField(max_length=20)

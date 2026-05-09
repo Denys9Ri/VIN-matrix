@@ -6,24 +6,17 @@ from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from apps.core.views import (
-    RegisterView, 
-    VisitViewSet, 
-    ServiceCatalogViewSet, 
-    ProfileSettingsView, 
-    LogoutView,
-    ChangePasswordView,
-    MechanicCreateView
+    RegisterView, VisitViewSet, ServiceCatalogViewSet, 
+    ProfileSettingsView, LogoutView, ChangePasswordView, MechanicViewSet
 )
 
 router = DefaultRouter()
 router.register(r'visits', VisitViewSet, basename='visit')
 router.register(r'services', ServiceCatalogViewSet, basename='service')
+router.register(r'mechanics', MechanicViewSet, basename='mechanic') # НОВИЙ РОУТЕР ДЛЯ МАЙСТРІВ
 
 def api_root(request):
-    return JsonResponse({
-        "message": "VIN-matrix API is running!",
-        "status": "stable"
-    })
+    return JsonResponse({"message": "VIN-matrix API is running!", "status": "stable"})
 
 urlpatterns = [
     path('', api_root),
@@ -34,16 +27,9 @@ urlpatterns = [
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
-    
-    # Маршрут для додавання майстрів
-    path('api/mechanics/add/', MechanicCreateView.as_view(), name='add-mechanic'),
-    
     path('api/', include(router.urls)),
 ]
 
-# ПРИМУСОВЕ ВІДДАВАННЯ КАРТИНОК (Працює завжди, навіть на Coolify)
 urlpatterns += [
-    re_path(r'^media/(?P<path>.*)$', serve, {
-        'document_root': settings.MEDIA_ROOT,
-    }),
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 ]

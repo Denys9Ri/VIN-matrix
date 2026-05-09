@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom'; // <--- ДОДАЛИ Link СЮДИ
 import { CarFront, Lock, User, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 
@@ -75,9 +75,10 @@ const Login = () => {
           >
             {loading ? 'Вхід...' : 'Увійти'}
           </button>
+          
           <div style={{ textAlign: 'center', marginTop: '15px', fontSize: '14px', color: '#aaa' }}>
-   Ще не з нами? <Link to="/register" style={{ color: '#007bff', textDecoration: 'none' }}>Зареєструвати СТО</Link>
-</div>
+            Ще не з нами? <Link to="/register" style={{ color: '#007bff', textDecoration: 'none' }}>Зареєструвати СТО</Link>
+          </div>
         </form>
       </div>
     </div>

@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List } from 'lucide-react';
+import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, Calendar, RefreshCcw } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard'; 
+import { useNavigate } from 'react-router-dom';
 
 const Visits = () => {
+  const navigate = useNavigate();
   const [visits, setVisits] = useState([]);
   const [catalogServices, setCatalogServices] = useState([]); 
-  const [role, setRole] = useState(null); // Початково null, щоб знати, що дані вантажаться
+  const [role, setRole] = useState(null); 
   const [loading, setLoading] = useState(true);
+  
+  // Фільтри (Пошук і Календар)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterDate, setFilterDate] = useState('');
   
   const [selectedVisit, setSelectedVisit] = useState(null);
   const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
@@ -23,27 +29,34 @@ const Visits = () => {
   const partStatusColors = { 'WAITING': 'text-orange-600 bg-orange-100', 'IN_TRANSIT': 'text-blue-600 bg-blue-100', 'ARRIVED': 'text-green-600 bg-green-100', 'UNAVAILABLE': 'text-red-600 bg-red-100' };
   const serviceStatusColors = { 'PENDING': 'text-slate-600 bg-slate-100', 'IN_PROGRESS': 'text-blue-600 bg-blue-100', 'DONE': 'text-green-600 bg-green-100' };
 
-  const fetchData = async () => {
-    try {
-      const [visitsRes, settingsRes, servicesRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/visits/`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) 
-      ]);
-      setVisits(visitsRes.data || []);
-      setRole(settingsRes.data.role);
-      setCatalogServices(servicesRes.data || []);
-    } catch (error) { 
-        console.error("Помилка завантаження даних", error);
-        // Якщо помилка 401 - на логін
-        if (error.response?.status === 401) navigate('/login');
-        // Якщо інша помилка - ставимо дефолтну роль, щоб сторінка не пуста була
-        setRole('owner'); 
-    } 
-    finally { setLoading(false); }
-  };
+  // Використовуємо useEffect для автоматичного оновлення при пошуку чи зміні дати
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (searchQuery) params.append('search', searchQuery);
+        if (filterDate) params.append('date', filterDate);
 
-  useEffect(() => { fetchData(); }, []);
+        const [visitsRes, settingsRes, servicesRes] = await Promise.all([
+          axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) 
+        ]);
+        setVisits(visitsRes.data || []);
+        setRole(settingsRes.data.role);
+        setCatalogServices(servicesRes.data || []);
+      } catch (error) { 
+          console.error("Помилка завантаження даних", error);
+          if (error.response?.status === 401) navigate('/login');
+          setRole('owner'); 
+      } 
+      finally { setLoading(false); }
+    };
+
+    // Затримка (debounce), щоб не робити запит на кожну букву під час друку
+    const timeoutId = setTimeout(() => { fetchData(); }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, filterDate, navigate, token]);
 
   const handleCreateVisit = async (e) => {
     e.preventDefault();
@@ -51,15 +64,23 @@ const Visits = () => {
       await axios.post(`${API_BASE}/api/visits/`, newVisitData, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
       setNewVisitData({ plate: '', client: '', phone: '' });
-      fetchData(); 
+      // Примусово скидаємо фільтри, щоб побачити нове авто на головній дошці
+      setSearchQuery('');
+      setFilterDate('');
     } catch (error) { alert("Помилка створення візиту"); }
   };
 
   const updateVisitStatus = async (id, newStatus) => {
     try {
       await axios.patch(`${API_BASE}/api/visits/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } });
-      fetchData();
-      if (selectedVisit) setSelectedVisit({ ...selectedVisit, status: newStatus });
+      // Оновлюємо дані візиту у модалці
+      setSelectedVisit({ ...selectedVisit, status: newStatus });
+      // Оновлюємо список на фоні
+      const params = new URLSearchParams();
+      if (searchQuery) params.append('search', searchQuery);
+      if (filterDate) params.append('date', filterDate);
+      const res = await axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+      setVisits(res.data);
     } catch (error) { alert("Помилка статусу"); }
   };
 
@@ -113,7 +134,13 @@ const Visits = () => {
   const refreshSelectedVisit = async () => {
     const res = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } });
     setSelectedVisit(res.data);
-    fetchData(); 
+    
+    // Оновлюємо фон, не збиваючи фільтри
+    const params = new URLSearchParams();
+    if (searchQuery) params.append('search', searchQuery);
+    if (filterDate) params.append('date', filterDate);
+    const listRes = await axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+    setVisits(listRes.data);
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
@@ -131,23 +158,40 @@ const Visits = () => {
         {items.map(visit => (
           <VisitCard key={visit.id} visit={visit} onClick={() => setSelectedVisit(visit)} />
         ))}
+        {items.length === 0 && <div className="text-center text-slate-400 text-xs font-bold uppercase mt-10">Пусто</div>}
       </div>
     </div>
   );
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 h-screen flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-black uppercase italic">Дошка Візитів</h1>
+      
+      {/* ВЕРХНЯ ПАНЕЛЬ: ПОШУК І КАЛЕНДАР */}
+      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4">
+        <h1 className="text-2xl font-black uppercase italic w-full xl:w-auto">Дошка Візитів</h1>
+        
+        <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-1 xl:justify-center">
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input type="text" placeholder="Пошук (номер, телефон, клієнт)..." className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-3 text-sm outline-none focus:border-blue-500 font-medium shadow-sm transition-all" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+          </div>
+          <div className="relative w-full md:w-auto">
+            <input type="date" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 font-medium text-slate-600 shadow-sm cursor-pointer transition-all" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
+          </div>
+          {(searchQuery || filterDate) && (
+            <button onClick={() => {setSearchQuery(''); setFilterDate('');}} className="bg-slate-100 text-slate-500 px-4 py-3 rounded-xl hover:bg-slate-200 transition-all font-black text-xs uppercase w-full md:w-auto">Скинути</button>
+          )}
+        </div>
+
         {role !== 'mechanic' && (
-           <button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-4 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all hover:scale-[1.02]">
+           <button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-5 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all hover:scale-[1.02] w-full xl:w-auto">
              <Plus size={16}/> Нове авто
            </button>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
-        <Column title="В черзі" icon={<Clock size={18}/>} items={pending} colorClass="text-slate-600" />
+        <Column title="В черзі / Підбір" icon={<Clock size={18}/>} items={pending} colorClass="text-slate-600" />
         <Column title="В роботі" icon={<Wrench size={18}/>} items={inProgress} colorClass="text-blue-600" />
         <Column title="Готово" icon={<CheckCircle2 size={18}/>} items={done} colorClass="text-green-600" />
       </div>
@@ -156,28 +200,45 @@ const Visits = () => {
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
-            <button onClick={() => setIsCreatingVisit(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full"><X size={20} /></button>
+            <button onClick={() => setIsCreatingVisit(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
             <h2 className="text-xl font-black mb-6 flex items-center gap-2"><CarFront className="text-blue-600"/> Новий візит</h2>
             <form onSubmit={handleCreateVisit} className="space-y-4">
-              <input required type="text" placeholder="Номер авто (АА1234ВВ)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})}/>
+              <input required type="text" placeholder="Номер авто (АА1234ВВ)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})}/>
               <input required type="text" placeholder="Клієнт / Марка" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
               <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
-              <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-xl font-black uppercase shadow-lg shadow-blue-200">Відкрити замовлення</button>
+              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black uppercase shadow-lg shadow-blue-200 transition-all tracking-widest text-sm">Відкрити замовлення</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* МОДАЛКА ДЕТАЛЕЙ (Аналогічно попередній, з вибором статусів) */}
+      {/* МОДАЛКА ДЕТАЛЕЙ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8">
-            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-slate-100 pb-4 gap-4">
               <div>
                 <h2 className="text-3xl font-black uppercase">{selectedVisit.plate}</h2>
                 <p className="text-slate-500 font-bold flex items-center gap-2 mt-1"><CarFront size={16}/> {selectedVisit.client} | <Phone size={16}/> {selectedVisit.phone}</p>
+                <p className="text-slate-400 text-xs font-bold mt-1">Створено: {new Date(selectedVisit.created_at).toLocaleDateString()}</p>
               </div>
-              <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
+              
+              <div className="flex items-center gap-2">
+                {/* КНОПКА ПОВТОРНОГО ВІЗИТУ ДЛЯ СТАРИХ АВТО */}
+                {role === 'owner' && (selectedVisit.status === 'DONE' || filterDate) && (
+                  <button 
+                    onClick={() => {
+                      setNewVisitData({ plate: selectedVisit.plate, client: selectedVisit.client, phone: selectedVisit.phone });
+                      setSelectedVisit(null);
+                      setIsCreatingVisit(true);
+                    }} 
+                    className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-black uppercase text-xs hover:bg-blue-100 transition-all"
+                  >
+                    <RefreshCcw size={16}/> Повторний візит
+                  </button>
+                )}
+                <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-full hover:bg-slate-200 transition-colors"><X size={20} /></button>
+              </div>
             </div>
 
             <div className="flex gap-2 bg-slate-50 p-2 rounded-2xl mb-6">
@@ -187,6 +248,8 @@ const Visits = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              
+              {/* === ЗАВДАННЯ (ПОСЛУГИ) === */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Wrench size={18}/> Завдання</h3>
                 <div className="space-y-3 mb-4">
@@ -222,6 +285,7 @@ const Visits = () => {
                 )}
               </div>
 
+              {/* === ЗАПЧАСТИНИ === */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Store size={18}/> Запчастини</h3>
                 <div className="space-y-3 mb-4">
@@ -264,7 +328,7 @@ const Visits = () => {
                           <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
                           <input type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
                         </div>
-                        <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs py-3 rounded-lg mt-2">Зберегти</button>
+                        <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs py-3 rounded-lg mt-2 tracking-widest hover:bg-blue-700 shadow-sm transition-all">Зберегти</button>
                       </form>
                     )}
                   </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign } from 'lucide-react';
+import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -18,6 +18,11 @@ const Settings = () => {
   const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '' });
   const [saveLoading, setSaveLoading] = useState(false);
   const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
+
+  // СТАНИ ДЛЯ ПОШУКУ ТА РЕДАГУВАННЯ ПОСЛУГ
+  const [searchQuery, setSearchQuery] = useState('');
+  const [editingServiceId, setEditingServiceId] = useState(null);
+  const [editServiceData, setEditServiceData] = useState({ name: '', price: '' });
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -39,7 +44,6 @@ const Settings = () => {
       setProfile(profileRes.data);
       setServices(servicesRes.data);
       
-      // Заповнюємо форму редагування поточними даними
       setFormData({
         first_name: profileRes.data.user.first_name || '',
         email: profileRes.data.user.email || '',
@@ -73,6 +77,19 @@ const Settings = () => {
     } catch (e) { alert("Помилка видалення"); }
   };
 
+  const handleUpdateService = async (id) => {
+    try {
+      await axios.patch(`${API_BASE}/api/services/${id}/`, editServiceData, { headers: { Authorization: `Bearer ${token}` } });
+      setEditingServiceId(null);
+      fetchData();
+    } catch (e) { alert("Помилка оновлення послуги"); }
+  };
+
+  // Фільтруємо послуги для пошуку
+  const filteredServices = services.filter(service => 
+    service.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   // --- ЗМІНА ПАРОЛЯ ---
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -88,7 +105,7 @@ const Settings = () => {
     } catch (e) { alert(e.response?.data?.error || "Помилка зміни пароля"); }
   };
 
-  // --- РЕДАГУВАННЯ ПРОФІЛЮ ТА СТО ---
+  // --- РЕДАГУВАННЯ ПРОФІЛЮ ---
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
@@ -101,20 +118,18 @@ const Settings = () => {
       await fetchData();
       setIsEditingProfile(false);
     } catch (error) {
-      alert("Не вдалося зберегти дані. Перевірте з'єднання.");
+      alert("Не вдалося зберегти дані.");
     } finally {
       setSaveLoading(false);
     }
   };
 
-  // --- ВИХІД ---
   const handleLogout = async () => {
     try {
       const refreshToken = localStorage.getItem('refresh_token');
       await axios.post(`${API_BASE}/api/logout/`, { refresh: refreshToken }, { headers: { Authorization: `Bearer ${token}` } });
-    } catch (e) {
-      console.log("Очищення сесії...");
-    } finally {
+    } catch (e) { console.log("Очищення сесії..."); } 
+    finally {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       navigate('/login');
@@ -152,42 +167,105 @@ const Settings = () => {
 
       {/* ПРАЙС-ЛИСТ ПОСЛУГ */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-          <h2 className="font-black uppercase text-sm tracking-wider flex items-center gap-2">
+        <div className="p-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+          <h2 className="font-black uppercase text-sm tracking-wider flex items-center gap-2 w-full sm:w-auto">
             <DollarSign size={18} className="text-green-600"/> Прайс-лист послуг
           </h2>
+          
+          {/* ПОШУК */}
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input 
+              type="text" 
+              placeholder="Пошук послуги..." 
+              className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-9 pr-4 outline-none focus:border-blue-500 text-sm font-medium"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
         
         <div className="p-6">
           <form onSubmit={handleAddService} className="flex gap-2 mb-6">
             <input 
-              required type="text" placeholder="Назва послуги" 
+              required type="text" placeholder="Нова послуга..." 
               className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2 outline-none focus:border-blue-500 font-medium"
               value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})}
             />
             <input 
-              required type="number" placeholder="Ціна (грн)" 
-              className="w-32 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2 outline-none focus:border-blue-500 font-medium"
+              required type="number" placeholder="Ціна" 
+              className="w-28 sm:w-32 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2 outline-none focus:border-blue-500 font-medium"
               value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})}
             />
-            <button type="submit" className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200">
+            <button type="submit" className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200 flex items-center justify-center min-w-[48px]">
               <Plus size={20}/>
             </button>
           </form>
 
           <div className="space-y-2">
-            {services.map(service => (
+            {filteredServices.map(service => (
               <div key={service.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-blue-100 transition-all">
-                <span className="font-bold text-slate-700">{service.name}</span>
-                <div className="flex items-center gap-4">
-                  <span className="font-black text-slate-900">{service.price} ₴</span>
-                  <button onClick={() => handleDeleteService(service.id)} className="text-slate-300 hover:text-red-500 transition-colors bg-slate-50 p-2 rounded-lg">
-                    <Trash2 size={18}/>
-                  </button>
-                </div>
+                
+                {/* РЕЖИМ РЕДАГУВАННЯ */}
+                {editingServiceId === service.id ? (
+                  <div className="flex-1 flex gap-2 items-center">
+                    <input 
+                      type="text" 
+                      className="flex-1 bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-1 outline-none focus:border-blue-500 font-medium text-sm"
+                      value={editServiceData.name} 
+                      onChange={e => setEditServiceData({...editServiceData, name: e.target.value})}
+                      autoFocus
+                    />
+                    <input 
+                      type="number" 
+                      className="w-24 bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-1 outline-none focus:border-blue-500 font-medium text-sm"
+                      value={editServiceData.price} 
+                      onChange={e => setEditServiceData({...editServiceData, price: e.target.value})}
+                    />
+                    <div className="flex gap-1">
+                      <button onClick={() => handleUpdateService(service.id)} className="bg-green-100 text-green-600 hover:bg-green-200 p-2 rounded-lg transition-colors">
+                        <Save size={18}/>
+                      </button>
+                      <button onClick={() => setEditingServiceId(null)} className="bg-slate-100 text-slate-600 hover:bg-slate-200 p-2 rounded-lg transition-colors">
+                        <X size={18}/>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* РЕЖИМ ПЕРЕГЛЯДУ */
+                  <>
+                    <span className="font-bold text-slate-700">{service.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 mr-2">{service.price} ₴</span>
+                      <button 
+                        onClick={() => {
+                          setEditingServiceId(service.id);
+                          setEditServiceData({ name: service.name, price: service.price });
+                        }} 
+                        className="text-slate-400 hover:text-blue-600 transition-colors bg-slate-50 p-2 rounded-lg"
+                      >
+                        <Pencil size={18}/>
+                      </button>
+                      <button onClick={() => handleDeleteService(service.id)} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-50 p-2 rounded-lg">
+                        <Trash2 size={18}/>
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
-            {services.length === 0 && <p className="text-center text-slate-400 py-8 italic font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">Прайс-лист поки порожній. Додайте першу послугу!</p>}
+            
+            {/* ПОВІДОМЛЕННЯ, ЯКЩО ПУСТО */}
+            {services.length === 0 && (
+              <p className="text-center text-slate-400 py-8 italic font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                Прайс-лист поки порожній. Додайте першу послугу!
+              </p>
+            )}
+            {services.length > 0 && filteredServices.length === 0 && (
+              <p className="text-center text-slate-400 py-8 italic font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                За запитом "{searchQuery}" нічого не знайдено.
+              </p>
+            )}
           </div>
         </div>
       </div>

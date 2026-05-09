@@ -5,10 +5,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from .models import Company, Visit, ServiceCatalog, Employee
+from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService
 from .serializers import (
     VisitSerializer, UserSerializer, 
-    CompanySerializer, ServiceCatalogSerializer
+    CompanySerializer, ServiceCatalogSerializer,
+    OrderPartSerializer, OrderServiceSerializer
 )
 
 def get_user_company(user):
@@ -21,6 +22,24 @@ class VisitViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     def get_queryset(self): return Visit.objects.filter(company=get_user_company(self.request.user))
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
+
+# === НОВІ ФУНКЦІЇ ДЛЯ ЗАПЧАСТИН ТА ПОСЛУГ У ВІЗИТІ ===
+class OrderPartViewSet(viewsets.ModelViewSet):
+    serializer_class = OrderPartSerializer
+    permission_classes = [IsAuthenticated]
+    def get_queryset(self): return OrderPart.objects.filter(visit__company=get_user_company(self.request.user))
+    def perform_create(self, serializer):
+        visit = Visit.objects.get(id=self.request.data.get('visit'), company=get_user_company(self.request.user))
+        serializer.save(visit=visit)
+
+class OrderServiceViewSet(viewsets.ModelViewSet):
+    serializer_class = OrderServiceSerializer
+    permission_classes = [IsAuthenticated]
+    def get_queryset(self): return OrderService.objects.filter(visit__company=get_user_company(self.request.user))
+    def perform_create(self, serializer):
+        visit = Visit.objects.get(id=self.request.data.get('visit'), company=get_user_company(self.request.user))
+        serializer.save(visit=visit)
+# =======================================================
 
 class ServiceCatalogViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceCatalogSerializer
@@ -68,7 +87,6 @@ class ProfileSettingsView(APIView):
         company.save()
         return Response({"message": "Дані успішно оновлено!"})
 
-# === НОВЕ: УПРАВЛІННЯ КОМАНДОЮ (CRUD) ===
 class MechanicViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 

@@ -92,10 +92,14 @@ if os.getenv('USE_POSTGRES') == 'True':
         }
     }
 else:
+    # НОВИЙ КОД ДЛЯ SQLITE:
+    DB_FOLDER = BASE_DIR / 'database_data'
+    DB_FOLDER.mkdir(exist_ok=True) # Автоматично створює папку
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': DB_FOLDER / 'db.sqlite3',
         }
     }
 

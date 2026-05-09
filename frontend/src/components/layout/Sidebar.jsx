@@ -1,9 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search } from 'lucide-react';
+import axios from 'axios';
 
 const Sidebar = () => {
-  const menuItems = [
+  // За замовчуванням ставимо 'mechanic', щоб до завантаження даних ніхто не бачив зайвого
+  const [role, setRole] = useState('mechanic'); 
+  const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
+
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+
+      try {
+        const response = await axios.get(`${API_BASE}/api/settings/`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setRole(response.data.role); // Отримуємо 'owner' або 'mechanic'
+      } catch (error) {
+        console.error("Помилка перевірки ролі", error);
+      }
+    };
+
+    fetchUserRole();
+  }, []);
+
+  // УСІ можливі пункти меню
+  const allMenuItems = [
     { name: 'Панель', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Пошук запчастин', icon: <Search size={20} />, path: '/search' },
     { name: 'Візити', icon: <CarFront size={20} />, path: '/visits' },
@@ -12,6 +36,11 @@ const Sidebar = () => {
     { name: 'Клієнти', icon: <Users size={20} />, path: '/clients' },
     { name: 'Налаштування', icon: <Settings size={20} />, path: '/settings' },
   ];
+
+  // ФІЛЬТРАЦІЯ: Якщо власник — бачить усе. Якщо майстер — тільки Візити та Налаштування.
+  const menuItems = role === 'owner' 
+    ? allMenuItems 
+    : allMenuItems.filter(item => ['Візити', 'Налаштування'].includes(item.name));
 
   return (
     <div className="w-20 md:w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 z-50">

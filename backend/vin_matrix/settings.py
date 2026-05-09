@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from datetime import timedelta
 from dotenv import load_dotenv
 
 # Завантажуємо змінні з .env файлу
@@ -7,7 +8,7 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Додано запасний ключ на випадок збоїв
+# Безпека
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
@@ -25,6 +26,8 @@ INSTALLED_APPS = [
     # Сторонні
     'rest_framework',
     'corsheaders',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist', # Додано для Logout (чорний список токенів)
     
     # Наші модулі
     'apps.core',
@@ -95,6 +98,7 @@ else:
         }
     }
 
+# Налаштування JWT та REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -104,9 +108,18 @@ REST_FRAMEWORK = {
     )
 }
 
+# Налаштування часу життя токенів
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1), # Токен активний 1 день
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7), # Можна оновлювати вхід тиждень
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+}
+
+# Статичні файли (CSS, JS)
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-# Важливе налаштування, щоб база не видавала помилок про ключі
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Інше
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

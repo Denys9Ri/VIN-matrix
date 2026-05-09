@@ -1,8 +1,8 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.http import JsonResponse
 from django.conf import settings
-from django.conf.urls.static import static
+from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from apps.core.views import (
@@ -11,7 +11,8 @@ from apps.core.views import (
     ServiceCatalogViewSet, 
     ProfileSettingsView, 
     LogoutView,
-    ChangePasswordView
+    ChangePasswordView,
+    MechanicCreateView
 )
 
 router = DefaultRouter()
@@ -33,9 +34,16 @@ urlpatterns = [
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    
+    # Маршрут для додавання майстрів
+    path('api/mechanics/add/', MechanicCreateView.as_view(), name='add-mechanic'),
+    
     path('api/', include(router.urls)),
 ]
 
-# Додаємо підтримку медіа-файлів (логотипів)
-if settings.MEDIA_URL:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# ПРИМУСОВЕ ВІДДАВАННЯ КАРТИНОК (Працює завжди, навіть на Coolify)
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {
+        'document_root': settings.MEDIA_ROOT,
+    }),
+]

@@ -7,6 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
 from django.utils import timezone
+from datetime import datetime, timedelta, time as dt_time
 from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService
 from .serializers import (
     VisitSerializer, UserSerializer, 
@@ -38,25 +39,38 @@ class VisitViewSet(viewsets.ModelViewSet):
             )
             return queryset.order_by('-created_at')
             
-        elif date_str and len(date_str) == 10: # Захист: перевіряємо чи дата має формат YYYY-MM-DD
-            queryset = queryset.filter(
-                Q(scheduled_datetime__date=date_str) | Q(created_at__date=date_str)
-            ).distinct()
-            return queryset.order_by('scheduled_datetime')
-            
-        else:
-            today = timezone.localdate()
-            queryset = queryset.filter(
-                ~Q(status='DONE') | 
-                Q(scheduled_datetime__date=today) | 
-                Q(status='DONE', updated_at__date=today)
-            ).distinct()
+        elif date_str and len(date_str) == 10:
+            try:
+                # БЕЗПЕЧНИЙ ПОШУК ДАТИ (Захист від 500 помилки SQLite)
+                parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                start_of_day = timezone.make_aware(datetime.combine(parsed_date, dt_time.min))
+                end_of_day = start_of_day + timedelta(days=1)
+
+                queryset = queryset.filter(
+                    (Q(scheduled_datetime__gte=start_of_day) & Q(scheduled_datetime__lt=end_of_day)) |
+                    (Q(created_at__gte=start_of_day) & Q(created_at__lt=end_of_day))
+                ).distinct()
+                return queryset.order_by('scheduled_datetime')
+            except Exception:
+                pass
+                
+        # ДЕФОЛТ (Сьогодні)
+        today = timezone.localdate()
+        start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
+        end_of_today = start_of_today + timedelta(days=1)
+
+        queryset = queryset.filter(
+            ~Q(status='DONE') | 
+            (Q(scheduled_datetime__gte=start_of_today) & Q(scheduled_datetime__lt=end_of_today)) | 
+            (Q(status='DONE') & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today))
+        ).distinct()
             
         return queryset.order_by('scheduled_datetime') 
 
     def perform_create(self, serializer): 
         serializer.save(company=get_user_company(self.request.user))
 
+# --- ІНШІ КЛАСИ ---
 class OrderPartViewSet(viewsets.ModelViewSet):
     serializer_class = OrderPartSerializer
     permission_classes = [IsAuthenticated]

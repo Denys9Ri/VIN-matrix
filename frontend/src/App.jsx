@@ -7,6 +7,7 @@ import Inventory from './pages/Inventory';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Visits from './pages/Visits'; // <--- ДОДАЛИ ІМПОРТ НАШОЇ НОВОЇ СТОРІНКИ
 
 // Захисник роутів: якщо немає токена, викидає на /login
 const ProtectedRoute = ({ children }) => {
@@ -32,7 +33,7 @@ function App() {
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="visits" element={<Placeholder title="Active Visits" />} />
+          <Route path="visits" element={<Visits />} /> {/* <--- ЗАМІНИЛИ ЗАГЛУШКУ НА РЕАЛЬНУ СТОРІНКУ */}
           <Route path="analytics" element={<Placeholder title="Analytics" />} />
           <Route path="clients" element={<Placeholder title="Clients" />} />
         </Route>

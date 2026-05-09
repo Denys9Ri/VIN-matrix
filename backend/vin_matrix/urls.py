@@ -7,13 +7,17 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from apps.core.views import (
     RegisterView, VisitViewSet, ServiceCatalogViewSet, 
-    ProfileSettingsView, LogoutView, ChangePasswordView, MechanicViewSet
+    ProfileSettingsView, LogoutView, ChangePasswordView, MechanicViewSet,
+    OrderPartViewSet, OrderServiceViewSet # НОВІ ІМПОРТИ
 )
 
 router = DefaultRouter()
 router.register(r'visits', VisitViewSet, basename='visit')
 router.register(r'services', ServiceCatalogViewSet, basename='service')
-router.register(r'mechanics', MechanicViewSet, basename='mechanic') # НОВИЙ РОУТЕР ДЛЯ МАЙСТРІВ
+router.register(r'mechanics', MechanicViewSet, basename='mechanic')
+# === НОВІ РОУТИ ===
+router.register(r'order-parts', OrderPartViewSet, basename='order-part')
+router.register(r'order-services', OrderServiceViewSet, basename='order-service')
 
 def api_root(request):
     return JsonResponse({"message": "VIN-matrix API is running!", "status": "stable"})

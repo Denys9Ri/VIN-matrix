@@ -5,6 +5,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.db.models import Q
+from django.utils import timezone
 from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService
 from .serializers import (
     VisitSerializer, UserSerializer, 
@@ -20,10 +22,41 @@ def get_user_company(user):
 class VisitViewSet(viewsets.ModelViewSet):
     serializer_class = VisitSerializer
     permission_classes = [IsAuthenticated]
-    def get_queryset(self): return Visit.objects.filter(company=get_user_company(self.request.user))
-    def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
+    
+    def get_queryset(self): 
+        company = get_user_company(self.request.user)
+        queryset = Visit.objects.filter(company=company)
+        
+        # Отримуємо параметри пошуку або дати з фронтенду
+        search = self.request.query_params.get('search', None)
+        date = self.request.query_params.get('date', None)
+        
+        if search:
+            # Шукаємо по номеру авто, імені або телефону
+            queryset = queryset.filter(
+                Q(plate__icontains=search) | 
+                Q(client__icontains=search) | 
+                Q(phone__icontains=search)
+            )
+        elif date:
+            # Якщо вибрана конкретна дата в календарі
+            queryset = queryset.filter(
+                Q(created_at__date=date) | Q(updated_at__date=date)
+            ).distinct()
+        else:
+            # ДЕФОЛТНА ДОШКА (Активні авто + Готові сьогодні)
+            today = timezone.localdate()
+            queryset = queryset.filter(
+                ~Q(status='DONE') | Q(status='DONE', updated_at__date=today)
+            )
+            
+        return queryset.order_by('-updated_at')
 
-# === НОВІ ФУНКЦІЇ ДЛЯ ЗАПЧАСТИН ТА ПОСЛУГ У ВІЗИТІ ===
+    def perform_create(self, serializer): 
+        serializer.save(company=get_user_company(self.request.user))
+
+# --- УСІ ІНШІ КЛАСИ ЗАЛИШАЮТЬСЯ БЕЗ ЗМІН ---
+
 class OrderPartViewSet(viewsets.ModelViewSet):
     serializer_class = OrderPartSerializer
     permission_classes = [IsAuthenticated]
@@ -39,7 +72,6 @@ class OrderServiceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         visit = Visit.objects.get(id=self.request.data.get('visit'), company=get_user_company(self.request.user))
         serializer.save(visit=visit)
-# =======================================================
 
 class ServiceCatalogViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceCatalogSerializer

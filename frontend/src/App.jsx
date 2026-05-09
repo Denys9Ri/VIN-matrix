@@ -6,6 +6,7 @@ import UniversalSearch from './pages/UniversalSearch';
 import Inventory from './pages/Inventory';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import Register from './pages/Register';
 
 // Захисник роутів: якщо немає токена, викидає на /login
 const ProtectedRoute = ({ children }) => {
@@ -28,6 +29,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="/register" element={<Register />} />
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<Placeholder title="Active Visits" />} />
           <Route path="analytics" element={<Placeholder title="Analytics" />} />

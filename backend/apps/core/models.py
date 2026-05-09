@@ -27,7 +27,10 @@ class Visit(models.Model):
     client = models.CharField(max_length=100)
     phone = models.CharField(max_length=20)
     status = models.CharField(max_length=50, default='SELECTION')
+    
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True) # Для очищення дошки в кінці дня
+    scheduled_datetime = models.DateTimeField(null=True, blank=True) # Для запису на час
 
 class ServiceCatalog(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
@@ -42,12 +45,10 @@ class OrderPart(models.Model):
     buy_price = models.DecimalField(max_digits=10, decimal_places=2) 
     sell_price = models.DecimalField(max_digits=10, decimal_places=2) 
     supplier = models.CharField(max_length=100)
-    # НОВЕ ПОЛЕ: Статус запчастини
     status = models.CharField(max_length=20, default='WAITING')
 
 class OrderService(models.Model):
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, related_name='services')
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    # НОВЕ ПОЛЕ: Статус послуги
     status = models.CharField(max_length=20, default='PENDING')

@@ -5,18 +5,15 @@ class Company(models.Model):
     name = models.CharField(max_length=255, verbose_name="Назва СТО")
     owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company')
     
-    # --- НАЛАШТУВАННЯ ДЛЯ ДРУКУ (АКТ ВИКОНАНИХ РОБІТ) ---
     logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Логотип")
     phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="Телефон СТО")
     address = models.CharField(max_length=255, blank=True, null=True, verbose_name="Адреса СТО")
     document_footer = models.TextField(blank=True, null=True, verbose_name="Текст для чека (Гарантія тощо)")
     
-    # --- ФІНАНСОВІ НАЛАШТУВАННЯ ---
     global_margin_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, verbose_name="Націнка на запчастини (%)")
 
     def __str__(self): return self.name
 
-# --- МОДЕЛЬ ДЛЯ ПРАЦІВНИКІВ (МАЙСТРІВ) ---
 class Employee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employee_profile')
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='employees')
@@ -32,24 +29,25 @@ class Visit(models.Model):
     status = models.CharField(max_length=50, default='SELECTION')
     created_at = models.DateTimeField(auto_now_add=True)
 
-# Модель для запчастин, доданих у наряд
+class ServiceCatalog(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255) 
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+
 class OrderPart(models.Model):
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, related_name='parts')
     brand = models.CharField(max_length=100)
     article = models.CharField(max_length=100)
     name = models.CharField(max_length=255)
-    buy_price = models.DecimalField(max_digits=10, decimal_places=2) # Ціна закупки
-    sell_price = models.DecimalField(max_digits=10, decimal_places=2) # Ціна з націнкою
+    buy_price = models.DecimalField(max_digits=10, decimal_places=2) 
+    sell_price = models.DecimalField(max_digits=10, decimal_places=2) 
     supplier = models.CharField(max_length=100)
+    # НОВЕ ПОЛЕ: Статус запчастини
+    status = models.CharField(max_length=20, default='WAITING')
 
-# Модель для прайс-листа робіт
-class ServiceCatalog(models.Model):
-    company = models.ForeignKey(Company, on_delete=models.CASCADE)
-    name = models.CharField(max_length=255) # Назва роботи (напр. Заміна колодок)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-
-# Роботи, додані у конкретний візит
 class OrderService(models.Model):
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, related_name='services')
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    # НОВЕ ПОЛЕ: Статус послуги
+    status = models.CharField(max_length=20, default='PENDING')

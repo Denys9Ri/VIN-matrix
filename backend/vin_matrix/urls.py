@@ -36,6 +36,6 @@ urlpatterns = [
     path('api/', include(router.urls)),
 ]
 
-# Цей рядок дозволяє Django показувати завантажені картинки
-if settings.DEBUG or True: # Додаємо 'or True', щоб працювало і на деплої, поки немає Nginx
+# Додаємо підтримку медіа-файлів (логотипів)
+if settings.MEDIA_URL:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

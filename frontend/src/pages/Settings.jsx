@@ -9,20 +9,25 @@ const Settings = () => {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // Стани модалок
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
 
-  // Прайс-лист послуг стани
+  // Послуги та пошук
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [searchQuery, setSearchQuery] = useState('');
   const [editingServiceId, setEditingServiceId] = useState(null);
   const [editServiceData, setEditServiceData] = useState({ name: '', price: '' });
   const [showAllServices, setShowAllServices] = useState(false);
 
+  // Форма профілю
   const [formData, setFormData] = useState({
     first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', global_margin_percent: 20, logo: null
   });
+
+  // Зміна пароля
+  const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -53,6 +58,7 @@ const Settings = () => {
     } finally { setLoading(false); }
   };
 
+  // --- ЛОГІКА ЗБЕРЕЖЕННЯ ПРОФІЛЮ ---
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
@@ -73,19 +79,26 @@ const Settings = () => {
       alert("Налаштування успішно збережено!");
       await fetchData();
       setIsEditingProfile(false);
-    } catch (error) {
-      alert("Помилка збереження.");
-    } finally { setSaveLoading(false); }
+    } catch (error) { alert("Помилка збереження."); } 
+    finally { setSaveLoading(false); }
   };
 
-  // Послуги логіка
+  // --- ЛОГІКА ПОСЛУГ ---
   const handleAddService = async (e) => {
     e.preventDefault();
     try {
       await axios.post(`${API_BASE}/api/services/`, newService, { headers: { Authorization: `Bearer ${token}` } });
       setNewService({ name: '', price: '' });
       fetchData();
-    } catch (e) { alert("Помилка"); }
+    } catch (e) { alert("Помилка додавання"); }
+  };
+
+  const handleUpdateService = async (id) => {
+    try {
+      await axios.patch(`${API_BASE}/api/services/${id}/`, editServiceData, { headers: { Authorization: `Bearer ${token}` } });
+      setEditingServiceId(null);
+      fetchData();
+    } catch (e) { alert("Помилка оновлення"); }
   };
 
   const handleDeleteService = async (id) => {
@@ -93,8 +106,23 @@ const Settings = () => {
       try {
         await axios.delete(`${API_BASE}/api/services/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
         fetchData();
-      } catch (e) { alert("Помилка"); }
+      } catch (e) { alert("Помилка видалення"); }
     }
+  };
+
+  // --- ЗМІНА ПАРОЛЯ ---
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (passData.new !== passData.confirm) return alert("Паролі не збігаються");
+    try {
+      await axios.post(`${API_BASE}/api/change-password/`, 
+        { old_password: passData.old, new_password: passData.new },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert("Пароль успішно змінено!");
+      setIsChangingPassword(false);
+      setPassData({ old: '', new: '', confirm: '' });
+    } catch (e) { alert(e.response?.data?.error || "Помилка зміни пароля"); }
   };
 
   const filteredServices = services.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -107,6 +135,7 @@ const Settings = () => {
       <h1 className="text-2xl font-black uppercase italic">Налаштування R16</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* КАРТКА СТО */}
         <div className="md:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex gap-6">
             <div className="w-24 h-24 bg-slate-50 rounded-2xl flex-shrink-0 overflow-hidden border-2 border-slate-100 flex items-center justify-center">
               {profile.company.logo ? (
@@ -126,55 +155,85 @@ const Settings = () => {
             </div>
         </div>
 
+        {/* БЕЗПЕКА */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
             <div className="bg-purple-100 w-10 h-10 rounded-xl text-purple-600 flex items-center justify-center"><Key size={20}/></div>
-            <button onClick={() => setIsChangingPassword(true)} className="text-purple-600 font-bold text-sm hover:underline mt-4">Змінити пароль</button>
-            <button onClick={() => {localStorage.clear(); navigate('/login');}} className="text-red-400 font-bold text-sm hover:underline mt-2">Вийти</button>
+            <button onClick={() => setIsChangingPassword(true)} className="text-purple-600 font-bold text-sm hover:underline mt-4 text-left">Змінити пароль</button>
+            <button onClick={() => {localStorage.clear(); navigate('/login');}} className="text-red-400 font-bold text-sm hover:underline mt-2 text-left">Вийти</button>
         </div>
       </div>
 
       {/* ПРАЙС-ЛИСТ */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="p-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
           <h2 className="font-black uppercase text-sm tracking-wider flex items-center gap-2">
             <DollarSign size={18} className="text-green-600"/> Прайс послуг
           </h2>
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input type="text" placeholder="Пошук..." className="w-full border rounded-lg py-2 pl-9 pr-4 text-sm outline-none focus:border-blue-500" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+            <input type="text" placeholder="Пошук послуги..." className="w-full border rounded-lg py-2 pl-9 pr-4 text-sm outline-none focus:border-blue-500" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           </div>
         </div>
         <div className="p-6">
           <form onSubmit={handleAddService} className="flex gap-2 mb-6">
             <input required type="text" placeholder="Назва послуги" className="flex-1 bg-slate-50 border rounded-xl px-4 py-2 outline-none focus:border-blue-500" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
             <input required type="number" placeholder="Ціна" className="w-24 bg-slate-50 border rounded-xl px-4 py-2 outline-none focus:border-blue-500" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
-            <button type="submit" className="bg-blue-600 text-white p-3 rounded-xl"><Plus size={20}/></button>
+            <button type="submit" className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200 flex items-center justify-center min-w-[48px]"><Plus size={20}/></button>
           </form>
+
           <div className="space-y-2">
             {displayedServices.map(s => (
-              <div key={s.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all">
-                <span className="font-bold text-slate-700">{s.name}</span>
-                <div className="flex items-center gap-4">
-                  <span className="font-black text-slate-900">{s.price} ₴</span>
-                  <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
-                </div>
+              <div key={s.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-blue-100 transition-all">
+                {editingServiceId === s.id ? (
+                  <div className="flex-1 flex gap-2 items-center">
+                    <input type="text" className="flex-1 bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-1 outline-none text-sm font-medium" value={editServiceData.name} onChange={e => setEditServiceData({...editServiceData, name: e.target.value})} />
+                    <input type="number" className="w-24 bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-1 outline-none text-sm font-medium" value={editServiceData.price} onChange={e => setEditServiceData({...editServiceData, price: e.target.value})} />
+                    <button onClick={() => handleUpdateService(s.id)} className="bg-green-100 text-green-600 p-2 rounded-lg"><Save size={18}/></button>
+                    <button onClick={() => setEditingServiceId(null)} className="bg-slate-100 text-slate-600 p-2 rounded-lg"><X size={18}/></button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="font-bold text-slate-700">{s.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 mr-2">{s.price} ₴</span>
+                      <button onClick={() => { setEditingServiceId(s.id); setEditServiceData({ name: s.name, price: s.price }); }} className="text-slate-400 hover:text-blue-600 p-2 rounded-lg"><Pencil size={18}/></button>
+                      <button onClick={() => handleDeleteService(s.id)} className="text-slate-400 hover:text-red-500 p-2 rounded-lg"><Trash2 size={18}/></button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
             {filteredServices.length > 5 && !searchQuery && (
-              <button onClick={() => setShowAllServices(!showAllServices)} className="w-full py-3 text-blue-600 font-bold text-sm bg-blue-50 rounded-xl mt-2 flex items-center justify-center gap-2">
-                {showAllServices ? <><ChevronUp size={16}/> Сховати</> : <><ChevronDown size={16}/> Показати всі {filteredServices.length}</>}
+              <button onClick={() => setShowAllServices(!showAllServices)} className="w-full py-3 text-blue-600 font-bold text-sm bg-blue-50/50 rounded-xl mt-2 flex items-center justify-center gap-2">
+                {showAllServices ? <><ChevronUp size={16}/> Сховати</> : <><ChevronDown size={16}/> Показати всі ({filteredServices.length})</>}
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* МОДАЛКА РЕДАГУВАННЯ */}
+      {/* МОДАЛКА ЗМІНИ ПАРОЛЯ */}
+      {isChangingPassword && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
+            <button onClick={() => setIsChangingPassword(false)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-700 bg-slate-100 p-2 rounded-full"><X size={20} /></button>
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Key className="text-purple-600"/> Зміна пароля</h2>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <input required type="password" placeholder="Старий пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-purple-500 font-medium" value={passData.old} onChange={e => setPassData({...passData, old: e.target.value})}/>
+              <input required type="password" placeholder="Новий пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-purple-500 font-medium" value={passData.new} onChange={e => setPassData({...passData, new: e.target.value})}/>
+              <input required type="password" placeholder="Підтвердіть новий пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-purple-500 font-medium" value={passData.confirm} onChange={e => setPassData({...passData, confirm: e.target.value})}/>
+              <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-black uppercase tracking-wide mt-6 transition-all shadow-lg shadow-purple-200">Оновити пароль</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* МОДАЛКА РЕДАГУВАННЯ ПРОФІЛЮ */}
       {isEditingProfile && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-2xl p-8 shadow-2xl my-8">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black italic">НАЛАШТУВАННЯ СТО</h2>
+              <h2 className="text-2xl font-black italic uppercase">Налаштування СТО</h2>
               <button onClick={() => setIsEditingProfile(false)} className="bg-slate-100 p-2 rounded-full"><X size={20} /></button>
             </div>
             <form onSubmit={handleSaveProfile} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -182,13 +241,13 @@ const Settings = () => {
                 <label className="block text-xs font-black uppercase text-slate-500 mb-2 tracking-widest">Логотип (PNG/JPG)</label>
                 <input type="file" accept="image/*" className="text-sm" onChange={(e) => setFormData({...formData, logo: e.target.files[0]})} />
               </div>
-              <div><label className="text-xs font-black uppercase text-slate-500">Назва СТО</label><input type="text" className="w-full bg-slate-50 border rounded-xl py-3 px-4" value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} /></div>
-              <div><label className="text-xs font-black uppercase text-slate-500">Націнка (%)</label><input type="number" className="w-full bg-slate-50 border rounded-xl py-3 px-4 font-black text-blue-600" value={formData.global_margin_percent} onChange={e => setFormData({...formData, global_margin_percent: e.target.value})} /></div>
-              <div><label className="text-xs font-black uppercase text-slate-500">Телефон</label><input type="text" className="w-full bg-slate-50 border rounded-xl py-3 px-4" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
-              <div><label className="text-xs font-black uppercase text-slate-500">Адреса</label><input type="text" className="w-full bg-slate-50 border rounded-xl py-3 px-4" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
-              <div className="md:col-span-2"><label className="text-xs font-black uppercase text-slate-500">Текст у підвалі (Гарантія)</label><textarea rows="3" className="w-full bg-slate-50 border rounded-xl py-3 px-4" value={formData.document_footer} onChange={e => setFormData({...formData, document_footer: e.target.value})}></textarea></div>
-              <button type="submit" disabled={saveLoading} className="md:col-span-2 w-full bg-blue-600 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-200 transition-all hover:scale-[1.02] flex items-center justify-center gap-2">
-                {saveLoading ? <Loader2 className="animate-spin" /> : <Save size={20} />} ЗБЕРЕГТИ ЗМІНИ
+              <div><label className="text-xs font-black uppercase text-slate-500">Назва СТО</label><input type="text" className="w-full bg-slate-50 border rounded-xl py-3 px-4 outline-none focus:border-blue-500" value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} /></div>
+              <div><label className="text-xs font-black uppercase text-slate-500">Націнка на запчастини (%)</label><input type="number" className="w-full bg-slate-50 border rounded-xl py-3 px-4 font-black text-blue-600 outline-none focus:border-blue-500" value={formData.global_margin_percent} onChange={e => setFormData({...formData, global_margin_percent: e.target.value})} /></div>
+              <div><label className="text-xs font-black uppercase text-slate-500">Телефон</label><input type="text" className="w-full bg-slate-50 border rounded-xl py-3 px-4 outline-none focus:border-blue-500" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
+              <div><label className="text-xs font-black uppercase text-slate-500">Адреса</label><input type="text" className="w-full bg-slate-50 border rounded-xl py-3 px-4 outline-none focus:border-blue-500" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
+              <div className="md:col-span-2"><label className="text-xs font-black uppercase text-slate-500">Текст у підвалі (Гарантія)</label><textarea rows="3" className="w-full bg-slate-50 border rounded-xl py-3 px-4 outline-none focus:border-blue-500" value={formData.document_footer} onChange={e => setFormData({...formData, document_footer: e.target.value})}></textarea></div>
+              <button type="submit" disabled={saveLoading} className="md:col-span-2 w-full bg-blue-600 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-200 transition-all hover:scale-[1.01] flex items-center justify-center gap-2">
+                {saveLoading ? <Loader2 className="animate-spin" /> : <Save size={20} />} ЗБЕРЕГТИ ВСІ НАЛАШТУВАННЯ
               </button>
             </form>
           </div>

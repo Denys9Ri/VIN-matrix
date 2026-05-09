@@ -4,7 +4,15 @@ from django.contrib.auth.models import User
 class Company(models.Model):
     name = models.CharField(max_length=255, verbose_name="Назва СТО")
     owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company')
-    global_margin_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20.00)
+    
+    # --- НАЛАШТУВАННЯ ДЛЯ ДРУКУ (АКТ ВИКОНАНИХ РОБІТ) ---
+    logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Логотип")
+    phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="Телефон СТО")
+    address = models.CharField(max_length=255, blank=True, null=True, verbose_name="Адреса СТО")
+    document_footer = models.TextField(blank=True, null=True, verbose_name="Текст для чека (Гарантія тощо)")
+    
+    # --- ФІНАНСОВІ НАЛАШТУВАННЯ ---
+    global_margin_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, verbose_name="Націнка на запчастини (%)")
 
     def __str__(self): return self.name
 

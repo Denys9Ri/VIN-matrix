@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search } from 'lucide-react';
+import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -19,10 +19,11 @@ const Settings = () => {
   const [saveLoading, setSaveLoading] = useState(false);
   const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
 
-  // СТАНИ ДЛЯ ПОШУКУ ТА РЕДАГУВАННЯ ПОСЛУГ
+  // СТАНИ ДЛЯ ПОШУКУ, РЕДАГУВАННЯ ТА ПАГІНАЦІЇ ПОСЛУГ
   const [searchQuery, setSearchQuery] = useState('');
   const [editingServiceId, setEditingServiceId] = useState(null);
   const [editServiceData, setEditServiceData] = useState({ name: '', price: '' });
+  const [showAllServices, setShowAllServices] = useState(false); // Стан для кнопки "Показати всі"
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -42,7 +43,9 @@ const Settings = () => {
         axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
       setProfile(profileRes.data);
-      setServices(servicesRes.data);
+      // Сортуємо так, щоб нові послуги були зверху (за ID)
+      const sortedServices = servicesRes.data.sort((a, b) => b.id - a.id);
+      setServices(sortedServices);
       
       setFormData({
         first_name: profileRes.data.user.first_name || '',
@@ -66,6 +69,8 @@ const Settings = () => {
     try {
       await axios.post(`${API_BASE}/api/services/`, newService, { headers: { Authorization: `Bearer ${token}` } });
       setNewService({ name: '', price: '' });
+      // Після додавання автоматично розгортаємо список, щоб побачити нову послугу
+      setShowAllServices(true);
       fetchData();
     } catch (e) { alert("Помилка додавання послуги"); }
   };
@@ -86,9 +91,15 @@ const Settings = () => {
   };
 
   // Фільтруємо послуги для пошуку
+  const isSearching = searchQuery.trim().length > 0;
   const filteredServices = services.filter(service => 
     service.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Визначаємо, які послуги показувати (всі при пошуку/натисканні кнопки, або лише 5)
+  const displayedServices = (showAllServices || isSearching) 
+    ? filteredServices 
+    : filteredServices.slice(0, 5);
 
   // --- ЗМІНА ПАРОЛЯ ---
   const handleChangePassword = async (e) => {
@@ -203,7 +214,7 @@ const Settings = () => {
           </form>
 
           <div className="space-y-2">
-            {filteredServices.map(service => (
+            {displayedServices.map(service => (
               <div key={service.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-blue-100 transition-all">
                 
                 {/* РЕЖИМ РЕДАГУВАННЯ */}
@@ -255,16 +266,31 @@ const Settings = () => {
               </div>
             ))}
             
-            {/* ПОВІДОМЛЕННЯ, ЯКЩО ПУСТО */}
+            {/* ПОВІДОМЛЕННЯ ТА КНОПКА ПОКАЗАТИ ЩЕ */}
             {services.length === 0 && (
               <p className="text-center text-slate-400 py-8 italic font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                 Прайс-лист поки порожній. Додайте першу послугу!
               </p>
             )}
+            
             {services.length > 0 && filteredServices.length === 0 && (
               <p className="text-center text-slate-400 py-8 italic font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                 За запитом "{searchQuery}" нічого не знайдено.
               </p>
+            )}
+
+            {/* КНОПКА "ПОКАЗАТИ ВСІ / СХОВАТИ" */}
+            {!isSearching && filteredServices.length > 5 && (
+              <button 
+                onClick={() => setShowAllServices(!showAllServices)}
+                className="w-full flex items-center justify-center gap-2 py-4 mt-2 text-sm font-bold text-blue-600 bg-blue-50/50 hover:bg-blue-50 rounded-2xl transition-colors"
+              >
+                {showAllServices ? (
+                  <><ChevronUp size={18} /> Сховати список</>
+                ) : (
+                  <><ChevronDown size={18} /> Показати ще {filteredServices.length - 5} послуг</>
+                )}
+              </button>
             )}
           </div>
         </div>

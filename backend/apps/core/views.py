@@ -27,35 +27,33 @@ class VisitViewSet(viewsets.ModelViewSet):
         company = get_user_company(self.request.user)
         queryset = Visit.objects.filter(company=company)
         
-        # Отримуємо параметри пошуку або дати з фронтенду
         search = self.request.query_params.get('search', None)
-        date = self.request.query_params.get('date', None)
+        date_str = self.request.query_params.get('date', None)
         
         if search:
-            # Шукаємо по номеру авто, імені або телефону
             queryset = queryset.filter(
                 Q(plate__icontains=search) | 
                 Q(client__icontains=search) | 
                 Q(phone__icontains=search)
             )
-        elif date:
-            # Якщо вибрана конкретна дата в календарі
+            return queryset.order_by('-created_at')
+        elif date_str:
             queryset = queryset.filter(
-                Q(created_at__date=date) | Q(updated_at__date=date)
+                Q(scheduled_datetime__date=date_str) | Q(created_at__date=date_str)
             ).distinct()
+            return queryset.order_by('scheduled_datetime')
         else:
-            # ДЕФОЛТНА ДОШКА (Активні авто + Готові сьогодні)
             today = timezone.localdate()
             queryset = queryset.filter(
-                ~Q(status='DONE') | Q(status='DONE', updated_at__date=today)
-            )
+                ~Q(status='DONE') | 
+                Q(scheduled_datetime__date=today) | 
+                Q(status='DONE', updated_at__date=today)
+            ).distinct()
             
-        return queryset.order_by('-updated_at')
+        return queryset.order_by('scheduled_datetime') # Сортуємо по часу запису
 
     def perform_create(self, serializer): 
         serializer.save(company=get_user_company(self.request.user))
-
-# --- УСІ ІНШІ КЛАСИ ЗАЛИШАЮТЬСЯ БЕЗ ЗМІН ---
 
 class OrderPartViewSet(viewsets.ModelViewSet):
     serializer_class = OrderPartSerializer

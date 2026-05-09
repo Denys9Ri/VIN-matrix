@@ -11,7 +11,6 @@ const Visits = () => {
   const [role, setRole] = useState(null); 
   const [loading, setLoading] = useState(true);
   
-  // Фільтри (Пошук і Календар)
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState('');
   
@@ -19,7 +18,8 @@ const Visits = () => {
   const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
   const [showManualPartForm, setShowManualPartForm] = useState(false); 
   
-  const [newVisitData, setNewVisitData] = useState({ plate: '', client: '', phone: '' });
+  // Додали date та time в новий візит
+  const [newVisitData, setNewVisitData] = useState({ plate: '', client: '', phone: '', date: '', time: '' });
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
 
@@ -29,7 +29,6 @@ const Visits = () => {
   const partStatusColors = { 'WAITING': 'text-orange-600 bg-orange-100', 'IN_TRANSIT': 'text-blue-600 bg-blue-100', 'ARRIVED': 'text-green-600 bg-green-100', 'UNAVAILABLE': 'text-red-600 bg-red-100' };
   const serviceStatusColors = { 'PENDING': 'text-slate-600 bg-slate-100', 'IN_PROGRESS': 'text-blue-600 bg-blue-100', 'DONE': 'text-green-600 bg-green-100' };
 
-  // Використовуємо useEffect для автоматичного оновлення при пошуку чи зміні дати
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -46,25 +45,26 @@ const Visits = () => {
         setRole(settingsRes.data.role);
         setCatalogServices(servicesRes.data || []);
       } catch (error) { 
-          console.error("Помилка завантаження даних", error);
+          console.error("Помилка", error);
           if (error.response?.status === 401) navigate('/login');
           setRole('owner'); 
       } 
       finally { setLoading(false); }
     };
 
-    // Затримка (debounce), щоб не робити запит на кожну букву під час друку
     const timeoutId = setTimeout(() => { fetchData(); }, 300);
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
   const handleCreateVisit = async (e) => {
     e.preventDefault();
+    // Формуємо дату та час для відправки
+    const scheduled_datetime = newVisitData.date && newVisitData.time ? `${newVisitData.date}T${newVisitData.time}` : null;
+
     try {
-      await axios.post(`${API_BASE}/api/visits/`, newVisitData, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API_BASE}/api/visits/`, { ...newVisitData, scheduled_datetime }, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
-      setNewVisitData({ plate: '', client: '', phone: '' });
-      // Примусово скидаємо фільтри, щоб побачити нове авто на головній дошці
+      setNewVisitData({ plate: '', client: '', phone: '', date: '', time: '' });
       setSearchQuery('');
       setFilterDate('');
     } catch (error) { alert("Помилка створення візиту"); }
@@ -73,9 +73,7 @@ const Visits = () => {
   const updateVisitStatus = async (id, newStatus) => {
     try {
       await axios.patch(`${API_BASE}/api/visits/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } });
-      // Оновлюємо дані візиту у модалці
       setSelectedVisit({ ...selectedVisit, status: newStatus });
-      // Оновлюємо список на фоні
       const params = new URLSearchParams();
       if (searchQuery) params.append('search', searchQuery);
       if (filterDate) params.append('date', filterDate);
@@ -135,7 +133,6 @@ const Visits = () => {
     const res = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } });
     setSelectedVisit(res.data);
     
-    // Оновлюємо фон, не збиваючи фільтри
     const params = new URLSearchParams();
     if (searchQuery) params.append('search', searchQuery);
     if (filterDate) params.append('date', filterDate);
@@ -165,8 +162,6 @@ const Visits = () => {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 h-screen flex flex-col">
-      
-      {/* ВЕРХНЯ ПАНЕЛЬ: ПОШУК І КАЛЕНДАР */}
       <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl font-black uppercase italic w-full xl:w-auto">Дошка Візитів</h1>
         
@@ -196,13 +191,24 @@ const Visits = () => {
         <Column title="Готово" icon={<CheckCircle2 size={18}/>} items={done} colorClass="text-green-600" />
       </div>
 
-      {/* МОДАЛКА СТВОРЕННЯ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
             <button onClick={() => setIsCreatingVisit(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
             <h2 className="text-xl font-black mb-6 flex items-center gap-2"><CarFront className="text-blue-600"/> Новий візит</h2>
             <form onSubmit={handleCreateVisit} className="space-y-4">
+              
+              <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Дата приїзду</label>
+                  <input required type="date" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-slate-700" value={newVisitData.date} onChange={e => setNewVisitData({...newVisitData, date: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Час</label>
+                  <input required type="time" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-slate-700" value={newVisitData.time} onChange={e => setNewVisitData({...newVisitData, time: e.target.value})}/>
+                </div>
+              </div>
+
               <input required type="text" placeholder="Номер авто (АА1234ВВ)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})}/>
               <input required type="text" placeholder="Клієнт / Марка" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
               <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
@@ -212,7 +218,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ДЕТАЛЕЙ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8">
@@ -220,15 +225,17 @@ const Visits = () => {
               <div>
                 <h2 className="text-3xl font-black uppercase">{selectedVisit.plate}</h2>
                 <p className="text-slate-500 font-bold flex items-center gap-2 mt-1"><CarFront size={16}/> {selectedVisit.client} | <Phone size={16}/> {selectedVisit.phone}</p>
-                <p className="text-slate-400 text-xs font-bold mt-1">Створено: {new Date(selectedVisit.created_at).toLocaleDateString()}</p>
+                <p className="text-slate-400 text-xs font-bold mt-1 flex items-center gap-1">
+                  <Clock size={12}/> 
+                  Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}
+                </p>
               </div>
               
               <div className="flex items-center gap-2">
-                {/* КНОПКА ПОВТОРНОГО ВІЗИТУ ДЛЯ СТАРИХ АВТО */}
                 {role === 'owner' && (selectedVisit.status === 'DONE' || filterDate) && (
                   <button 
                     onClick={() => {
-                      setNewVisitData({ plate: selectedVisit.plate, client: selectedVisit.client, phone: selectedVisit.phone });
+                      setNewVisitData({ plate: selectedVisit.plate, client: selectedVisit.client, phone: selectedVisit.phone, date: '', time: '' });
                       setSelectedVisit(null);
                       setIsCreatingVisit(true);
                     }} 
@@ -248,8 +255,6 @@ const Visits = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              
-              {/* === ЗАВДАННЯ (ПОСЛУГИ) === */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Wrench size={18}/> Завдання</h3>
                 <div className="space-y-3 mb-4">
@@ -285,7 +290,6 @@ const Visits = () => {
                 )}
               </div>
 
-              {/* === ЗАПЧАСТИНИ === */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Store size={18}/> Запчастини</h3>
                 <div className="space-y-3 mb-4">

@@ -5,11 +5,19 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from .models import Company, Visit, ServiceCatalog
+from .models import Company, Visit, ServiceCatalog, Employee
 from .serializers import (
     VisitSerializer, UserSerializer, 
     CompanySerializer, ServiceCatalogSerializer
 )
+
+# Функція для визначення компанії (чи це Власник, чи Майстер)
+def get_user_company(user):
+    if hasattr(user, 'company'):
+        return user.company
+    if hasattr(user, 'employee_profile'):
+        return user.employee_profile.company
+    return None
 
 # 1. ВІЗИТИ (МАШИНИ)
 class VisitViewSet(viewsets.ModelViewSet):
@@ -17,10 +25,10 @@ class VisitViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Visit.objects.filter(company=self.request.user.company)
+        return Visit.objects.filter(company=get_user_company(self.request.user))
 
     def perform_create(self, serializer):
-        serializer.save(company=self.request.user.company)
+        serializer.save(company=get_user_company(self.request.user))
 
 # 2. КАТАЛОГ ПОСЛУГ ТА ЦІН
 class ServiceCatalogViewSet(viewsets.ModelViewSet):
@@ -28,10 +36,10 @@ class ServiceCatalogViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return ServiceCatalog.objects.filter(company=self.request.user.company)
+        return ServiceCatalog.objects.filter(company=get_user_company(self.request.user))
 
     def perform_create(self, serializer):
-        serializer.save(company=self.request.user.company)
+        serializer.save(company=get_user_company(self.request.user))
 
 # 3. РЕДАГУВАННЯ ПРОФІЛЮ ТА СТО
 class ProfileSettingsView(APIView):
@@ -39,15 +47,22 @@ class ProfileSettingsView(APIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def get(self, request):
+        company = get_user_company(request.user)
+        role = 'owner' if hasattr(request.user, 'company') else 'mechanic'
+
         user_serializer = UserSerializer(request.user)
-        # ВАЖЛИВО: додаємо context={'request': request} для коректних посилань на логотип
-        company_serializer = CompanySerializer(request.user.company, context={'request': request})
+        company_serializer = CompanySerializer(company, context={'request': request})
+        
         return Response({
             "user": user_serializer.data,
-            "company": company_serializer.data
+            "company": company_serializer.data,
+            "role": role # Повертаємо роль на фронтенд
         })
 
     def patch(self, request):
+        if not hasattr(request.user, 'company'):
+            return Response({"error": "Тільки власник може змінювати налаштування"}, status=403)
+
         user = request.user
         company = user.company
 
@@ -75,6 +90,31 @@ class ProfileSettingsView(APIView):
 
         company.save()
         return Response({"message": "Дані успішно оновлено!"})
+
+# ДОДАВАННЯ МАЙСТРА
+class MechanicCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not hasattr(request.user, 'company'):
+            return Response({"error": "Тільки власник може додавати майстрів!"}, status=403)
+
+        username = request.data.get('username')
+        password = request.data.get('password')
+        first_name = request.data.get('first_name')
+
+        if not username or not password or not first_name:
+            return Response({"error": "Всі поля обов'язкові!"}, status=400)
+
+        if User.objects.filter(username=username).exists():
+            return Response({"error": "Такий логін вже зайнятий!"}, status=400)
+
+        try:
+            new_user = User.objects.create_user(username=username, password=password, first_name=first_name)
+            Employee.objects.create(user=new_user, company=request.user.company, role='mechanic')
+            return Response({"message": "Майстра успішно додано!"}, status=201)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
 # 4. РЕЄСТРАЦІЯ
 class RegisterView(APIView):

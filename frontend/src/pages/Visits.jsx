@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store } from 'lucide-react';
-// Зверни увагу на правильний шлях до твого компонента!
+import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard'; 
 
 const Visits = () => {
   const [visits, setVisits] = useState([]);
+  const [catalogServices, setCatalogServices] = useState([]); // Стан для прайс-листа
   const [role, setRole] = useState('mechanic');
   const [loading, setLoading] = useState(true);
   
   const [selectedVisit, setSelectedVisit] = useState(null);
-  const [isCreatingVisit, setIsCreatingVisit] = useState(false); // Стан для модалки створення
+  const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
+  const [showManualPartForm, setShowManualPartForm] = useState(false); // Тогл для ручного додавання запчастин
   
   const [newVisitData, setNewVisitData] = useState({ plate: '', client: '', phone: '' });
   const [newService, setNewService] = useState({ name: '', price: '' });
@@ -21,26 +22,27 @@ const Visits = () => {
 
   const fetchData = async () => {
     try {
-      const [visitsRes, settingsRes] = await Promise.all([
+      const [visitsRes, settingsRes, servicesRes] = await Promise.all([
         axios.get(`${API_BASE}/api/visits/`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) // Завантажуємо прайс
       ]);
       setVisits(visitsRes.data);
       setRole(settingsRes.data.role);
+      setCatalogServices(servicesRes.data);
     } catch (error) { console.error(error); } 
     finally { setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, []);
 
-  // --- СТВОРЕННЯ НОВОГО ВІЗИТУ ---
   const handleCreateVisit = async (e) => {
     e.preventDefault();
     try {
       await axios.post(`${API_BASE}/api/visits/`, newVisitData, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
       setNewVisitData({ plate: '', client: '', phone: '' });
-      fetchData(); // Оновлюємо дошку
+      fetchData(); 
     } catch (error) { alert("Помилка створення візиту"); }
   };
 
@@ -54,20 +56,49 @@ const Visits = () => {
 
   const handleAddService = async (e) => {
     e.preventDefault();
+    if(!newService.name || !newService.price) return;
     try {
       await axios.post(`${API_BASE}/api/order-services/`, { ...newService, visit: selectedVisit.id }, { headers: { Authorization: `Bearer ${token}` } });
       setNewService({ name: '', price: '' });
       refreshSelectedVisit();
-    } catch (error) { alert("Помилка"); }
+    } catch (error) { alert("Помилка при додаванні послуги"); }
   };
 
   const handleAddPart = async (e) => {
     e.preventDefault();
+    // Страхуємось від пустих значень, щоб бекенд не видавав помилку
+    const payload = {
+      ...newPart,
+      visit: selectedVisit.id,
+      brand: newPart.brand || '-',
+      article: newPart.article || '-',
+      buy_price: newPart.buy_price || 0,
+      sell_price: newPart.sell_price || 0,
+      supplier: 'Вручну'
+    };
+
     try {
-      await axios.post(`${API_BASE}/api/order-parts/`, { ...newPart, visit: selectedVisit.id }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API_BASE}/api/order-parts/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       setNewPart({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
+      setShowManualPartForm(false); // Ховаємо форму після успішного додавання
       refreshSelectedVisit();
-    } catch (error) { alert("Помилка"); }
+    } catch (error) { alert("Помилка при додаванні деталі. Перевірте поля."); }
+  };
+
+  // Видалення завдання (послуги)
+  const handleDeleteService = async (id) => {
+    try {
+      await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
+      refreshSelectedVisit();
+    } catch (error) { alert("Помилка видалення"); }
+  };
+
+  // Видалення запчастини
+  const handleDeletePart = async (id) => {
+    try {
+      await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
+      refreshSelectedVisit();
+    } catch (error) { alert("Помилка видалення"); }
   };
 
   const refreshSelectedVisit = async () => {
@@ -82,13 +113,12 @@ const Visits = () => {
   const inProgress = visits.filter(v => v.status === 'IN_PROGRESS');
   const done = visits.filter(v => v.status === 'DONE');
 
-  // Оновлена колонка, яка використовує твій VisitCard
   const Column = ({ title, icon, items, colorClass }) => (
     <div className="bg-slate-50/50 rounded-3xl p-4 flex flex-col h-full border border-slate-100">
       <h3 className={`font-black uppercase tracking-wider text-sm flex items-center gap-2 mb-4 ${colorClass}`}>
         {icon} {title} <span className="ml-auto bg-white px-2 py-1 rounded-lg shadow-sm text-slate-500">{items.length}</span>
       </h3>
-      <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+      <div className="space-y-4 flex-1 overflow-y-auto pr-1 pb-10">
         {items.map(visit => (
           <VisitCard key={visit.id} visit={visit} onClick={() => setSelectedVisit(visit)} />
         ))}
@@ -129,7 +159,7 @@ const Visits = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ВІЗИТУ (Внутрішня частина картки) */}
+      {/* МОДАЛКА ВІЗИТУ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8">
@@ -141,6 +171,7 @@ const Visits = () => {
               <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
             </div>
 
+            {/* ПАНЕЛЬ СТАТУСІВ */}
             <div className="flex gap-2 bg-slate-50 p-2 rounded-2xl mb-6">
               <button onClick={() => updateStatus(selectedVisit.id, 'PENDING')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow-md text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
               <button onClick={() => updateStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow-md shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
@@ -148,54 +179,97 @@ const Visits = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* === ЗАВДАННЯ (ПОСЛУГИ) === */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Wrench size={18}/> Завдання</h3>
                 <div className="space-y-2 mb-4">
                   {selectedVisit.services?.length === 0 && <p className="text-sm text-slate-400 italic">Роботи ще не додані</p>}
                   {selectedVisit.services?.map(s => (
-                    <div key={s.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
+                    <div key={s.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center group">
                       <span className="font-bold text-slate-700 text-sm">{s.name}</span>
-                      {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{s.price} ₴</span>}
+                      <div className="flex items-center gap-3">
+                        {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{s.price} ₴</span>}
+                        {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
+                      </div>
                     </div>
                   ))}
                 </div>
+                
+                {/* Вибір послуги з прайсу або вручну */}
                 {role === 'owner' && (
-                  <form onSubmit={handleAddService} className="flex gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-                    <input required type="text" placeholder="Що зробити?" className="flex-1 bg-white border-none rounded-lg px-3 py-2 text-sm outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
-                    <input required type="number" placeholder="Ціна" className="w-20 bg-white border-none rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
-                    <button type="submit" className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700"><Plus size={18}/></button>
-                  </form>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-3 mt-4">
+                    <div className="relative">
+                      <List className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <select 
+                        className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none cursor-pointer text-slate-600 font-medium appearance-none"
+                        onChange={(e) => {
+                          const s = catalogServices.find(cat => cat.id === parseInt(e.target.value));
+                          if (s) setNewService({ name: s.name, price: s.price });
+                        }}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Оберіть послугу з прайсу...</option>
+                        {catalogServices.map(s => (
+                          <option key={s.id} value={s.id}>{s.name} - {s.price} ₴</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <form onSubmit={handleAddService} className="flex gap-2">
+                      <input required type="text" placeholder="Або введіть свою назву" className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-medium" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
+                      <input required type="number" placeholder="Ціна" className="w-20 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-black" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
+                      <button type="submit" className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 shadow-sm"><Plus size={18}/></button>
+                    </form>
+                  </div>
                 )}
               </div>
 
+              {/* === ЗАПЧАСТИНИ === */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Store size={18}/> Запчастини</h3>
                 <div className="space-y-2 mb-4">
                   {selectedVisit.parts?.length === 0 && <p className="text-sm text-slate-400 italic">Запчастини не потрібні</p>}
                   {selectedVisit.parts?.map(p => (
-                    <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-start">
+                    <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-start group">
                       <div>
                         <p className="font-bold text-slate-700 text-sm">{p.name}</p>
                         <p className="text-[10px] uppercase font-bold text-slate-500 mt-1">{p.brand} | Арт: {p.article}</p>
                       </div>
-                      {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{p.sell_price} ₴</span>}
+                      <div className="flex items-center gap-3">
+                        {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{p.sell_price} ₴</span>}
+                        {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
+                      </div>
                     </div>
                   ))}
                 </div>
+
                 {role === 'owner' && (
-                  <form onSubmit={handleAddPart} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                    <input required type="text" placeholder="Назва запчастини" className="w-full bg-white border-none rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
-                    <div className="flex gap-2">
-                      <input type="text" placeholder="Бренд" className="w-1/2 bg-white border-none rounded-lg px-3 py-2 text-sm outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
-                      <input type="text" placeholder="Артикул" className="w-1/2 bg-white border-none rounded-lg px-3 py-2 text-sm outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
-                    </div>
-                    <div className="flex gap-2 items-center bg-white p-1 rounded-lg">
-                      <input required type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none px-3 py-2 text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
-                      <span className="text-slate-300">|</span>
-                      <input required type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none px-3 py-2 text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
-                    </div>
-                    <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs tracking-widest py-3 rounded-lg mt-2 hover:bg-blue-700 shadow-sm">Додати деталь</button>
-                  </form>
+                  <div className="mt-4">
+                    {!showManualPartForm ? (
+                      <button 
+                        onClick={() => setShowManualPartForm(true)} 
+                        className="flex items-center gap-2 text-xs font-black uppercase text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all w-full p-3 justify-center border-2 border-dashed border-slate-200 rounded-xl"
+                      >
+                        <Pencil size={14}/> Додати запчастину вручну
+                      </button>
+                    ) : (
+                      <form onSubmit={handleAddPart} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 relative">
+                        <button type="button" onClick={() => setShowManualPartForm(false)} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 bg-white rounded-full p-1"><X size={14}/></button>
+                        <p className="text-xs font-black uppercase text-slate-500 mb-2">Ручне введення</p>
+                        <input required type="text" placeholder="Назва запчастини (напр. Колодки)" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
+                        <div className="flex gap-2">
+                          <input type="text" placeholder="Бренд" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
+                          <input type="text" placeholder="Артикул" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
+                        </div>
+                        <div className="flex gap-2 items-center bg-white p-1 rounded-lg border border-slate-200">
+                          <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none px-3 py-2 text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
+                          <span className="text-slate-300">|</span>
+                          <input type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none px-3 py-2 text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
+                        </div>
+                        <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs tracking-widest py-3 rounded-lg mt-2 hover:bg-blue-700 shadow-sm transition-colors">Зберегти деталь</button>
+                      </form>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

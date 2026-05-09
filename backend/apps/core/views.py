@@ -27,8 +27,8 @@ class VisitViewSet(viewsets.ModelViewSet):
         company = get_user_company(self.request.user)
         queryset = Visit.objects.filter(company=company)
         
-        search = self.request.query_params.get('search', None)
-        date_str = self.request.query_params.get('date', None)
+        search = self.request.query_params.get('search', '').strip()
+        date_str = self.request.query_params.get('date', '').strip()
         
         if search:
             queryset = queryset.filter(
@@ -37,11 +37,13 @@ class VisitViewSet(viewsets.ModelViewSet):
                 Q(phone__icontains=search)
             )
             return queryset.order_by('-created_at')
-        elif date_str:
+            
+        elif date_str and len(date_str) == 10: # Захист: перевіряємо чи дата має формат YYYY-MM-DD
             queryset = queryset.filter(
                 Q(scheduled_datetime__date=date_str) | Q(created_at__date=date_str)
             ).distinct()
             return queryset.order_by('scheduled_datetime')
+            
         else:
             today = timezone.localdate()
             queryset = queryset.filter(
@@ -50,7 +52,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                 Q(status='DONE', updated_at__date=today)
             ).distinct()
             
-        return queryset.order_by('scheduled_datetime') # Сортуємо по часу запису
+        return queryset.order_by('scheduled_datetime') 
 
     def perform_create(self, serializer): 
         serializer.save(company=get_user_company(self.request.user))

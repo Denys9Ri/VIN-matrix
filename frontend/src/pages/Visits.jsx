@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Trash2 } from 'lucide-react';
+import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store } from 'lucide-react';
+// Зверни увагу на правильний шлях до твого компонента!
+import VisitCard from '../components/visits/VisitCard'; 
 
 const Visits = () => {
   const [visits, setVisits] = useState([]);
   const [role, setRole] = useState('mechanic');
   const [loading, setLoading] = useState(true);
   
-  // Модалка і вибраний візит
   const [selectedVisit, setSelectedVisit] = useState(null);
+  const [isCreatingVisit, setIsCreatingVisit] = useState(false); // Стан для модалки створення
   
-  // Дані для додавання нових елементів
+  const [newVisitData, setNewVisitData] = useState({ plate: '', client: '', phone: '' });
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
 
@@ -25,16 +27,23 @@ const Visits = () => {
       ]);
       setVisits(visitsRes.data);
       setRole(settingsRes.data.role);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error(error); } 
+    finally { setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, []);
 
-  // Оновлення статусу (В черзі -> В роботі -> Готово)
+  // --- СТВОРЕННЯ НОВОГО ВІЗИТУ ---
+  const handleCreateVisit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_BASE}/api/visits/`, newVisitData, { headers: { Authorization: `Bearer ${token}` } });
+      setIsCreatingVisit(false);
+      setNewVisitData({ plate: '', client: '', phone: '' });
+      fetchData(); // Оновлюємо дошку
+    } catch (error) { alert("Помилка створення візиту"); }
+  };
+
   const updateStatus = async (id, newStatus) => {
     try {
       await axios.patch(`${API_BASE}/api/visits/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } });
@@ -43,7 +52,6 @@ const Visits = () => {
     } catch (error) { alert("Помилка оновлення статусу"); }
   };
 
-  // --- ЛОГІКА ДОДАВАННЯ (Тільки для Власника) ---
   const handleAddService = async (e) => {
     e.preventDefault();
     try {
@@ -65,38 +73,24 @@ const Visits = () => {
   const refreshSelectedVisit = async () => {
     const res = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } });
     setSelectedVisit(res.data);
-    fetchData(); // Оновлюємо фон
+    fetchData(); 
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
 
-  // Розділяємо візити по колонках
   const pending = visits.filter(v => v.status === 'PENDING' || v.status === 'SELECTION');
   const inProgress = visits.filter(v => v.status === 'IN_PROGRESS');
   const done = visits.filter(v => v.status === 'DONE');
 
+  // Оновлена колонка, яка використовує твій VisitCard
   const Column = ({ title, icon, items, colorClass }) => (
     <div className="bg-slate-50/50 rounded-3xl p-4 flex flex-col h-full border border-slate-100">
       <h3 className={`font-black uppercase tracking-wider text-sm flex items-center gap-2 mb-4 ${colorClass}`}>
         {icon} {title} <span className="ml-auto bg-white px-2 py-1 rounded-lg shadow-sm text-slate-500">{items.length}</span>
       </h3>
-      <div className="space-y-3 flex-1 overflow-y-auto">
+      <div className="space-y-4 flex-1 overflow-y-auto pr-1">
         {items.map(visit => (
-          <div 
-            key={visit.id} 
-            onClick={() => setSelectedVisit(visit)}
-            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:border-blue-300 transition-all hover:shadow-md group"
-          >
-            <div className="flex justify-between items-start mb-2">
-              <span className="font-black text-slate-800 text-lg bg-slate-100 px-2 py-1 rounded-lg">{visit.plate}</span>
-              <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">{new Date(visit.created_at).toLocaleDateString()}</span>
-            </div>
-            {role === 'owner' && <p className="text-sm font-bold text-slate-600 flex items-center gap-2"><CarFront size={14}/> {visit.client}</p>}
-            <div className="mt-3 flex gap-2">
-              <span className="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-md">Роботи: {visit.services?.length || 0}</span>
-              <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-md">Запчастини: {visit.parts?.length || 0}</span>
-            </div>
-          </div>
+          <VisitCard key={visit.id} visit={visit} onClick={() => setSelectedVisit(visit)} />
         ))}
       </div>
     </div>
@@ -107,62 +101,73 @@ const Visits = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-black uppercase italic">Дошка Візитів</h1>
         {role === 'owner' && (
-           <button className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200">
-             <Plus size={18}/> Нове авто
+           <button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-4 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all hover:scale-[1.02]">
+             <Plus size={16}/> Нове авто
            </button>
         )}
       </div>
 
-      {/* КАНБАН ДОШКА */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
-        <Column title="В черзі / Підбір" icon={<Clock size={18}/>} items={pending} colorClass="text-slate-600" />
+        <Column title="В черзі" icon={<Clock size={18}/>} items={pending} colorClass="text-slate-600" />
         <Column title="В роботі" icon={<Wrench size={18}/>} items={inProgress} colorClass="text-blue-600" />
         <Column title="Готово" icon={<CheckCircle2 size={18}/>} items={done} colorClass="text-green-600" />
       </div>
 
-      {/* МОДАЛКА ВІЗИТУ */}
+      {/* МОДАЛКА: СТВОРЕННЯ НОВОГО АВТО */}
+      {isCreatingVisit && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
+            <button onClick={() => setIsCreatingVisit(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><CarFront className="text-blue-600"/> Новий візит</h2>
+            <form onSubmit={handleCreateVisit} className="space-y-4">
+              <input required type="text" placeholder="Номер авто (АА1234ВВ)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})}/>
+              <input required type="text" placeholder="Клієнт (марка авто або ім'я)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
+              <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
+              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black uppercase tracking-wide mt-6 shadow-lg shadow-blue-200 transition-all">Відкрити замовлення</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* МОДАЛКА ВІЗИТУ (Внутрішня частина картки) */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8">
             <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-3xl font-black uppercase">{selectedVisit.plate}</h2>
-                {role === 'owner' && <p className="text-slate-500 font-bold flex items-center gap-2 mt-1"><CarFront size={16}/> {selectedVisit.client} | <Phone size={16}/> {selectedVisit.phone}</p>}
+                <p className="text-slate-500 font-bold flex items-center gap-2 mt-1"><CarFront size={16}/> {selectedVisit.client} | <Phone size={16}/> {selectedVisit.phone}</p>
               </div>
               <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
             </div>
 
-            {/* ПАНЕЛЬ СТАТУСІВ */}
             <div className="flex gap-2 bg-slate-50 p-2 rounded-2xl mb-6">
-              <button onClick={() => updateStatus(selectedVisit.id, 'PENDING')} className={`flex-1 py-3 rounded-xl font-black text-sm uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow-md text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
-              <button onClick={() => updateStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 py-3 rounded-xl font-black text-sm uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow-md shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
-              <button onClick={() => updateStatus(selectedVisit.id, 'DONE')} className={`flex-1 py-3 rounded-xl font-black text-sm uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow-md shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
+              <button onClick={() => updateStatus(selectedVisit.id, 'PENDING')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow-md text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
+              <button onClick={() => updateStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow-md shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
+              <button onClick={() => updateStatus(selectedVisit.id, 'DONE')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow-md shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* КОЛОНКА РОБІТ */}
               <div>
-                <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Wrench size={18}/> Завдання (Роботи)</h3>
+                <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Wrench size={18}/> Завдання</h3>
                 <div className="space-y-2 mb-4">
                   {selectedVisit.services?.length === 0 && <p className="text-sm text-slate-400 italic">Роботи ще не додані</p>}
                   {selectedVisit.services?.map(s => (
-                    <div key={s.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between">
-                      <span className="font-bold text-slate-700">{s.name}</span>
-                      {role === 'owner' && <span className="font-black text-slate-900">{s.price} ₴</span>}
+                    <div key={s.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
+                      <span className="font-bold text-slate-700 text-sm">{s.name}</span>
+                      {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{s.price} ₴</span>}
                     </div>
                   ))}
                 </div>
-                {/* Форма додавання тільки для власника */}
                 {role === 'owner' && (
-                  <form onSubmit={handleAddService} className="flex gap-2">
-                    <input required type="text" placeholder="Що зробити?" className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
-                    <input required type="number" placeholder="Ціна" className="w-20 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
-                    <button type="submit" className="bg-blue-100 text-blue-600 p-2 rounded-lg"><Plus size={18}/></button>
+                  <form onSubmit={handleAddService} className="flex gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                    <input required type="text" placeholder="Що зробити?" className="flex-1 bg-white border-none rounded-lg px-3 py-2 text-sm outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
+                    <input required type="number" placeholder="Ціна" className="w-20 bg-white border-none rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
+                    <button type="submit" className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700"><Plus size={18}/></button>
                   </form>
                 )}
               </div>
 
-              {/* КОЛОНКА ЗАПЧАСТИН */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Store size={18}/> Запчастини</h3>
                 <div className="space-y-2 mb-4">
@@ -170,26 +175,26 @@ const Visits = () => {
                   {selectedVisit.parts?.map(p => (
                     <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-start">
                       <div>
-                        <p className="font-bold text-slate-700">{p.name}</p>
-                        <p className="text-xs text-slate-500">{p.brand} | Арт: {p.article}</p>
+                        <p className="font-bold text-slate-700 text-sm">{p.name}</p>
+                        <p className="text-[10px] uppercase font-bold text-slate-500 mt-1">{p.brand} | Арт: {p.article}</p>
                       </div>
-                      {role === 'owner' && <span className="font-black text-slate-900">{p.sell_price} ₴</span>}
+                      {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{p.sell_price} ₴</span>}
                     </div>
                   ))}
                 </div>
-                {/* Форма додавання тільки для власника */}
                 {role === 'owner' && (
                   <form onSubmit={handleAddPart} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                    <input required type="text" placeholder="Назва запчастини" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
+                    <input required type="text" placeholder="Назва запчастини" className="w-full bg-white border-none rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
                     <div className="flex gap-2">
-                      <input type="text" placeholder="Бренд" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
-                      <input type="text" placeholder="Артикул" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
+                      <input type="text" placeholder="Бренд" className="w-1/2 bg-white border-none rounded-lg px-3 py-2 text-sm outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
+                      <input type="text" placeholder="Артикул" className="w-1/2 bg-white border-none rounded-lg px-3 py-2 text-sm outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
                     </div>
-                    <div className="flex gap-2">
-                      <input required type="number" placeholder="Закупка" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
-                      <input required type="number" placeholder="Продаж" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
+                    <div className="flex gap-2 items-center bg-white p-1 rounded-lg">
+                      <input required type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none px-3 py-2 text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
+                      <span className="text-slate-300">|</span>
+                      <input required type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none px-3 py-2 text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
                     </div>
-                    <button type="submit" className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg text-sm mt-2">Додати запчастину</button>
+                    <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs tracking-widest py-3 rounded-lg mt-2 hover:bg-blue-700 shadow-sm">Додати деталь</button>
                   </form>
                 )}
               </div>

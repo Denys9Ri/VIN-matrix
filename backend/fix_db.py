@@ -1,28 +1,33 @@
+import sqlite3
 import os
-import django
 
-# Налаштовуємо доступ до Django
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "vin_matrix.settings")
-django.setup()
+# Шлях до файлу бази даних
+db_path = 'db.sqlite3'
 
-from django.db import connection
+print("Починаємо перевірку та оновлення бази даних...")
 
-# Наші SQL-команди для додавання колонок
-queries = [
-    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS logo varchar(100);",
-    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS phone varchar(50);",
-    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS address varchar(255);",
-    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS document_footer text;"
-]
-
-# Виконуємо їх напряму в PostgreSQL
-print("Починаємо оновлення бази даних...")
-with connection.cursor() as cursor:
+if os.path.exists(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # SQL-запити для примусового додавання нових колонок
+    queries = [
+        "ALTER TABLE core_visit ADD COLUMN updated_at datetime NULL;",
+        "ALTER TABLE core_visit ADD COLUMN scheduled_datetime datetime NULL;",
+        "ALTER TABLE core_orderpart ADD COLUMN status varchar(20) NOT NULL DEFAULT 'WAITING';",
+        "ALTER TABLE core_orderservice ADD COLUMN status varchar(20) NOT NULL DEFAULT 'PENDING';"
+    ]
+    
     for q in queries:
         try:
             cursor.execute(q)
-            print(f"Успішно виконано: {q}")
+            print(f"Виконано: {q}")
         except Exception as e:
-            print(f"Пропущено: {e}")
+            # Якщо колонка вже існує, база видасть помилку, ми її просто ігноруємо
+            pass
             
-print("База даних готова до роботи!")
+    conn.commit()
+    conn.close()
+    print("Оновлення бази даних успішно завершено!")
+else:
+    print("Файл db.sqlite3 не знайдено. Перевірте шлях.")

@@ -22,14 +22,15 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* ВІДКРИТІ СТОРІНКИ */}
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} /> {/* <--- Винесли сюди! */}
         
-        {/* Всі сторінки всередині цього блоку ЗАХИЩЕНІ */}
+        {/* ЗАХИЩЕНІ СТОРІНКИ (тільки після входу) */}
         <Route path="/" element={ <ProtectedRoute><MainLayout /></ProtectedRoute> }>
           <Route index element={<Dashboard />} />
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
-          <Route path="/register" element={<Register />} />
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<Placeholder title="Active Visits" />} />
           <Route path="analytics" element={<Placeholder title="Analytics" />} />

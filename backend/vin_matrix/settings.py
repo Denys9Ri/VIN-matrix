@@ -7,10 +7,11 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('SECRET_KEY')
-DEBUG = os.getenv('DEBUG') == 'True'
+# Додано запасний ключ на випадок збоїв
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key')
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*'] # Для Coolify потім налаштуємо конкретні домени
+ALLOWED_HOSTS = ['*']
 
 # Реєструємо сторонні бібліотеки та наші модулі
 INSTALLED_APPS = [
@@ -29,14 +30,13 @@ INSTALLED_APPS = [
     'apps.core',
     'apps.integrations',
     'apps.crm',
-    # 'apps.analytics', # Залишив закоментованим, поки не створимо цей додаток
 ]
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [],
-        'APP_DIRS': True, # Саме це дозволяє знайти admin/login.html
+        'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
@@ -50,8 +50,8 @@ TEMPLATES = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # Додано для роздачі стилів (CSS)
-    'corsheaders.middleware.CorsMiddleware', # Важливо для роботи з React (має бути тут)
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -63,11 +63,19 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'vin_matrix.urls'
 WSGI_APPLICATION = 'vin_matrix.wsgi.application'
 
-# Дозволяємо React-фронтенду робити запити до нашого API
+# Налаштування CORS для React
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True 
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
 
-# Налаштування Бази Даних (SQLite для локального тесту, Postgres для Coolify)
+# Налаштування Бази Даних
 if os.getenv('USE_POSTGRES') == 'True':
     DATABASES = {
         'default': {
@@ -96,15 +104,8 @@ REST_FRAMEWORK = {
     )
 }
 
-# Налаштування статики (CSS, JS, зображення для адмінки)
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-# Дозволяємо JWT заголовки
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "authorization",
-    "content-type",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-]
+
+# Важливе налаштування, щоб база не видавала помилок про ключі
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

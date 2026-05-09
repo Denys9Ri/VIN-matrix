@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import Company, Visit, ServiceCatalog
 from .serializers import (
     VisitSerializer, UserSerializer, 
@@ -21,13 +22,12 @@ class VisitViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(company=self.request.user.company)
 
-# 2. КАТАЛОГ ПОСЛУГ ТА ЦІН (Налаштування клієнта)
+# 2. КАТАЛОГ ПОСЛУГ ТА ЦІН
 class ServiceCatalogViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceCatalogSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Кожен бачить тільки свій прайс
         return ServiceCatalog.objects.filter(company=self.request.user.company)
 
     def perform_create(self, serializer):
@@ -36,9 +36,9 @@ class ServiceCatalogViewSet(viewsets.ModelViewSet):
 # 3. РЕДАГУВАННЯ ПРОФІЛЮ ТА СТО
 class ProfileSettingsView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def get(self, request):
-        # Повертаємо дані про юзера та його СТО
         user_serializer = UserSerializer(request.user)
         company_serializer = CompanySerializer(request.user.company)
         return Response({
@@ -50,20 +50,30 @@ class ProfileSettingsView(APIView):
         user = request.user
         company = user.company
 
-        # Оновлюємо дані користувача (email, ім'я)
-        user_data = request.data.get('user', {})
-        user_serializer = UserSerializer(user, data=user_data, partial=True)
+        # Обробка даних користувача (підтримка FormData ключів)
+        first_name = request.data.get('user[first_name]') or request.data.get('first_name')
+        email = request.data.get('user[email]') or request.data.get('email')
         
-        # Оновлюємо назву СТО
-        company_data = request.data.get('company', {})
-        company_serializer = CompanySerializer(company, data=company_data, partial=True)
+        if first_name: user.first_name = first_name
+        if email: user.email = email
+        user.save()
 
-        if user_serializer.is_valid() and company_serializer.is_valid():
-            user_serializer.save()
-            company_serializer.save()
-            return Response({"message": "Дані успішно оновлено!"})
+        # Обробка даних компанії
+        name = request.data.get('company[name]') or request.data.get('name')
+        if name: company.name = name
         
-        return Response({"error": "Помилка валідації"}, status=400)
+        if 'company[phone]' in request.data: company.phone = request.data.get('company[phone]')
+        if 'company[address]' in request.data: company.address = request.data.get('company[address]')
+        if 'company[document_footer]' in request.data: company.document_footer = request.data.get('company[document_footer]')
+        if 'company[global_margin_percent]' in request.data: company.global_margin_percent = request.data.get('company[global_margin_percent]')
+        
+        # Обробка ЛОГОТИПА
+        logo = request.data.get('company[logo]')
+        if logo:
+            company.logo = logo
+
+        company.save()
+        return Response({"message": "Дані успішно оновлено!"})
 
 # 4. РЕЄСТРАЦІЯ
 class RegisterView(APIView):
@@ -87,15 +97,14 @@ class RegisterView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
-# 5. ВИХІД (LOGOUT)
+# 5. ВИХІД
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
-
     def post(self, request):
         try:
             refresh_token = request.data.get("refresh")
             token = RefreshToken(refresh_token)
-            token.blacklist() # Додаємо токен у чорний список
+            token.blacklist()
             return Response({"message": "Вихід успішний"}, status=205)
         except Exception as e:
             return Response({"error": "Помилка при виході"}, status=400)
@@ -103,16 +112,11 @@ class LogoutView(APIView):
 # 6. ЗМІНА ПАРОЛЯ
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
-
     def post(self, request):
         old_password = request.data.get("old_password")
         new_password = request.data.get("new_password")
-        
-        # Перевіряємо старий пароль
         if not request.user.check_password(old_password):
             return Response({"error": "Старий пароль невірний"}, status=status.HTTP_400_BAD_REQUEST)
-            
-        # Встановлюємо новий
         request.user.set_password(new_password)
         request.user.save()
         return Response({"message": "Пароль успішно змінено!"}, status=status.HTTP_200_OK)

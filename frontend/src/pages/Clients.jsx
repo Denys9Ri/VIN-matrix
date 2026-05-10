@@ -10,9 +10,8 @@ const Clients = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
 
-  // ДОДАНО: Стан для пагінації
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 12; // Кількість авто на одній сторінці
+  const itemsPerPage = 12; 
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -58,12 +57,10 @@ const Clients = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, token, navigate]);
 
-  // ДОДАНО: Якщо користувач починає пошук, перекидаємо його на 1-шу сторінку
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
 
-  // ДОДАНО: Логіка обчислення поточних авто для відображення
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentClients = clients.slice(indexOfFirstItem, indexOfLastItem);
@@ -92,7 +89,6 @@ const Clients = () => {
         </div>
       </div>
 
-      {/* СПИСОК КЛІЄНТІВ (використовуємо currentClients замість clients) */}
       <div className="flex-1 overflow-y-auto pr-2 pb-10">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {currentClients.map(c => (
@@ -136,7 +132,6 @@ const Clients = () => {
           </div>
         )}
 
-        {/* ДОДАНО: КНОПКИ ПАГІНАЦІЇ */}
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-4 mt-8 pt-4 border-t border-slate-100">
             <button 
@@ -185,7 +180,11 @@ const Clients = () => {
                   <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-3">
                     <div className="font-black text-blue-600 flex items-center gap-2">
                       <CalendarDays size={16}/> 
-                      {new Date(visit.created_at).toLocaleDateString()} 
+                      {/* ВИПРАВЛЕНО: Тепер пріоритет у дати ЗАПИСУ, а не дати створення */}
+                      {visit.scheduled_datetime 
+                        ? new Date(visit.scheduled_datetime).toLocaleDateString() 
+                        : new Date(visit.created_at).toLocaleDateString()
+                      }
                       <span className="text-slate-400 text-xs font-medium ml-2">Візит #{selectedClient.visits.length - index}</span>
                     </div>
                     <div className="font-black text-lg">{visit.visitTotal.toLocaleString()} ₴</div>

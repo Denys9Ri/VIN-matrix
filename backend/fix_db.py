@@ -20,7 +20,8 @@ queries_alter = [
     "ALTER TABLE core_visit ADD COLUMN scheduled_datetime timestamp with time zone;",
     "ALTER TABLE core_orderpart ADD COLUMN status varchar(20) DEFAULT 'WAITING';",
     "ALTER TABLE core_orderservice ADD COLUMN status varchar(20) DEFAULT 'PENDING';",
-    "ALTER TABLE core_visit ADD COLUMN comment text;" # НОВЕ ПОЛЕ ДЛЯ КОМЕНТАРЯ
+    "ALTER TABLE core_visit ADD COLUMN comment text;",
+    "ALTER TABLE core_visit ADD COLUMN vin_code varchar(17);" # СТВОРЮЄМО КОЛОНКУ VIN
 ]
 
 print("Починаємо перевірку бази даних PostgreSQL...")

@@ -230,7 +230,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def get_queryset(self): return Supplier.objects.filter(company=get_user_company(self.request.user))
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
-
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -270,13 +269,16 @@ class PartSearchView(APIView):
                     # Розбираємо API ключ: "customer_id:токен"
                     parts = sup.api_key.split(':')
                     customer_id = int(parts[0]) if len(parts) > 1 else 0
-                    token = parts[1] if len(parts) > 1 else sup.api_key
+                    token_raw = parts[1] if len(parts) > 1 else sup.api_key
+                    
+                    # ОЧИЩЕННЯ ТОКЕНУ: прибираємо слово Token якщо воно є
+                    token = token_raw.replace('Token', '').replace('token', '').strip()
 
-                    # ОНОВЛЕНО: Правильний URL за Swagger документацією
                     vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
                     
+                    # ВИПРАВЛЕНО: Використовуємо 'Token ' замість 'Bearer '
                     headers = {
-                        "Authorization": f"Bearer {token}", 
+                        "Authorization": f"Token {token}", 
                         "Content-Type": "application/json",
                         "Accept-Language": "uk"
                     }
@@ -285,7 +287,6 @@ class PartSearchView(APIView):
                         "article": query
                     }
                     
-                    # Робимо реальний запит
                     response = requests.post(vesna_url, json=payload, headers=headers, timeout=8)
                     
                     if response.status_code == 200:

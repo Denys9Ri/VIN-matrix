@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2, Printer } from 'lucide-react';
+import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2, Printer, MessageSquare } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard'; 
 import { useNavigate } from 'react-router-dom';
 
@@ -22,12 +22,13 @@ const Visits = () => {
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [editTimeData, setEditTimeData] = useState({ date: '', time: '' });
   
+  // Стан для внутрішнього коментаря
+  const [editComment, setEditComment] = useState('');
+  const [foundExisting, setFoundExisting] = useState(false);
+
   const [newVisitData, setNewVisitData] = useState({ plate: '', client: '', phone: '', date: '', time: '' });
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
-
-  // ДОДАНО: Стан для сповіщення про автозаповнення
-  const [foundExisting, setFoundExisting] = useState(false);
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -62,7 +63,13 @@ const Visits = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
-  // ДОДАНО: Магічне автозаповнення старих клієнтів
+  // Коли відкриваємо візит - підтягуємо його коментар
+  useEffect(() => {
+    if (selectedVisit) {
+      setEditComment(selectedVisit.comment || '');
+    }
+  }, [selectedVisit?.id, selectedVisit?.comment]);
+
   const handlePlateBlur = async () => {
     if (!newVisitData.plate || newVisitData.plate.length < 3) return;
     try {
@@ -71,7 +78,7 @@ const Visits = () => {
       if (existing) {
         setNewVisitData(prev => ({ ...prev, client: existing.client, phone: existing.phone }));
         setFoundExisting(true);
-        setTimeout(() => setFoundExisting(false), 4000); // Ховаємо напис через 4 секунди
+        setTimeout(() => setFoundExisting(false), 4000); 
       }
     } catch (error) {
       console.error("Помилка автозаповнення", error);
@@ -81,26 +88,21 @@ const Visits = () => {
   const handleCreateVisit = async (e) => {
     e.preventDefault();
     let scheduled_datetime = null;
-    
     if (newVisitData.date && newVisitData.time) {
       const localDate = new Date(`${newVisitData.date}T${newVisitData.time}`);
       scheduled_datetime = localDate.toISOString();
     }
-
     const payload = {
         plate: newVisitData.plate.toUpperCase(),
         client: newVisitData.client,
         phone: newVisitData.phone,
         scheduled_datetime: scheduled_datetime
     };
-
     try {
       await axios.post(`${API_BASE}/api/visits/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
       setNewVisitData({ plate: '', client: '', phone: '', date: '', time: '' });
-      setSearchQuery('');
-      setFilterDate('');
-      fetchData();
+      setSearchQuery(''); setFilterDate(''); fetchData();
     } catch (error) { alert("Помилка створення візиту"); }
   };
 
@@ -108,8 +110,7 @@ const Visits = () => {
     if (window.confirm("Ви дійсно хочете видалити це замовлення НАЗАВЖДИ?")) {
       try {
         await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } });
-        setSelectedVisit(null);
-        fetchData();
+        setSelectedVisit(null); fetchData();
       } catch (error) { alert("Помилка видалення"); }
     }
   };
@@ -120,11 +121,9 @@ const Visits = () => {
       const localDate = new Date(`${editTimeData.date}T${editTimeData.time}`);
       scheduled_datetime = localDate.toISOString();
     }
-    
     try {
       await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`, { scheduled_datetime }, { headers: { Authorization: `Bearer ${token}` } });
-      setIsEditingTime(false);
-      refreshSelectedVisit();
+      setIsEditingTime(false); refreshSelectedVisit();
     } catch (error) { alert("Помилка збереження часу"); }
   };
 
@@ -134,6 +133,15 @@ const Visits = () => {
       setSelectedVisit({ ...selectedVisit, status: newStatus });
       fetchData();
     } catch (error) { alert("Помилка статусу"); }
+  };
+
+  // ЗБЕРЕЖЕННЯ КОМЕНТАРЯ
+  const handleSaveComment = async () => {
+    try {
+      await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`, { comment: editComment }, { headers: { Authorization: `Bearer ${token}` } });
+      setSelectedVisit({ ...selectedVisit, comment: editComment });
+      fetchData();
+    } catch (error) { alert("Помилка збереження коментаря"); }
   };
 
   const updateServiceStatus = async (id, newStatus) => {
@@ -154,8 +162,7 @@ const Visits = () => {
     e.preventDefault();
     try {
       await axios.post(`${API_BASE}/api/order-services/`, { ...newService, visit: selectedVisit.id }, { headers: { Authorization: `Bearer ${token}` } });
-      setNewService({ name: '', price: '' });
-      refreshSelectedVisit();
+      setNewService({ name: '', price: '' }); refreshSelectedVisit();
     } catch (error) { alert("Помилка"); }
   };
 
@@ -164,8 +171,7 @@ const Visits = () => {
     try {
       await axios.post(`${API_BASE}/api/order-parts/`, { ...newPart, visit: selectedVisit.id, supplier: newPart.supplier || 'Вручну' }, { headers: { Authorization: `Bearer ${token}` } });
       setNewPart({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
-      setShowManualPartForm(false);
-      refreshSelectedVisit();
+      setShowManualPartForm(false); refreshSelectedVisit();
     } catch (error) { alert("Помилка"); }
   };
 
@@ -195,27 +201,11 @@ const Visits = () => {
 
   const handlePrint = () => {
     const dateStr = new Date().toLocaleDateString();
-    
     const logoHtml = companyInfo?.logo ? `<img src="${companyInfo.logo}" alt="Logo" style="max-height: 80px; margin-bottom: 10px;" />` : '';
-    
     const servicesRows = selectedVisit?.services?.map(s => `<tr><td>${s.name}</td><td style="text-align: right;">${parseFloat(s.price).toLocaleString()}</td></tr>`).join('') || '';
-    const servicesHtml = servicesRows ? `
-      <div class="section-title">1. ПЕРЕЛІК РОБІТ ТА ПОСЛУГ</div>
-      <table>
-        <thead><tr><th style="width: 80%;">Назва послуги</th><th style="text-align: right;">Вартість, грн</th></tr></thead>
-        <tbody>${servicesRows}</tbody>
-      </table>
-    ` : '';
-
+    const servicesHtml = servicesRows ? `<div class="section-title">1. ПЕРЕЛІК РОБІТ ТА ПОСЛУГ</div><table><thead><tr><th style="width: 80%;">Назва послуги</th><th style="text-align: right;">Вартість, грн</th></tr></thead><tbody>${servicesRows}</tbody></table>` : '';
     const partsRows = selectedVisit?.parts?.map(p => `<tr><td>${p.name}</td><td>${p.brand} ${p.article}</td><td style="text-align: right;">${parseFloat(p.sell_price).toLocaleString()}</td></tr>`).join('') || '';
-    const partsHtml = partsRows ? `
-      <div class="section-title">2. ЗАПЧАСТИНИ ТА МАТЕРІАЛИ</div>
-      <table>
-        <thead><tr><th style="width: 40%;">Назва</th><th style="width: 40%;">Бренд/Артикул</th><th style="text-align: right;">Ціна, грн</th></tr></thead>
-        <tbody>${partsRows}</tbody>
-      </table>
-    ` : '';
-
+    const partsHtml = partsRows ? `<div class="section-title">2. ЗАПЧАСТИНИ ТА МАТЕРІАЛИ</div><table><thead><tr><th style="width: 40%;">Назва</th><th style="width: 40%;">Бренд/Артикул</th><th style="text-align: right;">Ціна, грн</th></tr></thead><tbody>${partsRows}</tbody></table>` : '';
     const footerHtml = companyInfo?.document_footer ? `<div class="footer">${companyInfo.document_footer}</div>` : '';
 
     const iframe = document.createElement('iframe');
@@ -257,35 +247,25 @@ const Visits = () => {
               <p style="font-size: 14px; margin: 0;">Дата: ${dateStr}</p>
             </div>
           </div>
-
           <div class="info-block">
             <p><strong>Автомобіль:</strong> ${selectedVisit.plate} (${selectedVisit.client})</p>
             <p style="margin-bottom: 0;"><strong>Телефон клієнта:</strong> ${selectedVisit.phone}</p>
           </div>
-
           ${servicesHtml}
           ${partsHtml}
-
           <div class="total-block">
             <p>Всього за роботи: ${servicesTotal.toLocaleString()} грн</p>
             <p>Всього за запчастини: ${partsTotal.toLocaleString()} грн</p>
             <p class="grand-total">ДО СПЛАТИ: ${grandTotal.toLocaleString()} грн</p>
           </div>
-
           ${footerHtml}
-
           <script>
-            window.onload = function() {
-              setTimeout(function() {
-                window.print();
-              }, 300);
-            }
+            window.onload = function() { setTimeout(function() { window.print(); }, 300); }
           </script>
         </body>
       </html>
     `);
     doc.close();
-    
     setTimeout(() => { document.body.removeChild(iframe); }, 5000);
   };
 
@@ -522,7 +502,25 @@ const Visits = () => {
               </div>
             </div>
 
-            <div className="mt-8 bg-blue-600 p-6 rounded-3xl text-white flex justify-between items-center shadow-xl shadow-blue-100">
+            {/* ДОДАНО: ВНУТРІШНІЙ КОМЕНТАР */}
+            <div className="mt-8 bg-amber-50 p-6 rounded-3xl border border-amber-100 relative">
+              <h3 className="font-black uppercase text-amber-800 mb-3 flex items-center gap-2 text-sm"><MessageSquare size={16}/> Внутрішній коментар (не друкується)</h3>
+              <textarea 
+                className="w-full bg-white border border-amber-200 rounded-xl p-4 text-sm outline-none focus:border-amber-400 min-h-[80px] font-medium text-slate-700 placeholder:text-slate-400"
+                placeholder="Залиште нотатку для себе або майстра..."
+                value={editComment}
+                onChange={e => setEditComment(e.target.value)}
+              />
+              {editComment !== (selectedVisit.comment || '') && (
+                <div className="flex justify-end mt-3">
+                  <button onClick={handleSaveComment} className="bg-amber-400 hover:bg-amber-500 text-amber-950 px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-sm">
+                    Зберегти
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 bg-blue-600 p-6 rounded-3xl text-white flex justify-between items-center shadow-xl shadow-blue-100">
                <div className="text-xs font-bold uppercase opacity-80">Загальна сума до сплати:</div>
                <div className="text-3xl font-black italic">{grandTotal.toLocaleString()} ₴</div>
             </div>

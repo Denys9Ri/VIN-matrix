@@ -4,12 +4,10 @@ from django.contrib.auth.models import User
 class Company(models.Model):
     name = models.CharField(max_length=255, verbose_name="Назва СТО")
     owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company')
-    
     logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Логотип")
     phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="Телефон СТО")
     address = models.CharField(max_length=255, blank=True, null=True, verbose_name="Адреса СТО")
     document_footer = models.TextField(blank=True, null=True, verbose_name="Текст для чека (Гарантія тощо)")
-    
     global_margin_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, verbose_name="Націнка на запчастини (%)")
 
     def __str__(self): return self.name
@@ -24,6 +22,7 @@ class Employee(models.Model):
 class Visit(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='visits')
     plate = models.CharField(max_length=20)
+    vin_code = models.CharField(max_length=17, blank=True, null=True) # ДОДАНО VIN КОД
     client = models.CharField(max_length=100)
     phone = models.CharField(max_length=20)
     status = models.CharField(max_length=50, default='SELECTION')
@@ -31,8 +30,6 @@ class Visit(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     scheduled_datetime = models.DateTimeField(null=True, blank=True)
-    
-    # НОВЕ ПОЛЕ: Внутрішній коментар
     comment = models.TextField(blank=True, null=True)
 
 class ServiceCatalog(models.Model):

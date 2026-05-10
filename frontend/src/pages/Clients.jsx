@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, CarFront, Phone, CalendarDays, Wallet, History, X, Wrench, Store, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, CarFront, Phone, CalendarDays, Wallet, History, X, Wrench, Store, MessageSquare, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Clients = () => {
@@ -12,6 +12,9 @@ const Clients = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12; 
+  
+  // ДОДАНО: Стан для анімації кнопки "Скопійовано"
+  const [copiedVin, setCopiedVin] = useState(null);
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -33,12 +36,19 @@ const Clients = () => {
         if (!acc[visit.plate]) {
           acc[visit.plate] = {
             plate: visit.plate,
+            vin_code: visit.vin_code, // ДОДАНО: зберігаємо VIN
             client: visit.client,
             phone: visit.phone,
             totalSpent: 0,
             visits: []
           };
         }
+        
+        // ДОДАНО: Якщо в старих візитах не було VIN, а в новому є - оновлюємо
+        if (visit.vin_code && !acc[visit.plate].vin_code) {
+          acc[visit.plate].vin_code = visit.vin_code;
+        }
+
         acc[visit.plate].visits.push({ ...visit, visitTotal });
         acc[visit.plate].totalSpent += visitTotal;
         return acc;
@@ -61,6 +71,14 @@ const Clients = () => {
     setCurrentPage(1);
   }, [searchQuery]);
 
+  // ДОДАНО: Функція копіювання в буфер обміну
+  const handleCopyVin = (vin) => {
+    if (!vin) return;
+    navigator.clipboard.writeText(vin);
+    setCopiedVin(vin);
+    setTimeout(() => setCopiedVin(null), 2000); // Повертаємо іконку назад через 2 сек
+  };
+
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentClients = clients.slice(indexOfFirstItem, indexOfLastItem);
@@ -79,9 +97,10 @@ const Clients = () => {
         
         <div className="relative w-full md:w-96">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          {/* ДОДАНО: Змінили плейсхолдер */}
           <input 
             type="text" 
-            placeholder="Пошук (номер, ім'я, телефон)..." 
+            placeholder="Пошук (номер, VIN, ім'я, телефон)..." 
             className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-12 pr-4 py-3.5 outline-none focus:border-blue-500 font-bold text-slate-700 shadow-sm transition-all" 
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)} 
@@ -101,6 +120,12 @@ const Clients = () => {
                 <div>
                   <p className="text-[10px] font-black uppercase text-blue-500 mb-1 tracking-widest">Номер авто</p>
                   <h3 className="text-2xl font-black text-slate-900 group-hover:text-blue-600 transition-colors">{c.plate}</h3>
+                  {/* ДОДАНО: Вивід VIN-коду в карточці списку */}
+                  {c.vin_code && (
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 tracking-widest">
+                      VIN: {c.vin_code}
+                    </p>
+                  )}
                 </div>
                 <div className="bg-blue-50 p-3 rounded-2xl group-hover:scale-110 transition-transform">
                   <CarFront className="text-blue-600" size={24} />
@@ -157,7 +182,6 @@ const Clients = () => {
         )}
       </div>
 
-      {/* МОДАЛКА: ІСТОРІЯ КЛІЄНТА */}
       {selectedClient && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-3xl p-5 md:p-8 shadow-2xl mt-8 mb-16 relative">
@@ -165,6 +189,26 @@ const Clients = () => {
             
             <div className="border-b border-slate-100 pb-6 mb-6">
               <h2 className="text-3xl md:text-4xl font-black uppercase mb-2">{selectedClient.plate}</h2>
+              
+              {/* ДОДАНО: Блок з VIN-кодом та кнопкою копіювання */}
+              {selectedClient.vin_code && (
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs md:text-sm font-black text-slate-600 uppercase tracking-widest bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                    VIN: {selectedClient.vin_code}
+                  </span>
+                  <button 
+                    onClick={() => handleCopyVin(selectedClient.vin_code)}
+                    className="p-1.5 bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-lg transition-colors border border-slate-200 hover:border-blue-200"
+                    title="Скопіювати VIN"
+                  >
+                    {copiedVin === selectedClient.vin_code ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                  </button>
+                  {copiedVin === selectedClient.vin_code && (
+                    <span className="text-[10px] font-bold text-green-600 uppercase transition-all">Скопійовано!</span>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-4 text-sm font-bold text-slate-600">
                 <span className="flex items-center gap-1.5"><CarFront size={16}/> {selectedClient.client}</span>
                 <span className="flex items-center gap-1.5"><Phone size={16}/> {selectedClient.phone}</span>
@@ -180,7 +224,6 @@ const Clients = () => {
                   <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-3">
                     <div className="font-black text-blue-600 flex items-center gap-2">
                       <CalendarDays size={16}/> 
-                      {/* ВИПРАВЛЕНО: Тепер пріоритет у дати ЗАПИСУ, а не дати створення */}
                       {visit.scheduled_datetime 
                         ? new Date(visit.scheduled_datetime).toLocaleDateString() 
                         : new Date(visit.created_at).toLocaleDateString()

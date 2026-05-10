@@ -26,6 +26,9 @@ const Visits = () => {
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
 
+  // ДОДАНО: Стан для сповіщення про автозаповнення
+  const [foundExisting, setFoundExisting] = useState(false);
+
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
 
@@ -58,6 +61,22 @@ const Visits = () => {
     const timeoutId = setTimeout(() => { fetchData(); }, 300);
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
+
+  // ДОДАНО: Магічне автозаповнення старих клієнтів
+  const handlePlateBlur = async () => {
+    if (!newVisitData.plate || newVisitData.plate.length < 3) return;
+    try {
+      const res = await axios.get(`${API_BASE}/api/visits/?search=${newVisitData.plate}`, { headers: { Authorization: `Bearer ${token}` } });
+      const existing = res.data.find(v => v.plate.toUpperCase() === newVisitData.plate.toUpperCase());
+      if (existing) {
+        setNewVisitData(prev => ({ ...prev, client: existing.client, phone: existing.phone }));
+        setFoundExisting(true);
+        setTimeout(() => setFoundExisting(false), 4000); // Ховаємо напис через 4 секунди
+      }
+    } catch (error) {
+      console.error("Помилка автозаповнення", error);
+    }
+  };
 
   const handleCreateVisit = async (e) => {
     e.preventDefault();
@@ -174,14 +193,11 @@ const Visits = () => {
   const partsTotal = selectedVisit?.parts?.reduce((sum, p) => sum + parseFloat(p.sell_price || 0), 0) || 0;
   const grandTotal = servicesTotal + partsTotal;
 
-  // --- МАГІЯ ДРУКУ: Створюємо невидимий документ і друкуємо його ---
   const handlePrint = () => {
     const dateStr = new Date().toLocaleDateString();
     
-    // Формуємо логотип
     const logoHtml = companyInfo?.logo ? `<img src="${companyInfo.logo}" alt="Logo" style="max-height: 80px; margin-bottom: 10px;" />` : '';
     
-    // Формуємо послуги
     const servicesRows = selectedVisit?.services?.map(s => `<tr><td>${s.name}</td><td style="text-align: right;">${parseFloat(s.price).toLocaleString()}</td></tr>`).join('') || '';
     const servicesHtml = servicesRows ? `
       <div class="section-title">1. ПЕРЕЛІК РОБІТ ТА ПОСЛУГ</div>
@@ -191,7 +207,6 @@ const Visits = () => {
       </table>
     ` : '';
 
-    // Формуємо запчастини
     const partsRows = selectedVisit?.parts?.map(p => `<tr><td>${p.name}</td><td>${p.brand} ${p.article}</td><td style="text-align: right;">${parseFloat(p.sell_price).toLocaleString()}</td></tr>`).join('') || '';
     const partsHtml = partsRows ? `
       <div class="section-title">2. ЗАПЧАСТИНИ ТА МАТЕРІАЛИ</div>
@@ -201,10 +216,8 @@ const Visits = () => {
       </table>
     ` : '';
 
-    // Формуємо підвал з гарантією
     const footerHtml = companyInfo?.document_footer ? `<div class="footer">${companyInfo.document_footer}</div>` : '';
 
-    // Створюємо невидимий Iframe для друку
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
@@ -262,7 +275,6 @@ const Visits = () => {
           ${footerHtml}
 
           <script>
-            // Чекаємо, щоб завантажився логотип, і викликаємо друк
             window.onload = function() {
               setTimeout(function() {
                 window.print();
@@ -274,10 +286,8 @@ const Visits = () => {
     `);
     doc.close();
     
-    // Видаляємо невидимий документ після друку
     setTimeout(() => { document.body.removeChild(iframe); }, 5000);
   };
-  // --------------------------------------------------------
 
   if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
 
@@ -333,7 +343,7 @@ const Visits = () => {
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
-            <button onClick={() => setIsCreatingVisit(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
+            <button onClick={() => { setIsCreatingVisit(false); setFoundExisting(false); }} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
             <h2 className="text-xl font-black mb-6 flex items-center gap-2"><CarFront className="text-blue-600"/> Новий візит</h2>
             <form onSubmit={handleCreateVisit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
@@ -346,7 +356,12 @@ const Visits = () => {
                   <input required type="time" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-slate-700" value={newVisitData.time} onChange={e => setNewVisitData({...newVisitData, time: e.target.value})}/>
                 </div>
               </div>
-              <input required type="text" placeholder="Номер авто (АА1234ВВ)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})}/>
+              
+              <div>
+                <input required type="text" placeholder="Номер авто (АА1234ВВ)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
+                {foundExisting && <p className="text-green-600 text-[10px] font-bold uppercase mt-1 ml-2">✓ Дані підтягнуто з бази</p>}
+              </div>
+
               <input required type="text" placeholder="Клієнт / Марка" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
               <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
               <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black uppercase shadow-lg shadow-blue-200 transition-all tracking-widest text-sm">Відкрити замовлення</button>
@@ -359,7 +374,6 @@ const Visits = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8 relative">
             
-            {/* ШАПКА ВІЗИТУ З КНОПКАМИ */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-6 border-b border-slate-100 pb-4 gap-4">
               <div className="w-full">
                 <h2 className="text-3xl font-black uppercase">{selectedVisit.plate}</h2>
@@ -392,7 +406,6 @@ const Visits = () => {
               </div>
               
               <div className="flex items-center gap-2 shrink-0">
-                {/* ОНОВЛЕНА КНОПКА ДРУКУ: Викликає нашу магічну функцію */}
                 {role === 'owner' && (
                   <button onClick={handlePrint} className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2 px-3 font-black text-xs uppercase shadow-md shadow-blue-200" title="Друкувати акт">
                     <Printer size={18} /> Друк

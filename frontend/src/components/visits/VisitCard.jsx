@@ -16,9 +16,26 @@ const VisitCard = ({ visit, onClick }) => {
     'DONE': 'Готово'
   };
 
-  const timeStr = visit.scheduled_datetime 
-    ? new Date(visit.scheduled_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : null;
+  // Розумне формування часу та дати
+  let timeStr = null;
+  if (visit.scheduled_datetime) {
+    const dateObj = new Date(visit.scheduled_datetime);
+    const today = new Date();
+    
+    // Перевіряємо чи дата співпадає з сьогоднішньою
+    const isToday = dateObj.getDate() === today.getDate() && 
+                    dateObj.getMonth() === today.getMonth() && 
+                    dateObj.getFullYear() === today.getFullYear();
+    
+    const timePart = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    if (isToday) {
+      timeStr = timePart; // Тільки час, якщо сьогодні
+    } else {
+      const datePart = dateObj.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+      timeStr = `${datePart} | ${timePart}`; // Додаємо дату, якщо не сьогодні
+    }
+  }
 
   return (
     <div onClick={onClick} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group cursor-pointer hover:border-blue-300">

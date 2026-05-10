@@ -1,27 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Package, Truck, Search, Plus, Trash2, Edit2, Tag, Key, FileSpreadsheet, X } from 'lucide-react';
+import { Package, Truck, Search, Plus, Trash2, Tag, Key, FileSpreadsheet, X, Settings2, Download, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Inventory = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('stock'); // 'stock' | 'suppliers'
+  const [activeTab, setActiveTab] = useState('stock'); 
   
-  // Стан для складу
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Стан для постачальників
   const [suppliers, setSuppliers] = useState([]);
   
-  // Модалки
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   
-  // Форми
+  // ДОДАНО: Стан для модалки налаштувань складів
+  const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
+  const [selectedSupplierForWarehouses, setSelectedSupplierForWarehouses] = useState(null);
+  const [warehousePrefs, setWarehousePrefs] = useState([]);
+  const [isFetchingWarehouses, setIsFetchingWarehouses] = useState(false);
+  
   const [newCatName, setNewCatName] = useState('');
   const [newItem, setNewItem] = useState({ brand: '', article: '', name: '', quantity: 1, buy_price: '', category: '' });
   const [newSupplier, setNewSupplier] = useState({ name: '', type: 'api', api_key: '', file: null });
@@ -101,34 +103,65 @@ const Inventory = () => {
     }
   };
 
+  // === ЛОГІКА НАЛАШТУВАННЯ СКЛАДІВ ===
+  const openWarehouseModal = (supplier) => {
+    setSelectedSupplierForWarehouses(supplier);
+    setWarehousePrefs(supplier.warehouse_prefs || []);
+    setIsWarehouseModalOpen(true);
+  };
+
+  const handleFetchWarehouses = async () => {
+    setIsFetchingWarehouses(true);
+    try {
+      const res = await axios.post(`${API_BASE}/api/suppliers/${selectedSupplierForWarehouses.id}/fetch_warehouses/`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      setWarehousePrefs(res.data.warehouses);
+      alert(res.data.message);
+    } catch (error) {
+      alert(error.response?.data?.error || "Помилка завантаження складів.");
+    } finally {
+      setIsFetchingWarehouses(false);
+    }
+  };
+
+  const handleAddManualWarehouse = () => {
+    const newId = `manual_${Date.now()}`;
+    setWarehousePrefs([...warehousePrefs, { id: newId, name: '', priority: 99, is_active: true }]);
+  };
+
+  const handleUpdateWarehousePref = (index, field, value) => {
+    const newPrefs = [...warehousePrefs];
+    newPrefs[index][field] = value;
+    setWarehousePrefs(newPrefs);
+  };
+
+  const handleSaveWarehousePrefs = async () => {
+    try {
+      await axios.patch(`${API_BASE}/api/suppliers/${selectedSupplierForWarehouses.id}/`, { warehouse_prefs: warehousePrefs }, { headers: { Authorization: `Bearer ${token}` } });
+      setIsWarehouseModalOpen(false);
+      fetchData(); // Оновлюємо список
+    } catch (error) {
+      alert("Помилка збереження налаштувань.");
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 h-screen flex flex-col">
       
-      {/* ШАПКА І ТАБИ */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-6 shrink-0">
         <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800">Управління</h1>
         
         <div className="flex bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto">
-          <button 
-            onClick={() => setActiveTab('stock')} 
-            className={`flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'stock' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-          >
+          <button onClick={() => setActiveTab('stock')} className={`flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'stock' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
             <Package size={16}/> Склад наявності
           </button>
-          <button 
-            onClick={() => setActiveTab('suppliers')} 
-            className={`flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'suppliers' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-          >
+          <button onClick={() => setActiveTab('suppliers')} className={`flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'suppliers' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
             <Truck size={16}/> Постачальники
           </button>
         </div>
       </div>
 
-      {/* ===================== ВКЛАДКА: СКЛАД ===================== */}
       {activeTab === 'stock' && (
         <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
-          
-          {/* САЙДБАР КАТЕГОРІЙ */}
           <div className="w-full lg:w-64 bg-white border border-slate-200 rounded-3xl p-5 flex flex-col shrink-0">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-black uppercase text-slate-700 text-sm tracking-widest flex items-center gap-2"><Tag size={16}/> Категорії</h3>
@@ -150,12 +183,11 @@ const Inventory = () => {
             </div>
           </div>
 
-          {/* ТАБЛИЦЯ ТОВАРІВ */}
           <div className="flex-1 bg-white border border-slate-200 rounded-3xl p-5 flex flex-col min-h-0">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
               <div className="relative w-full md:w-80">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input type="text" placeholder="Пошук по артикулу, бренду, назві..." className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 font-medium transition-all" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                <input type="text" placeholder="Пошук по артикулу, бренду..." className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 font-medium transition-all" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
               </div>
               <button onClick={() => setIsItemModalOpen(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-black uppercase text-xs flex items-center gap-2 hover:bg-blue-700 shadow-md shadow-blue-200 transition-all w-full md:w-auto justify-center">
                 <Plus size={16}/> Додати товар
@@ -203,7 +235,6 @@ const Inventory = () => {
         </div>
       )}
 
-      {/* ===================== ВКЛАДКА: ПОСТАЧАЛЬНИКИ ===================== */}
       {activeTab === 'suppliers' && (
         <div className="flex-1 bg-white border border-slate-200 rounded-3xl p-5 md:p-8">
           <div className="flex justify-between items-center mb-6">
@@ -216,9 +247,12 @@ const Inventory = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {suppliers.map(s => (
               <div key={s.id} className="border border-slate-200 rounded-2xl p-5 flex flex-col relative group">
-                <button onClick={() => handleDeleteSupplier(s.id)} className="absolute top-4 right-4 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18}/></button>
+                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                  <button onClick={() => openWarehouseModal(s)} className="text-slate-400 hover:text-blue-600" title="Налаштування складів"><Settings2 size={18}/></button>
+                  <button onClick={() => handleDeleteSupplier(s.id)} className="text-slate-400 hover:text-red-500" title="Видалити"><Trash2 size={18}/></button>
+                </div>
                 
-                <h3 className="font-black text-lg text-slate-800 mb-4 pr-6">{s.name}</h3>
+                <h3 className="font-black text-lg text-slate-800 mb-4 pr-16">{s.name}</h3>
                 
                 {s.api_key ? (
                   <div className="mt-auto bg-amber-50 border border-amber-100 rounded-xl p-4 flex items-start gap-3">
@@ -243,9 +277,7 @@ const Inventory = () => {
         </div>
       )}
 
-      {/* === МОДАЛКИ === */}
-      
-      {/* Модалка: Нова Категорія */}
+      {/* МОДАЛКИ */}
       {isCategoryModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 relative">
@@ -259,7 +291,6 @@ const Inventory = () => {
         </div>
       )}
 
-      {/* Модалка: Новий Товар */}
       {isItemModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 relative">
@@ -272,12 +303,10 @@ const Inventory = () => {
               </select>
               
               <div className="grid grid-cols-2 gap-4">
-                <input required type="text" placeholder="Бренд (Bosch)" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-bold uppercase" value={newItem.brand} onChange={e => setNewItem({...newItem, brand: e.target.value})} />
+                <input required type="text" placeholder="Бренд" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-bold uppercase" value={newItem.brand} onChange={e => setNewItem({...newItem, brand: e.target.value})} />
                 <input required type="text" placeholder="Артикул" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-bold uppercase" value={newItem.article} onChange={e => setNewItem({...newItem, article: e.target.value})} />
               </div>
-              
-              <textarea required placeholder="Опис товару (Колодки гальмівні передні)" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-medium min-h-[80px]" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-              
+              <textarea required placeholder="Опис товару" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-medium min-h-[80px]" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
               <div className="grid grid-cols-2 gap-4 items-end">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Кількість (шт)</label>
@@ -288,28 +317,23 @@ const Inventory = () => {
                   <input required type="number" step="0.01" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-black text-lg text-blue-600 text-center" value={newItem.buy_price} onChange={e => setNewItem({...newItem, buy_price: e.target.value})} />
                 </div>
               </div>
-
               <button type="submit" className="w-full bg-blue-600 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-2 shadow-lg shadow-blue-200">Додати товар</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Модалка: Новий Постачальник */}
       {isSupplierModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 relative">
             <button onClick={() => setIsSupplierModalOpen(false)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
             <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Truck className="text-blue-600"/> Новий постачальник</h2>
-            
             <div className="flex bg-slate-100 p-1.5 rounded-xl mb-6">
               <button onClick={() => setNewSupplier({...newSupplier, type: 'api'})} className={`flex-1 py-2 rounded-lg font-black text-[10px] uppercase transition-all ${newSupplier.type === 'api' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>Ключ API</button>
               <button onClick={() => setNewSupplier({...newSupplier, type: 'file'})} className={`flex-1 py-2 rounded-lg font-black text-[10px] uppercase transition-all ${newSupplier.type === 'file' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>Файл (Excel)</button>
             </div>
-
             <form onSubmit={handleAddSupplier} className="space-y-4">
-              <input required type="text" placeholder="Назва постачальника (напр. Омега Авто)" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-bold" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} />
-              
+              <input required type="text" placeholder="Назва постачальника" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-bold" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} />
               {newSupplier.type === 'api' ? (
                 <div className="relative">
                   <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -324,9 +348,58 @@ const Inventory = () => {
                   </label>
                 </div>
               )}
-
               <button type="submit" className="w-full bg-slate-800 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-4 shadow-lg">Зберегти постачальника</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ДОДАНО: Модалка налаштувань складів */}
+      {isWarehouseModalOpen && selectedSupplierForWarehouses && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-2xl p-6 md:p-8 mt-10 mb-10 relative shadow-2xl">
+            <button onClick={() => setIsWarehouseModalOpen(false)} className="absolute right-4 top-4 text-slate-400 hover:bg-slate-100 p-2 rounded-full"><X size={20} /></button>
+            
+            <div className="mb-6 border-b border-slate-100 pb-4">
+              <h2 className="text-2xl font-black uppercase flex items-center gap-2"><Settings2 className="text-blue-600"/> Склади: {selectedSupplierForWarehouses.name}</h2>
+              <p className="text-sm font-bold text-slate-500 mt-2">Виставте пріоритет (1 - найвищий) та вимкніть склади, які не потрібні.</p>
+            </div>
+
+            <div className="flex justify-between items-center mb-4 gap-4">
+              <button onClick={handleFetchWarehouses} disabled={isFetchingWarehouses} className="flex-1 bg-blue-50 text-blue-600 hover:bg-blue-100 p-3 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50">
+                {isFetchingWarehouses ? 'Завантаження...' : <><Download size={16}/> Отримати з API</>}
+              </button>
+              <button onClick={handleAddManualWarehouse} className="flex-1 bg-slate-50 text-slate-600 hover:bg-slate-100 p-3 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-colors">
+                <Plus size={16}/> Додати вручну
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
+              {warehousePrefs.length === 0 && <p className="text-center text-slate-400 font-bold py-6">Складів ще немає. Завантажте з API або додайте вручну.</p>}
+              
+              {warehousePrefs.map((wh, index) => (
+                <div key={wh.id || index} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${wh.is_active ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
+                  
+                  {/* Чекбокс Активності */}
+                  <label className="flex items-center cursor-pointer">
+                    <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={wh.is_active} onChange={(e) => handleUpdateWarehousePref(index, 'is_active', e.target.checked)} />
+                  </label>
+                  
+                  {/* Назва складу */}
+                  <input type="text" placeholder="Назва складу (Київ)" className="flex-1 bg-transparent border-none outline-none font-bold text-sm" value={wh.name} onChange={(e) => handleUpdateWarehousePref(index, 'name', e.target.value)} />
+                  
+                  {/* Пріоритет */}
+                  <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg">
+                    <span className="text-[10px] font-black uppercase text-slate-400">Пріоритет</span>
+                    <input type="number" min="1" max="999" className="w-12 bg-transparent border-none outline-none font-black text-blue-600 text-center" value={wh.priority} onChange={(e) => handleUpdateWarehousePref(index, 'priority', e.target.value)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={handleSaveWarehousePrefs} className="w-full bg-emerald-500 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-6 shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all">
+              <Save className="inline-block mr-2 mb-0.5" size={18}/> Зберегти налаштування
+            </button>
           </div>
         </div>
       )}

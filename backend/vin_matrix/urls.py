@@ -10,7 +10,8 @@ from apps.core.views import (
     ProfileSettingsView, LogoutView, ChangePasswordView, MechanicViewSet,
     OrderPartViewSet, OrderServiceViewSet,
     # === НОВІ ІМПОРТИ ДЛЯ СКЛАДУ ТА ПОСТАЧАЛЬНИКІВ ===
-    CategoryViewSet, InventoryItemViewSet, SupplierViewSet
+    CategoryViewSet, InventoryItemViewSet, SupplierViewSet,
+    PartSearchView # <--- ДОДАЛИ ТІЛЬКИ ЦЕ
 )
 
 router = DefaultRouter()
@@ -37,6 +38,7 @@ urlpatterns = [
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    path('api/search-parts/', PartSearchView.as_view(), name='search-parts'), # <--- І ДОДАЛИ ЦЕЙ РЯДОК
     path('api/', include(router.urls)),
 ]
 

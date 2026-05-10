@@ -30,7 +30,19 @@ class VisitViewSet(viewsets.ModelViewSet):
         
         search = self.request.query_params.get('search', '').strip()
         date_str = self.request.query_params.get('date', '').strip()
+        history_mode = self.request.query_params.get('history', '').strip() # ДОДАНО: Для сторінки Клієнти
         
+        # --- ЛОГІКА ДЛЯ СТОРІНКИ "КЛІЄНТИ" (Вся історія) ---
+        if history_mode == 'true':
+            if search:
+                queryset = queryset.filter(
+                    Q(plate__icontains=search) | 
+                    Q(client__icontains=search) | 
+                    Q(phone__icontains=search)
+                )
+            return queryset.order_by('-created_at')
+
+        # --- ЛОГІКА ДЛЯ ДОШКИ ВІЗИТІВ (Старе залишається без змін) ---
         if search:
             # ПОШУК: по номеру, клієнту або телефону
             queryset = queryset.filter(

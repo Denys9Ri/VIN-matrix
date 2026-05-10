@@ -28,11 +28,14 @@ class VisitViewSet(viewsets.ModelViewSet):
         company = get_user_company(self.request.user)
         queryset = Visit.objects.filter(company=company)
         
+        # ДОДАНО: Якщо ми редагуємо/видаляємо конкретне авто, віддаємо його без фільтрів дошки
+        if self.action != 'list':
+            return queryset
+        
         search = self.request.query_params.get('search', '').strip()
         date_str = self.request.query_params.get('date', '').strip()
-        history_mode = self.request.query_params.get('history', '').strip() # ДОДАНО: Для сторінки Клієнти
+        history_mode = self.request.query_params.get('history', '').strip()
         
-        # --- ЛОГІКА ДЛЯ СТОРІНКИ "КЛІЄНТИ" (Вся історія) ---
         if history_mode == 'true':
             if search:
                 queryset = queryset.filter(
@@ -42,9 +45,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                 )
             return queryset.order_by('-created_at')
 
-        # --- ЛОГІКА ДЛЯ ДОШКИ ВІЗИТІВ (Старе залишається без змін) ---
         if search:
-            # ПОШУК: по номеру, клієнту або телефону
             queryset = queryset.filter(
                 Q(plate__icontains=search) | 
                 Q(client__icontains=search) | 
@@ -53,14 +54,11 @@ class VisitViewSet(viewsets.ModelViewSet):
             return queryset.order_by('-created_at')
             
         elif date_str and len(date_str) == 10:
-            # КАЛЕНДАР: Фільтр по конкретній даті
             try:
                 parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 start_of_day = timezone.make_aware(datetime.combine(parsed_date, dt_time.min))
                 end_of_day = start_of_day + timedelta(days=1)
 
-                # ФІКС: Показуємо ТІЛЬКИ ті, що записані на цю дату.
-                # Або ті, що без запису (жива черга), але створені в цей день.
                 queryset = queryset.filter(
                     (Q(scheduled_datetime__gte=start_of_day) & Q(scheduled_datetime__lt=end_of_day)) |
                     (Q(scheduled_datetime__isnull=True) & Q(created_at__gte=start_of_day) & Q(created_at__lt=end_of_day))
@@ -69,15 +67,14 @@ class VisitViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
                 
-        # ДЕФОЛТНА ДОШКА (Актуальні на сьогодні)
         today = timezone.localdate()
         start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
         end_of_today = start_of_today + timedelta(days=1)
 
         queryset = queryset.filter(
-            ( ~Q(status='DONE') & Q(scheduled_datetime__lt=end_of_today) ) | # Не готові: записані на сьогодні або прострочені
-            ( ~Q(status='DONE') & Q(scheduled_datetime__isnull=True) ) | # Не готові: без запису
-            ( Q(status='DONE') & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today) ) # Готові сьогодні
+            ( ~Q(status='DONE') & Q(scheduled_datetime__lt=end_of_today) ) | 
+            ( ~Q(status='DONE') & Q(scheduled_datetime__isnull=True) ) | 
+            ( Q(status='DONE') & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today) ) 
         ).distinct()
             
         return queryset.order_by('scheduled_datetime') 
@@ -110,52 +107,39 @@ class ServiceCatalogViewSet(viewsets.ModelViewSet):
 class ProfileSettingsView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser, JSONParser)
-
     def get(self, request):
         company = get_user_company(request.user)
         role = 'owner' if hasattr(request.user, 'company') else 'mechanic'
         user_serializer = UserSerializer(request.user)
         company_serializer = CompanySerializer(company, context={'request': request})
-        return Response({
-            "user": user_serializer.data,
-            "company": company_serializer.data,
-            "role": role
-        })
-
+        return Response({ "user": user_serializer.data, "company": company_serializer.data, "role": role })
     def patch(self, request):
         if not hasattr(request.user, 'company'): return Response({"error": "Тільки власник"}, status=403)
         user = request.user
         company = user.company
-
         first_name = request.data.get('user[first_name]') or request.data.get('first_name')
         email = request.data.get('user[email]') or request.data.get('email')
         if first_name: user.first_name = first_name
         if email: user.email = email
         user.save()
-
         name = request.data.get('company[name]') or request.data.get('name')
         if name: company.name = name
-        
         if 'company[phone]' in request.data: company.phone = request.data.get('company[phone]')
         if 'company[address]' in request.data: company.address = request.data.get('company[address]')
         if 'company[document_footer]' in request.data: company.document_footer = request.data.get('company[document_footer]')
         if 'company[global_margin_percent]' in request.data: company.global_margin_percent = request.data.get('company[global_margin_percent]')
-        
         logo = request.data.get('company[logo]')
         if logo: company.logo = logo
-
         company.save()
         return Response({"message": "Дані успішно оновлено!"})
 
 class MechanicViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
-
     def list(self, request):
         if not hasattr(request.user, 'company'): return Response(status=403)
         mechanics = Employee.objects.filter(company=request.user.company, role='mechanic')
         data = [{"id": m.user.id, "username": m.user.username, "first_name": m.user.first_name} for m in mechanics]
         return Response(data)
-
     def create(self, request):
         if not hasattr(request.user, 'company'): return Response(status=403)
         username = request.data.get('username')
@@ -167,7 +151,6 @@ class MechanicViewSet(viewsets.ViewSet):
             Employee.objects.create(user=user, company=request.user.company, role='mechanic')
             return Response({"message": "Створено"}, status=201)
         except Exception as e: return Response({"error": str(e)}, status=500)
-
     def partial_update(self, request, pk=None):
         if not hasattr(request.user, 'company'): return Response(status=403)
         try:
@@ -177,7 +160,6 @@ class MechanicViewSet(viewsets.ViewSet):
             user.save()
             return Response({"message": "Оновлено"})
         except User.DoesNotExist: return Response(status=404)
-
     def destroy(self, request, pk=None):
         if not hasattr(request.user, 'company'): return Response(status=403)
         try:

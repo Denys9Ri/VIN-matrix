@@ -32,6 +32,7 @@ class VisitViewSet(viewsets.ModelViewSet):
         date_str = self.request.query_params.get('date', '').strip()
         
         if search:
+            # ПОШУК: по номеру, клієнту або телефону
             queryset = queryset.filter(
                 Q(plate__icontains=search) | 
                 Q(client__icontains=search) | 
@@ -40,28 +41,31 @@ class VisitViewSet(viewsets.ModelViewSet):
             return queryset.order_by('-created_at')
             
         elif date_str and len(date_str) == 10:
+            # КАЛЕНДАР: Фільтр по конкретній даті
             try:
                 parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 start_of_day = timezone.make_aware(datetime.combine(parsed_date, dt_time.min))
                 end_of_day = start_of_day + timedelta(days=1)
 
+                # ФІКС: Показуємо ТІЛЬКИ ті, що записані на цю дату.
+                # Або ті, що без запису (жива черга), але створені в цей день.
                 queryset = queryset.filter(
                     (Q(scheduled_datetime__gte=start_of_day) & Q(scheduled_datetime__lt=end_of_day)) |
-                    (Q(created_at__gte=start_of_day) & Q(created_at__lt=end_of_day))
+                    (Q(scheduled_datetime__isnull=True) & Q(created_at__gte=start_of_day) & Q(created_at__lt=end_of_day))
                 ).distinct()
                 return queryset.order_by('scheduled_datetime')
             except Exception:
                 pass
                 
-        # ДЕФОЛТНА ДОШКА (тільки сьогоднішні, прострочені та без дати)
+        # ДЕФОЛТНА ДОШКА (Актуальні на сьогодні)
         today = timezone.localdate()
         start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
         end_of_today = start_of_today + timedelta(days=1)
 
         queryset = queryset.filter(
-            ( ~Q(status='DONE') & Q(scheduled_datetime__lt=end_of_today) ) | 
-            ( ~Q(status='DONE') & Q(scheduled_datetime__isnull=True) ) | 
-            ( Q(status='DONE') & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today) )
+            ( ~Q(status='DONE') & Q(scheduled_datetime__lt=end_of_today) ) | # Не готові: записані на сьогодні або прострочені
+            ( ~Q(status='DONE') & Q(scheduled_datetime__isnull=True) ) | # Не готові: без запису
+            ( Q(status='DONE') & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today) ) # Готові сьогодні
         ).distinct()
             
         return queryset.order_by('scheduled_datetime') 

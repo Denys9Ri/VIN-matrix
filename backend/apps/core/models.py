@@ -29,8 +29,11 @@ class Visit(models.Model):
     status = models.CharField(max_length=50, default='SELECTION')
     
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True) # Для очищення дошки в кінці дня
-    scheduled_datetime = models.DateTimeField(null=True, blank=True) # Для запису на час
+    updated_at = models.DateTimeField(auto_now=True)
+    scheduled_datetime = models.DateTimeField(null=True, blank=True)
+    
+    # НОВЕ ПОЛЕ: Внутрішній коментар
+    comment = models.TextField(blank=True, null=True)
 
 class ServiceCatalog(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)

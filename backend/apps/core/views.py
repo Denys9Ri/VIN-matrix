@@ -1,3 +1,4 @@
+import requests # <--- ДОДАНО ДЛЯ ЗАПИТІВ ДО API
 from rest_framework import viewsets, status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,13 +9,12 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
 from django.utils import timezone
 from datetime import datetime, timedelta, time as dt_time
-from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService
-from .models import Category, InventoryItem, Supplier
-from .serializers import CategorySerializer, InventoryItemSerializer, SupplierSerializer
+from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService, Category, InventoryItem, Supplier
 from .serializers import (
     VisitSerializer, UserSerializer, 
     CompanySerializer, ServiceCatalogSerializer,
-    OrderPartSerializer, OrderServiceSerializer
+    OrderPartSerializer, OrderServiceSerializer,
+    CategorySerializer, InventoryItemSerializer, SupplierSerializer
 )
 
 def get_user_company(user):
@@ -41,7 +41,7 @@ class VisitViewSet(viewsets.ModelViewSet):
             if search:
                 queryset = queryset.filter(
                     Q(plate__icontains=search) | 
-                    Q(vin_code__icontains=search) | # ДОДАНО ПОШУК ПО VIN
+                    Q(vin_code__icontains=search) | 
                     Q(client__icontains=search) | 
                     Q(phone__icontains=search)
                 )
@@ -50,7 +50,7 @@ class VisitViewSet(viewsets.ModelViewSet):
         if search:
             queryset = queryset.filter(
                 Q(plate__icontains=search) | 
-                Q(vin_code__icontains=search) | # ДОДАНО ПОШУК ПО VIN
+                Q(vin_code__icontains=search) | 
                 Q(client__icontains=search) | 
                 Q(phone__icontains=search)
             )
@@ -230,7 +230,8 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def get_queryset(self): return Supplier.objects.filter(company=get_user_company(self.request.user))
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
-# --- ДОДАНО: ЛОГІКА ДЛЯ УНІВЕРСАЛЬНОГО ПОШУКУ ЗАПЧАСТИН ---
+
+# === НОВИЙ КЛАС ДЛЯ ГЛОБАЛЬНОГО ПОШУКУ ===
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -238,12 +239,12 @@ class PartSearchView(APIView):
         company = get_user_company(request.user)
         query = request.query_params.get('q', '').strip()
 
-        if not query:
+        if not query or len(query) < 2:
             return Response([])
 
         results = []
 
-        # 1. ПОШУК ПО ВЛАСНОМУ СКЛАДУ
+        # 1. ПОШУК ПО ВЛАСНОМУ СКЛАДУ (Найнадійніше і найшвидше)
         local_items = InventoryItem.objects.filter(
             Q(company=company) & 
             (Q(article__icontains=query) | Q(name__icontains=query) | Q(brand__icontains=query))
@@ -260,23 +261,71 @@ class PartSearchView(APIView):
                 "is_local": True
             })
 
-        # 2. ПОШУК ПО ПОСТАЧАЛЬНИКАХ (Зараз генеруємо тестові результати)
+        # 2. ПОШУК ПО ПОСТАЧАЛЬНИКАХ
         suppliers = Supplier.objects.filter(company=company)
+        
         for sup in suppliers:
-            if sup.api_key:
-                # ТУТ БУДЕ РЕАЛЬНИЙ ЗАПИТ ДО API ПОСТАЧАЛЬНИКА
+            # === ІНТЕГРАЦІЯ VESNA-AUTO ===
+            if sup.api_key and ('vesna' in sup.name.lower() or 'весна' in sup.name.lower()):
+                try:
+                    # Розбираємо API ключ: очікуємо формат "customer_id:токен"
+                    parts = sup.api_key.split(':')
+                    customer_id = int(parts[0]) if len(parts) > 1 else 0
+                    token = parts[1] if len(parts) > 1 else sup.api_key
+
+                    # УВАГА: Заміни домен на реальний домен API Vesna Auto, якщо він інший!
+                    vesna_url = "https://api.vesna-auto.com/search-methods/search-by-article/"
+                    
+                    headers = {
+                        "Authorization": f"Bearer {token}", 
+                        "Content-Type": "application/json",
+                        "Accept-Language": "uk"
+                    }
+                    payload = {
+                        "customer_id": customer_id,
+                        "article": query
+                    }
+                    
+                    # Робимо реальний запит
+                    response = requests.post(vesna_url, json=payload, headers=headers, timeout=8)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        # Іноді API повертає словник замість масиву, робимо масив примусово
+                        if isinstance(data, dict):
+                            data = [data]
+                            
+                        for item in data:
+                            # Проходимось по кожному складу (balance)
+                            for wh in item.get('balance', []):
+                                results.append({
+                                    "id": f"vesna_{sup.id}_{item.get('sku', '')}_{wh.get('warehouse_id')}",
+                                    "source": f"{sup.name} ({wh.get('name', 'Склад')})",
+                                    "brand": item.get('brand', 'Unknown'),
+                                    "article": item.get('article', query.upper()),
+                                    "name": item.get('name', 'Деталь Vesna'),
+                                    "buy_price": float(item.get('price', 0)),
+                                    "quantity": f"{wh.get('quantity', '0')} шт",
+                                    "is_local": False
+                                })
+                except Exception as e:
+                    print(f"Помилка інтеграції Vesna-Auto: {e}")
+                    
+            # ТЕСТОВА ЗАГЛУШКА ДЛЯ ІНШИХ API ПОСТАЧАЛЬНИКІВ
+            elif sup.api_key:
                 results.append({
                     "id": f"api_{sup.id}_{query}",
                     "source": sup.name,
                     "brand": "Бренд (API)",
                     "article": query.upper(),
-                    "name": f"Тестова деталь з бази {sup.name}",
+                    "name": f"Тестова деталь {sup.name}",
                     "buy_price": 450.00,
                     "quantity": "В наявності",
                     "is_local": False
                 })
+                
+            # ТЕСТОВА ЗАГЛУШКА ДЛЯ EXCEL ПРАЙСІВ
             elif sup.price_file:
-                # ТУТ БУДЕ ПОШУК ПО EXCEL ФАЙЛУ
                 results.append({
                     "id": f"file_{sup.id}_{query}",
                     "source": sup.name,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, Plus, Box, Truck, CarFront, X, Loader2 } from 'lucide-react';
+import { Search, Plus, Box, Truck, CarFront, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const UniversalSearch = () => {
@@ -11,30 +11,31 @@ const UniversalSearch = () => {
   const [hasSearched, setHasSearched] = useState(false);
 
   // Для модалки додавання в замовлення
-  const [activeVisits, setActiveVisits] = useState([]);
   const [companyInfo, setCompanyInfo] = useState(null);
   const [selectedPart, setSelectedPart] = useState(null);
-  const [addToVisitData, setAddToVisitData] = useState({ visit_id: '', sell_price: '' });
+  
+  // Пошук візитів всередині модалки
+  const [visitSearchQuery, setVisitSearchQuery] = useState('');
+  const [visitSearchResults, setVisitSearchResults] = useState([]);
+  const [isSearchingVisits, setIsSearchingVisits] = useState(false);
+  const [selectedVisit, setSelectedVisit] = useState(null);
+
+  const [addToVisitData, setAddToVisitData] = useState({ sell_price: '' });
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
 
-  // Завантажуємо активні візити та інфо (для націнки)
+  // Завантажуємо налаштування (для націнки)
   useEffect(() => {
-    const fetchBaseData = async () => {
+    const fetchSettings = async () => {
       try {
-        const [visitsRes, settingsRes] = await Promise.all([
-          axios.get(`${API_BASE}/api/visits/`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } })
-        ]);
-        // Беремо тільки авто, які в черзі або в роботі
-        setActiveVisits(visitsRes.data.filter(v => v.status !== 'DONE'));
-        setCompanyInfo(settingsRes.data.company);
+        const res = await axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } });
+        setCompanyInfo(res.data.company);
       } catch (error) {
         if (error.response?.status === 401) navigate('/login');
       }
     };
-    fetchBaseData();
+    fetchSettings();
   }, [token, navigate]);
 
   const handleSearch = async (e) => {
@@ -55,38 +56,62 @@ const UniversalSearch = () => {
     }
   };
 
-  // Відкриття модалки додавання
+  // Пошук візиту за номером або VIN
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (visitSearchQuery.length >= 2) {
+        setIsSearchingVisits(true);
+        try {
+          const res = await axios.get(`${API_BASE}/api/visits/?search=${visitSearchQuery}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          // Фільтруємо, щоб не додавати в уже закриті замовлення
+          setVisitSearchResults(res.data.filter(v => v.status !== 'DONE'));
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setIsSearchingVisits(false);
+        }
+      } else {
+        setVisitSearchResults([]);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [visitSearchQuery, token]);
+
   const openAddModal = (part) => {
     setSelectedPart(part);
+    setSelectedVisit(null);
+    setVisitSearchQuery('');
     // Розраховуємо автоматичну націнку
     const margin = companyInfo?.global_margin_percent ? parseFloat(companyInfo.global_margin_percent) : 0;
     const sellPrice = (part.buy_price * (1 + margin / 100)).toFixed(2);
-    setAddToVisitData({ visit_id: activeVisits.length > 0 ? activeVisits[0].id : '', sell_price: sellPrice });
+    setAddToVisitData({ sell_price: sellPrice });
   };
 
   const handleAddToVisit = async (e) => {
     e.preventDefault();
-    if (!addToVisitData.visit_id) {
-      alert("Немає активних замовлень. Створіть візит спочатку.");
+    if (!selectedVisit) {
+      alert("Будь ласка, знайдіть та оберіть автомобіль!");
       return;
     }
     
     const payload = {
-      visit: addToVisitData.visit_id,
+      visit: selectedVisit.id,
       brand: selectedPart.brand,
       article: selectedPart.article,
       name: selectedPart.name,
       buy_price: selectedPart.buy_price,
       sell_price: addToVisitData.sell_price,
       supplier: selectedPart.source,
-      status: selectedPart.is_local ? 'ARRIVED' : 'WAITING' // Якщо з нашого складу - одразу приїхала
+      status: selectedPart.is_local ? 'ARRIVED' : 'WAITING'
     };
 
     try {
       await axios.post(`${API_BASE}/api/order-parts/`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert(`Успішно додано в замовлення!`);
+      alert(`Запчастину додано до ${selectedVisit.plate}!`);
       setSelectedPart(null);
     } catch (error) {
       alert("Помилка додавання.");
@@ -100,7 +125,6 @@ const UniversalSearch = () => {
         <p className="text-slate-500 font-bold text-sm">Шукайте запчастини на власному складі та у всіх постачальників одночасно.</p>
       </div>
 
-      {/* РЯДОК ПОШУКУ */}
       <form onSubmit={handleSearch} className="relative w-full mb-8 shadow-xl shadow-slate-200/50 rounded-2xl">
         <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={24} />
         <input 
@@ -115,7 +139,6 @@ const UniversalSearch = () => {
         </button>
       </form>
 
-      {/* РЕЗУЛЬТАТИ */}
       {hasSearched && (
         <div className="bg-white border border-slate-200 rounded-3xl p-5 md:p-8 flex-1">
           <h2 className="text-lg font-black uppercase mb-6 text-slate-800">Результати пошуку: {results.length}</h2>
@@ -171,10 +194,10 @@ const UniversalSearch = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ДОДАВАННЯ */}
+      {/* МОДАЛКА ДОДАВАННЯ (ОНОВЛЕНА) */}
       {selectedPart && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 md:p-8 relative">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 md:p-8 relative mt-10 mb-10 shadow-2xl">
             <button onClick={() => setSelectedPart(null)} className="absolute right-4 top-4 text-slate-400 hover:bg-slate-100 p-2 rounded-full"><X size={20} /></button>
             <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Plus className="text-emerald-500"/> Додати в авто</h2>
             
@@ -187,34 +210,75 @@ const UniversalSearch = () => {
               </div>
             </div>
 
-            <form onSubmit={handleAddToVisit} className="space-y-5">
+            <div className="space-y-5">
+              {/* ПОШУК АВТО */}
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 flex items-center gap-1.5"><CarFront size={14}/> Оберіть активне замовлення</label>
-                {activeVisits.length > 0 ? (
-                  <select required className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-500 font-bold text-slate-700" value={addToVisitData.visit_id} onChange={e => setAddToVisitData({...addToVisitData, visit_id: e.target.value})}>
-                    {activeVisits.map(v => (
-                      <option key={v.id} value={v.id}>{v.plate} ({v.client})</option>
-                    ))}
-                  </select>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Знайдіть авто (Номер або VIN)</label>
+                {!selectedVisit ? (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input 
+                      type="text" 
+                      placeholder="Напр. АА1234..." 
+                      className="w-full bg-white border-2 border-slate-200 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-blue-500 font-bold text-slate-700 uppercase"
+                      value={visitSearchQuery}
+                      onChange={(e) => setVisitSearchQuery(e.target.value)}
+                    />
+                    
+                    {/* РЕЗУЛЬТАТИ ПОШУКУ АВТО */}
+                    {visitSearchResults.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
+                        {visitSearchResults.map(v => (
+                          <button 
+                            key={v.id} 
+                            onClick={() => { setSelectedVisit(v); setVisitSearchResults([]); }}
+                            className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50 last:border-0 transition-colors"
+                          >
+                            <p className="font-black text-sm text-slate-800">{v.plate}</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase">{v.client} | {v.vin_code || 'Без VIN'}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {isSearchingVisits && <div className="absolute right-3 top-1/2 -translate-y-1/2"><Loader2 className="animate-spin text-blue-500" size={16}/></div>}
+                  </div>
                 ) : (
-                  <div className="text-sm font-bold text-red-500 bg-red-50 p-3 rounded-xl border border-red-100">
-                    Немає машин в роботі. Спочатку створіть візит.
+                  <div className="flex justify-between items-center bg-blue-50 border-2 border-blue-200 rounded-xl p-3">
+                    <div>
+                      <p className="font-black text-blue-700">{selectedVisit.plate}</p>
+                      <p className="text-[10px] font-bold text-blue-500 uppercase">{selectedVisit.client}</p>
+                    </div>
+                    <button onClick={() => setSelectedVisit(null)} className="text-blue-400 hover:text-red-500 transition-colors"><X size={18}/></button>
                   </div>
                 )}
               </div>
 
+              {/* ЦІНА ПРОДАЖУ */}
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Ціна продажу клієнту (₴)</label>
                 <div className="flex items-center gap-3">
-                  <input required type="number" step="0.01" className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-500 font-black text-xl text-emerald-600" value={addToVisitData.sell_price} onChange={e => setAddToVisitData({...addToVisitData, sell_price: e.target.value})} />
-                  <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-lg whitespace-nowrap">Націнка: {companyInfo?.global_margin_percent}%</span>
+                  <input 
+                    required 
+                    type="number" 
+                    step="0.01" 
+                    className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-500 font-black text-xl text-emerald-600" 
+                    value={addToVisitData.sell_price} 
+                    onChange={e => setAddToVisitData({...addToVisitData, sell_price: e.target.value})} 
+                  />
+                  <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded whitespace-nowrap">
+                    Націнка: {companyInfo?.global_margin_percent}%
+                  </div>
                 </div>
               </div>
 
-              <button type="submit" disabled={activeVisits.length === 0} className="w-full bg-emerald-500 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-4 shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all disabled:opacity-50">
+              <button 
+                onClick={handleAddToVisit}
+                disabled={!selectedVisit} 
+                className="w-full bg-emerald-500 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-4 shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all disabled:opacity-30 disabled:grayscale"
+              >
                 Зберегти в чек
               </button>
-            </form>
+            </div>
           </div>
         </div>
       )}

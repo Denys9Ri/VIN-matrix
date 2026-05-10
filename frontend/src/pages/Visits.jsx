@@ -9,7 +9,7 @@ const Visits = () => {
   const [visits, setVisits] = useState([]);
   const [catalogServices, setCatalogServices] = useState([]); 
   const [role, setRole] = useState(null); 
-  const [companyInfo, setCompanyInfo] = useState(null); // ДОДАНО: Стан для реквізитів СТО
+  const [companyInfo, setCompanyInfo] = useState(null); 
   const [loading, setLoading] = useState(true);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,7 +19,6 @@ const Visits = () => {
   const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
   const [showManualPartForm, setShowManualPartForm] = useState(false); 
   
-  // Стан для редагування часу існуючого візиту
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [editTimeData, setEditTimeData] = useState({ date: '', time: '' });
   
@@ -46,7 +45,7 @@ const Visits = () => {
       ]);
       setVisits(visitsRes.data || []);
       setRole(settingsRes.data.role);
-      setCompanyInfo(settingsRes.data.company); // ДОДАНО: Зберігаємо реквізити для чека
+      setCompanyInfo(settingsRes.data.company); 
       setCatalogServices(servicesRes.data || []);
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
@@ -60,12 +59,10 @@ const Visits = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
-  // --- СТВОРЕННЯ (З виправленням часового поясу) ---
   const handleCreateVisit = async (e) => {
     e.preventDefault();
     let scheduled_datetime = null;
     
-    // Форматуємо дату в правильний ISO формат з урахуванням місцевого часу
     if (newVisitData.date && newVisitData.time) {
       const localDate = new Date(`${newVisitData.date}T${newVisitData.time}`);
       scheduled_datetime = localDate.toISOString();
@@ -88,7 +85,6 @@ const Visits = () => {
     } catch (error) { alert("Помилка створення візиту"); }
   };
 
-  // --- ВИДАЛЕННЯ ВІЗИТУ ---
   const handleDeleteVisit = async () => {
     if (window.confirm("Ви дійсно хочете видалити це замовлення НАЗАВЖДИ?")) {
       try {
@@ -99,7 +95,6 @@ const Visits = () => {
     }
   };
 
-  // --- РЕДАГУВАННЯ ЧАСУ ---
   const handleUpdateTime = async () => {
     let scheduled_datetime = null;
     if (editTimeData.date && editTimeData.time) {
@@ -114,7 +109,6 @@ const Visits = () => {
     } catch (error) { alert("Помилка збереження часу"); }
   };
 
-  // --- ІНШІ СТАТУСИ ---
   const updateVisitStatus = async (id, newStatus) => {
     try {
       await axios.patch(`${API_BASE}/api/visits/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } });
@@ -176,7 +170,6 @@ const Visits = () => {
     fetchData();
   };
 
-  // ДОДАНО: ПІДРАХУНОК СУМ ДЛЯ ЧЕКА ТА ВІДОБРАЖЕННЯ
   const servicesTotal = selectedVisit?.services?.reduce((sum, s) => sum + parseFloat(s.price || 0), 0) || 0;
   const partsTotal = selectedVisit?.parts?.reduce((sum, p) => sum + parseFloat(p.sell_price || 0), 0) || 0;
   const grandTotal = servicesTotal + partsTotal;
@@ -188,7 +181,7 @@ const Visits = () => {
   const done = visits.filter(v => v.status === 'DONE');
 
   const Column = ({ title, icon, items, colorClass }) => (
-    <div className="bg-slate-50/50 rounded-3xl p-4 flex flex-col h-full border border-slate-100">
+    <div className="bg-slate-50/50 rounded-3xl p-4 flex flex-col h-full border border-slate-100 no-print-area">
       <h3 className={`font-black uppercase tracking-wider text-sm flex items-center gap-2 mb-4 ${colorClass}`}>
         {icon} {title} <span className="ml-auto bg-white px-2 py-1 rounded-lg shadow-sm text-slate-500">{items.length}</span>
       </h3>
@@ -204,20 +197,53 @@ const Visits = () => {
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 h-screen flex flex-col">
       
-      {/* ДОДАНО: СТИЛІ ДЛЯ ДРУКУ */}
+      {/* СУПЕР-ЗАХИЩЕНИЙ CSS ДЛЯ ДРУКУ */}
       <style>{`
         @media print {
-          body * { visibility: hidden; }
-          #printable-act, #printable-act * { visibility: visible; }
-          #printable-act { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; font-family: 'Arial', sans-serif; color: black; background: white; }
-          .no-print { display: none !important; }
-          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
-          th { background-color: #f2f2f2; font-weight: bold; }
+          /* 1. Ховаємо взагалі ВСЕ на сторінці */
+          body * { display: none !important; }
+          
+          /* 2. Але дозволяємо показувати наш рутовий контейнер і сам Акт */
+          #root, #root *, #printable-act, #printable-act * { display: block !important; }
+          
+          /* 3. Знову ховаємо те, що помічено класом .no-print-area (навіть всередині #root) */
+          .no-print-area, .no-print-area * { display: none !important; }
+          
+          /* 4. Скидаємо всі ліміти Tailwind (це вирішує проблему порожніх аркушів) */
+          html, body, #root { 
+            height: auto !important; 
+            min-height: auto !important; 
+            overflow: visible !important; 
+            background: white !important;
+          }
+          
+          .fixed, .absolute { position: static !important; }
+          .overflow-y-auto, .overflow-hidden { overflow: visible !important; }
+          .h-screen { height: auto !important; }
+          .max-w-4xl, .max-w-7xl { max-width: none !important; width: 100% !important; }
+          
+          /* 5. Дизайн самого Чека */
+          #printable-act {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            padding: 0 10mm !important;
+            color: black !important;
+            font-family: Arial, sans-serif !important;
+          }
+
+          table { width: 100% !important; border-collapse: collapse !important; margin-top: 15px !important; }
+          th, td { border: 1px solid #000 !important; padding: 8px !important; text-align: left !important; font-size: 13px !important; color: black !important; display: table-cell !important; }
+          th { background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact !important; font-weight: bold !important; }
+          tr { display: table-row !important; page-break-inside: avoid; }
+          tbody { display: table-row-group !important; }
+          thead { display: table-header-group !important; }
         }
       `}</style>
 
-      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4">
+      {/* ШАПКА ПОШУКУ */}
+      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 no-print-area">
         <h1 className="text-2xl font-black uppercase italic w-full xl:w-auto">Дошка Візитів</h1>
         
         <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-1 xl:justify-center">
@@ -240,7 +266,8 @@ const Visits = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
+      {/* КОЛОНКИ */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0 no-print-area">
         <Column title="В черзі / Підбір" icon={<Clock size={18}/>} items={pending} colorClass="text-slate-600" />
         <Column title="В роботі" icon={<Wrench size={18}/>} items={inProgress} colorClass="text-blue-600" />
         <Column title="Готово" icon={<CheckCircle2 size={18}/>} items={done} colorClass="text-green-600" />
@@ -248,7 +275,7 @@ const Visits = () => {
 
       {/* МОДАЛКА СТВОРЕННЯ */}
       {isCreatingVisit && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
             <button onClick={() => setIsCreatingVisit(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
             <h2 className="text-xl font-black mb-6 flex items-center gap-2"><CarFront className="text-blue-600"/> Новий візит</h2>
@@ -277,222 +304,222 @@ const Visits = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8 relative">
             
-            {/* ДОДАНО: ПРИХОВАНИЙ БЛОК ДЛЯ ДРУКУ */}
+            {/* БЛОК ДЛЯ ДРУКУ (З'ЯВЛЯЄТЬСЯ ТІЛЬКИ НА ПАПЕРІ) */}
             <div id="printable-act" className="hidden">
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid black', paddingBottom: '15px', marginBottom: '20px' }}>
                 <div>
-                  {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" style={{ height: '60px', marginBottom: '10px' }} />}
-                  <h1 style={{ fontSize: '20px', fontWeight: '900', margin: '0' }}>{companyInfo?.name || 'СТО'}</h1>
-                  <p style={{ fontSize: '12px', margin: '2px 0' }}>{companyInfo?.address}</p>
-                  <p style={{ fontSize: '12px', margin: '2px 0' }}>Тел: {companyInfo?.phone}</p>
+                  {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" style={{ maxHeight: '70px', marginBottom: '10px' }} />}
+                  <h1 style={{ fontSize: '24px', fontWeight: '900', margin: '0' }}>{companyInfo?.name || 'СТО'}</h1>
+                  <p style={{ fontSize: '14px', margin: '4px 0' }}>{companyInfo?.address}</p>
+                  <p style={{ fontSize: '14px', margin: '4px 0' }}>Тел: {companyInfo?.phone}</p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <h2 style={{ fontSize: '18px', fontWeight: '900' }}>АКТ ВИКОНАНИХ РОБІТ №{selectedVisit.id}</h2>
-                  <p style={{ fontSize: '12px' }}>Дата: {new Date().toLocaleDateString()}</p>
+                  <h2 style={{ fontSize: '20px', fontWeight: '900', margin: '0 0 10px 0' }}>АКТ ВИКОНАНИХ РОБІТ №{selectedVisit.id}</h2>
+                  <p style={{ fontSize: '14px', margin: '0' }}>Дата: {new Date().toLocaleDateString()}</p>
                 </div>
               </div>
 
-              <div style={{ background: '#f9fafb', padding: '10px', borderRadius: '8px', marginBottom: '20px' }}>
-                <p style={{ margin: '0', fontSize: '13px' }}><strong>Автомобіль:</strong> {selectedVisit.plate} ({selectedVisit.client})</p>
-                <p style={{ margin: '5px 0 0 0', fontSize: '13px' }}><strong>Телефон:</strong> {selectedVisit.phone}</p>
+              <div style={{ padding: '15px', border: '1px solid #000', borderRadius: '8px', marginBottom: '20px' }}>
+                <p style={{ margin: '0 0 8px 0', fontSize: '14px' }}><strong>Автомобіль:</strong> {selectedVisit.plate} ({selectedVisit.client})</p>
+                <p style={{ margin: '0', fontSize: '14px' }}><strong>Телефон клієнта:</strong> {selectedVisit.phone}</p>
               </div>
 
               {selectedVisit.services?.length > 0 && (
-                <>
-                  <h3 style={{ fontSize: '14px', borderBottom: '2px solid black', paddingBottom: '5px' }}>1. ПЕРЕЛІК РОБІТ ТА ПОСЛУГ</h3>
+                <div style={{ marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 10px 0' }}>1. ПЕРЕЛІК РОБІТ ТА ПОСЛУГ</h3>
                   <table>
-                    <thead><tr><th>Назва послуги</th><th style={{ textAlign: 'right' }}>Вартість, грн</th></tr></thead>
+                    <thead><tr><th style={{ width: '80%' }}>Назва послуги</th><th style={{ textAlign: 'right' }}>Вартість, грн</th></tr></thead>
                     <tbody>
                       {selectedVisit.services.map(s => (
-                        <tr key={s.id}><td>{s.name}</td><td style={{ textAlign: 'right' }}>{s.price}</td></tr>
+                        <tr key={s.id}><td>{s.name}</td><td style={{ textAlign: 'right' }}>{parseFloat(s.price).toLocaleString()}</td></tr>
                       ))}
                     </tbody>
                   </table>
-                </>
+                </div>
               )}
 
               {selectedVisit.parts?.length > 0 && (
-                <>
-                  <h3 style={{ fontSize: '14px', borderBottom: '2px solid black', paddingBottom: '5px', marginTop: '20px' }}>2. ЗАПЧАСТИНИ ТА МАТЕРІАЛИ</h3>
+                <div style={{ marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 10px 0' }}>2. ЗАПЧАСТИНИ ТА МАТЕРІАЛИ</h3>
                   <table>
-                    <thead><tr><th>Назва</th><th>Бренд/Артикул</th><th style={{ textAlign: 'right' }}>Ціна, грн</th></tr></thead>
+                    <thead><tr><th style={{ width: '40%' }}>Назва</th><th style={{ width: '40%' }}>Бренд/Артикул</th><th style={{ textAlign: 'right' }}>Ціна, грн</th></tr></thead>
                     <tbody>
                       {selectedVisit.parts.map(p => (
-                        <tr key={p.id}><td>{p.name}</td><td>{p.brand} {p.article}</td><td style={{ textAlign: 'right' }}>{p.sell_price}</td></tr>
+                        <tr key={p.id}><td>{p.name}</td><td>{p.brand} {p.article}</td><td style={{ textAlign: 'right' }}>{parseFloat(p.sell_price).toLocaleString()}</td></tr>
                       ))}
                     </tbody>
                   </table>
-                </>
+                </div>
               )}
 
-              <div style={{ marginTop: '20px', textAlign: 'right' }}>
-                <p style={{ fontSize: '16px', fontWeight: '900' }}>ВСЬОГО ДО СПЛАТИ: {grandTotal.toLocaleString()} грн</p>
+              <div style={{ marginTop: '30px', textAlign: 'right', padding: '15px', borderTop: '2px solid black' }}>
+                <p style={{ fontSize: '14px', margin: '0 0 5px 0' }}>Всього за роботи: {servicesTotal.toLocaleString()} грн</p>
+                <p style={{ fontSize: '14px', margin: '0 0 10px 0' }}>Всього за запчастини: {partsTotal.toLocaleString()} грн</p>
+                <p style={{ fontSize: '20px', fontWeight: '900', margin: '0' }}>ДО СПЛАТИ: {grandTotal.toLocaleString()} грн</p>
               </div>
 
               {companyInfo?.document_footer && (
-                <div style={{ marginTop: '40px', fontSize: '10px', color: '#666', borderTop: '1px solid #ddd', paddingTop: '10px' }}>
-                  <p>{companyInfo.document_footer}</p>
+                <div style={{ marginTop: '50px', fontSize: '12px', color: '#333', borderTop: '1px solid #ddd', paddingTop: '15px', whiteSpace: 'pre-wrap' }}>
+                  {companyInfo.document_footer}
                 </div>
               )}
             </div>
             
-            {/* ШАПКА ВІЗИТУ З КНОПКАМИ */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-6 border-b border-slate-100 pb-4 gap-4">
-              <div className="w-full">
-                <h2 className="text-3xl font-black uppercase">{selectedVisit.plate}</h2>
-                <p className="text-slate-500 font-bold flex items-center gap-2 mt-1"><CarFront size={16}/> {selectedVisit.client} | <Phone size={16}/> {selectedVisit.phone}</p>
+            {/* ВІЗУАЛЬНА ЧАСТИНА (ХОВАЄТЬСЯ ПРИ ДРУКУ) */}
+            <div className="no-print-area">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-6 border-b border-slate-100 pb-4 gap-4">
+                <div className="w-full">
+                  <h2 className="text-3xl font-black uppercase">{selectedVisit.plate}</h2>
+                  <p className="text-slate-500 font-bold flex items-center gap-2 mt-1"><CarFront size={16}/> {selectedVisit.client} | <Phone size={16}/> {selectedVisit.phone}</p>
+                  
+                  {/* РЕДАГУВАННЯ ЧАСУ */}
+                  <div className="text-slate-500 text-xs font-bold mt-2 flex items-center gap-2 group">
+                    <Clock size={14}/>
+                    {isEditingTime ? (
+                      <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                        <input type="date" className="bg-transparent outline-none text-slate-700" value={editTimeData.date} onChange={e => setEditTimeData({...editTimeData, date: e.target.value})} />
+                        <input type="time" className="bg-transparent outline-none text-slate-700" value={editTimeData.time} onChange={e => setEditTimeData({...editTimeData, time: e.target.value})} />
+                        <button onClick={handleUpdateTime} className="text-green-600 hover:bg-green-100 p-1 rounded"><CheckCircle2 size={14}/></button>
+                        <button onClick={() => setIsEditingTime(false)} className="text-slate-400 hover:bg-slate-200 p-1 rounded"><X size={14}/></button>
+                      </div>
+                    ) : (
+                      <>
+                        <span>Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}</span>
+                        {role === 'owner' && (
+                          <button onClick={() => {
+                            const d = selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime) : new Date();
+                            setEditTimeData({ date: d.toLocaleDateString('en-CA'), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
+                            setIsEditingTime(true);
+                          }} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Pencil size={14}/>
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
                 
-                {/* РЕДАГУВАННЯ ЧАСУ */}
-                <div className="text-slate-500 text-xs font-bold mt-2 flex items-center gap-2 group">
-                  <Clock size={14}/>
-                  {isEditingTime ? (
-                    <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                      <input type="date" className="bg-transparent outline-none text-slate-700" value={editTimeData.date} onChange={e => setEditTimeData({...editTimeData, date: e.target.value})} />
-                      <input type="time" className="bg-transparent outline-none text-slate-700" value={editTimeData.time} onChange={e => setEditTimeData({...editTimeData, time: e.target.value})} />
-                      <button onClick={handleUpdateTime} className="text-green-600 hover:bg-green-100 p-1 rounded"><CheckCircle2 size={14}/></button>
-                      <button onClick={() => setIsEditingTime(false)} className="text-slate-400 hover:bg-slate-200 p-1 rounded"><X size={14}/></button>
-                    </div>
-                  ) : (
-                    <>
-                      <span>Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}</span>
-                      {role === 'owner' && (
-                        <button onClick={() => {
-                          const d = selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime) : new Date();
-                          setEditTimeData({ date: d.toLocaleDateString('en-CA'), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
-                          setIsEditingTime(true);
-                        }} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Pencil size={14}/>
-                        </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {role === 'owner' && (
+                    <button onClick={() => window.print()} className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2 px-3 font-black text-xs uppercase shadow-md shadow-blue-200" title="Друкувати акт">
+                      <Printer size={18} /> Друк
+                    </button>
+                  )}
+                  {role === 'owner' && (
+                    <button onClick={handleDeleteVisit} className="bg-red-50 text-red-500 p-2 rounded-xl hover:bg-red-100 transition-colors" title="Видалити візит повністю">
+                      <Trash2 size={20} />
+                    </button>
+                  )}
+                  {role === 'owner' && (selectedVisit.status === 'DONE' || filterDate) && (
+                    <button onClick={() => {
+                        setNewVisitData({ plate: selectedVisit.plate, client: selectedVisit.client, phone: selectedVisit.phone, date: '', time: '' });
+                        setSelectedVisit(null);
+                        setIsCreatingVisit(true);
+                      }} className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-black uppercase text-xs hover:bg-blue-100 transition-all"
+                    >
+                      <RefreshCcw size={16}/> Повторний
+                    </button>
+                  )}
+                  <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-full hover:bg-slate-200 transition-colors"><X size={20} /></button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 bg-slate-50 p-2 rounded-2xl mb-6">
+                <button onClick={() => updateVisitStatus(selectedVisit.id, 'PENDING')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow-md text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
+                <button onClick={() => updateVisitStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow-md shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
+                <button onClick={() => updateVisitStatus(selectedVisit.id, 'DONE')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow-md shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Wrench size={18}/> Завдання</h3>
+                  <div className="space-y-3 mb-4">
+                    {selectedVisit.services?.map(s => (
+                      <div key={s.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-3 group">
+                        <div className="flex justify-between items-start">
+                          <span className="font-bold text-slate-700 text-sm">{s.name}</span>
+                          <div className="flex items-center gap-3">
+                            {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{s.price} ₴</span>}
+                            {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
+                          </div>
+                        </div>
+                        <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`text-[10px] font-black uppercase tracking-widest rounded-lg px-3 py-2 outline-none cursor-pointer border-none w-full ${serviceStatusColors[s.status || 'PENDING']}`}>
+                          <option value="PENDING">⏳ Очікує</option>
+                          <option value="IN_PROGRESS">🔧 В роботі</option>
+                          <option value="DONE">✅ Виконано</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  {role === 'owner' && (
+                    <form onSubmit={handleAddService} className="bg-slate-50 p-2 rounded-xl border border-slate-200 space-y-2">
+                      <select className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none cursor-pointer text-slate-600" onChange={(e) => { const s = catalogServices.find(cat => cat.id === parseInt(e.target.value)); if (s) setNewService({ name: s.name, price: s.price }); }} defaultValue="">
+                          <option value="" disabled>Оберіть з прайсу...</option>
+                          {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} - {s.price} ₴</option>)}
+                      </select>
+                      <div className="flex gap-2">
+                        <input required type="text" placeholder="Назва" className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
+                        <input required type="number" placeholder="Ціна" className="w-20 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
+                        <button type="submit" className="bg-blue-600 text-white p-2 rounded-lg"><Plus size={18}/></button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Store size={18}/> Запчастини</h3>
+                  <div className="space-y-3 mb-4">
+                    {selectedVisit.parts?.map(p => (
+                      <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-3 group">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-bold text-slate-700 text-sm">{p.name}</p>
+                            <p className="text-[9px] uppercase font-bold text-slate-500 mt-1">{p.brand} | {p.article}</p>
+                            {role === 'owner' && <p className="text-[9px] uppercase font-bold text-blue-500 mt-1">Де: {p.supplier}</p>}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{p.sell_price} ₴</span>}
+                            {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
+                          </div>
+                        </div>
+                        <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[10px] font-black uppercase tracking-widest rounded-lg px-3 py-2 outline-none cursor-pointer border-none w-full ${partStatusColors[p.status || 'WAITING']}`}>
+                          <option value="WAITING">⏳ Очікується</option>
+                          <option value="IN_TRANSIT">🚚 В дорозі</option>
+                          <option value="ARRIVED">✅ Приїхала</option>
+                          <option value="UNAVAILABLE">❌ Не буде</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  {role === 'owner' && (
+                    <div className="mt-4">
+                      {!showManualPartForm ? (
+                        <button onClick={() => setShowManualPartForm(true)} className="w-full p-3 border-2 border-dashed border-slate-200 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-blue-600 hover:border-blue-300 transition-all">✏️ Додати вручну</button>
+                      ) : (
+                        <form onSubmit={handleAddPart} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 relative">
+                          <button type="button" onClick={() => setShowManualPartForm(false)} className="absolute right-2 top-2 text-slate-400"><X size={14}/></button>
+                          <input required type="text" placeholder="Назва деталі" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
+                          <input required type="text" placeholder="Постачальник / Де замовлено" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.supplier} onChange={e => setNewPart({...newPart, supplier: e.target.value})} />
+                          <div className="flex gap-2">
+                            <input type="text" placeholder="Бренд" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
+                            <input type="text" placeholder="Артикул" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
+                          </div>
+                          <div className="flex gap-2 items-center bg-white p-2 rounded-lg">
+                            <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
+                            <input type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
+                          </div>
+                          <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs py-3 rounded-lg mt-2 tracking-widest hover:bg-blue-700 shadow-sm transition-all">Зберегти</button>
+                        </form>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
               
-              <div className="flex items-center gap-2 shrink-0">
-                {/* ДОДАНО: КНОПКА ДРУКУ */}
-                {role === 'owner' && (
-                  <button onClick={() => window.print()} className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2 px-3 font-black text-xs uppercase" title="Друкувати акт">
-                    <Printer size={18} /> Друк
-                  </button>
-                )}
-                {role === 'owner' && (
-                  <button onClick={handleDeleteVisit} className="bg-red-50 text-red-500 p-2 rounded-xl hover:bg-red-100 transition-colors" title="Видалити візит повністю">
-                    <Trash2 size={20} />
-                  </button>
-                )}
-                {role === 'owner' && (selectedVisit.status === 'DONE' || filterDate) && (
-                  <button onClick={() => {
-                      setNewVisitData({ plate: selectedVisit.plate, client: selectedVisit.client, phone: selectedVisit.phone, date: '', time: '' });
-                      setSelectedVisit(null);
-                      setIsCreatingVisit(true);
-                    }} className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-black uppercase text-xs hover:bg-blue-100 transition-all"
-                  >
-                    <RefreshCcw size={16}/> Повторний
-                  </button>
-                )}
-                <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-full hover:bg-slate-200 transition-colors"><X size={20} /></button>
+              <div className="mt-8 bg-blue-600 p-6 rounded-3xl text-white flex justify-between items-center shadow-xl shadow-blue-100">
+                 <div className="text-xs font-bold uppercase opacity-80">Загальна сума до сплати:</div>
+                 <div className="text-3xl font-black italic">{grandTotal.toLocaleString()} ₴</div>
               </div>
-            </div>
-
-            <div className="flex gap-2 bg-slate-50 p-2 rounded-2xl mb-6">
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'PENDING')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow-md text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow-md shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'DONE')} className={`flex-1 py-3 rounded-xl font-black text-xs md:text-sm uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow-md shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* === ЗАВДАННЯ (ПОСЛУГИ) === */}
-              <div>
-                <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Wrench size={18}/> Завдання</h3>
-                <div className="space-y-3 mb-4">
-                  {selectedVisit.services?.map(s => (
-                    <div key={s.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-3 group">
-                      <div className="flex justify-between items-start">
-                        <span className="font-bold text-slate-700 text-sm">{s.name}</span>
-                        <div className="flex items-center gap-3">
-                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{s.price} ₴</span>}
-                          {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
-                        </div>
-                      </div>
-                      <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`text-[10px] font-black uppercase tracking-widest rounded-lg px-3 py-2 outline-none cursor-pointer border-none w-full ${serviceStatusColors[s.status || 'PENDING']}`}>
-                        <option value="PENDING">⏳ Очікує</option>
-                        <option value="IN_PROGRESS">🔧 В роботі</option>
-                        <option value="DONE">✅ Виконано</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
-                {role === 'owner' && (
-                  <form onSubmit={handleAddService} className="bg-slate-50 p-2 rounded-xl border border-slate-200 space-y-2">
-                    <select className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none cursor-pointer text-slate-600" onChange={(e) => { const s = catalogServices.find(cat => cat.id === parseInt(e.target.value)); if (s) setNewService({ name: s.name, price: s.price }); }} defaultValue="">
-                        <option value="" disabled>Оберіть з прайсу...</option>
-                        {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} - {s.price} ₴</option>)}
-                    </select>
-                    <div className="flex gap-2">
-                      <input required type="text" placeholder="Назва" className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
-                      <input required type="number" placeholder="Ціна" className="w-20 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
-                      <button type="submit" className="bg-blue-600 text-white p-2 rounded-lg"><Plus size={18}/></button>
-                    </div>
-                  </form>
-                )}
-              </div>
-
-              {/* === ЗАПЧАСТИНИ === */}
-              <div>
-                <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Store size={18}/> Запчастини</h3>
-                <div className="space-y-3 mb-4">
-                  {selectedVisit.parts?.map(p => (
-                    <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-3 group">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-bold text-slate-700 text-sm">{p.name}</p>
-                          <p className="text-[9px] uppercase font-bold text-slate-500 mt-1">{p.brand} | {p.article}</p>
-                          {role === 'owner' && <p className="text-[9px] uppercase font-bold text-blue-500 mt-1">Де: {p.supplier}</p>}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-1 rounded-md text-sm">{p.sell_price} ₴</span>}
-                          {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
-                        </div>
-                      </div>
-                      <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[10px] font-black uppercase tracking-widest rounded-lg px-3 py-2 outline-none cursor-pointer border-none w-full ${partStatusColors[p.status || 'WAITING']}`}>
-                        <option value="WAITING">⏳ Очікується</option>
-                        <option value="IN_TRANSIT">🚚 В дорозі</option>
-                        <option value="ARRIVED">✅ Приїхала</option>
-                        <option value="UNAVAILABLE">❌ Не буде</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
-                {role === 'owner' && (
-                  <div className="mt-4">
-                    {!showManualPartForm ? (
-                      <button onClick={() => setShowManualPartForm(true)} className="w-full p-3 border-2 border-dashed border-slate-200 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-blue-600 hover:border-blue-300 transition-all">✏️ Додати вручну</button>
-                    ) : (
-                      <form onSubmit={handleAddPart} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 relative">
-                        <button type="button" onClick={() => setShowManualPartForm(false)} className="absolute right-2 top-2 text-slate-400"><X size={14}/></button>
-                        <input required type="text" placeholder="Назва деталі" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
-                        <input required type="text" placeholder="Постачальник / Де замовлено" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.supplier} onChange={e => setNewPart({...newPart, supplier: e.target.value})} />
-                        <div className="flex gap-2">
-                          <input type="text" placeholder="Бренд" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
-                          <input type="text" placeholder="Артикул" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
-                        </div>
-                        <div className="flex gap-2 items-center bg-white p-2 rounded-lg">
-                          <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
-                          <input type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
-                        </div>
-                        <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs py-3 rounded-lg mt-2 tracking-widest hover:bg-blue-700 shadow-sm transition-all">Зберегти</button>
-                      </form>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* ДОДАНО: ВІДОБРАЖЕННЯ ЗАГАЛЬНОЇ СУМИ В САМІЙ МОДАЛЦІ */}
-            <div className="mt-8 bg-blue-600 p-6 rounded-3xl text-white flex justify-between items-center shadow-xl shadow-blue-100">
-               <div className="text-xs font-bold uppercase opacity-80">Загальна сума до сплати:</div>
-               <div className="text-3xl font-black italic">{grandTotal.toLocaleString()} ₴</div>
             </div>
 
           </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2 } from 'lucide-react';
+import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2, Printer } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard'; 
 import { useNavigate } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ const Visits = () => {
   const [visits, setVisits] = useState([]);
   const [catalogServices, setCatalogServices] = useState([]); 
   const [role, setRole] = useState(null); 
+  const [companyInfo, setCompanyInfo] = useState(null); // ДОДАНО: Стан для реквізитів СТО
   const [loading, setLoading] = useState(true);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,6 +46,7 @@ const Visits = () => {
       ]);
       setVisits(visitsRes.data || []);
       setRole(settingsRes.data.role);
+      setCompanyInfo(settingsRes.data.company); // ДОДАНО: Зберігаємо реквізити для чека
       setCatalogServices(servicesRes.data || []);
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
@@ -174,6 +176,11 @@ const Visits = () => {
     fetchData();
   };
 
+  // ДОДАНО: ПІДРАХУНОК СУМ ДЛЯ ЧЕКА ТА ВІДОБРАЖЕННЯ
+  const servicesTotal = selectedVisit?.services?.reduce((sum, s) => sum + parseFloat(s.price || 0), 0) || 0;
+  const partsTotal = selectedVisit?.parts?.reduce((sum, p) => sum + parseFloat(p.sell_price || 0), 0) || 0;
+  const grandTotal = servicesTotal + partsTotal;
+
   if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
 
   const pending = visits.filter(v => v.status === 'PENDING' || v.status === 'SELECTION');
@@ -196,6 +203,20 @@ const Visits = () => {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 h-screen flex flex-col">
+      
+      {/* ДОДАНО: СТИЛІ ДЛЯ ДРУКУ */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #printable-act, #printable-act * { visibility: visible; }
+          #printable-act { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; font-family: 'Arial', sans-serif; color: black; background: white; }
+          .no-print { display: none !important; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
+          th { background-color: #f2f2f2; font-weight: bold; }
+        }
+      `}</style>
+
       <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl font-black uppercase italic w-full xl:w-auto">Дошка Візитів</h1>
         
@@ -254,7 +275,66 @@ const Visits = () => {
       {/* МОДАЛКА ДЕТАЛЕЙ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8">
+          <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8 relative">
+            
+            {/* ДОДАНО: ПРИХОВАНИЙ БЛОК ДЛЯ ДРУКУ */}
+            <div id="printable-act" className="hidden">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <div>
+                  {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" style={{ height: '60px', marginBottom: '10px' }} />}
+                  <h1 style={{ fontSize: '20px', fontWeight: '900', margin: '0' }}>{companyInfo?.name || 'СТО'}</h1>
+                  <p style={{ fontSize: '12px', margin: '2px 0' }}>{companyInfo?.address}</p>
+                  <p style={{ fontSize: '12px', margin: '2px 0' }}>Тел: {companyInfo?.phone}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <h2 style={{ fontSize: '18px', fontWeight: '900' }}>АКТ ВИКОНАНИХ РОБІТ №{selectedVisit.id}</h2>
+                  <p style={{ fontSize: '12px' }}>Дата: {new Date().toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              <div style={{ background: '#f9fafb', padding: '10px', borderRadius: '8px', marginBottom: '20px' }}>
+                <p style={{ margin: '0', fontSize: '13px' }}><strong>Автомобіль:</strong> {selectedVisit.plate} ({selectedVisit.client})</p>
+                <p style={{ margin: '5px 0 0 0', fontSize: '13px' }}><strong>Телефон:</strong> {selectedVisit.phone}</p>
+              </div>
+
+              {selectedVisit.services?.length > 0 && (
+                <>
+                  <h3 style={{ fontSize: '14px', borderBottom: '2px solid black', paddingBottom: '5px' }}>1. ПЕРЕЛІК РОБІТ ТА ПОСЛУГ</h3>
+                  <table>
+                    <thead><tr><th>Назва послуги</th><th style={{ textAlign: 'right' }}>Вартість, грн</th></tr></thead>
+                    <tbody>
+                      {selectedVisit.services.map(s => (
+                        <tr key={s.id}><td>{s.name}</td><td style={{ textAlign: 'right' }}>{s.price}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {selectedVisit.parts?.length > 0 && (
+                <>
+                  <h3 style={{ fontSize: '14px', borderBottom: '2px solid black', paddingBottom: '5px', marginTop: '20px' }}>2. ЗАПЧАСТИНИ ТА МАТЕРІАЛИ</h3>
+                  <table>
+                    <thead><tr><th>Назва</th><th>Бренд/Артикул</th><th style={{ textAlign: 'right' }}>Ціна, грн</th></tr></thead>
+                    <tbody>
+                      {selectedVisit.parts.map(p => (
+                        <tr key={p.id}><td>{p.name}</td><td>{p.brand} {p.article}</td><td style={{ textAlign: 'right' }}>{p.sell_price}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              <div style={{ marginTop: '20px', textAlign: 'right' }}>
+                <p style={{ fontSize: '16px', fontWeight: '900' }}>ВСЬОГО ДО СПЛАТИ: {grandTotal.toLocaleString()} грн</p>
+              </div>
+
+              {companyInfo?.document_footer && (
+                <div style={{ marginTop: '40px', fontSize: '10px', color: '#666', borderTop: '1px solid #ddd', paddingTop: '10px' }}>
+                  <p>{companyInfo.document_footer}</p>
+                </div>
+              )}
+            </div>
             
             {/* ШАПКА ВІЗИТУ З КНОПКАМИ */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-6 border-b border-slate-100 pb-4 gap-4">
@@ -290,6 +370,12 @@ const Visits = () => {
               </div>
               
               <div className="flex items-center gap-2 shrink-0">
+                {/* ДОДАНО: КНОПКА ДРУКУ */}
+                {role === 'owner' && (
+                  <button onClick={() => window.print()} className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2 px-3 font-black text-xs uppercase" title="Друкувати акт">
+                    <Printer size={18} /> Друк
+                  </button>
+                )}
                 {role === 'owner' && (
                   <button onClick={handleDeleteVisit} className="bg-red-50 text-red-500 p-2 rounded-xl hover:bg-red-100 transition-colors" title="Видалити візит повністю">
                     <Trash2 size={20} />
@@ -402,6 +488,13 @@ const Visits = () => {
                 )}
               </div>
             </div>
+            
+            {/* ДОДАНО: ВІДОБРАЖЕННЯ ЗАГАЛЬНОЇ СУМИ В САМІЙ МОДАЛЦІ */}
+            <div className="mt-8 bg-blue-600 p-6 rounded-3xl text-white flex justify-between items-center shadow-xl shadow-blue-100">
+               <div className="text-xs font-bold uppercase opacity-80">Загальна сума до сплати:</div>
+               <div className="text-3xl font-black italic">{grandTotal.toLocaleString()} ₴</div>
+            </div>
+
           </div>
         </div>
       )}

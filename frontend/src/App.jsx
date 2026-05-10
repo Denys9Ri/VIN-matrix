@@ -7,7 +7,8 @@ import Inventory from './pages/Inventory';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Visits from './pages/Visits'; // <--- ДОДАЛИ ІМПОРТ НАШОЇ НОВОЇ СТОРІНКИ
+import Visits from './pages/Visits';
+import Clients from './pages/Clients'; // <--- ДОДАЛИ ІМПОРТ
 
 // Захисник роутів: якщо немає токена, викидає на /login
 const ProtectedRoute = ({ children }) => {
@@ -25,7 +26,7 @@ function App() {
       <Routes>
         {/* ВІДКРИТІ СТОРІНКИ */}
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} /> {/* <--- Винесли сюди! */}
+        <Route path="/register" element={<Register />} /> 
         
         {/* ЗАХИЩЕНІ СТОРІНКИ (тільки після входу) */}
         <Route path="/" element={ <ProtectedRoute><MainLayout /></ProtectedRoute> }>
@@ -33,9 +34,9 @@ function App() {
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="visits" element={<Visits />} /> {/* <--- ЗАМІНИЛИ ЗАГЛУШКУ НА РЕАЛЬНУ СТОРІНКУ */}
+          <Route path="visits" element={<Visits />} /> 
+          <Route path="clients" element={<Clients />} /> {/* <--- ЗАМІНИЛИ ЗАГЛУШКУ */}
           <Route path="analytics" element={<Placeholder title="Analytics" />} />
-          <Route path="clients" element={<Placeholder title="Clients" />} />
         </Route>
       </Routes>
     </BrowserRouter>

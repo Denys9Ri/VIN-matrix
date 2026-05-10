@@ -230,6 +230,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def get_queryset(self): return Supplier.objects.filter(company=get_user_company(self.request.user))
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
+
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -266,17 +267,13 @@ class PartSearchView(APIView):
             # === ІНТЕГРАЦІЯ VESNA-AUTO ===
             if sup.api_key and ('vesna' in sup.name.lower() or 'весна' in sup.name.lower()):
                 try:
-                    # Розбираємо API ключ: "customer_id:токен"
                     parts = sup.api_key.split(':')
                     customer_id = int(parts[0]) if len(parts) > 1 else 0
                     token_raw = parts[1] if len(parts) > 1 else sup.api_key
-                    
-                    # ОЧИЩЕННЯ ТОКЕНУ: прибираємо слово Token якщо воно є
                     token = token_raw.replace('Token', '').replace('token', '').strip()
 
                     vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
                     
-                    # ВИПРАВЛЕНО: Використовуємо 'Token ' замість 'Bearer '
                     headers = {
                         "Authorization": f"Token {token}", 
                         "Content-Type": "application/json",
@@ -306,8 +303,29 @@ class PartSearchView(APIView):
                                     "quantity": f"{wh.get('quantity', '0')} шт",
                                     "is_local": False
                                 })
+                    else:
+                        # ВИВЕДЕННЯ ПОМИЛКИ В ТАБЛИЦЮ ФРОНТЕНДУ ДЛЯ ДЕБАГУ
+                        results.append({
+                            "id": f"vesna_err_{sup.id}",
+                            "source": f"{sup.name} (API ПОМИЛКА)",
+                            "brand": "ПОМИЛКА",
+                            "article": str(response.status_code),
+                            "name": f"Відповідь сервера: {response.text[:150]}",
+                            "buy_price": 0.0,
+                            "quantity": "❌",
+                            "is_local": False
+                        })
                 except Exception as e:
-                    print(f"Помилка інтеграції Vesna-Auto: {e}")
+                    results.append({
+                        "id": f"vesna_err_sys_{sup.id}",
+                        "source": f"{sup.name} (СИСТЕМНА ПОМИЛКА)",
+                        "brand": "ПОМИЛКА",
+                        "article": "500",
+                        "name": str(e),
+                        "buy_price": 0.0,
+                        "quantity": "❌",
+                        "is_local": False
+                    })
                     
             # ТЕСТОВА ЗАГЛУШКА ДЛЯ ІНШИХ API
             elif sup.api_key:

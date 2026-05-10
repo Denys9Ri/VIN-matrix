@@ -1,4 +1,4 @@
-import requests # <--- ДОДАНО ДЛЯ ЗАПИТІВ ДО API
+import requests
 from rest_framework import viewsets, status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -231,7 +231,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
 
-# === НОВИЙ КЛАС ДЛЯ ГЛОБАЛЬНОГО ПОШУКУ ===
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -244,7 +243,7 @@ class PartSearchView(APIView):
 
         results = []
 
-        # 1. ПОШУК ПО ВЛАСНОМУ СКЛАДУ (Найнадійніше і найшвидше)
+        # 1. ПОШУК ПО ВЛАСНОМУ СКЛАДУ
         local_items = InventoryItem.objects.filter(
             Q(company=company) & 
             (Q(article__icontains=query) | Q(name__icontains=query) | Q(brand__icontains=query))
@@ -268,13 +267,13 @@ class PartSearchView(APIView):
             # === ІНТЕГРАЦІЯ VESNA-AUTO ===
             if sup.api_key and ('vesna' in sup.name.lower() or 'весна' in sup.name.lower()):
                 try:
-                    # Розбираємо API ключ: очікуємо формат "customer_id:токен"
+                    # Розбираємо API ключ: "customer_id:токен"
                     parts = sup.api_key.split(':')
                     customer_id = int(parts[0]) if len(parts) > 1 else 0
                     token = parts[1] if len(parts) > 1 else sup.api_key
 
-                    # УВАГА: Заміни домен на реальний домен API Vesna Auto, якщо він інший!
-                    vesna_url = "https://api.vesna-auto.com/search-methods/search-by-article/"
+                    # ОНОВЛЕНО: Правильний URL за Swagger документацією
+                    vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
                     
                     headers = {
                         "Authorization": f"Bearer {token}", 
@@ -291,12 +290,10 @@ class PartSearchView(APIView):
                     
                     if response.status_code == 200:
                         data = response.json()
-                        # Іноді API повертає словник замість масиву, робимо масив примусово
                         if isinstance(data, dict):
                             data = [data]
                             
                         for item in data:
-                            # Проходимось по кожному складу (balance)
                             for wh in item.get('balance', []):
                                 results.append({
                                     "id": f"vesna_{sup.id}_{item.get('sku', '')}_{wh.get('warehouse_id')}",
@@ -311,7 +308,7 @@ class PartSearchView(APIView):
                 except Exception as e:
                     print(f"Помилка інтеграції Vesna-Auto: {e}")
                     
-            # ТЕСТОВА ЗАГЛУШКА ДЛЯ ІНШИХ API ПОСТАЧАЛЬНИКІВ
+            # ТЕСТОВА ЗАГЛУШКА ДЛЯ ІНШИХ API
             elif sup.api_key:
                 results.append({
                     "id": f"api_{sup.id}_{query}",

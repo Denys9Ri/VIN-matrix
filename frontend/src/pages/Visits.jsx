@@ -24,8 +24,12 @@ const Visits = () => {
   
   const [editComment, setEditComment] = useState('');
   const [foundExisting, setFoundExisting] = useState(false);
+  
+  // ДОДАНО: Стан для випадаючого списку послуг (щоб він не залипав)
+  const [selectedCatalogId, setSelectedCatalogId] = useState('');
 
-  const [newVisitData, setNewVisitData] = useState({ plate: '', client: '', phone: '', date: '', time: '' });
+  // ДОДАНО: vin_code у стан
+  const [newVisitData, setNewVisitData] = useState({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '' });
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
 
@@ -74,7 +78,7 @@ const Visits = () => {
       const res = await axios.get(`${API_BASE}/api/visits/?search=${newVisitData.plate}`, { headers: { Authorization: `Bearer ${token}` } });
       const existing = res.data.find(v => v.plate.toUpperCase() === newVisitData.plate.toUpperCase());
       if (existing) {
-        setNewVisitData(prev => ({ ...prev, client: existing.client, phone: existing.phone }));
+        setNewVisitData(prev => ({ ...prev, client: existing.client, phone: existing.phone, vin_code: existing.vin_code || '' }));
         setFoundExisting(true);
         setTimeout(() => setFoundExisting(false), 4000); 
       }
@@ -92,6 +96,7 @@ const Visits = () => {
     }
     const payload = {
         plate: newVisitData.plate.toUpperCase(),
+        vin_code: newVisitData.vin_code, // ВІДПРАВЛЯЄМО VIN
         client: newVisitData.client,
         phone: newVisitData.phone,
         scheduled_datetime: scheduled_datetime
@@ -99,7 +104,7 @@ const Visits = () => {
     try {
       await axios.post(`${API_BASE}/api/visits/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
-      setNewVisitData({ plate: '', client: '', phone: '', date: '', time: '' });
+      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '' });
       setSearchQuery(''); setFilterDate(''); fetchData();
     } catch (error) { alert("Помилка створення візиту"); }
   };
@@ -114,15 +119,20 @@ const Visits = () => {
   };
 
   const handleUpdateTime = async () => {
-    let scheduled_datetime = null;
-    if (editTimeData.date && editTimeData.time) {
-      const localDate = new Date(`${editTimeData.date}T${editTimeData.time}`);
-      scheduled_datetime = localDate.toISOString();
+    // ВАЛІДАЦІЯ: Перевіряємо, чи юзер не залишив поля пустими
+    if (!editTimeData.date || !editTimeData.time) {
+      alert("Будь ласка, оберіть і дату, і час!");
+      return;
     }
+    
+    let scheduled_datetime = null;
+    const localDate = new Date(`${editTimeData.date}T${editTimeData.time}`);
+    scheduled_datetime = localDate.toISOString();
+    
     try {
       await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`, { scheduled_datetime }, { headers: { Authorization: `Bearer ${token}` } });
       setIsEditingTime(false); refreshSelectedVisit();
-    } catch (error) { alert("Помилка збереження часу"); }
+    } catch (error) { alert("Помилка збереження часу. Перевірте правильність дати."); }
   };
 
   const updateVisitStatus = async (id, newStatus) => {
@@ -159,7 +169,9 @@ const Visits = () => {
     e.preventDefault();
     try {
       await axios.post(`${API_BASE}/api/order-services/`, { ...newService, visit: selectedVisit.id }, { headers: { Authorization: `Bearer ${token}` } });
-      setNewService({ name: '', price: '' }); refreshSelectedVisit();
+      setNewService({ name: '', price: '' }); 
+      setSelectedCatalogId(''); // СКИДАЄМО ВИПАДАЮЧИЙ СПИСОК
+      refreshSelectedVisit();
     } catch (error) { alert("Помилка"); }
   };
 
@@ -246,6 +258,7 @@ const Visits = () => {
           </div>
           <div class="info-block">
             <p><strong>Автомобіль:</strong> ${selectedVisit.plate} (${selectedVisit.client})</p>
+            <p style="margin-bottom: 8px;"><strong>VIN-код:</strong> ${selectedVisit.vin_code || '—'}</p>
             <p style="margin-bottom: 0;"><strong>Телефон клієнта:</strong> ${selectedVisit.phone}</p>
           </div>
           ${servicesHtml}
@@ -314,7 +327,7 @@ const Visits = () => {
         <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-1 xl:justify-center">
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input type="text" placeholder="Пошук (номер, телефон, клієнт)..." className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-3 text-sm outline-none focus:border-blue-500 font-medium shadow-sm transition-all" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+            <input type="text" placeholder="Пошук (номер, клієнт)..." className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-3 text-sm outline-none focus:border-blue-500 font-medium shadow-sm transition-all" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           </div>
           <div className="relative w-full md:w-auto">
             <input type="date" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 font-medium text-slate-600 shadow-sm cursor-pointer transition-all" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
@@ -355,9 +368,18 @@ const Visits = () => {
               </div>
               
               <div>
-                <input required type="text" placeholder="Номер авто (АА1234ВВ)" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest text-sm" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
+                <input required type="text" placeholder="НОМЕР АВТО (АА1234ВВ)" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest text-sm" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
                 {foundExisting && <p className="text-green-600 text-[10px] font-bold uppercase mt-1 ml-2">✓ Дані підтягнуто з бази</p>}
               </div>
+
+              {/* ПОЛЕ VIN КОД */}
+              <input 
+                type="text" 
+                placeholder="VIN-КОД (Англ. букви та цифри)" 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-sm tracking-widest uppercase" 
+                value={newVisitData.vin_code} 
+                onChange={e => setNewVisitData({...newVisitData, vin_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)})}
+              />
 
               <input required type="text" placeholder="Клієнт / Марка" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium text-sm" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
               <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium text-sm" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
@@ -371,40 +393,46 @@ const Visits = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-2xl w-full max-w-4xl p-5 md:p-6 shadow-2xl mt-8 mb-16 relative">
             
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 border-b border-slate-100 pb-4 gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-4 border-b border-slate-100 pb-3 gap-3">
               <div className="w-full">
                 <h2 className="text-2xl md:text-3xl font-black uppercase leading-tight">{selectedVisit.plate}</h2>
-                <p className="text-slate-500 text-sm font-bold flex items-center gap-2 mt-1"><CarFront size={16}/> {selectedVisit.client} | <Phone size={16}/> {selectedVisit.phone}</p>
+                {selectedVisit.vin_code && <p className="text-[11px] font-black text-slate-400 mt-1 uppercase tracking-widest">VIN: {selectedVisit.vin_code}</p>}
+                <p className="text-slate-500 text-[13px] font-bold flex items-center gap-2 mt-1"><CarFront size={14}/> {selectedVisit.client} | <Phone size={14}/> {selectedVisit.phone}</p>
                 
-                <div className="text-slate-500 text-xs font-bold mt-2 flex items-center gap-2 group">
-                  <Clock size={14}/>
-                  {isEditingTime ? (
-                    <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                      <input type="date" className="bg-transparent outline-none text-slate-700" value={editTimeData.date} onChange={e => setEditTimeData({...editTimeData, date: e.target.value})} />
-                      <input type="time" className="bg-transparent outline-none text-slate-700" value={editTimeData.time} onChange={e => setEditTimeData({...editTimeData, time: e.target.value})} />
-                      <button onClick={handleUpdateTime} className="text-green-600 hover:bg-green-100 p-1 rounded"><CheckCircle2 size={16}/></button>
-                      <button onClick={() => setIsEditingTime(false)} className="text-slate-400 hover:bg-slate-200 p-1 rounded"><X size={16}/></button>
-                    </div>
-                  ) : (
-                    <>
+                <div className="mt-3">
+                  {!isEditingTime ? (
+                    <div className="flex items-center gap-2 text-slate-500 text-[11px] font-bold group">
+                      <Clock size={12}/>
                       <span>Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}</span>
                       {role === 'owner' && (
                         <button onClick={() => {
                           const d = selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime) : new Date();
                           setEditTimeData({ date: d.toLocaleDateString('en-CA'), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
                           setIsEditingTime(true);
-                        }} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Pencil size={14}/>
+                        }} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 p-1 rounded">
+                          <Pencil size={12}/> Редагувати
                         </button>
                       )}
-                    </>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 max-w-sm mt-2">
+                      <label className="text-[10px] font-black uppercase text-slate-500 block mb-2">Новий час візиту</label>
+                      <div className="flex gap-2 mb-2">
+                        <input type="date" className="flex-1 bg-white border border-slate-200 outline-none text-slate-700 rounded-lg p-2 text-xs font-bold" value={editTimeData.date} onChange={e => setEditTimeData({...editTimeData, date: e.target.value})} />
+                        <input type="time" className="w-24 bg-white border border-slate-200 outline-none text-slate-700 rounded-lg p-2 text-xs font-bold" value={editTimeData.time} onChange={e => setEditTimeData({...editTimeData, time: e.target.value})} />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={handleUpdateTime} className="flex-1 bg-green-500 text-white hover:bg-green-600 rounded-lg py-2 text-[10px] font-black uppercase tracking-widest transition-all">Зберегти</button>
+                        <button onClick={() => setIsEditingTime(false)} className="flex-1 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg py-2 text-[10px] font-black uppercase tracking-widest transition-all">Скасувати</button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
               
               <div className="flex items-center gap-2 shrink-0">
                 {role === 'owner' && (
-                  <button onClick={handlePrint} className="bg-blue-50 text-blue-600 p-2 md:px-4 md:py-2.5 rounded-xl hover:bg-blue-100 transition-all flex items-center gap-2 font-black text-xs uppercase" title="Друкувати акт">
+                  <button onClick={handlePrint} className="bg-blue-600 text-white p-2 md:px-4 md:py-2.5 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2 font-black text-xs uppercase shadow-md shadow-blue-200" title="Друкувати акт">
                     <Printer size={16} /> <span className="hidden md:inline">Друк</span>
                   </button>
                 )}
@@ -415,7 +443,7 @@ const Visits = () => {
                 )}
                 {role === 'owner' && (selectedVisit.status === 'DONE' || filterDate) && (
                   <button onClick={() => {
-                      setNewVisitData({ plate: selectedVisit.plate, client: selectedVisit.client, phone: selectedVisit.phone, date: '', time: '' });
+                      setNewVisitData({ plate: selectedVisit.plate, vin_code: selectedVisit.vin_code || '', client: selectedVisit.client, phone: selectedVisit.phone, date: '', time: '' });
                       setSelectedVisit(null);
                       setIsCreatingVisit(true);
                     }} className="flex items-center gap-1.5 bg-slate-100 text-slate-700 px-3 py-2.5 rounded-xl font-black uppercase text-xs hover:bg-slate-200 transition-all"
@@ -427,26 +455,26 @@ const Visits = () => {
               </div>
             </div>
 
-            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-6">
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'PENDING')} className={`flex-1 py-3 rounded-lg font-black text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 py-3 rounded-lg font-black text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'DONE')} className={`flex-1 py-3 rounded-lg font-black text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
+            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4">
+              <button onClick={() => updateVisitStatus(selectedVisit.id, 'PENDING')} className={`flex-1 py-2.5 rounded-lg font-black text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
+              <button onClick={() => updateVisitStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 py-2.5 rounded-lg font-black text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
+              <button onClick={() => updateVisitStatus(selectedVisit.id, 'DONE')} className={`flex-1 py-2.5 rounded-lg font-black text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Wrench size={18}/> Завдання</h3>
-                <div className="space-y-3 mb-4">
+                <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Wrench size={16}/> Завдання</h3>
+                <div className="space-y-2 mb-3">
                   {selectedVisit.services?.map(s => (
-                    <div key={s.id} className="p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-3 group">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-slate-800 text-[15px]">{s.name}</span>
-                        <div className="flex items-center gap-3">
-                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-3 py-1 rounded-lg border border-slate-100 text-sm shadow-sm">{s.price} ₴</span>}
-                          {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
+                    <div key={s.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-2 group">
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-slate-700 text-[13px]">{s.name}</span>
+                        <div className="flex items-center gap-2">
+                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded text-xs">{s.price} ₴</span>}
+                          {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>}
                         </div>
                       </div>
-                      <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`text-[11px] md:text-xs font-black uppercase tracking-widest rounded-lg px-3 py-2 outline-none cursor-pointer border-none w-full ${serviceStatusColors[s.status || 'PENDING']}`}>
+                      <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`text-[9px] font-black uppercase tracking-widest rounded px-2 py-1 outline-none cursor-pointer border-none w-full ${serviceStatusColors[s.status || 'PENDING']}`}>
                         <option value="PENDING">⏳ Очікує</option>
                         <option value="IN_PROGRESS">🔧 В роботі</option>
                         <option value="DONE">✅ Виконано</option>
@@ -455,37 +483,41 @@ const Visits = () => {
                   ))}
                 </div>
                 {role === 'owner' && (
-                  <form onSubmit={handleAddService} className="bg-slate-50 p-2 md:p-3 rounded-xl border border-slate-200 space-y-2">
-                    <select className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none cursor-pointer text-slate-600" onChange={(e) => { const s = catalogServices.find(cat => cat.id === parseInt(e.target.value)); if (s) setNewService({ name: s.name, price: s.price }); }} defaultValue="">
-                        <option value="" disabled>З прайсу...</option>
+                  <form onSubmit={handleAddService} className="bg-slate-50 p-2 rounded-lg border border-slate-200 space-y-2">
+                    <select className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none cursor-pointer text-slate-600 font-bold" value={selectedCatalogId} onChange={(e) => { 
+                        setSelectedCatalogId(e.target.value);
+                        const s = catalogServices.find(cat => cat.id === parseInt(e.target.value)); 
+                        if (s) setNewService({ name: s.name, price: s.price }); 
+                      }}>
+                        <option value="" disabled>Оберіть з прайсу...</option>
                         {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} - {s.price} ₴</option>)}
                     </select>
                     <div className="flex gap-2">
-                      <input required type="text" placeholder="Назва" className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
-                      <input required type="number" placeholder="Ціна" className="w-20 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
-                      <button type="submit" className="bg-blue-600 text-white p-2 rounded-lg"><Plus size={18}/></button>
+                      <input required type="text" placeholder="Назва" className="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
+                      <input required type="number" placeholder="Ціна" className="w-16 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
+                      <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded transition-colors"><Plus size={16}/></button>
                     </div>
                   </form>
                 )}
               </div>
 
               <div>
-                <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={18}/> Запчастини</h3>
-                <div className="space-y-3 mb-4">
+                <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
+                <div className="space-y-2 mb-3">
                   {selectedVisit.parts?.map(p => (
-                    <div key={p.id} className="p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-3 group">
+                    <div key={p.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-2 group">
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-bold text-slate-800 text-[15px] leading-tight mb-1">{p.name}</p>
-                          <p className="text-[10px] uppercase font-bold text-slate-500">{p.brand} | {p.article}</p>
-                          {role === 'owner' && <p className="text-[10px] uppercase font-bold text-blue-500 mt-1">Де: {p.supplier}</p>}
+                          <p className="font-bold text-slate-700 text-[13px] leading-tight">{p.name}</p>
+                          <p className="text-[9px] uppercase font-bold text-slate-500 mt-0.5">{p.brand} | {p.article}</p>
+                          {role === 'owner' && <p className="text-[9px] uppercase font-bold text-blue-500">Де: {p.supplier}</p>}
                         </div>
-                        <div className="flex items-center gap-3">
-                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-3 py-1 rounded-lg border border-slate-100 text-sm shadow-sm">{p.sell_price} ₴</span>}
-                          {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
+                        <div className="flex items-center gap-2">
+                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded text-xs">{p.sell_price} ₴</span>}
+                          {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>}
                         </div>
                       </div>
-                      <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[11px] md:text-xs font-black uppercase tracking-widest rounded-lg px-3 py-2 outline-none cursor-pointer border-none w-full ${partStatusColors[p.status || 'WAITING']}`}>
+                      <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[9px] font-black uppercase tracking-widest rounded px-2 py-1 outline-none cursor-pointer border-none w-full ${partStatusColors[p.status || 'WAITING']}`}>
                         <option value="WAITING">⏳ Очікується</option>
                         <option value="IN_TRANSIT">🚚 В дорозі</option>
                         <option value="ARRIVED">✅ Приїхала</option>
@@ -497,21 +529,21 @@ const Visits = () => {
                 {role === 'owner' && (
                   <div className="mt-3">
                     {!showManualPartForm ? (
-                      <button onClick={() => setShowManualPartForm(true)} className="w-full p-3 border-2 border-dashed border-slate-200 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all">✏️ Додати вручну</button>
+                      <button onClick={() => setShowManualPartForm(true)} className="w-full p-2 border-2 border-dashed border-slate-200 rounded-lg text-[10px] font-black uppercase text-slate-400 hover:text-blue-600 hover:border-blue-300 transition-all">✏️ Додати вручну</button>
                     ) : (
-                      <form onSubmit={handleAddPart} className="bg-slate-50 p-3 md:p-4 rounded-xl border border-slate-200 space-y-3 relative">
-                        <button type="button" onClick={() => setShowManualPartForm(false)} className="absolute right-2 top-2 text-slate-400"><X size={16}/></button>
-                        <input required type="text" placeholder="Назва деталі" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
-                        <input required type="text" placeholder="Постачальник / Де замовлено" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.supplier} onChange={e => setNewPart({...newPart, supplier: e.target.value})} />
+                      <form onSubmit={handleAddPart} className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 relative">
+                        <button type="button" onClick={() => setShowManualPartForm(false)} className="absolute right-2 top-2 text-slate-400"><X size={14}/></button>
+                        <input required type="text" placeholder="Назва деталі" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
+                        <input required type="text" placeholder="Де замовлено" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.supplier} onChange={e => setNewPart({...newPart, supplier: e.target.value})} />
                         <div className="flex gap-2">
-                          <input type="text" placeholder="Бренд" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
-                          <input type="text" placeholder="Артикул" className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
+                          <input type="text" placeholder="Бренд" className="w-1/2 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
+                          <input type="text" placeholder="Артикул" className="w-1/2 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
                         </div>
-                        <div className="flex gap-2 items-center bg-white p-2 rounded-lg border border-slate-200">
-                          <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
-                          <input type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
+                        <div className="flex gap-2 items-center bg-white p-1.5 rounded border border-slate-200">
+                          <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none text-xs outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
+                          <input type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none text-xs outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
                         </div>
-                        <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs py-3 rounded-lg mt-2 tracking-widest hover:bg-blue-700 shadow-sm transition-all">Зберегти</button>
+                        <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-[10px] py-2 rounded mt-1 tracking-widest hover:bg-blue-700 transition-all">Зберегти</button>
                       </form>
                     )}
                   </div>
@@ -519,24 +551,24 @@ const Visits = () => {
               </div>
             </div>
 
-            <div className="mt-6 bg-amber-50 p-4 md:p-5 rounded-2xl border border-amber-100 relative">
-              <h3 className="font-black uppercase text-amber-800 mb-3 flex items-center gap-2 text-xs"><MessageSquare size={16}/> Внутрішній коментар</h3>
+            <div className="mt-4 bg-amber-50 p-4 rounded-xl border border-amber-100 relative">
+              <h3 className="font-black uppercase text-amber-800 mb-2 flex items-center gap-1.5 text-xs"><MessageSquare size={14}/> Внутрішній коментар</h3>
               <textarea 
-                className="w-full bg-white border border-amber-200 rounded-xl p-3 md:p-4 text-sm outline-none focus:border-amber-400 min-h-[70px] font-medium text-slate-700 placeholder:text-slate-400"
+                className="w-full bg-white border border-amber-200 rounded-lg p-3 text-sm outline-none focus:border-amber-400 min-h-[60px] font-medium text-slate-700 placeholder:text-slate-400"
                 placeholder="Залиште нотатку для себе або майстра..."
                 value={editComment}
                 onChange={e => setEditComment(e.target.value)}
               />
               {editComment !== (selectedVisit.comment || '') && (
-                <div className="flex justify-end mt-3">
-                  <button onClick={handleSaveComment} className="bg-amber-400 hover:bg-amber-500 text-amber-950 px-5 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-sm">
+                <div className="flex justify-end mt-2">
+                  <button onClick={handleSaveComment} className="bg-amber-400 hover:bg-amber-500 text-amber-950 px-4 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all shadow-sm">
                     Зберегти
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="mt-6 bg-slate-50 border border-slate-200 p-4 md:p-5 rounded-2xl flex justify-between items-center">
+            <div className="mt-4 bg-slate-50 border border-slate-200 p-4 rounded-2xl flex justify-between items-center">
                <div className="text-xs font-bold uppercase text-slate-500 tracking-wide">Загальна сума:</div>
                <div className="text-xl md:text-2xl font-black text-slate-800">{grandTotal.toLocaleString()} ₴</div>
             </div>

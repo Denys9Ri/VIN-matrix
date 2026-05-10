@@ -289,7 +289,6 @@ class PartSearchView(APIView):
                     if response.status_code == 200:
                         raw_data = response.json()
                         
-                        # РОЗПАКОВКА ДАНИХ (Виправлення структури)
                         if isinstance(raw_data, dict) and 'data' in raw_data:
                             items_data = raw_data['data']
                         elif isinstance(raw_data, list):
@@ -304,20 +303,37 @@ class PartSearchView(APIView):
                                 continue
                                 
                             balances = item.get('balance', [])
-                            for wh in balances:
-                                found_any_balance = True
-                                results.append({
-                                    "id": f"vesna_{sup.id}_{item.get('sku', '0')}_{wh.get('warehouse_id', '0')}",
-                                    "source": f"{sup.name} ({wh.get('name', 'Склад')})",
-                                    "brand": item.get('brand', 'Unknown'),
-                                    "article": item.get('article', query.upper()),
-                                    "name": item.get('name', 'Деталь Vesna'),
-                                    "buy_price": float(item.get('price', 0) or 0),
-                                    "quantity": f"{wh.get('quantity', '0')} шт",
-                                    "is_local": False
-                                })
+                            if not balances:
+                                continue
                                 
-                        # ДЕБАГ: Якщо є відповідь, але немає залишків
+                            found_any_balance = True
+                            
+                            # ЗБИРАЄМО СКЛАДИ ДО КУПИ
+                            warehouses_list = []
+                            for wh in balances:
+                                warehouses_list.append({
+                                    "name": wh.get('name', 'Склад'),
+                                    "quantity": wh.get('quantity', '0')
+                                })
+                            
+                            # МАГІЯ: Сортуємо так, щоб Київ (або kyiv) був першим!
+                            warehouses_list.sort(key=lambda w: 0 if 'київ' in w['name'].lower() or 'kyiv' in w['name'].lower() else 1)
+                            
+                            primary_wh = warehouses_list[0]
+                            display_qty = f"{primary_wh['quantity']} шт ({primary_wh['name']})"
+                                
+                            results.append({
+                                "id": f"vesna_{sup.id}_{item.get('sku', '0')}",
+                                "source": sup.name,
+                                "brand": item.get('brand', 'Unknown'),
+                                "article": item.get('article', query.upper()),
+                                "name": item.get('name', 'Деталь Vesna'),
+                                "buy_price": float(item.get('price', 0) or 0),
+                                "quantity": display_qty,
+                                "is_local": False,
+                                "warehouses": warehouses_list # Передаємо масив складів на фронтенд
+                            })
+                                
                         if not found_any_balance:
                             results.append({
                                 "id": f"vesna_debug_200_{sup.id}",

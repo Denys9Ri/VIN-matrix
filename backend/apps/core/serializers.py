@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService
+from .models import Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService, Category, InventoryItem, Supplier
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -37,5 +37,25 @@ class VisitSerializer(serializers.ModelSerializer):
     class Meta:
         model = Visit
         fields = '__all__'
-        
         read_only_fields = ['company', 'created_at', 'updated_at']
+
+# --- НОВІ СЕРІАЛІЗАТОРИ ДЛЯ СКЛАДУ ТА ПОСТАЧАЛЬНИКІВ ---
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = '__all__'
+        read_only_fields = ['company']
+
+class InventoryItemSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    
+    class Meta:
+        model = InventoryItem
+        fields = '__all__'
+        read_only_fields = ['company']
+
+class SupplierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Supplier
+        fields = '__all__'
+        read_only_fields = ['company']

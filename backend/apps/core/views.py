@@ -9,6 +9,8 @@ from django.db.models import Q
 from django.utils import timezone
 from datetime import datetime, timedelta, time as dt_time
 from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService
+from .models import Category, InventoryItem, Supplier
+from .serializers import CategorySerializer, InventoryItemSerializer, SupplierSerializer
 from .serializers import (
     VisitSerializer, UserSerializer, 
     CompanySerializer, ServiceCatalogSerializer,
@@ -202,3 +204,28 @@ class ChangePasswordView(APIView):
         request.user.set_password(new_password)
         request.user.save()
         return Response({"message": "Пароль змінено!"}, status=200)
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    serializer_class = CategorySerializer
+    permission_classes = [IsAuthenticated]
+    def get_queryset(self): return Category.objects.filter(company=get_user_company(self.request.user))
+    def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
+
+class InventoryItemViewSet(viewsets.ModelViewSet):
+    serializer_class = InventoryItemSerializer
+    permission_classes = [IsAuthenticated]
+    def get_queryset(self): 
+        queryset = InventoryItem.objects.filter(company=get_user_company(self.request.user))
+        cat_id = self.request.query_params.get('category')
+        search = self.request.query_params.get('search')
+        if cat_id: queryset = queryset.filter(category_id=cat_id)
+        if search: queryset = queryset.filter(Q(article__icontains=search) | Q(name__icontains=search) | Q(brand__icontains=search))
+        return queryset
+    def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
+
+class SupplierViewSet(viewsets.ModelViewSet):
+    serializer_class = SupplierSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+    def get_queryset(self): return Supplier.objects.filter(company=get_user_company(self.request.user))
+    def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))

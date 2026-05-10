@@ -229,3 +229,63 @@ class SupplierViewSet(viewsets.ModelViewSet):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     def get_queryset(self): return Supplier.objects.filter(company=get_user_company(self.request.user))
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
+
+# --- ДОДАНО: ЛОГІКА ДЛЯ УНІВЕРСАЛЬНОГО ПОШУКУ ЗАПЧАСТИН ---
+class PartSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = get_user_company(request.user)
+        query = request.query_params.get('q', '').strip()
+
+        if not query:
+            return Response([])
+
+        results = []
+
+        # 1. ПОШУК ПО ВЛАСНОМУ СКЛАДУ
+        local_items = InventoryItem.objects.filter(
+            Q(company=company) & 
+            (Q(article__icontains=query) | Q(name__icontains=query) | Q(brand__icontains=query))
+        )
+        for item in local_items:
+            results.append({
+                "id": f"local_{item.id}",
+                "source": "Мій склад",
+                "brand": item.brand,
+                "article": item.article,
+                "name": item.name,
+                "buy_price": float(item.buy_price),
+                "quantity": f"{item.quantity} шт",
+                "is_local": True
+            })
+
+        # 2. ПОШУК ПО ПОСТАЧАЛЬНИКАХ (Зараз генеруємо тестові результати)
+        suppliers = Supplier.objects.filter(company=company)
+        for sup in suppliers:
+            if sup.api_key:
+                # ТУТ БУДЕ РЕАЛЬНИЙ ЗАПИТ ДО API ПОСТАЧАЛЬНИКА
+                results.append({
+                    "id": f"api_{sup.id}_{query}",
+                    "source": sup.name,
+                    "brand": "Бренд (API)",
+                    "article": query.upper(),
+                    "name": f"Тестова деталь з бази {sup.name}",
+                    "buy_price": 450.00,
+                    "quantity": "В наявності",
+                    "is_local": False
+                })
+            elif sup.price_file:
+                # ТУТ БУДЕ ПОШУК ПО EXCEL ФАЙЛУ
+                results.append({
+                    "id": f"file_{sup.id}_{query}",
+                    "source": sup.name,
+                    "brand": "Бренд (Прайс)",
+                    "article": query.upper(),
+                    "name": f"Деталь з прайсу {sup.name}",
+                    "buy_price": 380.00,
+                    "quantity": "Уточнюйте",
+                    "is_local": False
+                })
+
+        return Response(results)

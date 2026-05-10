@@ -13,7 +13,6 @@ const Clients = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12; 
   
-  // ДОДАНО: Стан для анімації кнопки "Скопійовано"
   const [copiedVin, setCopiedVin] = useState(null);
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
@@ -36,7 +35,7 @@ const Clients = () => {
         if (!acc[visit.plate]) {
           acc[visit.plate] = {
             plate: visit.plate,
-            vin_code: visit.vin_code, // ДОДАНО: зберігаємо VIN
+            vin_code: visit.vin_code,
             client: visit.client,
             phone: visit.phone,
             totalSpent: 0,
@@ -44,7 +43,6 @@ const Clients = () => {
           };
         }
         
-        // ДОДАНО: Якщо в старих візитах не було VIN, а в новому є - оновлюємо
         if (visit.vin_code && !acc[visit.plate].vin_code) {
           acc[visit.plate].vin_code = visit.vin_code;
         }
@@ -71,12 +69,34 @@ const Clients = () => {
     setCurrentPage(1);
   }, [searchQuery]);
 
-  // ДОДАНО: Функція копіювання в буфер обміну
+  // НАДІЙНА ФУНКЦІЯ КОПІЮВАННЯ (Працює навіть без HTTPS)
   const handleCopyVin = (vin) => {
     if (!vin) return;
-    navigator.clipboard.writeText(vin);
-    setCopiedVin(vin);
-    setTimeout(() => setCopiedVin(null), 2000); // Повертаємо іконку назад через 2 сек
+    
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(vin).then(() => {
+        setCopiedVin(vin);
+        setTimeout(() => setCopiedVin(null), 2000);
+      });
+    } else {
+      // Резервний метод для http:// (твого сервера)
+      const textArea = document.createElement("textarea");
+      textArea.value = vin;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopiedVin(vin);
+        setTimeout(() => setCopiedVin(null), 2000);
+      } catch (err) {
+        console.error('Помилка копіювання', err);
+      }
+      document.body.removeChild(textArea);
+    }
   };
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -87,7 +107,7 @@ const Clients = () => {
   if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 h-screen flex flex-col">
+    <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col">
       
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 shrink-0">
         <div>
@@ -97,7 +117,6 @@ const Clients = () => {
         
         <div className="relative w-full md:w-96">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          {/* ДОДАНО: Змінили плейсхолдер */}
           <input 
             type="text" 
             placeholder="Пошук (номер, VIN, ім'я, телефон)..." 
@@ -108,36 +127,37 @@ const Clients = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2 pb-10">
+      <div className="flex-1 pb-10">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {currentClients.map(c => (
             <div 
               key={c.plate} 
               onClick={() => setSelectedClient(c)}
-              className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between"
             >
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <p className="text-[10px] font-black uppercase text-blue-500 mb-1 tracking-widest">Номер авто</p>
-                  <h3 className="text-2xl font-black text-slate-900 group-hover:text-blue-600 transition-colors">{c.plate}</h3>
-                  {/* ДОДАНО: Вивід VIN-коду в карточці списку */}
-                  {c.vin_code && (
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 tracking-widest">
-                      VIN: {c.vin_code}
-                    </p>
-                  )}
+              <div>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-blue-500 mb-1 tracking-widest">Номер авто</p>
+                    <h3 className="text-2xl font-black text-slate-900 group-hover:text-blue-600 transition-colors">{c.plate}</h3>
+                    {c.vin_code && (
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 tracking-widest">
+                        VIN: {c.vin_code}
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded-2xl group-hover:scale-110 transition-transform">
+                    <CarFront className="text-blue-600" size={24} />
+                  </div>
                 </div>
-                <div className="bg-blue-50 p-3 rounded-2xl group-hover:scale-110 transition-transform">
-                  <CarFront className="text-blue-600" size={24} />
+
+                <div className="space-y-2 mb-6">
+                  <p className="text-sm font-bold text-slate-700 flex items-center gap-2"><CarFront size={14} className="text-slate-400"/> {c.client}</p>
+                  <p className="text-sm font-bold text-slate-700 flex items-center gap-2"><Phone size={14} className="text-slate-400"/> {c.phone}</p>
                 </div>
               </div>
 
-              <div className="space-y-2 mb-6">
-                <p className="text-sm font-bold text-slate-700 flex items-center gap-2"><CarFront size={14} className="text-slate-400"/> {c.client}</p>
-                <p className="text-sm font-bold text-slate-700 flex items-center gap-2"><Phone size={14} className="text-slate-400"/> {c.phone}</p>
-              </div>
-
-              <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+              <div className="flex items-center justify-between border-t border-slate-100 pt-4 mt-auto">
                 <div>
                   <p className="text-[10px] font-black uppercase text-slate-400 mb-0.5">Всього візитів</p>
                   <p className="text-sm font-black flex items-center gap-1"><History size={14} className="text-slate-600"/> {c.visits.length}</p>
@@ -190,7 +210,6 @@ const Clients = () => {
             <div className="border-b border-slate-100 pb-6 mb-6">
               <h2 className="text-3xl md:text-4xl font-black uppercase mb-2">{selectedClient.plate}</h2>
               
-              {/* ДОДАНО: Блок з VIN-кодом та кнопкою копіювання */}
               {selectedClient.vin_code && (
                 <div className="flex items-center gap-2 mb-4">
                   <span className="text-xs md:text-sm font-black text-slate-600 uppercase tracking-widest bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">

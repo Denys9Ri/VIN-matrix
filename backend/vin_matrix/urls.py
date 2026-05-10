@@ -8,7 +8,9 @@ from rest_framework.routers import DefaultRouter
 from apps.core.views import (
     RegisterView, VisitViewSet, ServiceCatalogViewSet, 
     ProfileSettingsView, LogoutView, ChangePasswordView, MechanicViewSet,
-    OrderPartViewSet, OrderServiceViewSet # НОВІ ІМПОРТИ
+    OrderPartViewSet, OrderServiceViewSet,
+    # === НОВІ ІМПОРТИ ДЛЯ СКЛАДУ ТА ПОСТАЧАЛЬНИКІВ ===
+    CategoryViewSet, InventoryItemViewSet, SupplierViewSet
 )
 
 router = DefaultRouter()
@@ -18,6 +20,10 @@ router.register(r'mechanics', MechanicViewSet, basename='mechanic')
 # === НОВІ РОУТИ ===
 router.register(r'order-parts', OrderPartViewSet, basename='order-part')
 router.register(r'order-services', OrderServiceViewSet, basename='order-service')
+# === НОВІ РОУТИ ДЛЯ СКЛАДУ ТА ПОСТАЧАЛЬНИКІВ ===
+router.register(r'categories', CategoryViewSet, basename='category')
+router.register(r'inventory', InventoryItemViewSet, basename='inventory')
+router.register(r'suppliers', SupplierViewSet, basename='supplier')
 
 def api_root(request):
     return JsonResponse({"message": "VIN-matrix API is running!", "status": "stable"})

@@ -16,16 +16,19 @@ class ServiceCatalogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ServiceCatalog
         fields = '__all__'
+        read_only_fields = ['company']
 
 class OrderPartSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderPart
         fields = '__all__'
+        read_only_fields = ['visit']
 
 class OrderServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderService
         fields = '__all__'
+        read_only_fields = ['visit']
 
 class VisitSerializer(serializers.ModelSerializer):
     services = OrderServiceSerializer(many=True, read_only=True)
@@ -34,3 +37,5 @@ class VisitSerializer(serializers.ModelSerializer):
     class Meta:
         model = Visit
         fields = '__all__'
+        
+        read_only_fields = ['company', 'created_at', 'updated_at']

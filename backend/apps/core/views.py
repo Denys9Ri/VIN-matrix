@@ -28,7 +28,6 @@ class VisitViewSet(viewsets.ModelViewSet):
         company = get_user_company(self.request.user)
         queryset = Visit.objects.filter(company=company)
         
-        # ДОДАНО: Якщо ми редагуємо/видаляємо конкретне авто, віддаємо його без фільтрів дошки
         if self.action != 'list':
             return queryset
         
@@ -40,6 +39,7 @@ class VisitViewSet(viewsets.ModelViewSet):
             if search:
                 queryset = queryset.filter(
                     Q(plate__icontains=search) | 
+                    Q(vin_code__icontains=search) | # ДОДАНО ПОШУК ПО VIN
                     Q(client__icontains=search) | 
                     Q(phone__icontains=search)
                 )
@@ -48,6 +48,7 @@ class VisitViewSet(viewsets.ModelViewSet):
         if search:
             queryset = queryset.filter(
                 Q(plate__icontains=search) | 
+                Q(vin_code__icontains=search) | # ДОДАНО ПОШУК ПО VIN
                 Q(client__icontains=search) | 
                 Q(phone__icontains=search)
             )

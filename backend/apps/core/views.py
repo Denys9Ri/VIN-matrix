@@ -287,8 +287,16 @@ class PartSearchView(APIView):
                     response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
                     
                     if response.status_code == 200:
-                        data = response.json()
-                        items_data = data if isinstance(data, list) else [data]
+                        raw_data = response.json()
+                        
+                        # РОЗПАКОВКА ДАНИХ (Виправлення структури)
+                        if isinstance(raw_data, dict) and 'data' in raw_data:
+                            items_data = raw_data['data']
+                        elif isinstance(raw_data, list):
+                            items_data = raw_data
+                        else:
+                            items_data = [raw_data]
+                            
                         found_any_balance = False
                         
                         for item in items_data:
@@ -309,21 +317,20 @@ class PartSearchView(APIView):
                                     "is_local": False
                                 })
                                 
-                        # ДЕБАГ: Якщо сервер відповів 200 ОК, але порожньо (наприклад немає залишків)
+                        # ДЕБАГ: Якщо є відповідь, але немає залишків
                         if not found_any_balance:
                             results.append({
                                 "id": f"vesna_debug_200_{sup.id}",
                                 "source": f"{sup.name} (API 200 ОК)",
                                 "brand": "ДЕБАГ",
                                 "article": query.upper(),
-                                "name": f"Відповідь: {str(data)[:150]}",
+                                "name": f"Відповідь: {str(raw_data)[:300]}",
                                 "buy_price": 0.0,
                                 "quantity": "Пусто",
                                 "is_local": False
                             })
 
                     else:
-                        # ДЕБАГ: Якщо сервер відмовив (Помилка авторизації, невірний URL тощо)
                         results.append({
                             "id": f"vesna_err_{sup.id}",
                             "source": f"{sup.name} (ПОМИЛКА {response.status_code})",
@@ -335,7 +342,6 @@ class PartSearchView(APIView):
                             "is_local": False
                         })
                 except Exception as e:
-                    # ДЕБАГ: Якщо сервер впав або таймаут
                     results.append({
                         "id": f"vesna_err_sys_{sup.id}",
                         "source": f"{sup.name} (СИСТЕМНА)",

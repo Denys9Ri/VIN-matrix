@@ -284,42 +284,62 @@ class PartSearchView(APIView):
                         "article": query
                     }
                     
-                    response = requests.post(vesna_url, json=payload, headers=headers, timeout=8)
+                    response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
                     
                     if response.status_code == 200:
                         data = response.json()
-                        if isinstance(data, dict):
-                            data = [data]
-                            
-                        for item in data:
-                            for wh in item.get('balance', []):
+                        items_data = data if isinstance(data, list) else [data]
+                        found_any_balance = False
+                        
+                        for item in items_data:
+                            if not isinstance(item, dict):
+                                continue
+                                
+                            balances = item.get('balance', [])
+                            for wh in balances:
+                                found_any_balance = True
                                 results.append({
-                                    "id": f"vesna_{sup.id}_{item.get('sku', '')}_{wh.get('warehouse_id')}",
+                                    "id": f"vesna_{sup.id}_{item.get('sku', '0')}_{wh.get('warehouse_id', '0')}",
                                     "source": f"{sup.name} ({wh.get('name', 'Склад')})",
                                     "brand": item.get('brand', 'Unknown'),
                                     "article": item.get('article', query.upper()),
                                     "name": item.get('name', 'Деталь Vesna'),
-                                    "buy_price": float(item.get('price', 0)),
+                                    "buy_price": float(item.get('price', 0) or 0),
                                     "quantity": f"{wh.get('quantity', '0')} шт",
                                     "is_local": False
                                 })
+                                
+                        # ДЕБАГ: Якщо сервер відповів 200 ОК, але порожньо (наприклад немає залишків)
+                        if not found_any_balance:
+                            results.append({
+                                "id": f"vesna_debug_200_{sup.id}",
+                                "source": f"{sup.name} (API 200 ОК)",
+                                "brand": "ДЕБАГ",
+                                "article": query.upper(),
+                                "name": f"Відповідь: {str(data)[:150]}",
+                                "buy_price": 0.0,
+                                "quantity": "Пусто",
+                                "is_local": False
+                            })
+
                     else:
-                        # ВИВЕДЕННЯ ПОМИЛКИ В ТАБЛИЦЮ ФРОНТЕНДУ ДЛЯ ДЕБАГУ
+                        # ДЕБАГ: Якщо сервер відмовив (Помилка авторизації, невірний URL тощо)
                         results.append({
                             "id": f"vesna_err_{sup.id}",
-                            "source": f"{sup.name} (API ПОМИЛКА)",
-                            "brand": "ПОМИЛКА",
-                            "article": str(response.status_code),
-                            "name": f"Відповідь сервера: {response.text[:150]}",
+                            "source": f"{sup.name} (ПОМИЛКА {response.status_code})",
+                            "brand": "API ERR",
+                            "article": query.upper(),
+                            "name": f"Відповідь: {response.text[:150]}",
                             "buy_price": 0.0,
                             "quantity": "❌",
                             "is_local": False
                         })
                 except Exception as e:
+                    # ДЕБАГ: Якщо сервер впав або таймаут
                     results.append({
                         "id": f"vesna_err_sys_{sup.id}",
-                        "source": f"{sup.name} (СИСТЕМНА ПОМИЛКА)",
-                        "brand": "ПОМИЛКА",
+                        "source": f"{sup.name} (СИСТЕМНА)",
+                        "brand": "SYS ERR",
                         "article": "500",
                         "name": str(e),
                         "buy_price": 0.0,

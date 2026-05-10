@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, Calendar, RefreshCcw } from 'lucide-react';
+import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2 } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard'; 
 import { useNavigate } from 'react-router-dom';
 
@@ -18,6 +18,10 @@ const Visits = () => {
   const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
   const [showManualPartForm, setShowManualPartForm] = useState(false); 
   
+  // Стан для редагування часу існуючого візиту
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [editTimeData, setEditTimeData] = useState({ date: '', time: '' });
+  
   const [newVisitData, setNewVisitData] = useState({ plate: '', client: '', phone: '', date: '', time: '' });
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
@@ -28,37 +32,42 @@ const Visits = () => {
   const partStatusColors = { 'WAITING': 'text-orange-600 bg-orange-100', 'IN_TRANSIT': 'text-blue-600 bg-blue-100', 'ARRIVED': 'text-green-600 bg-green-100', 'UNAVAILABLE': 'text-red-600 bg-red-100' };
   const serviceStatusColors = { 'PENDING': 'text-slate-600 bg-slate-100', 'IN_PROGRESS': 'text-blue-600 bg-blue-100', 'DONE': 'text-green-600 bg-green-100' };
 
+  const fetchData = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (searchQuery) params.append('search', searchQuery);
+      if (filterDate) params.append('date', filterDate);
+
+      const [visitsRes, settingsRes, servicesRes] = await Promise.all([
+        axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) 
+      ]);
+      setVisits(visitsRes.data || []);
+      setRole(settingsRes.data.role);
+      setCatalogServices(servicesRes.data || []);
+    } catch (error) { 
+        if (error.response?.status === 401) navigate('/login');
+        setRole('owner'); 
+    } 
+    finally { setLoading(false); }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const params = new URLSearchParams();
-        if (searchQuery) params.append('search', searchQuery);
-        if (filterDate) params.append('date', filterDate);
-
-        const [visitsRes, settingsRes, servicesRes] = await Promise.all([
-          axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) 
-        ]);
-        setVisits(visitsRes.data || []);
-        setRole(settingsRes.data.role);
-        setCatalogServices(servicesRes.data || []);
-      } catch (error) { 
-          console.error("Помилка", error);
-          if (error.response?.status === 401) navigate('/login');
-          setRole('owner'); 
-      } 
-      finally { setLoading(false); }
-    };
-
     const timeoutId = setTimeout(() => { fetchData(); }, 300);
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
+  // --- СТВОРЕННЯ (З виправленням часового поясу) ---
   const handleCreateVisit = async (e) => {
     e.preventDefault();
-    // Чистий формат дати для бекенду
-    const scheduled_datetime = newVisitData.date && newVisitData.time ? `${newVisitData.date}T${newVisitData.time}:00` : null;
+    let scheduled_datetime = null;
+    
+    // Форматуємо дату в правильний ISO формат з урахуванням місцевого часу
+    if (newVisitData.date && newVisitData.time) {
+      const localDate = new Date(`${newVisitData.date}T${newVisitData.time}`);
+      scheduled_datetime = localDate.toISOString();
+    }
 
     const payload = {
         plate: newVisitData.plate.toUpperCase(),
@@ -73,18 +82,42 @@ const Visits = () => {
       setNewVisitData({ plate: '', client: '', phone: '', date: '', time: '' });
       setSearchQuery('');
       setFilterDate('');
+      fetchData();
     } catch (error) { alert("Помилка створення візиту"); }
   };
 
+  // --- ВИДАЛЕННЯ ВІЗИТУ ---
+  const handleDeleteVisit = async () => {
+    if (window.confirm("Ви дійсно хочете видалити це замовлення НАЗАВЖДИ?")) {
+      try {
+        await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } });
+        setSelectedVisit(null);
+        fetchData();
+      } catch (error) { alert("Помилка видалення"); }
+    }
+  };
+
+  // --- РЕДАГУВАННЯ ЧАСУ ---
+  const handleUpdateTime = async () => {
+    let scheduled_datetime = null;
+    if (editTimeData.date && editTimeData.time) {
+      const localDate = new Date(`${editTimeData.date}T${editTimeData.time}`);
+      scheduled_datetime = localDate.toISOString();
+    }
+    
+    try {
+      await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`, { scheduled_datetime }, { headers: { Authorization: `Bearer ${token}` } });
+      setIsEditingTime(false);
+      refreshSelectedVisit();
+    } catch (error) { alert("Помилка збереження часу"); }
+  };
+
+  // --- ІНШІ СТАТУСИ ---
   const updateVisitStatus = async (id, newStatus) => {
     try {
       await axios.patch(`${API_BASE}/api/visits/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } });
       setSelectedVisit({ ...selectedVisit, status: newStatus });
-      const params = new URLSearchParams();
-      if (searchQuery) params.append('search', searchQuery);
-      if (filterDate) params.append('date', filterDate);
-      const res = await axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
-      setVisits(res.data);
+      fetchData();
     } catch (error) { alert("Помилка статусу"); }
   };
 
@@ -138,12 +171,7 @@ const Visits = () => {
   const refreshSelectedVisit = async () => {
     const res = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } });
     setSelectedVisit(res.data);
-    
-    const params = new URLSearchParams();
-    if (searchQuery) params.append('search', searchQuery);
-    if (filterDate) params.append('date', filterDate);
-    const listRes = await axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
-    setVisits(listRes.data);
+    fetchData();
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
@@ -197,13 +225,13 @@ const Visits = () => {
         <Column title="Готово" icon={<CheckCircle2 size={18}/>} items={done} colorClass="text-green-600" />
       </div>
 
+      {/* МОДАЛКА СТВОРЕННЯ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
             <button onClick={() => setIsCreatingVisit(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
             <h2 className="text-xl font-black mb-6 flex items-center gap-2"><CarFront className="text-blue-600"/> Новий візит</h2>
             <form onSubmit={handleCreateVisit} className="space-y-4">
-              
               <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Дата приїзду</label>
@@ -214,7 +242,6 @@ const Visits = () => {
                   <input required type="time" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-slate-700" value={newVisitData.time} onChange={e => setNewVisitData({...newVisitData, time: e.target.value})}/>
                 </div>
               </div>
-
               <input required type="text" placeholder="Номер авто (АА1234ВВ)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})}/>
               <input required type="text" placeholder="Клієнт / Марка" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
               <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
@@ -224,30 +251,58 @@ const Visits = () => {
         </div>
       )}
 
+      {/* МОДАЛКА ДЕТАЛЕЙ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-6 shadow-2xl my-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-slate-100 pb-4 gap-4">
-              <div>
+            
+            {/* ШАПКА ВІЗИТУ З КНОПКАМИ */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-6 border-b border-slate-100 pb-4 gap-4">
+              <div className="w-full">
                 <h2 className="text-3xl font-black uppercase">{selectedVisit.plate}</h2>
                 <p className="text-slate-500 font-bold flex items-center gap-2 mt-1"><CarFront size={16}/> {selectedVisit.client} | <Phone size={16}/> {selectedVisit.phone}</p>
-                <p className="text-slate-400 text-xs font-bold mt-1 flex items-center gap-1">
-                  <Clock size={12}/> 
-                  Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}
-                </p>
+                
+                {/* РЕДАГУВАННЯ ЧАСУ */}
+                <div className="text-slate-500 text-xs font-bold mt-2 flex items-center gap-2 group">
+                  <Clock size={14}/>
+                  {isEditingTime ? (
+                    <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                      <input type="date" className="bg-transparent outline-none text-slate-700" value={editTimeData.date} onChange={e => setEditTimeData({...editTimeData, date: e.target.value})} />
+                      <input type="time" className="bg-transparent outline-none text-slate-700" value={editTimeData.time} onChange={e => setEditTimeData({...editTimeData, time: e.target.value})} />
+                      <button onClick={handleUpdateTime} className="text-green-600 hover:bg-green-100 p-1 rounded"><CheckCircle2 size={14}/></button>
+                      <button onClick={() => setIsEditingTime(false)} className="text-slate-400 hover:bg-slate-200 p-1 rounded"><X size={14}/></button>
+                    </div>
+                  ) : (
+                    <>
+                      <span>Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}</span>
+                      {role === 'owner' && (
+                        <button onClick={() => {
+                          const d = selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime) : new Date();
+                          setEditTimeData({ date: d.toLocaleDateString('en-CA'), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
+                          setIsEditingTime(true);
+                        }} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Pencil size={14}/>
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
+                {role === 'owner' && (
+                  <button onClick={handleDeleteVisit} className="bg-red-50 text-red-500 p-2 rounded-xl hover:bg-red-100 transition-colors" title="Видалити візит повністю">
+                    <Trash2 size={20} />
+                  </button>
+                )}
                 {role === 'owner' && (selectedVisit.status === 'DONE' || filterDate) && (
-                  <button 
-                    onClick={() => {
+                  <button onClick={() => {
                       setNewVisitData({ plate: selectedVisit.plate, client: selectedVisit.client, phone: selectedVisit.phone, date: '', time: '' });
                       setSelectedVisit(null);
                       setIsCreatingVisit(true);
-                    }} 
-                    className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-black uppercase text-xs hover:bg-blue-100 transition-all"
+                    }} className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-black uppercase text-xs hover:bg-blue-100 transition-all"
                   >
-                    <RefreshCcw size={16}/> Повторний візит
+                    <RefreshCcw size={16}/> Повторний
                   </button>
                 )}
                 <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-full hover:bg-slate-200 transition-colors"><X size={20} /></button>
@@ -261,6 +316,7 @@ const Visits = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* === ЗАВДАННЯ (ПОСЛУГИ) === */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Wrench size={18}/> Завдання</h3>
                 <div className="space-y-3 mb-4">
@@ -296,6 +352,7 @@ const Visits = () => {
                 )}
               </div>
 
+              {/* === ЗАПЧАСТИНИ === */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-4 flex items-center gap-2"><Store size={18}/> Запчастини</h3>
                 <div className="space-y-3 mb-4">

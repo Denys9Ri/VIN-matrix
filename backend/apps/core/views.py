@@ -280,10 +280,9 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 omega_url = "https://public.omega.page/public/api/v1.0/product/pricelist/paged"
                 payload = {
                     "Key": sup.api_key.strip(),
-                    "Query": "111697", # Популярний артикул для збору складів
-                    "Search": "111697",
+                    "Number": "111697", # ХАК: Тепер ми передаємо тестовий артикул в Number
                     "From": 0,
-                    "Count": 500 # Беремо аж 500 товарів, щоб точно зачепити партнерські склади
+                    "Count": 500
                 }
                 
                 response = requests.post(omega_url, json=payload, timeout=10)
@@ -302,7 +301,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
                             if w_name: warehouses_dict[w_name] = w_name
 
                     if not warehouses_dict:
-                        return Response({"error": "API Омеги не повернуло складів. Можливо, для вашого акаунту налаштований лише один склад. Додайте інші вручну."}, status=400)
+                        return Response({"error": "API Омеги не повернуло складів. Додайте їх вручну."}, status=400)
                     
                     existing_prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
                     existing_map = {str(w.get('id')): w for w in existing_prefs if isinstance(w, dict) and w.get('id')}
@@ -465,13 +464,11 @@ class PartSearchView(APIView):
                 try:
                     omega_url = "https://public.omega.page/public/api/v1.0/product/pricelist/paged"
                     
-                    # Пробуємо всі можливі ключі пошуку, щоб Омега точно зрозуміла
+                    # ХАК: Передаємо пошуковий запит у поле "Number" і ще декілька про всяк випадок
                     payload = {
                         "Key": sup.api_key.strip(),
-                        "Search": query,
-                        "Query": query,
-                        "Filter": query,
-                        "Article": query,
+                        "Number": query,
+                        "SearchText": query,
                         "From": 0,
                         "Count": 50
                     }
@@ -482,7 +479,6 @@ class PartSearchView(APIView):
                         raw_data = response.json()
                         items_data = raw_data.get('Result', [])
                         
-                        # Жорсткий фільтр
                         query_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
                         omega_added = 0
                         
@@ -492,6 +488,7 @@ class PartSearchView(APIView):
                             art_clean = str(item.get('Number', '')).upper().replace(' ', '').replace('-', '').replace('.', '')
                             card_clean = str(item.get('Card', '')).upper().replace(' ', '').replace('-', '').replace('.', '')
                             
+                            # Фільтр, щоб відсікти сміття, якщо Омега знову проігнорує запит
                             if query_clean not in art_clean and query_clean not in card_clean:
                                 continue
                                 
@@ -557,7 +554,6 @@ class PartSearchView(APIView):
                             })
                             omega_added += 1
 
-                        # ДЕБАГ ФІЛЬТРУ: Якщо API не зрозуміло запит і ми відкинули весь шлак
                         if omega_added == 0 and len(items_data) > 0:
                             first = items_data[0]
                             results.append({
@@ -570,7 +566,7 @@ class PartSearchView(APIView):
                                 "quantity": "Пусто",
                                 "is_local": False,
                                 "warehouses": [],
-                                "sku": "", "min_qty": 1, "image_url": "", "description": "Запитайте в айтішника Омеги, як називається поле для пошуку артикулу в методі /pricelist/paged"
+                                "sku": "", "min_qty": 1, "image_url": "", "description": "Потрібно спитати в айтішника Омеги, як називається поле для пошуку по артикулу."
                             })
 
                     else:

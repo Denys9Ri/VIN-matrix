@@ -218,6 +218,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
         if not sup.api_key:
             return Response({"error": "Немає ключа API"}, status=400)
 
+        # === ЛОГІКА VESNA-AUTO ===
         if 'vesna' in sup.name.lower() or 'весна' in sup.name.lower():
             try:
                 parts = sup.api_key.split(':')
@@ -272,6 +273,64 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 return Response({"error": f"Помилка API ({response.status_code}): {response.text}"}, status=400)
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
+                
+        # === ЛОГІКА ОМЕГА АВТОПОСТАВКА ===
+        elif 'omega' in sup.name.lower() or 'омега' in sup.name.lower():
+            try:
+                omega_url = "https://public.omega.page/public/api/v1.0/product/pricelist/paged"
+                payload = {
+                    "Key": sup.api_key.strip(),
+                    "Search": "OC90", # Тестовий артикул
+                    "From": 0,
+                    "Count": 10
+                }
+                
+                response = requests.post(omega_url, json=payload, timeout=10)
+                if response.status_code == 200:
+                    raw_data = response.json()
+                    items_data = raw_data.get('Result', [])
+                    
+                    warehouses_dict = {}
+                    for item in items_data:
+                        # Склади Омеги
+                        for wh in item.get('Rests', []):
+                            w_name = str(wh.get('Key', 'Склад Омега'))
+                            w_id = w_name # В Омеги назва складу часто є його ключем
+                            if w_id: warehouses_dict[w_id] = w_name
+                                
+                        # Склади партнерів Омеги (постачальники)
+                        for wh in item.get('SupplierRests', []):
+                            w_name = str(wh.get('WareHouseName', 'Склад Партнера'))
+                            w_id = w_name
+                            if w_id: warehouses_dict[w_id] = w_name
+
+                    if not warehouses_dict:
+                        return Response({"error": "API не повернуло жодного складу. Додайте їх вручну."}, status=400)
+                    
+                    existing_prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
+                    existing_map = {str(w.get('id')): w for w in existing_prefs if isinstance(w, dict) and w.get('id')}
+                    
+                    new_prefs = []
+                    for w_id, w_name in warehouses_dict.items():
+                        if w_id in existing_map:
+                            pref = existing_map[w_id]
+                            pref['name'] = w_name
+                            new_prefs.append(pref)
+                        else:
+                            new_prefs.append({"id": w_id, "name": w_name, "priority": 99, "is_active": True})
+                            
+                    new_ids = {p['id'] for p in new_prefs}
+                    for p in existing_prefs:
+                        if str(p.get('id')) not in new_ids:
+                            new_prefs.append(p)
+                            
+                    sup.warehouse_prefs = new_prefs
+                    sup.save()
+                    return Response({"message": f"Успішно завантажено {len(warehouses_dict)} складів!", "warehouses": new_prefs})
+                return Response({"error": f"Помилка API ({response.status_code}): {response.text}"}, status=400)
+            except Exception as e:
+                return Response({"error": str(e)}, status=500)
+
         return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
 
 
@@ -301,7 +360,6 @@ class PartSearchView(APIView):
                 "buy_price": float(item.buy_price),
                 "quantity": f"{item.quantity} шт",
                 "is_local": True,
-                # ДОДАНО ПОЛЯ ДЛЯ ІНФО
                 "sku": "",
                 "min_qty": 1,
                 "image_url": "",
@@ -318,6 +376,7 @@ class PartSearchView(APIView):
                     if p.get('id'): prefs_map[str(p['id'])] = p
                     if p.get('name'): prefs_map[str(p['name']).lower()] = p
 
+            # === ІНТЕГРАЦІЯ VESNA-AUTO ===
             if sup.api_key and ('vesna' in sup.name.lower() or 'весна' in sup.name.lower()):
                 try:
                     parts = sup.api_key.split(':')
@@ -326,12 +385,7 @@ class PartSearchView(APIView):
                     token = token_raw.replace('Token', '').replace('token', '').strip()
 
                     vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
-                    
-                    headers = {
-                        "Authorization": f"Token {token}", 
-                        "Content-Type": "application/json",
-                        "Accept-Language": "uk"
-                    }
+                    headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
                     payload = {"customer_id": customer_id, "article": query}
                     
                     response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
@@ -360,8 +414,7 @@ class PartSearchView(APIView):
                                     is_active = pref.get('is_active', True)
                                     priority = int(pref.get('priority', 99))
                                     
-                                if not is_active:
-                                    continue
+                                if not is_active: continue
                                 
                                 warehouses_list.append({
                                     "name": wh_name,
@@ -369,8 +422,7 @@ class PartSearchView(APIView):
                                     "priority": priority
                                 })
                             
-                            if not warehouses_list:
-                                continue
+                            if not warehouses_list: continue
                             
                             def sort_warehouses(w):
                                 raw_qty = str(w['quantity']).replace('>', '').replace('<', '').replace('+', '').strip()
@@ -380,11 +432,9 @@ class PartSearchView(APIView):
                                 return (0 if has_stock else 1, w['priority'])
                                 
                             warehouses_list.sort(key=sort_warehouses)
-                            
                             primary_wh = warehouses_list[0]
                             display_qty = f"{primary_wh['quantity']} шт ({primary_wh['name']})"
                             
-                            # ХАК: Ловимо фото та додатковий опис, якщо вони є в API (навіть якщо не документовано)
                             img_url = item.get('image') or item.get('picture') or item.get('image_url') or item.get('img') or ''
                             desc = item.get('description') or item.get('info') or ''
                                 
@@ -398,15 +448,118 @@ class PartSearchView(APIView):
                                 "quantity": display_qty,
                                 "is_local": False,
                                 "warehouses": warehouses_list,
-                                # ДОДАНО ПОЛЯ ДЛЯ ІНФО
                                 "sku": item.get('sku', ''),
                                 "min_qty": item.get('min_order_quantity', 1),
                                 "image_url": img_url,
                                 "description": desc
                             })
+                    else:
+                        results.append({
+                            "id": f"vesna_err_{sup.id}", "source": f"{sup.name} (ПОМИЛКА {response.status_code})",
+                            "brand": "API ERR", "article": query.upper(), "name": f"Відповідь: {response.text[:150]}",
+                            "buy_price": 0.0, "quantity": "❌", "is_local": False,
+                            "sku": "", "min_qty": 1, "image_url": "", "description": ""
+                        })
+                except Exception as e:
+                    pass
+
+            # === ІНТЕГРАЦІЯ ОМЕГА АВТОПОСТАВКА ===
+            elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
+                try:
+                    omega_url = "https://public.omega.page/public/api/v1.0/product/pricelist/paged"
+                    # В Омеги пошуковий запит зазвичай передається в параметрі Search
+                    payload = {
+                        "Key": sup.api_key.strip(),
+                        "Search": query,
+                        "From": 0,
+                        "Count": 50
+                    }
+                    
+                    response = requests.post(omega_url, json=payload, timeout=10)
+                    
+                    if response.status_code == 200:
+                        raw_data = response.json()
+                        items_data = raw_data.get('Result', [])
+                        
+                        for item in items_data:
+                            if not isinstance(item, dict): continue
+                            
+                            warehouses_list = []
+                            
+                            # 1. Власні склади Омеги
+                            for wh in item.get('Rests', []):
+                                wh_name = str(wh.get('Key', 'Склад Омега'))
+                                wh_qty = str(wh.get('Value', '0'))
+                                
+                                pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
+                                is_active = True
+                                priority = 99
+                                
+                                if pref:
+                                    is_active = pref.get('is_active', True)
+                                    priority = int(pref.get('priority', 99))
+                                    
+                                if not is_active: continue
+                                
+                                warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": priority})
+                                
+                            # 2. Склади партнерів (Постачальників Омеги)
+                            for wh in item.get('SupplierRests', []):
+                                wh_name = str(wh.get('WareHouseName', 'Склад Партнера'))
+                                wh_qty = str(wh.get('Rest', '0'))
+                                
+                                pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
+                                is_active = True
+                                priority = 99
+                                
+                                if pref:
+                                    is_active = pref.get('is_active', True)
+                                    priority = int(pref.get('priority', 99))
+                                    
+                                if not is_active: continue
+                                
+                                warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": priority})
+                                
+                            if not warehouses_list: continue
+                            
+                            def sort_warehouses(w):
+                                raw_qty = str(w['quantity']).replace('>', '').replace('<', '').replace('+', '').strip()
+                                try: qty = float(raw_qty)
+                                except ValueError: qty = 1 if raw_qty else 0
+                                has_stock = qty > 0
+                                return (0 if has_stock else 1, w['priority'])
+                                
+                            warehouses_list.sort(key=sort_warehouses)
+                            primary_wh = warehouses_list[0]
+                            display_qty = f"{primary_wh['quantity']} шт ({primary_wh['name']})"
+                            
+                            results.append({
+                                "id": f"omega_{sup.id}_{item.get('ProductId', '0')}",
+                                "source": sup.name,
+                                "brand": item.get('BrandDescription', 'Unknown'),
+                                "article": item.get('Number', query.upper()),
+                                "name": item.get('Description', 'Деталь Omega'),
+                                "buy_price": float(item.get('Price', 0) or 0),
+                                "quantity": display_qty,
+                                "is_local": False,
+                                "warehouses": warehouses_list,
+                                "sku": str(item.get('ProductId', '')),
+                                "min_qty": 1, # Омега зазвичай віддає по 1шт, якщо не вказано інше
+                                "image_url": item.get('ImageUrl', ''),
+                                "description": item.get('DescriptionUkr', '') or item.get('Info', '')
+                            })
+                    else:
+                        # ДЕБАГ: Якщо Омега повертає помилку (напр. невірний токен)
+                        results.append({
+                            "id": f"omega_err_{sup.id}", "source": f"{sup.name} (ПОМИЛКА {response.status_code})",
+                            "brand": "API ERR", "article": query.upper(), "name": f"Відповідь: {response.text[:150]}",
+                            "buy_price": 0.0, "quantity": "❌", "is_local": False,
+                            "sku": "", "min_qty": 1, "image_url": "", "description": ""
+                        })
                 except Exception as e:
                     pass
                     
+            # ТЕСТОВА ЗАГЛУШКА ДЛЯ ІНШИХ API
             elif sup.api_key:
                 results.append({
                     "id": f"api_{sup.id}_{query}",

@@ -281,6 +281,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 payload = {
                     "Key": sup.api_key.strip(),
                     "Query": "111697", # Популярний артикул для збору складів
+                    "Search": "111697",
                     "From": 0,
                     "Count": 500 # Беремо аж 500 товарів, щоб точно зачепити партнерські склади
                 }
@@ -463,12 +464,14 @@ class PartSearchView(APIView):
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
                 try:
                     omega_url = "https://public.omega.page/public/api/v1.0/product/pricelist/paged"
-                    # Тепер ми передаємо справжній запит!
+                    
+                    # Пробуємо всі можливі ключі пошуку, щоб Омега точно зрозуміла
                     payload = {
                         "Key": sup.api_key.strip(),
-                        "Query": query,
                         "Search": query,
+                        "Query": query,
                         "Filter": query,
+                        "Article": query,
                         "From": 0,
                         "Count": 50
                     }
@@ -479,8 +482,9 @@ class PartSearchView(APIView):
                         raw_data = response.json()
                         items_data = raw_data.get('Result', [])
                         
-                        # ЖОРСТКИЙ ФІЛЬТР: видаляємо пробіли, тире і крапки для точного порівняння
+                        # Жорсткий фільтр
                         query_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
+                        omega_added = 0
                         
                         for item in items_data:
                             if not isinstance(item, dict): continue
@@ -488,15 +492,13 @@ class PartSearchView(APIView):
                             art_clean = str(item.get('Number', '')).upper().replace(' ', '').replace('-', '').replace('.', '')
                             card_clean = str(item.get('Card', '')).upper().replace(' ', '').replace('-', '').replace('.', '')
                             
-                            # Відсікаємо сміття, якщо API раптом проігнорувало запит і віддало просто каталог
                             if query_clean not in art_clean and query_clean not in card_clean:
                                 continue
                                 
                             warehouses_list = []
                             
-                            # 1. Власні склади Омеги
                             for wh in item.get('Rests', []):
-                                wh_name = str(wh.get('Key', 'Склад Омега'))
+                                wh_name = str(wh.get('Key', 'Склад Омега')).strip()
                                 wh_qty = str(wh.get('Value', '0'))
                                 
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
@@ -508,12 +510,10 @@ class PartSearchView(APIView):
                                     priority = int(pref.get('priority', 99))
                                     
                                 if not is_active: continue
-                                
                                 warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": priority})
                                 
-                            # 2. Склади партнерів (Постачальників Омеги)
                             for wh in item.get('SupplierRests', []):
-                                wh_name = str(wh.get('WareHouseName', 'Склад Партнера'))
+                                wh_name = str(wh.get('WareHouseName', 'Склад Партнера')).strip()
                                 wh_qty = str(wh.get('Rest', '0'))
                                 
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
@@ -525,7 +525,6 @@ class PartSearchView(APIView):
                                     priority = int(pref.get('priority', 99))
                                     
                                 if not is_active: continue
-                                
                                 warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": priority})
                                 
                             if not warehouses_list: continue
@@ -556,6 +555,24 @@ class PartSearchView(APIView):
                                 "image_url": item.get('ImageUrl', ''),
                                 "description": item.get('DescriptionUkr', '') or item.get('Info', '')
                             })
+                            omega_added += 1
+
+                        # ДЕБАГ ФІЛЬТРУ: Якщо API не зрозуміло запит і ми відкинули весь шлак
+                        if omega_added == 0 and len(items_data) > 0:
+                            first = items_data[0]
+                            results.append({
+                                "id": f"omega_debug_filter_{sup.id}",
+                                "source": f"{sup.name} (ДЕБАГ ФІЛЬТРУ)",
+                                "brand": "API ІГНОРУЄ ПОШУК",
+                                "article": first.get('Number', 'N/A'),
+                                "name": f"Перший товар з відповіді: {first.get('Description', '')}",
+                                "buy_price": 0.0,
+                                "quantity": "Пусто",
+                                "is_local": False,
+                                "warehouses": [],
+                                "sku": "", "min_qty": 1, "image_url": "", "description": "Запитайте в айтішника Омеги, як називається поле для пошуку артикулу в методі /pricelist/paged"
+                            })
+
                     else:
                         results.append({
                             "id": f"omega_err_{sup.id}", "source": f"{sup.name} (ПОМИЛКА {response.status_code})",

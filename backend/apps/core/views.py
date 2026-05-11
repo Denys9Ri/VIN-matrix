@@ -279,7 +279,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 omega_url = "https://public.omega.page/public/api/v1.0/product/search"
                 payload = {
                     "Key": sup.api_key.strip(),
-                    "SearchPhrase": "111697",  # ЧАРІВНЕ СЛОВО ЗНАЙДЕНО!
+                    "SearchPhrase": "111697", 
                     "From": 0,
                     "Count": 100
                 }
@@ -287,7 +287,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 response = requests.post(omega_url, json=payload, timeout=10)
                 if response.status_code == 200:
                     raw_data = response.json()
-                    # Омега може повернути дані в 'Result' або 'Data'
                     items_data = raw_data.get('Result', []) or raw_data.get('Data', [])
                     
                     warehouses_dict = {}
@@ -398,16 +397,12 @@ class PartSearchView(APIView):
                             })
                 except Exception: pass
 
-            # === ІНТЕГРАЦІЯ ОМЕГА АВТОПОСТАВКА (НОВИЙ МЕТОД SEARCH) ===
+            # === ІНТЕГРАЦІЯ ОМЕГА АВТОПОСТАВКА ===
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
                 try:
                     omega_url = "https://public.omega.page/public/api/v1.0/product/search"
-                    payload = {
-                        "Key": sup.api_key.strip(), 
-                        "SearchPhrase": query, # <--- ОСЬ ВОНО, ЧАРІВНЕ СЛОВО!
-                        "From": 0, 
-                        "Count": 50 # Омега також просила додати Count
-                    }
+                    payload = {"Key": sup.api_key.strip(), "SearchPhrase": query, "From": 0, "Count": 50}
+                    
                     response = requests.post(omega_url, json=payload, timeout=10)
                     
                     if response.status_code == 200:
@@ -428,16 +423,16 @@ class PartSearchView(APIView):
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             warehouses_list = []
-                            all_rests = item.get('Rests', [])
-                            supplier_rests = item.get('SupplierRests', [])
                             
-                            for wh in all_rests:
+                            # Збираємо власні склади
+                            for wh in item.get('Rests', []):
                                 wh_name, wh_qty = str(wh.get('Key', 'Склад Омега')), str(wh.get('Value', '0'))
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
                                 if pref and not pref.get('is_active', True): continue
                                 warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99})
                                 
-                            for wh in supplier_rests:
+                            # Збираємо склади партнерів
+                            for wh in item.get('SupplierRests', []):
                                 wh_name, wh_qty = str(wh.get('WareHouseName', 'Склад Партнера')), str(wh.get('Rest', '0'))
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
                                 if pref and not pref.get('is_active', True): continue
@@ -446,10 +441,14 @@ class PartSearchView(APIView):
                             if not warehouses_list: continue
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
                             
+                            # БЕРЕМО ПРАВИЛЬНУ ЦІНУ ЗІ ЗНИЖКОЮ (ОПТОВУ)
+                            buy_price = float(item.get('CustomerPrice') or item.get('EffectivePrice') or item.get('Price') or 0)
+                            
                             results.append({
                                 "id": f"omega_{sup.id}_{item.get('ProductId', '0')}", "source": sup.name,
                                 "brand": item.get('BrandDescription', 'Unknown'), "article": item.get('Number', query.upper()),
-                                "name": item.get('Description', 'Деталь Omega'), "buy_price": float(item.get('Price', 0) or 0),
+                                "name": item.get('Description', 'Деталь Omega'), 
+                                "buy_price": buy_price, 
                                 "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
                                 "is_local": False, "warehouses": warehouses_list, "sku": str(item.get('ProductId', '')),
                                 "min_qty": 1, "image_url": item.get('ImageUrl', ''), "description": item.get('DescriptionUkr', '') or item.get('Info', '')

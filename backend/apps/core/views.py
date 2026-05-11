@@ -273,35 +273,33 @@ class SupplierViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
                 
-        # === ЛОГІКА ОМЕГА АВТОПОСТАВКА (Використовуємо знайдений метод SEARCH) ===
+        # === ЛОГІКА ОМЕГА АВТОПОСТАВКА ===
         elif 'omega' in sup.name.lower() or 'омега' in sup.name.lower():
             try:
-                omega_url = "https://public.omega.page/public/api/v1.0/product/search"
+                omega_url = "https://public.omega.page/public/api/v1.0/product/pricelist/paged"
                 payload = {
                     "Key": sup.api_key.strip(),
-                    "Search": "111697" # Використовуємо SEARCH замість pricelist
+                    "From": 0,
+                    "Count": 100
                 }
                 
                 response = requests.post(omega_url, json=payload, timeout=10)
                 if response.status_code == 200:
                     raw_data = response.json()
-                    # Омега може повернути дані в 'Result' або 'Data'
-                    items_data = raw_data.get('Result', []) or raw_data.get('Data', [])
+                    items_data = raw_data.get('Result', [])
                     
                     warehouses_dict = {}
                     for item in items_data:
-                        # Власні склади
                         for wh in item.get('Rests', []):
                             w_name = str(wh.get('Key', 'Склад Омега')).strip()
                             if w_name: warehouses_dict[w_name] = w_name
                                 
-                        # Склади партнерів
                         for wh in item.get('SupplierRests', []):
                             w_name = str(wh.get('WareHouseName', 'Склад Партнера')).strip()
                             if w_name: warehouses_dict[w_name] = w_name
 
                     if not warehouses_dict:
-                        return Response({"error": "API Омеги не повернуло складів. Спробуйте додати їх вручну."}, status=400)
+                        return Response({"error": "API Омеги не повернуло складів. Додайте їх вручну."}, status=400)
                     
                     existing_prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
                     existing_map = {str(w.get('id')): w for w in existing_prefs if isinstance(w, dict) and w.get('id')}
@@ -396,32 +394,66 @@ class PartSearchView(APIView):
                             })
                 except Exception: pass
 
-            # === ІНТЕГРАЦІЯ ОМЕГА АВТОПОСТАВКА (НОВИЙ МЕТОД SEARCH) ===
+            # === ІНТЕГРАЦІЯ ОМЕГА АВТОПОСТАВКА (АБСОЛЮТНИЙ ДЕБАГЕР) ===
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
                 try:
                     omega_url = "https://public.omega.page/public/api/v1.0/product/search"
                     payload = {"Key": sup.api_key.strip(), "Search": query}
+                    
                     response = requests.post(omega_url, json=payload, timeout=10)
                     
                     if response.status_code == 200:
                         raw_data = response.json()
-                        # Пошук Омеги зазвичай повертає список у Result або Data
+                        
+                        # 1. Перевіряємо на внутрішні помилки Омеги (якщо Success: false)
+                        if not raw_data.get('Success', True) or raw_data.get('Errors'):
+                            results.append({
+                                "id": f"omega_api_err_{sup.id}", "source": "ОМЕГА (API ПОМИЛКА)",
+                                "brand": "ПОМИЛКА", "article": query.upper(),
+                                "name": f"Деталі помилки: {str(raw_data.get('Errors', ''))[:200]}",
+                                "buy_price": 0.0, "quantity": "Помилка", "is_local": False,
+                                "sku": "", "min_qty": 1, "image_url": "", "description": f"Запит: {payload}"
+                            })
+                            continue
+                            
                         items_data = raw_data.get('Result', []) or raw_data.get('Data', [])
                         
+                        # 2. Якщо сервер відповів 200 ОК, Success: true, але список пустий
+                        if not items_data:
+                            results.append({
+                                "id": f"omega_empty_{sup.id}", "source": "ОМЕГА (ПУСТО)",
+                                "brand": "ПУСТО", "article": query.upper(),
+                                "name": "Запит успішний, але API не знайшло жодного товару за цим запитом.",
+                                "buy_price": 0.0, "quantity": "0 шт", "is_local": False,
+                                "sku": "", "min_qty": 1, "image_url": "", "description": f"Відповідь: {str(raw_data)[:200]}"
+                            })
+                            continue
+                            
+                        # 3. Якщо товари Є! Перевіряємо їх структуру (чи віддав він ціни і залишки)
+                        first_item = items_data[0]
+                        if 'Price' not in first_item and 'Rests' not in first_item:
+                            results.append({
+                                "id": f"omega_shallow_{sup.id}", "source": "ОМЕГА (СТРУКТУРА)",
+                                "brand": str(first_item.get('Brand', first_item.get('BrandDescription', 'N/A'))), 
+                                "article": str(first_item.get('Number', first_item.get('Code', query.upper()))),
+                                "name": f"Товар знайдено, але без ціни та залишків! Ключі: {list(first_item.keys())}",
+                                "buy_price": 0.0, "quantity": "Дебаг", "is_local": False,
+                                "sku": str(first_item.get('ProductId', '')), "min_qty": 1, "image_url": "", 
+                                "description": f"Вміст товару: {str(first_item)[:300]}"
+                            })
+                            continue
+                            
+                        # 4. Якщо все ідеально (Нормальний парсинг)
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             warehouses_list = []
-                            # Збираємо всі типи складів
-                            all_rests = item.get('Rests', [])
-                            supplier_rests = item.get('SupplierRests', [])
-                            
-                            for wh in all_rests:
+                            for wh in item.get('Rests', []):
                                 wh_name, wh_qty = str(wh.get('Key', 'Склад Омега')), str(wh.get('Value', '0'))
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
                                 if pref and not pref.get('is_active', True): continue
                                 warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99})
                                 
-                            for wh in supplier_rests:
+                            for wh in item.get('SupplierRests', []):
                                 wh_name, wh_qty = str(wh.get('WareHouseName', 'Склад Партнера')), str(wh.get('Rest', '0'))
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
                                 if pref and not pref.get('is_active', True): continue
@@ -438,6 +470,19 @@ class PartSearchView(APIView):
                                 "is_local": False, "warehouses": warehouses_list, "sku": str(item.get('ProductId', '')),
                                 "min_qty": 1, "image_url": item.get('ImageUrl', ''), "description": item.get('DescriptionUkr', '') or item.get('Info', '')
                             })
-                except Exception: pass
-                    
+                    else:
+                        results.append({
+                            "id": f"omega_http_err_{sup.id}", "source": f"ОМЕГА (HTTP {response.status_code})",
+                            "brand": "HTTP ERR", "article": query.upper(), "name": f"Помилка: {response.text[:150]}",
+                            "buy_price": 0.0, "quantity": "❌", "is_local": False,
+                            "sku": "", "min_qty": 1, "image_url": "", "description": ""
+                        })
+                except Exception as e:
+                    results.append({
+                        "id": f"omega_sys_err_{sup.id}", "source": "ОМЕГА (СИСТЕМНА)",
+                        "brand": "SYS ERR", "article": query.upper(), "name": str(e),
+                        "buy_price": 0.0, "quantity": "❌", "is_local": False,
+                        "sku": "", "min_qty": 1, "image_url": "", "description": ""
+                    })
+
         return Response(results)

@@ -225,10 +225,9 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 token_raw = parts[1] if len(parts) > 1 else sup.api_key
                 token = token_raw.replace('Token', '').replace('token', '').strip()
 
-                # ХИТРИЙ ТРЮК: Замість /get-deliveries/ використовуємо пошук тестової деталі!
                 vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
                 headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
-                payload = {"customer_id": customer_id, "article": "111697"} # Тестовий артикул, який гарантовано має багато складів
+                payload = {"customer_id": customer_id, "article": "111697"} 
                 
                 response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
                 if response.status_code == 200:
@@ -238,7 +237,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
                     elif isinstance(raw_data, list): items_data = raw_data
                     else: items_data = [raw_data]
 
-                    # Збираємо унікальні склади з відповіді
                     warehouses_dict = {}
                     for item in items_data:
                         if not isinstance(item, dict): continue
@@ -302,7 +300,12 @@ class PartSearchView(APIView):
                 "name": item.name,
                 "buy_price": float(item.buy_price),
                 "quantity": f"{item.quantity} шт",
-                "is_local": True
+                "is_local": True,
+                # ДОДАНО ПОЛЯ ДЛЯ ІНФО
+                "sku": "",
+                "min_qty": 1,
+                "image_url": "",
+                "description": ""
             })
 
         suppliers = Supplier.objects.filter(company=company)
@@ -380,6 +383,10 @@ class PartSearchView(APIView):
                             
                             primary_wh = warehouses_list[0]
                             display_qty = f"{primary_wh['quantity']} шт ({primary_wh['name']})"
+                            
+                            # ХАК: Ловимо фото та додатковий опис, якщо вони є в API (навіть якщо не документовано)
+                            img_url = item.get('image') or item.get('picture') or item.get('image_url') or item.get('img') or ''
+                            desc = item.get('description') or item.get('info') or ''
                                 
                             results.append({
                                 "id": f"vesna_{sup.id}_{item.get('sku', '0')}",
@@ -390,7 +397,12 @@ class PartSearchView(APIView):
                                 "buy_price": float(item.get('price', 0) or 0),
                                 "quantity": display_qty,
                                 "is_local": False,
-                                "warehouses": warehouses_list
+                                "warehouses": warehouses_list,
+                                # ДОДАНО ПОЛЯ ДЛЯ ІНФО
+                                "sku": item.get('sku', ''),
+                                "min_qty": item.get('min_order_quantity', 1),
+                                "image_url": img_url,
+                                "description": desc
                             })
                 except Exception as e:
                     pass
@@ -404,7 +416,8 @@ class PartSearchView(APIView):
                     "name": f"Тестова деталь {sup.name}",
                     "buy_price": 450.00,
                     "quantity": "В наявності",
-                    "is_local": False
+                    "is_local": False,
+                    "sku": "", "min_qty": 1, "image_url": "", "description": ""
                 })
             elif sup.price_file:
                 results.append({
@@ -415,7 +428,8 @@ class PartSearchView(APIView):
                     "name": f"Деталь з прайсу {sup.name}",
                     "buy_price": 380.00,
                     "quantity": "Уточнюйте",
-                    "is_local": False
+                    "is_local": False,
+                    "sku": "", "min_qty": 1, "image_url": "", "description": ""
                 })
 
         return Response(results)

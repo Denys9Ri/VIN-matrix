@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, Plus, Box, Truck, CarFront, X, Loader2, ChevronDown, ChevronUp, CornerDownRight } from 'lucide-react';
+import { Search, Plus, Box, Truck, CarFront, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const UniversalSearch = () => {
@@ -10,12 +10,14 @@ const UniversalSearch = () => {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   
-  // ДОДАНО: Стан для розкриття складів
   const [expandedRows, setExpandedRows] = useState(new Set());
 
   // Для модалки додавання в замовлення
   const [companyInfo, setCompanyInfo] = useState(null);
   const [selectedPart, setSelectedPart] = useState(null);
+  
+  // ДОДАНО: Стан для модалки з Інформацією про товар
+  const [infoPart, setInfoPart] = useState(null);
   
   const [visitSearchQuery, setVisitSearchQuery] = useState('');
   const [visitSearchResults, setVisitSearchResults] = useState([]);
@@ -45,7 +47,7 @@ const UniversalSearch = () => {
     
     setLoading(true);
     setHasSearched(true);
-    setExpandedRows(new Set()); // Скидаємо розкриті рядки при новому пошуку
+    setExpandedRows(new Set()); 
     try {
       const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(query)}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -58,7 +60,6 @@ const UniversalSearch = () => {
     }
   };
 
-  // ФУНКЦІЯ РОЗКРИТТЯ/ЗГОРТАННЯ
   const toggleRow = (id) => {
     const newExpanded = new Set(expandedRows);
     if (newExpanded.has(id)) {
@@ -168,7 +169,6 @@ const UniversalSearch = () => {
               <tbody>
                 {results.map(item => (
                   <React.Fragment key={item.id}>
-                    {/* ГОЛОВНИЙ РЯДОК */}
                     <tr className={`border-b border-slate-50 transition-colors ${item.is_local ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50'}`}>
                       <td className="p-3">
                         <div className="flex flex-col gap-1.5 items-start">
@@ -178,7 +178,6 @@ const UniversalSearch = () => {
                             <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest"><Truck size={12}/> {item.source}</span>
                           )}
                           
-                          {/* КНОПКА РОЗКРИТТЯ ІНШИХ СКЛАДІВ */}
                           {item.warehouses && item.warehouses.length > 1 && (
                             <button 
                               onClick={() => toggleRow(item.id)}
@@ -194,7 +193,17 @@ const UniversalSearch = () => {
                         <p className="text-[10px] font-bold text-blue-500 uppercase">{item.brand}</p>
                       </td>
                       <td className="p-3">
-                        <p className="font-bold text-sm text-slate-700">{item.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-sm text-slate-700">{item.name}</p>
+                          {/* ДОДАНО: Кнопка Інфо */}
+                          <button 
+                            onClick={() => setInfoPart(item)} 
+                            className="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-1 rounded-full transition-colors"
+                            title="Детальна інформація"
+                          >
+                            <Info size={16}/>
+                          </button>
+                        </div>
                       </td>
                       <td className="p-3 text-center">
                         <span className="font-bold text-slate-600 text-sm bg-slate-100 px-2 py-1 rounded-lg">{item.quantity}</span>
@@ -209,7 +218,6 @@ const UniversalSearch = () => {
                       </td>
                     </tr>
                     
-                    {/* ПРИХОВАНІ РЯДКИ (ІНШІ СКЛАДИ) */}
                     {expandedRows.has(item.id) && item.warehouses?.slice(1).map((wh, idx) => (
                       <tr key={`${item.id}_wh_${idx}`} className="bg-slate-50/70 hover:bg-slate-100/70 border-b border-slate-100 transition-colors">
                         <td className="p-3 pl-6">
@@ -226,7 +234,6 @@ const UniversalSearch = () => {
                           <span className="font-bold text-slate-500">{item.buy_price.toLocaleString()} ₴</span>
                         </td>
                         <td className="p-3 text-right">
-                          {/* Якщо клікають тут, передаємо ім'я конкретного складу */}
                           <button 
                             onClick={() => openAddModal({...item, source: `${item.source} (${wh.name})`, quantity: `${wh.quantity} шт`})} 
                             className="text-emerald-500 hover:text-white hover:bg-emerald-500 p-1.5 rounded-lg transition-colors border border-emerald-200 hover:border-emerald-500 shadow-sm"
@@ -248,6 +255,58 @@ const UniversalSearch = () => {
         </div>
       )}
 
+      {/* ДОДАНО: Модалка з Інформацією про товар */}
+      {infoPart && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl">
+            <button onClick={() => setInfoPart(null)} className="absolute right-4 top-4 text-slate-400 hover:bg-slate-100 p-2 rounded-full transition-colors"><X size={20} /></button>
+            <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Info className="text-blue-500"/> Інформація про товар</h2>
+            
+            <div className="flex flex-col md:flex-row gap-6 mb-6">
+              <div className="w-full md:w-2/5 aspect-square bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+                {infoPart.image_url ? (
+                  <img src={infoPart.image_url} alt="Part" className="w-full h-full object-contain p-2" />
+                ) : (
+                  <div className="flex flex-col items-center text-slate-300">
+                    <ImageIcon size={48} className="mb-2"/>
+                    <span className="text-[10px] font-black uppercase tracking-widest">Немає фото</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="w-full md:w-3/5 space-y-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Бренд</p>
+                  <p className="font-black text-blue-600 uppercase text-lg">{infoPart.brand}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Артикул</p>
+                  <p className="font-black text-slate-800 text-xl">{infoPart.article}</p>
+                </div>
+                <div className="flex gap-4 border-t border-slate-100 pt-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">SKU</p>
+                    <p className="font-bold text-slate-700 text-sm">{infoPart.sku || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Мін. замовлення</p>
+                    <p className="font-bold text-slate-700 text-sm">{infoPart.min_qty} шт</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Опис з каталогу</p>
+              <p className="text-sm font-medium text-slate-700 leading-relaxed">
+                {infoPart.description || infoPart.name}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* МОДАЛКА ДОДАВАННЯ */}
       {selectedPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 md:p-8 relative mt-10 mb-10 shadow-2xl">
@@ -255,7 +314,6 @@ const UniversalSearch = () => {
             <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Plus className="text-emerald-500"/> Додати в авто</h2>
             
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 relative overflow-hidden">
-              {/* Бірочка звідки товар */}
               <div className="absolute top-0 right-0 bg-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-lg">
                 {selectedPart.source}
               </div>

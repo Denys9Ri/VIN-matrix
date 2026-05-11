@@ -280,9 +280,9 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 omega_url = "https://public.omega.page/public/api/v1.0/product/pricelist/paged"
                 payload = {
                     "Key": sup.api_key.strip(),
-                    "Search": "OC90", # Тестовий артикул
+                    "Query": "111697", # Популярний артикул для збору складів
                     "From": 0,
-                    "Count": 10
+                    "Count": 500 # Беремо аж 500 товарів, щоб точно зачепити партнерські склади
                 }
                 
                 response = requests.post(omega_url, json=payload, timeout=10)
@@ -292,20 +292,16 @@ class SupplierViewSet(viewsets.ModelViewSet):
                     
                     warehouses_dict = {}
                     for item in items_data:
-                        # Склади Омеги
                         for wh in item.get('Rests', []):
-                            w_name = str(wh.get('Key', 'Склад Омега'))
-                            w_id = w_name # В Омеги назва складу часто є його ключем
-                            if w_id: warehouses_dict[w_id] = w_name
+                            w_name = str(wh.get('Key', 'Склад Омега')).strip()
+                            if w_name: warehouses_dict[w_name] = w_name
                                 
-                        # Склади партнерів Омеги (постачальники)
                         for wh in item.get('SupplierRests', []):
-                            w_name = str(wh.get('WareHouseName', 'Склад Партнера'))
-                            w_id = w_name
-                            if w_id: warehouses_dict[w_id] = w_name
+                            w_name = str(wh.get('WareHouseName', 'Склад Партнера')).strip()
+                            if w_name: warehouses_dict[w_name] = w_name
 
                     if not warehouses_dict:
-                        return Response({"error": "API не повернуло жодного складу. Додайте їх вручну."}, status=400)
+                        return Response({"error": "API Омеги не повернуло складів. Можливо, для вашого акаунту налаштований лише один склад. Додайте інші вручну."}, status=400)
                     
                     existing_prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
                     existing_map = {str(w.get('id')): w for w in existing_prefs if isinstance(w, dict) and w.get('id')}
@@ -467,10 +463,12 @@ class PartSearchView(APIView):
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
                 try:
                     omega_url = "https://public.omega.page/public/api/v1.0/product/pricelist/paged"
-                    # В Омеги пошуковий запит зазвичай передається в параметрі Search
+                    # Тепер ми передаємо справжній запит!
                     payload = {
                         "Key": sup.api_key.strip(),
+                        "Query": query,
                         "Search": query,
+                        "Filter": query,
                         "From": 0,
                         "Count": 50
                     }
@@ -481,9 +479,19 @@ class PartSearchView(APIView):
                         raw_data = response.json()
                         items_data = raw_data.get('Result', [])
                         
+                        # ЖОРСТКИЙ ФІЛЬТР: видаляємо пробіли, тире і крапки для точного порівняння
+                        query_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
+                        
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             
+                            art_clean = str(item.get('Number', '')).upper().replace(' ', '').replace('-', '').replace('.', '')
+                            card_clean = str(item.get('Card', '')).upper().replace(' ', '').replace('-', '').replace('.', '')
+                            
+                            # Відсікаємо сміття, якщо API раптом проігнорувало запит і віддало просто каталог
+                            if query_clean not in art_clean and query_clean not in card_clean:
+                                continue
+                                
                             warehouses_list = []
                             
                             # 1. Власні склади Омеги
@@ -544,12 +552,11 @@ class PartSearchView(APIView):
                                 "is_local": False,
                                 "warehouses": warehouses_list,
                                 "sku": str(item.get('ProductId', '')),
-                                "min_qty": 1, # Омега зазвичай віддає по 1шт, якщо не вказано інше
+                                "min_qty": 1,
                                 "image_url": item.get('ImageUrl', ''),
                                 "description": item.get('DescriptionUkr', '') or item.get('Info', '')
                             })
                     else:
-                        # ДЕБАГ: Якщо Омега повертає помилку (напр. невірний токен)
                         results.append({
                             "id": f"omega_err_{sup.id}", "source": f"{sup.name} (ПОМИЛКА {response.status_code})",
                             "brand": "API ERR", "article": query.upper(), "name": f"Відповідь: {response.text[:150]}",

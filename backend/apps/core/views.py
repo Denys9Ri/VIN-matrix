@@ -212,7 +212,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def get_queryset(self): return Supplier.objects.filter(company=get_user_company(self.request.user))
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
-    # ЖОРСТКО ЗАДАЄМО url_path, ЩОБ УНИКНУТИ ПОМИЛОК З ДЕФІСАМИ
     @action(detail=True, methods=['post'], url_path='fetch_warehouses')
     def fetch_warehouses(self, request, pk=None):
         sup = self.get_object()
@@ -226,26 +225,37 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 token_raw = parts[1] if len(parts) > 1 else sup.api_key
                 token = token_raw.replace('Token', '').replace('token', '').strip()
 
-                vesna_url = "https://api.vesna-auto.com.ua/public-api/delivery-settings/get-deliveries/"
+                # ХИТРИЙ ТРЮК: Замість /get-deliveries/ використовуємо пошук тестової деталі!
+                vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
                 headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
-                payload = {"customer_id": customer_id}
+                payload = {"customer_id": customer_id, "article": "111697"} # Тестовий артикул, який гарантовано має багато складів
                 
                 response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
                 if response.status_code == 200:
-                    data = response.json()
-                    if isinstance(data, dict) and 'data' in data: data = data['data']
-                    elif not isinstance(data, list): data = [data]
+                    raw_data = response.json()
+                    
+                    if isinstance(raw_data, dict) and 'data' in raw_data: items_data = raw_data['data']
+                    elif isinstance(raw_data, list): items_data = raw_data
+                    else: items_data = [raw_data]
+
+                    # Збираємо унікальні склади з відповіді
+                    warehouses_dict = {}
+                    for item in items_data:
+                        if not isinstance(item, dict): continue
+                        for wh in item.get('balance', []):
+                            w_id = str(wh.get('warehouse_id', ''))
+                            w_name = str(wh.get('name', 'Невідомий'))
+                            if w_id:
+                                warehouses_dict[w_id] = w_name
+
+                    if not warehouses_dict:
+                        return Response({"error": "API не повернуло жодного складу. Додайте їх вручну."}, status=400)
                     
                     existing_prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
                     existing_map = {str(w.get('id')): w for w in existing_prefs if isinstance(w, dict) and w.get('id')}
                     
                     new_prefs = []
-                    for item in data:
-                        if not isinstance(item, dict): continue
-                        w_id = str(item.get('id', ''))
-                        w_name = str(item.get('name', 'Невідомий'))
-                        if not w_id: continue
-                        
+                    for w_id, w_name in warehouses_dict.items():
                         if w_id in existing_map:
                             pref = existing_map[w_id]
                             pref['name'] = w_name
@@ -260,7 +270,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
                             
                     sup.warehouse_prefs = new_prefs
                     sup.save()
-                    return Response({"message": "Склади успішно завантажено!", "warehouses": new_prefs})
+                    return Response({"message": f"Успішно завантажено {len(warehouses_dict)} складів!", "warehouses": new_prefs})
                 return Response({"error": f"Помилка API ({response.status_code}): {response.text}"}, status=400)
             except Exception as e:
                 return Response({"error": str(e)}, status=500)

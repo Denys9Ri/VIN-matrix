@@ -18,7 +18,6 @@ const Inventory = () => {
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   
-  // ДОДАНО: Стан для модалки налаштувань складів
   const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
   const [selectedSupplierForWarehouses, setSelectedSupplierForWarehouses] = useState(null);
   const [warehousePrefs, setWarehousePrefs] = useState([]);
@@ -103,7 +102,6 @@ const Inventory = () => {
     }
   };
 
-  // === ЛОГІКА НАЛАШТУВАННЯ СКЛАДІВ ===
   const openWarehouseModal = (supplier) => {
     setSelectedSupplierForWarehouses(supplier);
     setWarehousePrefs(supplier.warehouse_prefs || []);
@@ -134,11 +132,17 @@ const Inventory = () => {
     setWarehousePrefs(newPrefs);
   };
 
+  // ДОДАНО: Функція видалення конкретного складу з налаштувань
+  const handleRemoveWarehousePref = (index) => {
+    const newPrefs = warehousePrefs.filter((_, i) => i !== index);
+    setWarehousePrefs(newPrefs);
+  };
+
   const handleSaveWarehousePrefs = async () => {
     try {
       await axios.patch(`${API_BASE}/api/suppliers/${selectedSupplierForWarehouses.id}/`, { warehouse_prefs: warehousePrefs }, { headers: { Authorization: `Bearer ${token}` } });
       setIsWarehouseModalOpen(false);
-      fetchData(); // Оновлюємо список
+      fetchData();
     } catch (error) {
       alert("Помилка збереження налаштувань.");
     }
@@ -354,7 +358,7 @@ const Inventory = () => {
         </div>
       )}
 
-      {/* ДОДАНО: Модалка налаштувань складів */}
+      {/* Модалка налаштувань складів */}
       {isWarehouseModalOpen && selectedSupplierForWarehouses && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-2xl p-6 md:p-8 mt-10 mb-10 relative shadow-2xl">
@@ -380,19 +384,22 @@ const Inventory = () => {
               {warehousePrefs.map((wh, index) => (
                 <div key={wh.id || index} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${wh.is_active ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
                   
-                  {/* Чекбокс Активності */}
                   <label className="flex items-center cursor-pointer">
                     <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={wh.is_active} onChange={(e) => handleUpdateWarehousePref(index, 'is_active', e.target.checked)} />
                   </label>
                   
-                  {/* Назва складу */}
                   <input type="text" placeholder="Назва складу (Київ)" className="flex-1 bg-transparent border-none outline-none font-bold text-sm" value={wh.name} onChange={(e) => handleUpdateWarehousePref(index, 'name', e.target.value)} />
                   
-                  {/* Пріоритет */}
                   <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg">
                     <span className="text-[10px] font-black uppercase text-slate-400">Пріоритет</span>
                     <input type="number" min="1" max="999" className="w-12 bg-transparent border-none outline-none font-black text-blue-600 text-center" value={wh.priority} onChange={(e) => handleUpdateWarehousePref(index, 'priority', e.target.value)} />
                   </div>
+
+                  {/* ДОДАНО: Кнопка видалення складу з налаштувань */}
+                  <button type="button" onClick={() => handleRemoveWarehousePref(index)} className="text-slate-300 hover:text-red-500 p-1 transition-colors" title="Видалити склад">
+                    <Trash2 size={18}/>
+                  </button>
+
                 </div>
               ))}
             </div>

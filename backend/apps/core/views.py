@@ -1,4 +1,5 @@
 import requests
+from rest_framework.decorators import action
 from rest_framework import viewsets, status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -29,9 +30,7 @@ class VisitViewSet(viewsets.ModelViewSet):
     def get_queryset(self): 
         company = get_user_company(self.request.user)
         queryset = Visit.objects.filter(company=company)
-        
-        if self.action != 'list':
-            return queryset
+        if self.action != 'list': return queryset
         
         search = self.request.query_params.get('search', '').strip()
         date_str = self.request.query_params.get('date', '').strip()
@@ -39,21 +38,11 @@ class VisitViewSet(viewsets.ModelViewSet):
         
         if history_mode == 'true':
             if search:
-                queryset = queryset.filter(
-                    Q(plate__icontains=search) | 
-                    Q(vin_code__icontains=search) | 
-                    Q(client__icontains=search) | 
-                    Q(phone__icontains=search)
-                )
+                queryset = queryset.filter(Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(client__icontains=search) | Q(phone__icontains=search))
             return queryset.order_by('-created_at')
 
         if search:
-            queryset = queryset.filter(
-                Q(plate__icontains=search) | 
-                Q(vin_code__icontains=search) | 
-                Q(client__icontains=search) | 
-                Q(phone__icontains=search)
-            )
+            queryset = queryset.filter(Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(client__icontains=search) | Q(phone__icontains=search))
             return queryset.order_by('-created_at')
             
         elif date_str and len(date_str) == 10:
@@ -61,14 +50,9 @@ class VisitViewSet(viewsets.ModelViewSet):
                 parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 start_of_day = timezone.make_aware(datetime.combine(parsed_date, dt_time.min))
                 end_of_day = start_of_day + timedelta(days=1)
-
-                queryset = queryset.filter(
-                    (Q(scheduled_datetime__gte=start_of_day) & Q(scheduled_datetime__lt=end_of_day)) |
-                    (Q(scheduled_datetime__isnull=True) & Q(created_at__gte=start_of_day) & Q(created_at__lt=end_of_day))
-                ).distinct()
+                queryset = queryset.filter((Q(scheduled_datetime__gte=start_of_day) & Q(scheduled_datetime__lt=end_of_day)) | (Q(scheduled_datetime__isnull=True) & Q(created_at__gte=start_of_day) & Q(created_at__lt=end_of_day))).distinct()
                 return queryset.order_by('scheduled_datetime')
-            except Exception:
-                pass
+            except Exception: pass
                 
         today = timezone.localdate()
         start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
@@ -79,11 +63,9 @@ class VisitViewSet(viewsets.ModelViewSet):
             ( ~Q(status='DONE') & Q(scheduled_datetime__isnull=True) ) | 
             ( Q(status='DONE') & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today) ) 
         ).distinct()
-            
         return queryset.order_by('scheduled_datetime') 
 
-    def perform_create(self, serializer): 
-        serializer.save(company=get_user_company(self.request.user))
+    def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
 class OrderPartViewSet(viewsets.ModelViewSet):
     serializer_class = OrderPartSerializer
@@ -230,6 +212,60 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def get_queryset(self): return Supplier.objects.filter(company=get_user_company(self.request.user))
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
+    # ЖОРСТКО ЗАДАЄМО url_path, ЩОБ УНИКНУТИ ПОМИЛОК З ДЕФІСАМИ
+    @action(detail=True, methods=['post'], url_path='fetch_warehouses')
+    def fetch_warehouses(self, request, pk=None):
+        sup = self.get_object()
+        if not sup.api_key:
+            return Response({"error": "Немає ключа API"}, status=400)
+
+        if 'vesna' in sup.name.lower() or 'весна' in sup.name.lower():
+            try:
+                parts = sup.api_key.split(':')
+                customer_id = int(parts[0]) if len(parts) > 1 else 0
+                token_raw = parts[1] if len(parts) > 1 else sup.api_key
+                token = token_raw.replace('Token', '').replace('token', '').strip()
+
+                vesna_url = "https://api.vesna-auto.com.ua/public-api/delivery-settings/get-deliveries/"
+                headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
+                payload = {"customer_id": customer_id}
+                
+                response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if isinstance(data, dict) and 'data' in data: data = data['data']
+                    elif not isinstance(data, list): data = [data]
+                    
+                    existing_prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
+                    existing_map = {str(w.get('id')): w for w in existing_prefs if isinstance(w, dict) and w.get('id')}
+                    
+                    new_prefs = []
+                    for item in data:
+                        if not isinstance(item, dict): continue
+                        w_id = str(item.get('id', ''))
+                        w_name = str(item.get('name', 'Невідомий'))
+                        if not w_id: continue
+                        
+                        if w_id in existing_map:
+                            pref = existing_map[w_id]
+                            pref['name'] = w_name
+                            new_prefs.append(pref)
+                        else:
+                            new_prefs.append({"id": w_id, "name": w_name, "priority": 99, "is_active": True})
+                    
+                    new_ids = {p['id'] for p in new_prefs}
+                    for p in existing_prefs:
+                        if str(p.get('id')) not in new_ids:
+                            new_prefs.append(p)
+                            
+                    sup.warehouse_prefs = new_prefs
+                    sup.save()
+                    return Response({"message": "Склади успішно завантажено!", "warehouses": new_prefs})
+                return Response({"error": f"Помилка API ({response.status_code}): {response.text}"}, status=400)
+            except Exception as e:
+                return Response({"error": str(e)}, status=500)
+        return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
+
 
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
@@ -243,7 +279,6 @@ class PartSearchView(APIView):
 
         results = []
 
-        # 1. ПОШУК ПО ВЛАСНОМУ СКЛАДУ
         local_items = InventoryItem.objects.filter(
             Q(company=company) & 
             (Q(article__icontains=query) | Q(name__icontains=query) | Q(brand__icontains=query))
@@ -260,11 +295,16 @@ class PartSearchView(APIView):
                 "is_local": True
             })
 
-        # 2. ПОШУК ПО ПОСТАЧАЛЬНИКАХ
         suppliers = Supplier.objects.filter(company=company)
         
         for sup in suppliers:
-            # === ІНТЕГРАЦІЯ VESNA-AUTO ===
+            prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
+            prefs_map = {}
+            for p in prefs:
+                if isinstance(p, dict):
+                    if p.get('id'): prefs_map[str(p['id'])] = p
+                    if p.get('name'): prefs_map[str(p['name']).lower()] = p
+
             if sup.api_key and ('vesna' in sup.name.lower() or 'весна' in sup.name.lower()):
                 try:
                     parts = sup.api_key.split(':')
@@ -279,59 +319,52 @@ class PartSearchView(APIView):
                         "Content-Type": "application/json",
                         "Accept-Language": "uk"
                     }
-                    payload = {
-                        "customer_id": customer_id,
-                        "article": query
-                    }
+                    payload = {"customer_id": customer_id, "article": query}
                     
                     response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
                     
                     if response.status_code == 200:
                         raw_data = response.json()
-                        
-                        if isinstance(raw_data, dict) and 'data' in raw_data:
-                            items_data = raw_data['data']
-                        elif isinstance(raw_data, list):
-                            items_data = raw_data
-                        else:
-                            items_data = [raw_data]
+                        if isinstance(raw_data, dict) and 'data' in raw_data: items_data = raw_data['data']
+                        elif isinstance(raw_data, list): items_data = raw_data
+                        else: items_data = [raw_data]
                             
-                        found_any_balance = False
-                        
                         for item in items_data:
-                            if not isinstance(item, dict):
-                                continue
-                                
+                            if not isinstance(item, dict): continue
                             balances = item.get('balance', [])
-                            if not balances:
-                                continue
-                                
-                            found_any_balance = True
+                            if not balances: continue
                             
                             warehouses_list = []
                             for wh in balances:
+                                wh_id = str(wh.get('warehouse_id', ''))
+                                wh_name = str(wh.get('name', 'Склад'))
+                                
+                                pref = prefs_map.get(wh_id) or prefs_map.get(wh_name.lower())
+                                is_active = True
+                                priority = 99
+                                
+                                if pref:
+                                    is_active = pref.get('is_active', True)
+                                    priority = int(pref.get('priority', 99))
+                                    
+                                if not is_active:
+                                    continue
+                                
                                 warehouses_list.append({
-                                    "name": wh.get('name', 'Склад'),
-                                    "quantity": wh.get('quantity', '0')
+                                    "name": wh_name,
+                                    "quantity": wh.get('quantity', '0'),
+                                    "priority": priority
                                 })
                             
-                            # РОЗУМНЕ СОРТУВАННЯ СКЛАДІВ
+                            if not warehouses_list:
+                                continue
+                            
                             def sort_warehouses(w):
-                                name_lower = w['name'].lower()
-                                is_kyiv = 'київ' in name_lower or 'kyiv' in name_lower
-                                
-                                # Безпечно дістаємо кількість (видаляємо > < +)
                                 raw_qty = str(w['quantity']).replace('>', '').replace('<', '').replace('+', '').strip()
-                                try:
-                                    qty = float(raw_qty)
-                                except ValueError:
-                                    qty = 1 if raw_qty else 0 # Якщо замість цифри текст, вважаємо що є
-                                    
+                                try: qty = float(raw_qty)
+                                except ValueError: qty = 1 if raw_qty else 0
                                 has_stock = qty > 0
-                                
-                                # Пріоритети: 0 = найвищий
-                                # (Є залишок: 0|1, Це Київ: 0|1)
-                                return (0 if has_stock else 1, 0 if is_kyiv else 1)
+                                return (0 if has_stock else 1, w['priority'])
                                 
                             warehouses_list.sort(key=sort_warehouses)
                             
@@ -349,22 +382,9 @@ class PartSearchView(APIView):
                                 "is_local": False,
                                 "warehouses": warehouses_list
                             })
-
-                    else:
-                        results.append({
-                            "id": f"vesna_err_{sup.id}",
-                            "source": f"{sup.name} (ПОМИЛКА {response.status_code})",
-                            "brand": "API ERR",
-                            "article": query.upper(),
-                            "name": f"Відповідь: {response.text[:150]}",
-                            "buy_price": 0.0,
-                            "quantity": "❌",
-                            "is_local": False
-                        })
                 except Exception as e:
                     pass
                     
-            # ТЕСТОВА ЗАГЛУШКА ДЛЯ ІНШИХ API
             elif sup.api_key:
                 results.append({
                     "id": f"api_{sup.id}_{query}",
@@ -376,8 +396,6 @@ class PartSearchView(APIView):
                     "quantity": "В наявності",
                     "is_local": False
                 })
-                
-            # ТЕСТОВА ЗАГЛУШКА ДЛЯ EXCEL ПРАЙСІВ
             elif sup.price_file:
                 results.append({
                     "id": f"file_{sup.id}_{query}",

@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
-import os
 
 # Завантажуємо змінні з .env файлу
 load_dotenv()
@@ -28,7 +27,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist', # Додано для Logout (чорний список токенів)
+    'rest_framework_simplejwt.token_blacklist',
     
     # Наші модулі
     'apps.core',
@@ -132,6 +131,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# --- ДОДАНО НАЛАШТУВАННЯ ЧАСУ ДЛЯ УКРАЇНИ ---
-TIME_ZONE = 'Europe/Kiev'
+# Сучасний часовий пояс для України
+TIME_ZONE = 'Europe/Kyiv'
 USE_TZ = True

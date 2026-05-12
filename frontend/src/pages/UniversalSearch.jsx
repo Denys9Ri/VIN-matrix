@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const UniversalSearch = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams(); // ДОДАНО ДЛЯ URL
   
   const [query, setQuery] = useState(sessionStorage.getItem('searchQuery') || '');
   const [results, setResults] = useState(JSON.parse(sessionStorage.getItem('searchResults')) || []);
@@ -51,6 +52,15 @@ const UniversalSearch = () => {
     sessionStorage.setItem('searchResults', JSON.stringify(results));
   }, [query, results]);
 
+  // МАГІЯ: Ловимо запит з Header (з URL адреси)
+  useEffect(() => {
+    const urlQuery = searchParams.get('q');
+    if (urlQuery) {
+      setQuery(urlQuery);
+      performSearch(urlQuery);
+    }
+  }, [searchParams]);
+
   const handleSaveEuroRate = async () => {
     try {
       await axios.patch(`${API_BASE}/api/settings/`, 
@@ -59,22 +69,22 @@ const UniversalSearch = () => {
       );
       setCompanyInfo({ ...companyInfo, euro_rate: euroRateInput });
       setIsEditingEuro(false);
-      if (results.length > 0) handleSearch();
+      if (results.length > 0) performSearch(query);
     } catch (error) {
       alert("Помилка збереження курсу");
     }
   };
 
-  const handleSearch = async (e) => {
-    if (e) e.preventDefault();
-    if (!query.trim()) return;
+  // Виніс логіку пошуку в окрему функцію
+  const performSearch = async (searchString) => {
+    if (!searchString.trim()) return;
     
     setLoading(true);
     setHasSearched(true);
     setExpandedAnalogs(new Set()); 
     setLocationFilter(''); 
     try {
-      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(query)}`, {
+      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(searchString.trim())}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const initialResults = res.data.map(item => ({
@@ -82,11 +92,18 @@ const UniversalSearch = () => {
         selectedWhIdx: 0 
       }));
       setResults(initialResults);
+      // Очищаємо URL після пошуку, щоб не зациклювалось при оновленні сторінки
+      setSearchParams({}, { replace: true });
     } catch (error) {
       console.error("Помилка пошуку", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearchFormSubmit = (e) => {
+    e.preventDefault();
+    performSearch(query);
   };
 
   const toggleAnalogs = (id) => {
@@ -223,7 +240,7 @@ const UniversalSearch = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col">
+    <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col w-full overflow-x-hidden">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
         <div>
           <h1 className="text-xl md:text-3xl font-black uppercase italic text-slate-800 mb-1 md:mb-2">Глобальний пошук</h1>
@@ -252,7 +269,7 @@ const UniversalSearch = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSearch} className="relative w-full mb-6 md:mb-8 shadow-xl shadow-slate-200/50 rounded-2xl">
+      <form onSubmit={handleSearchFormSubmit} className="relative w-full mb-6 md:mb-8 shadow-xl shadow-slate-200/50 rounded-2xl">
         <Search className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
         <input 
           type="text" 
@@ -288,9 +305,6 @@ const UniversalSearch = () => {
             )}
           </div>
           
-          {/* ======================= */}
-          {/* ВЕРСІЯ ДЛЯ КОМП'ЮТЕРІВ  */}
-          {/* ======================= */}
           <div className="hidden md:block overflow-x-auto pb-4">
             <table className="w-full text-left border-collapse min-w-[750px]">
               <thead>
@@ -381,9 +395,6 @@ const UniversalSearch = () => {
             </table>
           </div>
 
-          {/* ======================= */}
-          {/* ВЕРСІЯ ДЛЯ ТЕЛЕФОНІВ    */}
-          {/* ======================= */}
           <div className="md:hidden flex flex-col gap-4">
             {displayedResults.map(item => {
               const safeIdx = item.selectedWhIdx || 0;
@@ -394,7 +405,6 @@ const UniversalSearch = () => {
               return (
                 <div key={`mob_${item.id}`} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden">
                   
-                  {/* Рядок 1: Джерело та Кнопка додавання */}
                   <div className="flex justify-between items-center">
                     <span className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${getBadgeStyle(item.source, item.is_local)}`}>
                       {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
@@ -404,7 +414,6 @@ const UniversalSearch = () => {
                     </button>
                   </div>
 
-                  {/* Рядок 2: Артикул, Бренд, Ціна */}
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-black text-base text-slate-800 leading-tight">{item.article}</p>
@@ -415,13 +424,11 @@ const UniversalSearch = () => {
                     </div>
                   </div>
 
-                  {/* Рядок 3: Опис */}
                   <div className="flex items-start gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
                     <p className="font-bold text-xs text-slate-700 leading-snug flex-1">{item.name}</p>
                     <button onClick={() => setInfoPart(item)} className="text-slate-400 hover:text-blue-600 p-1 rounded-full shrink-0"><Info size={16}/></button>
                   </div>
 
-                  {/* Рядок 4: Склади та Аналоги */}
                   <div className="flex flex-col gap-2 mt-1">
                     {item.warehouses && item.warehouses.length > 1 ? (
                       <div className="flex items-center justify-between bg-slate-100 p-2 rounded-xl border border-slate-200">
@@ -449,7 +456,6 @@ const UniversalSearch = () => {
                     )}
                   </div>
 
-                  {/* Панель аналогів (Мобільна) */}
                   {expandedAnalogs.has(item.id) && (
                     <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-4 text-center mt-2">
                       <Box className="mx-auto text-slate-300 mb-1" size={24}/>
@@ -468,7 +474,6 @@ const UniversalSearch = () => {
         </div>
       )}
 
-      {/* МОДАЛКИ (Info та Add) залишаються без змін */}
       {infoPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl m-4">

@@ -98,6 +98,7 @@ class ProfileSettingsView(APIView):
         user_serializer = UserSerializer(request.user)
         company_serializer = CompanySerializer(company, context={'request': request})
         return Response({ "user": user_serializer.data, "company": company_serializer.data, "role": role })
+    
     def patch(self, request):
         if not hasattr(request.user, 'company'): return Response({"error": "Тільки власник"}, status=403)
         user = request.user
@@ -114,8 +115,15 @@ class ProfileSettingsView(APIView):
         if 'company[address]' in request.data: company.address = request.data.get('company[address]')
         if 'company[document_footer]' in request.data: company.document_footer = request.data.get('company[document_footer]')
         if 'company[global_margin_percent]' in request.data: company.global_margin_percent = request.data.get('company[global_margin_percent]')
-        if 'company[euro_rate]' in request.data: company.euro_rate = request.data.get('company[euro_rate]') # ДОДАНО ОНОВЛЕННЯ КУРСУ ЄВРО
         
+        # Виправляємо проблему з комами в курсі Євро
+        if 'company[euro_rate]' in request.data:
+            raw_rate = str(request.data.get('company[euro_rate]')).replace(',', '.')
+            try:
+                company.euro_rate = float(raw_rate)
+            except ValueError:
+                pass
+                
         logo = request.data.get('company[logo]')
         if logo: company.logo = logo
         company.save()
@@ -168,7 +176,6 @@ class RegisterView(APIView):
             user = User.objects.create_user(username=username, password=password)
             company = Company.objects.create(name=company_name, owner=user)
             
-            # АВТОМАТИЧНЕ СТВОРЕННЯ БАЗОВИХ ПОСТАЧАЛЬНИКІВ ДЛЯ НОВОГО СТО
             Supplier.objects.create(company=company, name="Vesna-auto", api_key="")
             Supplier.objects.create(company=company, name="Omega", api_key="")
             
@@ -226,7 +233,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
         if not sup.api_key:
             return Response({"error": "Немає ключа API"}, status=400)
 
-        # === ЛОГІКА VESNA-AUTO ===
         if 'vesna' in sup.name.lower() or 'весна' in sup.name.lower():
             try:
                 parts = sup.api_key.split(':')
@@ -281,7 +287,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
                 
-        # === ЛОГІКА ОМЕГА АВТОПОСТАВКА ===
         elif 'omega' in sup.name.lower() or 'омега' in sup.name.lower():
             try:
                 omega_url = "https://public.omega.page/public/api/v1.0/product/search"
@@ -342,7 +347,7 @@ class PartSearchView(APIView):
 
     def get(self, request):
         company = get_user_company(request.user)
-        euro_rate = float(company.euro_rate) if company.euro_rate else 42.00 # БЕРЕМО КУРС ЄВРО З НАЛАШТУВАНЬ СТО
+        euro_rate = float(company.euro_rate) if company.euro_rate else 42.00
         
         query = request.query_params.get('q', '').strip()
         if not query or len(query) < 2: return Response([])
@@ -367,7 +372,6 @@ class PartSearchView(APIView):
             prefs_map = {str(p.get('id')): p for p in prefs if isinstance(p, dict)}
             prefs_map.update({str(p.get('name')).lower(): p for p in prefs if isinstance(p, dict)})
 
-            # === ІНТЕГРАЦІЯ VESNA-AUTO ===
             if sup.api_key and ('vesna' in sup.name.lower() or 'весна' in sup.name.lower()):
                 try:
                     parts = sup.api_key.split(':')
@@ -395,7 +399,6 @@ class PartSearchView(APIView):
                             if not warehouses_list: continue
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
                             
-                            # КОНВЕРТАЦІЯ ЦІНИ З ЄВРО В ГРИВНІ ЗА КУРСОМ СТО
                             eur_price = float(item.get('price', 0) or 0)
                             uah_price = round(eur_price * euro_rate, 2)
                             
@@ -408,7 +411,6 @@ class PartSearchView(APIView):
                             })
                 except Exception: pass
 
-            # === ІНТЕГРАЦІЯ ОМЕГА АВТОПОСТАВКА ===
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
                 try:
                     omega_url = "https://public.omega.page/public/api/v1.0/product/search"
@@ -423,7 +425,6 @@ class PartSearchView(APIView):
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             
-                            # ЖОРСТКИЙ ФІЛЬТР: Перевіряємо, чи є запит у артикулі (Card або Number) без видалення крапок
                             art_val = str(item.get('Number', '')).upper()
                             card_val = str(item.get('Card', '')).upper()
                             q_upper = query.upper()

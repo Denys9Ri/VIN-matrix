@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search } from 'lucide-react';
+import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X } from 'lucide-react';
 import axios from 'axios';
 
-const Sidebar = () => {
-  // За замовчуванням ставимо 'mechanic', щоб до завантаження даних ніхто не бачив зайвого
+const Sidebar = ({ isOpen, closeMenu }) => {
   const [role, setRole] = useState('mechanic'); 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
 
@@ -17,7 +16,7 @@ const Sidebar = () => {
         const response = await axios.get(`${API_BASE}/api/settings/`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setRole(response.data.role); // Отримуємо 'owner' або 'mechanic'
+        setRole(response.data.role); 
       } catch (error) {
         console.error("Помилка перевірки ролі", error);
       }
@@ -26,7 +25,6 @@ const Sidebar = () => {
     fetchUserRole();
   }, []);
 
-  // УСІ можливі пункти меню
   const allMenuItems = [
     { name: 'Панель', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Пошук запчастин', icon: <Search size={20} />, path: '/search' },
@@ -37,40 +35,61 @@ const Sidebar = () => {
     { name: 'Налаштування', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  // ФІЛЬТРАЦІЯ: Якщо власник — бачить усе. Якщо майстер — тільки Візити та Налаштування.
   const menuItems = role === 'owner' 
     ? allMenuItems 
     : allMenuItems.filter(item => ['Візити', 'Налаштування'].includes(item.name));
 
   return (
-    <div className="w-20 md:w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 z-50">
-      <div className="h-16 flex items-center px-4 md:px-6 text-white font-bold text-lg md:text-xl border-b border-slate-800">
-        <span className="hidden md:inline font-black tracking-tighter text-blue-500">VIN</span>
-        <span className="hidden md:inline italic text-white">-matrix</span>
-        <span className="md:hidden">VM</span>
+    <>
+      {/* ТЕМНИЙ ФОН НА МОБІЛЬНОМУ (Закриває меню по кліку поза ним) */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden"
+          onClick={closeMenu}
+        />
+      )}
+
+      {/* САМЕ МЕНЮ: 
+        На десктопі (md:translate-x-0) воно завжди на місці.
+        На мобільному ховається за лівий екран (-translate-x-full) і виїжджає при isOpen.
+      */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col transform transition-transform duration-300 ease-in-out md:translate-x-0 shadow-2xl md:shadow-none ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        
+        <div className="h-16 flex items-center justify-between px-6 text-white border-b border-slate-800">
+          <div className="font-bold text-xl">
+            <span className="font-black tracking-tighter text-blue-500">VIN</span>
+            <span className="italic text-white">-matrix</span>
+          </div>
+          {/* Кнопка закриття меню (тільки для мобільних) */}
+          <button onClick={closeMenu} className="md:hidden p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+
+        <nav className="flex-1 py-6 overflow-y-auto px-3">
+          <ul className="space-y-1.5">
+            {menuItems.map((item) => (
+              <li key={item.name}>
+                <NavLink
+                  to={item.path}
+                  onClick={closeMenu} // Автоматично закриваємо меню при кліку на телефоні
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${
+                      isActive 
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`
+                  }
+                >
+                  {item.icon}
+                  <span>{item.name}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
       </div>
-      <nav className="flex-1 py-4 overflow-y-auto">
-        <ul className="space-y-1">
-          {menuItems.map((item) => (
-            <li key={item.name}>
-              <NavLink
-                to={item.path}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 md:px-6 py-3 transition-all ${
-                    isActive 
-                      ? 'bg-blue-600 text-white border-r-4 border-white shadow-lg' 
-                      : 'hover:bg-slate-800 hover:text-white'
-                  }`
-                }
-              >
-                {item.icon}
-                <span className="hidden md:inline font-medium">{item.name}</span>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    </div>
+    </>
   );
 };
 

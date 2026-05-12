@@ -58,7 +58,6 @@ class VisitViewSet(viewsets.ModelViewSet):
         start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
         end_of_today = start_of_today + timedelta(days=1)
 
-        # ЖОРСТКА ФІКСАЦІЯ ТІЛЬКИ НА СЬОГОДНІШНІ ВІЗИТИ
         queryset = queryset.filter(
             ( Q(scheduled_datetime__gte=start_of_today) & Q(scheduled_datetime__lt=end_of_today) ) | 
             ( Q(scheduled_datetime__isnull=True) & Q(created_at__gte=start_of_today) & Q(created_at__lt=end_of_today) )
@@ -177,6 +176,7 @@ class RegisterView(APIView):
             
             Supplier.objects.create(company=company, name="Vesna-auto", api_key="")
             Supplier.objects.create(company=company, name="Omega", api_key="")
+            Supplier.objects.create(company=company, name="Technomir", api_key="")
             
             return Response({"message": "Успішно зареєстровано!"}, status=201)
         except Exception as e: return Response({"error": str(e)}, status=500)
@@ -338,6 +338,50 @@ class SupplierViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
 
+        elif 'tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower():
+            try:
+                tehnomir_url = "https://api.tehnomir.com.ua/info/getSuppliers"
+                payload = {"apiToken": sup.api_key.strip()}
+                
+                response = requests.post(tehnomir_url, json=payload, timeout=10)
+                if response.status_code == 200:
+                    raw_data = response.json()
+                    items_data = raw_data.get('data', [])
+                    
+                    warehouses_dict = {}
+                    for item in items_data:
+                        w_id = str(item.get('priceLogo', '')).strip()
+                        region = str(item.get('regionUa') or item.get('region') or '').strip()
+                        if w_id:
+                            warehouses_dict[w_id] = f"{w_id} ({region})" if region else w_id
+
+                    if not warehouses_dict:
+                        return Response({"error": "API Техномир не повернуло складів. Додайте їх вручну."}, status=400)
+                    
+                    existing_prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
+                    existing_map = {str(w.get('id')): w for w in existing_prefs if isinstance(w, dict) and w.get('id')}
+                    
+                    new_prefs = []
+                    for w_id, w_name in warehouses_dict.items():
+                        if w_id in existing_map:
+                            pref = existing_map[w_id]
+                            pref['name'] = w_name
+                            new_prefs.append(pref)
+                        else:
+                            new_prefs.append({"id": w_id, "name": w_name, "priority": 99, "is_active": True})
+                            
+                    new_ids = {p['id'] for p in new_prefs}
+                    for p in existing_prefs:
+                        if str(p.get('id')) not in new_ids:
+                            new_prefs.append(p)
+                            
+                    sup.warehouse_prefs = new_prefs
+                    sup.save()
+                    return Response({"message": f"Успішно завантажено {len(warehouses_dict)} складів/напрямків!", "warehouses": new_prefs})
+                return Response({"error": f"Помилка API ({response.status_code}): {response.text}"}, status=400)
+            except Exception as e:
+                return Response({"error": str(e)}, status=500)
+
         return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
 
 
@@ -361,7 +405,8 @@ class PartSearchView(APIView):
             results.append({
                 "id": f"local_{item.id}", "source": "Мій склад", "brand": item.brand, "article": item.article,
                 "name": item.name, "buy_price": float(item.buy_price), "quantity": f"{item.quantity} шт",
-                "is_local": True, "sku": "", "min_qty": 1, "image_url": "", "description": ""
+                "is_local": True, "sku": "", "min_qty": 1, "image_url": "", "description": "",
+                "warehouses": [{"name": "Мій склад", "quantity": f"{item.quantity} шт", "priority": 1, "buy_price": float(item.buy_price)}]
             })
 
         suppliers = Supplier.objects.filter(company=company)
@@ -390,16 +435,23 @@ class PartSearchView(APIView):
                             balances = item.get('balance', [])
                             if not balances: continue
                             warehouses_list = []
+                            
+                            eur_price = float(item.get('price', 0) or 0)
+                            uah_price = round(eur_price * euro_rate, 2)
+                            
                             for wh in balances:
                                 wh_id, wh_name = str(wh.get('warehouse_id', '')), str(wh.get('name', 'Склад'))
                                 pref = prefs_map.get(wh_id) or prefs_map.get(wh_name.lower())
                                 if pref and not pref.get('is_active', True): continue
-                                warehouses_list.append({"name": wh_name, "quantity": wh.get('quantity', '0'), "priority": int(pref.get('priority', 99)) if pref else 99})
+                                warehouses_list.append({
+                                    "name": wh_name, 
+                                    "quantity": wh.get('quantity', '0'), 
+                                    "priority": int(pref.get('priority', 99)) if pref else 99,
+                                    "buy_price": uah_price
+                                })
+                                
                             if not warehouses_list: continue
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
-                            
-                            eur_price = float(item.get('price', 0) or 0)
-                            uah_price = round(eur_price * euro_rate, 2)
                             
                             results.append({
                                 "id": f"vesna_{sup.id}_{item.get('sku', '0')}", "source": sup.name, "brand": item.get('brand', 'Unknown'),
@@ -432,22 +484,22 @@ class PartSearchView(APIView):
                                 continue
                                 
                             warehouses_list = []
+                            buy_price = float(item.get('CustomerPrice') or item.get('EffectivePrice') or item.get('Price') or 0)
+                            
                             for wh in item.get('Rests', []):
                                 wh_name, wh_qty = str(wh.get('Key', 'Склад Омега')), str(wh.get('Value', '0'))
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
                                 if pref and not pref.get('is_active', True): continue
-                                warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99})
+                                warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": buy_price})
                                 
                             for wh in item.get('SupplierRests', []):
                                 wh_name, wh_qty = str(wh.get('WareHouseName', 'Склад Партнера')), str(wh.get('Rest', '0'))
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
                                 if pref and not pref.get('is_active', True): continue
-                                warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99})
+                                warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": buy_price})
                                 
                             if not warehouses_list: continue
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
-                            
-                            buy_price = float(item.get('CustomerPrice') or item.get('EffectivePrice') or item.get('Price') or 0)
                             
                             results.append({
                                 "id": f"omega_{sup.id}_{item.get('ProductId', '0')}", "source": sup.name,
@@ -456,6 +508,94 @@ class PartSearchView(APIView):
                                 "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
                                 "is_local": False, "warehouses": warehouses_list, "sku": str(item.get('ProductId', '')),
                                 "min_qty": 1, "image_url": item.get('ImageUrl', ''), "description": item.get('DescriptionUkr', '') or item.get('Info', '')
+                            })
+                except Exception: pass
+
+            elif sup.api_key and ('tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower()):
+                try:
+                    tehnomir_url = "https://api.tehnomir.com.ua/price/search"
+                    payload = {
+                        "apiToken": sup.api_key.strip(),
+                        "code": query,
+                        "isShowAnalogs": 0,
+                        "currency": "UAH" 
+                    }
+                    
+                    response = requests.post(tehnomir_url, json=payload, timeout=15)
+                    
+                    if response.status_code == 200:
+                        raw_data = response.json()
+                        if not raw_data.get('success'):
+                            continue
+                            
+                        items_data = raw_data.get('data', [])
+                        
+                        for item in items_data:
+                            if not isinstance(item, dict): continue
+                            
+                            brand = str(item.get('brand', 'Unknown'))
+                            article = str(item.get('code', query.upper()))
+                            
+                            if query.upper().replace(' ', '').replace('-', '').replace('.', '') not in article.upper().replace(' ', '').replace('-', '').replace('.', ''):
+                                continue
+                                
+                            warehouses_list = []
+                            for rest in item.get('rests', []):
+                                w_code = str(rest.get('priceLogo', 'Склад'))
+                                days = int(rest.get('deliveryTime', 0) or 0)
+                                w_name = f"{w_code} ({days} дн.)"
+                                w_qty = str(rest.get('quantity', '1'))
+                                
+                                pref = prefs_map.get(w_code) or prefs_map.get(w_code.lower())
+                                is_active = True
+                                priority = 99
+                                
+                                if pref:
+                                    is_active = pref.get('is_active', True)
+                                    priority = int(pref.get('priority', 99))
+                                    
+                                if not is_active: continue
+                                
+                                rest_price = float(rest.get('price', 0))
+                                currency = str(rest.get('currency', 'UAH')).upper()
+                                if currency == 'EUR':
+                                    rest_price = round(rest_price * euro_rate, 2)
+                                elif currency == 'USD':
+                                    rest_price = round(rest_price * 40.0, 2) 
+                                    
+                                # ЛОГІКА ПРІОРИТЕТУ УКРАЇНИ ДЛЯ ТЕХНОМИРА
+                                # Вважаємо локальним, якщо доставка <= 3 дні, або в назві є маркери України
+                                is_ukraine = False
+                                region_text = w_code.lower()
+                                if days <= 3 or 'украин' in region_text or 'ua' in region_text or 'київ' in region_text or 'наше' in region_text:
+                                    is_ukraine = True
+                                    
+                                warehouses_list.append({
+                                    "name": w_name, 
+                                    "quantity": w_qty, 
+                                    "priority": priority, 
+                                    "buy_price": rest_price,
+                                    "is_ukraine": is_ukraine
+                                })
+                                
+                            if not warehouses_list: continue
+                            
+                            # Сортуємо: 1. Україна, 2. Ціна, 3. Пріоритет
+                            warehouses_list.sort(key=lambda w: (0 if w.get('is_ukraine') else 1, w['buy_price'], w['priority']))
+                            cheapest_wh = warehouses_list[0]
+                            
+                            results.append({
+                                "id": f"tehno_{sup.id}_{item.get('productId', '0')}_{brand}", 
+                                "source": sup.name,
+                                "brand": brand, 
+                                "article": article,
+                                "name": item.get('descriptionRus') or item.get('descriptionUa') or 'Деталь Technomir', 
+                                "buy_price": cheapest_wh['buy_price'], 
+                                "quantity": f"{cheapest_wh['quantity']} шт ({cheapest_wh['name']})",
+                                "is_local": False, 
+                                "warehouses": warehouses_list, 
+                                "sku": str(item.get('productId', '')),
+                                "min_qty": 1, "image_url": "", "description": ""
                             })
                 except Exception: pass
                     

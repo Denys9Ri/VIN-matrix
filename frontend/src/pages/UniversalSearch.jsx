@@ -1,22 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, Plus, Box, Truck, CarFront, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon } from 'lucide-react';
+import { Search, Plus, Box, Truck, CarFront, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const UniversalSearch = () => {
   const navigate = useNavigate();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
+  
+  // ЗБЕРЕЖЕННЯ СТАНУ В SESSION STORAGE
+  const [query, setQuery] = useState(sessionStorage.getItem('searchQuery') || '');
+  const [results, setResults] = useState(JSON.parse(sessionStorage.getItem('searchResults')) || []);
+  
   const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(results.length > 0);
   
   const [expandedRows, setExpandedRows] = useState(new Set());
-
-  // Для модалки додавання в замовлення
   const [companyInfo, setCompanyInfo] = useState(null);
-  const [selectedPart, setSelectedPart] = useState(null);
   
-  // ДОДАНО: Стан для модалки з Інформацією про товар
+  // ЛОГІКА ДЛЯ КУРСУ ЄВРО
+  const [isEditingEuro, setIsEditingEuro] = useState(false);
+  const [euroRateInput, setEuroRateInput] = useState('');
+
+  const [selectedPart, setSelectedPart] = useState(null);
   const [infoPart, setInfoPart] = useState(null);
   
   const [visitSearchQuery, setVisitSearchQuery] = useState('');
@@ -34,6 +38,7 @@ const UniversalSearch = () => {
       try {
         const res = await axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } });
         setCompanyInfo(res.data.company);
+        setEuroRateInput(res.data.company.euro_rate || '42.00');
       } catch (error) {
         if (error.response?.status === 401) navigate('/login');
       }
@@ -41,8 +46,27 @@ const UniversalSearch = () => {
     fetchSettings();
   }, [token, navigate]);
 
+  // Оновлюємо SessionStorage при зміні
+  useEffect(() => {
+    sessionStorage.setItem('searchQuery', query);
+    sessionStorage.setItem('searchResults', JSON.stringify(results));
+  }, [query, results]);
+
+  const handleSaveEuroRate = async () => {
+    try {
+      await axios.patch(`${API_BASE}/api/settings/`, 
+        { "company[euro_rate]": euroRateInput }, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setCompanyInfo({ ...companyInfo, euro_rate: euroRateInput });
+      setIsEditingEuro(false);
+    } catch (error) {
+      alert("Помилка збереження курсу");
+    }
+  };
+
   const handleSearch = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!query.trim()) return;
     
     setLoading(true);
@@ -62,11 +86,8 @@ const UniversalSearch = () => {
 
   const toggleRow = (id) => {
     const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
+    if (newExpanded.has(id)) newExpanded.delete(id);
+    else newExpanded.add(id);
     setExpandedRows(newExpanded);
   };
 
@@ -102,45 +123,64 @@ const UniversalSearch = () => {
 
   const handleAddToVisit = async (e) => {
     e.preventDefault();
-    if (!selectedVisit) {
-      alert("Будь ласка, знайдіть та оберіть автомобіль!");
-      return;
-    }
+    if (!selectedVisit) { alert("Будь ласка, знайдіть та оберіть автомобіль!"); return; }
     
     const payload = {
-      visit: selectedVisit.id,
-      brand: selectedPart.brand,
-      article: selectedPart.article,
-      name: selectedPart.name,
-      buy_price: selectedPart.buy_price,
-      sell_price: addToVisitData.sell_price,
-      supplier: selectedPart.source,
-      status: selectedPart.is_local ? 'ARRIVED' : 'WAITING'
+      visit: selectedVisit.id, brand: selectedPart.brand, article: selectedPart.article,
+      name: selectedPart.name, buy_price: selectedPart.buy_price, sell_price: addToVisitData.sell_price,
+      supplier: selectedPart.source, status: selectedPart.is_local ? 'ARRIVED' : 'WAITING'
     };
 
     try {
-      await axios.post(`${API_BASE}/api/order-parts/`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.post(`${API_BASE}/api/order-parts/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       alert(`Запчастину додано до ${selectedVisit.plate}!`);
       setSelectedPart(null);
-    } catch (error) {
-      alert("Помилка додавання.");
-    }
+    } catch (error) { alert("Помилка додавання."); }
+  };
+
+  // ФУНКЦІЯ ВИЗНАЧЕННЯ КОЛЬОРУ БЕЙДЖА
+  const getBadgeStyle = (sourceName, isLocal) => {
+    if (isLocal) return "bg-slate-800 text-white";
+    const name = sourceName.toUpperCase();
+    if (name.includes('VESNA')) return "bg-emerald-600 text-white shadow-md shadow-emerald-200";
+    if (name.includes('OMEGA') || name.includes('ОМЕГА')) return "bg-blue-600 text-white shadow-md shadow-blue-200";
+    return "bg-slate-100 text-slate-600 border border-slate-200";
   };
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col">
-      <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 mb-2">Глобальний пошук</h1>
-        <p className="text-slate-500 font-bold text-sm">Шукайте запчастини на власному складі та у всіх постачальників одночасно.</p>
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 mb-2">Глобальний пошук</h1>
+          <p className="text-slate-500 font-bold text-sm">Шукайте запчастини на власному складі та у всіх постачальників одночасно.</p>
+        </div>
+        
+        {/* КУРС ЄВРО ВГОЛІ СПРАВА */}
+        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-3 flex items-center gap-3">
+          <div className="bg-amber-100 p-2 rounded-xl text-amber-600"><Banknote size={20}/></div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Курс € (Vesna)</p>
+            {isEditingEuro ? (
+              <div className="flex items-center gap-2 mt-1">
+                <input type="number" step="0.01" className="w-20 font-black text-sm border-b-2 border-amber-400 outline-none" value={euroRateInput} onChange={e => setEuroRateInput(e.target.value)} autoFocus />
+                <button onClick={handleSaveEuroRate} className="text-emerald-500 hover:text-emerald-600"><Check size={16}/></button>
+                <button onClick={() => {setIsEditingEuro(false); setEuroRateInput(companyInfo?.euro_rate || '42.00')}} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-black text-slate-800">{companyInfo?.euro_rate || '0.00'} ₴</span>
+                <button onClick={() => setIsEditingEuro(true)} className="text-slate-300 hover:text-blue-500 transition-colors"><Edit3 size={14}/></button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <form onSubmit={handleSearch} className="relative w-full mb-8 shadow-xl shadow-slate-200/50 rounded-2xl">
         <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={24} />
         <input 
           type="text" 
-          placeholder="Введіть артикул або назву..." 
+          placeholder="Введіть артикул..." 
           className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-16 pr-32 py-5 outline-none focus:border-blue-500 font-black text-lg text-slate-700 transition-all uppercase placeholder:normal-case placeholder:font-medium" 
           value={query} 
           onChange={e => setQuery(e.target.value)} 
@@ -169,20 +209,15 @@ const UniversalSearch = () => {
               <tbody>
                 {results.map(item => (
                   <React.Fragment key={item.id}>
-                    <tr className={`border-b border-slate-50 transition-colors ${item.is_local ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50'}`}>
+                    <tr className={`border-b border-slate-50 transition-colors ${item.is_local ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
                       <td className="p-3">
                         <div className="flex flex-col gap-1.5 items-start">
-                          {item.is_local ? (
-                            <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest"><Box size={12}/> {item.source}</span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest"><Truck size={12}/> {item.source}</span>
-                          )}
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${getBadgeStyle(item.source, item.is_local)}`}>
+                            {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
+                          </span>
                           
                           {item.warehouses && item.warehouses.length > 1 && (
-                            <button 
-                              onClick={() => toggleRow(item.id)}
-                              className="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 px-2 py-1 rounded transition-all flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200"
-                            >
+                            <button onClick={() => toggleRow(item.id)} className="text-slate-500 hover:text-blue-600 bg-white px-2 py-1 rounded-md transition-all flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm ml-1">
                               {expandedRows.has(item.id) ? <><ChevronUp size={12}/> Сховати</> : <><ChevronDown size={12}/> Ще {item.warehouses.length - 1} склади</>}
                             </button>
                           )}
@@ -195,24 +230,17 @@ const UniversalSearch = () => {
                       <td className="p-3">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-sm text-slate-700">{item.name}</p>
-                          {/* ДОДАНО: Кнопка Інфо */}
-                          <button 
-                            onClick={() => setInfoPart(item)} 
-                            className="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-1 rounded-full transition-colors"
-                            title="Детальна інформація"
-                          >
-                            <Info size={16}/>
-                          </button>
+                          <button onClick={() => setInfoPart(item)} className="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-1.5 rounded-full transition-colors border border-slate-100" title="Детальна інформація"><Info size={16}/></button>
                         </div>
                       </td>
                       <td className="p-3 text-center">
-                        <span className="font-bold text-slate-600 text-sm bg-slate-100 px-2 py-1 rounded-lg">{item.quantity}</span>
+                        <span className="font-bold text-slate-600 text-sm bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">{item.quantity}</span>
                       </td>
                       <td className="p-3 text-right">
-                        <span className="font-black text-slate-800">{item.buy_price.toLocaleString()} ₴</span>
+                        <span className="font-black text-slate-800 text-base">{item.buy_price.toLocaleString()} ₴</span>
                       </td>
                       <td className="p-3 text-right">
-                        <button onClick={() => openAddModal(item)} className="bg-emerald-500 text-white p-2 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm" title="Додати в замовлення">
+                        <button onClick={() => openAddModal(item)} className="bg-emerald-500 text-white p-2.5 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200" title="Додати в замовлення">
                           <Plus size={18}/>
                         </button>
                       </td>
@@ -220,27 +248,15 @@ const UniversalSearch = () => {
                     
                     {expandedRows.has(item.id) && item.warehouses?.slice(1).map((wh, idx) => (
                       <tr key={`${item.id}_wh_${idx}`} className="bg-slate-50/70 hover:bg-slate-100/70 border-b border-slate-100 transition-colors">
-                        <td className="p-3 pl-6">
-                          <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-500 tracking-widest">
-                            <CornerDownRight size={14} className="text-slate-300"/> {wh.name}
-                          </span>
+                        <td className="p-3 pl-8">
+                          <span className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500 tracking-widest"><CornerDownRight size={14} className="text-slate-300"/> {wh.name}</span>
                         </td>
                         <td className="p-3"></td>
                         <td className="p-3 text-xs text-slate-400 font-medium">Альтернативний склад</td>
-                        <td className="p-3 text-center">
-                          <span className="font-bold text-slate-500 text-sm">{wh.quantity} шт</span>
-                        </td>
+                        <td className="p-3 text-center"><span className="font-bold text-slate-500 text-sm">{wh.quantity} шт</span></td>
+                        <td className="p-3 text-right"><span className="font-bold text-slate-500">{item.buy_price.toLocaleString()} ₴</span></td>
                         <td className="p-3 text-right">
-                          <span className="font-bold text-slate-500">{item.buy_price.toLocaleString()} ₴</span>
-                        </td>
-                        <td className="p-3 text-right">
-                          <button 
-                            onClick={() => openAddModal({...item, source: `${item.source} (${wh.name})`, quantity: `${wh.quantity} шт`})} 
-                            className="text-emerald-500 hover:text-white hover:bg-emerald-500 p-1.5 rounded-lg transition-colors border border-emerald-200 hover:border-emerald-500 shadow-sm"
-                            title={`Додати з ${wh.name}`}
-                          >
-                            <Plus size={16}/>
-                          </button>
+                          <button onClick={() => openAddModal({...item, source: `${item.source} (${wh.name})`, quantity: `${wh.quantity} шт`})} className="text-emerald-500 hover:text-white hover:bg-emerald-500 p-2 rounded-xl transition-colors border border-emerald-200 hover:border-emerald-500 shadow-sm" title={`Додати з ${wh.name}`}><Plus size={16}/></button>
                         </td>
                       </tr>
                     ))}
@@ -255,7 +271,7 @@ const UniversalSearch = () => {
         </div>
       )}
 
-      {/* ДОДАНО: Модалка з Інформацією про товар */}
+      {/* МОДАЛКА З ІНФО */}
       {infoPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl">
@@ -306,7 +322,7 @@ const UniversalSearch = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ДОДАВАННЯ */}
+      {/* МОДАЛКА ДОДАВАННЯ В ЧЕК */}
       {selectedPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 md:p-8 relative mt-10 mb-10 shadow-2xl">
@@ -314,15 +330,15 @@ const UniversalSearch = () => {
             <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Plus className="text-emerald-500"/> Додати в авто</h2>
             
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-lg">
+              <div className={`absolute top-0 right-0 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-bl-xl ${getBadgeStyle(selectedPart.source, selectedPart.is_local)}`}>
                 {selectedPart.source}
               </div>
 
               <p className="font-black text-slate-800 text-lg leading-tight mb-1">{selectedPart.article}</p>
-              <p className="text-xs font-bold text-slate-500 uppercase mb-3 pr-16">{selectedPart.brand} | {selectedPart.name}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-3 pr-20">{selectedPart.brand} | {selectedPart.name}</p>
               <div className="flex justify-between items-end border-t border-slate-200 pt-2">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Закупка:</span>
-                <span className="font-black text-blue-600">{selectedPart.buy_price} ₴</span>
+                <span className="font-black text-slate-800 text-lg">{selectedPart.buy_price} ₴</span>
               </div>
             </div>
 
@@ -332,22 +348,11 @@ const UniversalSearch = () => {
                 {!selectedVisit ? (
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="Напр. АА1234..." 
-                      className="w-full bg-white border-2 border-slate-200 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-blue-500 font-bold text-slate-700 uppercase"
-                      value={visitSearchQuery}
-                      onChange={(e) => setVisitSearchQuery(e.target.value)}
-                    />
-                    
+                    <input type="text" placeholder="Напр. АА1234..." className="w-full bg-white border-2 border-slate-200 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-blue-500 font-bold text-slate-700 uppercase" value={visitSearchQuery} onChange={(e) => setVisitSearchQuery(e.target.value)} />
                     {visitSearchResults.length > 0 && (
                       <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
                         {visitSearchResults.map(v => (
-                          <button 
-                            key={v.id} 
-                            onClick={() => { setSelectedVisit(v); setVisitSearchResults([]); }}
-                            className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50 last:border-0 transition-colors"
-                          >
+                          <button key={v.id} onClick={() => { setSelectedVisit(v); setVisitSearchResults([]); }} className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50 last:border-0 transition-colors">
                             <p className="font-black text-sm text-slate-800">{v.plate}</p>
                             <p className="text-[10px] font-bold text-slate-500 uppercase">{v.client} | {v.vin_code || 'Без VIN'}</p>
                           </button>
@@ -370,25 +375,14 @@ const UniversalSearch = () => {
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Ціна продажу клієнту (₴)</label>
                 <div className="flex items-center gap-3">
-                  <input 
-                    required 
-                    type="number" 
-                    step="0.01" 
-                    className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-500 font-black text-xl text-emerald-600" 
-                    value={addToVisitData.sell_price} 
-                    onChange={e => setAddToVisitData({...addToVisitData, sell_price: e.target.value})} 
-                  />
+                  <input required type="number" step="0.01" className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-500 font-black text-xl text-emerald-600" value={addToVisitData.sell_price} onChange={e => setAddToVisitData({...addToVisitData, sell_price: e.target.value})} />
                   <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded whitespace-nowrap">
                     Націнка: {companyInfo?.global_margin_percent}%
                   </div>
                 </div>
               </div>
 
-              <button 
-                onClick={handleAddToVisit}
-                disabled={!selectedVisit} 
-                className="w-full bg-emerald-500 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-4 shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all disabled:opacity-30 disabled:grayscale"
-              >
+              <button onClick={handleAddToVisit} disabled={!selectedVisit} className="w-full bg-emerald-500 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-4 shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all disabled:opacity-30 disabled:grayscale">
                 Зберегти в чек
               </button>
             </div>

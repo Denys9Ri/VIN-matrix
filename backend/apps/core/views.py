@@ -107,12 +107,15 @@ class ProfileSettingsView(APIView):
         if first_name: user.first_name = first_name
         if email: user.email = email
         user.save()
+        
         name = request.data.get('company[name]') or request.data.get('name')
         if name: company.name = name
         if 'company[phone]' in request.data: company.phone = request.data.get('company[phone]')
         if 'company[address]' in request.data: company.address = request.data.get('company[address]')
         if 'company[document_footer]' in request.data: company.document_footer = request.data.get('company[document_footer]')
         if 'company[global_margin_percent]' in request.data: company.global_margin_percent = request.data.get('company[global_margin_percent]')
+        if 'company[euro_rate]' in request.data: company.euro_rate = request.data.get('company[euro_rate]') # ДОДАНО ОНОВЛЕННЯ КУРСУ ЄВРО
+        
         logo = request.data.get('company[logo]')
         if logo: company.logo = logo
         company.save()
@@ -163,7 +166,12 @@ class RegisterView(APIView):
         if User.objects.filter(username=username).exists(): return Response({"error": "Логін зайнятий!"}, status=400)
         try:
             user = User.objects.create_user(username=username, password=password)
-            Company.objects.create(name=company_name, owner=user)
+            company = Company.objects.create(name=company_name, owner=user)
+            
+            # АВТОМАТИЧНЕ СТВОРЕННЯ БАЗОВИХ ПОСТАЧАЛЬНИКІВ ДЛЯ НОВОГО СТО
+            Supplier.objects.create(company=company, name="Vesna-auto", api_key="")
+            Supplier.objects.create(company=company, name="Omega", api_key="")
+            
             return Response({"message": "Успішно зареєстровано!"}, status=201)
         except Exception as e: return Response({"error": str(e)}, status=500)
 
@@ -291,12 +299,10 @@ class SupplierViewSet(viewsets.ModelViewSet):
                     
                     warehouses_dict = {}
                     for item in items_data:
-                        # Власні склади
                         for wh in item.get('Rests', []):
                             w_name = str(wh.get('Key', 'Склад Омега')).strip()
                             if w_name: warehouses_dict[w_name] = w_name
                                 
-                        # Склади партнерів
                         for wh in item.get('SupplierRests', []):
                             w_name = str(wh.get('WareHouseName', 'Склад Партнера')).strip()
                             if w_name: warehouses_dict[w_name] = w_name
@@ -336,10 +342,10 @@ class PartSearchView(APIView):
 
     def get(self, request):
         company = get_user_company(request.user)
+        euro_rate = float(company.euro_rate) if company.euro_rate else 42.00 # БЕРЕМО КУРС ЄВРО З НАЛАШТУВАНЬ СТО
+        
         query = request.query_params.get('q', '').strip()
-
-        if not query or len(query) < 2:
-            return Response([])
+        if not query or len(query) < 2: return Response([])
 
         results = []
 
@@ -388,10 +394,15 @@ class PartSearchView(APIView):
                                 warehouses_list.append({"name": wh_name, "quantity": wh.get('quantity', '0'), "priority": int(pref.get('priority', 99)) if pref else 99})
                             if not warehouses_list: continue
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
+                            
+                            # КОНВЕРТАЦІЯ ЦІНИ З ЄВРО В ГРИВНІ ЗА КУРСОМ СТО
+                            eur_price = float(item.get('price', 0) or 0)
+                            uah_price = round(eur_price * euro_rate, 2)
+                            
                             results.append({
                                 "id": f"vesna_{sup.id}_{item.get('sku', '0')}", "source": sup.name, "brand": item.get('brand', 'Unknown'),
                                 "article": item.get('article', query.upper()), "name": item.get('name', 'Деталь Vesna'),
-                                "buy_price": float(item.get('price', 0) or 0), "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
+                                "buy_price": uah_price, "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
                                 "is_local": False, "warehouses": warehouses_list, "sku": item.get('sku', ''), "min_qty": item.get('min_order_quantity', 1),
                                 "image_url": item.get('image') or item.get('picture') or '', "description": item.get('description') or ''
                             })
@@ -407,31 +418,26 @@ class PartSearchView(APIView):
                     
                     if response.status_code == 200:
                         raw_data = response.json()
-                        
-                        if not raw_data.get('Success', True) or raw_data.get('Errors'):
-                            results.append({
-                                "id": f"omega_api_err_{sup.id}", "source": "ОМЕГА (API ПОМИЛКА)",
-                                "brand": "ПОМИЛКА", "article": query.upper(),
-                                "name": f"Деталі помилки: {str(raw_data.get('Errors', ''))[:200]}",
-                                "buy_price": 0.0, "quantity": "Помилка", "is_local": False,
-                                "sku": "", "min_qty": 1, "image_url": "", "description": f"Запит: {payload}"
-                            })
-                            continue
-                            
                         items_data = raw_data.get('Result', []) or raw_data.get('Data', [])
                         
                         for item in items_data:
                             if not isinstance(item, dict): continue
-                            warehouses_list = []
                             
-                            # Збираємо власні склади
+                            # ЖОРСТКИЙ ФІЛЬТР: Перевіряємо, чи є запит у артикулі (Card або Number) без видалення крапок
+                            art_val = str(item.get('Number', '')).upper()
+                            card_val = str(item.get('Card', '')).upper()
+                            q_upper = query.upper()
+                            
+                            if q_upper not in art_val and q_upper not in card_val:
+                                continue
+                                
+                            warehouses_list = []
                             for wh in item.get('Rests', []):
                                 wh_name, wh_qty = str(wh.get('Key', 'Склад Омега')), str(wh.get('Value', '0'))
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
                                 if pref and not pref.get('is_active', True): continue
                                 warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99})
                                 
-                            # Збираємо склади партнерів
                             for wh in item.get('SupplierRests', []):
                                 wh_name, wh_qty = str(wh.get('WareHouseName', 'Склад Партнера')), str(wh.get('Rest', '0'))
                                 pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
@@ -441,14 +447,12 @@ class PartSearchView(APIView):
                             if not warehouses_list: continue
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
                             
-                            # БЕРЕМО ПРАВИЛЬНУ ЦІНУ ЗІ ЗНИЖКОЮ (ОПТОВУ)
                             buy_price = float(item.get('CustomerPrice') or item.get('EffectivePrice') or item.get('Price') or 0)
                             
                             results.append({
                                 "id": f"omega_{sup.id}_{item.get('ProductId', '0')}", "source": sup.name,
                                 "brand": item.get('BrandDescription', 'Unknown'), "article": item.get('Number', query.upper()),
-                                "name": item.get('Description', 'Деталь Omega'), 
-                                "buy_price": buy_price, 
+                                "name": item.get('Description', 'Деталь Omega'), "buy_price": buy_price, 
                                 "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
                                 "is_local": False, "warehouses": warehouses_list, "sku": str(item.get('ProductId', '')),
                                 "min_qty": 1, "image_url": item.get('ImageUrl', ''), "description": item.get('DescriptionUkr', '') or item.get('Info', '')

@@ -12,7 +12,7 @@ const UniversalSearch = () => {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(results.length > 0);
   
-  const [expandedAnalogs, setExpandedAnalogs] = useState(new Set()); // Для аналогів
+  const [expandedAnalogs, setExpandedAnalogs] = useState(new Set()); 
   const [companyInfo, setCompanyInfo] = useState(null);
   
   const [isEditingEuro, setIsEditingEuro] = useState(false);
@@ -27,6 +27,8 @@ const UniversalSearch = () => {
   const [selectedVisit, setSelectedVisit] = useState(null);
 
   const [locationFilter, setLocationFilter] = useState('');
+
+  const [addToVisitData, setAddToVisitData] = useState({ sell_price: '' });
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -75,10 +77,9 @@ const UniversalSearch = () => {
       const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(query)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      // Додаємо кожному результату стан вибраного складу
       const initialResults = res.data.map(item => ({
         ...item,
-        selectedWhIdx: 0 // за замовчуванням перший склад
+        selectedWhIdx: 0 
       }));
       setResults(initialResults);
     } catch (error) {
@@ -117,12 +118,15 @@ const UniversalSearch = () => {
   }, [visitSearchQuery, token]);
 
   const openAddModal = (part, whIdx) => {
-    const selectedWh = part.warehouses[whIdx];
+    // Бронебійна перевірка індексу складу
+    const safeIdx = whIdx || 0;
+    const selectedWh = (part.warehouses && part.warehouses.length > 0) ? (part.warehouses[safeIdx] || part.warehouses[0]) : null;
+    
     const finalPart = {
       ...part,
-      source: `${part.source} (${selectedWh.name})`,
-      buy_price: selectedWh.buy_price,
-      quantity: `${selectedWh.quantity} шт`
+      source: selectedWh ? `${part.source} (${selectedWh.name})` : part.source,
+      buy_price: selectedWh ? (selectedWh.buy_price || part.buy_price) : part.buy_price,
+      quantity: selectedWh ? `${selectedWh.quantity} шт` : part.quantity
     };
     
     setSelectedPart(finalPart);
@@ -191,23 +195,29 @@ const UniversalSearch = () => {
           return {
             ...item,
             warehouses: [...matched, ...others],
-            selectedWhIdx: 0 // Скидаємо вибраний склад на перший підходящий
+            selectedWhIdx: 0 
           };
         }
         return item;
       });
     }
     
+    // Бронебійне сортування із захистом від undefined
     processed.sort((a, b) => {
-      const priceA = a.warehouses ? a.warehouses[a.selectedWhIdx].buy_price : a.buy_price;
-      const priceB = b.warehouses ? b.warehouses[b.selectedWhIdx].buy_price : b.buy_price;
-      return priceA - priceB;
+      const getPrice = (item) => {
+        if (item.warehouses && item.warehouses.length > 0) {
+          const idx = item.selectedWhIdx || 0;
+          const wh = item.warehouses[idx] || item.warehouses[0];
+          return wh.buy_price || item.buy_price || 0;
+        }
+        return item.buy_price || 0;
+      };
+      return getPrice(a) - getPrice(b);
     });
     
     return processed;
   }, [results, locationFilter]);
 
-  // Функція для зміни вибраного складу для конкретного рядка
   const updateSelectedWarehouse = (itemId, whIndex) => {
     setResults(prev => prev.map(item => 
       item.id === itemId ? { ...item, selectedWhIdx: parseInt(whIndex) } : item
@@ -292,9 +302,10 @@ const UniversalSearch = () => {
               </thead>
               <tbody>
                 {displayedResults.map(item => {
-                  // Визначаємо поточний вибраний склад для цього рядка
-                  const currentWh = item.warehouses ? item.warehouses[item.selectedWhIdx] : null;
-                  const currentPrice = currentWh ? currentWh.buy_price : item.buy_price;
+                  // Бронебійна логіка витягування поточного складу
+                  const safeIdx = item.selectedWhIdx || 0;
+                  const currentWh = (item.warehouses && item.warehouses.length > 0) ? (item.warehouses[safeIdx] || item.warehouses[0]) : null;
+                  const currentPrice = currentWh ? (currentWh.buy_price || item.buy_price || 0) : (item.buy_price || 0);
                   const currentQty = currentWh ? currentWh.quantity : item.quantity;
                   
                   return (
@@ -306,7 +317,6 @@ const UniversalSearch = () => {
                             {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
                           </span>
                           
-                          {/* КНОПКА АНАЛОГІВ ЗЛІВА */}
                           {!item.is_local && (
                             <button onClick={() => toggleAnalogs(item.id)} className="w-full text-slate-500 hover:text-blue-600 bg-white px-2 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm whitespace-nowrap">
                               {expandedAnalogs.has(item.id) ? <><ChevronUp size={12}/> Сховати</> : <><ChevronDown size={12}/> Аналоги</>}
@@ -325,13 +335,12 @@ const UniversalSearch = () => {
                         </div>
                       </td>
                       <td className="p-3 pt-4 text-center align-top">
-                        {/* ВИПАДАЮЧИЙ СПИСОК СКЛАДІВ СПРАВА */}
                         {item.warehouses && item.warehouses.length > 1 ? (
                           <div className="flex flex-col items-center gap-1">
-                            <span className="font-bold text-slate-600 text-sm">{currentQty} шт</span>
+                            <span className="font-bold text-slate-600 text-sm">{currentQty}</span>
                             <select 
                               className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-1 outline-none w-32 cursor-pointer"
-                              value={item.selectedWhIdx}
+                              value={safeIdx}
                               onChange={(e) => updateSelectedWarehouse(item.id, e.target.value)}
                             >
                               {item.warehouses.map((wh, idx) => (
@@ -347,13 +356,12 @@ const UniversalSearch = () => {
                         <span className="font-black text-slate-800 text-base block">{currentPrice.toLocaleString()} ₴</span>
                       </td>
                       <td className="p-3 pt-4 text-right align-top">
-                        <button onClick={() => openAddModal(item, item.selectedWhIdx)} className="bg-emerald-500 text-white p-2.5 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200 inline-block" title="Додати в замовлення">
+                        <button onClick={() => openAddModal(item, safeIdx)} className="bg-emerald-500 text-white p-2.5 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200 inline-block" title="Додати в замовлення">
                           <Plus size={18}/>
                         </button>
                       </td>
                     </tr>
                     
-                    {/* РОЗКРИТТЯ АНАЛОГІВ */}
                     {expandedAnalogs.has(item.id) && (
                       <tr className="bg-slate-50/70 border-b border-slate-100">
                         <td colSpan="6" className="p-4">
@@ -376,7 +384,6 @@ const UniversalSearch = () => {
         </div>
       )}
 
-      {/* МОДАЛКА З ІНФО */}
       {infoPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl">
@@ -427,7 +434,6 @@ const UniversalSearch = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ДОДАВАННЯ В ЧЕК */}
       {selectedPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 md:p-8 relative mt-10 mb-10 shadow-2xl">

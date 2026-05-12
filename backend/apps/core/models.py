@@ -9,7 +9,7 @@ class Company(models.Model):
     address = models.CharField(max_length=255, blank=True, null=True, verbose_name="Адреса СТО")
     document_footer = models.TextField(blank=True, null=True, verbose_name="Текст для чека (Гарантія тощо)")
     global_margin_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, verbose_name="Націнка на запчастини (%)")
-    euro_rate = models.DecimalField(max_digits=6, decimal_places=2, default=42.00, verbose_name="Курс Євро (для Vesna)") # ДОДАНО
+    euro_rate = models.DecimalField(max_digits=6, decimal_places=2, default=42.00, verbose_name="Курс Євро (для Vesna)")
 
     def __str__(self): return self.name
 
@@ -73,6 +73,4 @@ class Supplier(models.Model):
     name = models.CharField(max_length=255)
     api_key = models.CharField(max_length=255, blank=True, null=True)
     price_file = models.FileField(upload_to='supplier_prices/', null=True, blank=True)
-    
-    # ДОДАНО: Поле для збереження налаштувань складів (пріоритети, видимість)
     warehouse_prefs = models.JSONField(default=list, blank=True)

@@ -118,7 +118,6 @@ const UniversalSearch = () => {
   }, [visitSearchQuery, token]);
 
   const openAddModal = (part, whIdx) => {
-    // Бронебійна перевірка індексу складу
     const safeIdx = whIdx || 0;
     const selectedWh = (part.warehouses && part.warehouses.length > 0) ? (part.warehouses[safeIdx] || part.warehouses[0]) : null;
     
@@ -202,7 +201,6 @@ const UniversalSearch = () => {
       });
     }
     
-    // Бронебійне сортування із захистом від undefined
     processed.sort((a, b) => {
       const getPrice = (item) => {
         if (item.warehouses && item.warehouses.length > 0) {
@@ -225,59 +223,63 @@ const UniversalSearch = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col">
-      <div className="flex justify-between items-start mb-8">
+    <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col">
+      {/* АДАПТИВНИЙ ХЕДЕР: На мобільному в стовпчик, на ПК в рядок */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 md:mb-8 gap-4 mt-12 md:mt-0">
         <div>
-          <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 mb-2">Глобальний пошук</h1>
-          <p className="text-slate-500 font-bold text-sm">Шукайте запчастини на власному складі та у всіх постачальників одночасно.</p>
+          <h1 className="text-xl md:text-3xl font-black uppercase italic text-slate-800 mb-1 md:mb-2">Глобальний пошук</h1>
+          <p className="text-slate-500 font-bold text-xs md:text-sm">Шукайте запчастини на складі та у всіх постачальників.</p>
         </div>
         
-        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-3 flex items-center gap-3">
-          <div className="bg-amber-100 p-2 rounded-xl text-amber-600"><Banknote size={20}/></div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Курс € (Vesna/Technomir)</p>
-            {isEditingEuro ? (
-              <div className="flex items-center gap-2 mt-1">
-                <input type="number" step="0.01" className="w-20 font-black text-sm border-b-2 border-amber-400 outline-none" value={euroRateInput} onChange={e => setEuroRateInput(e.target.value)} autoFocus />
-                <button onClick={handleSaveEuroRate} className="text-emerald-500 hover:text-emerald-600"><Check size={16}/></button>
-                <button onClick={() => {setIsEditingEuro(false); setEuroRateInput(companyInfo?.euro_rate || '42.00')}} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="font-black text-slate-800">{companyInfo?.euro_rate || '0.00'} ₴</span>
-                <button onClick={() => setIsEditingEuro(true)} className="text-slate-300 hover:text-blue-500 transition-colors"><Edit3 size={14}/></button>
-              </div>
-            )}
+        <div className="w-full lg:w-auto bg-white border border-slate-200 shadow-sm rounded-2xl p-3 flex items-center justify-between lg:justify-start gap-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-100 p-2 rounded-xl text-amber-600"><Banknote size={20}/></div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Курс € (Vesna/Techno)</p>
+              {isEditingEuro ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <input type="number" step="0.01" className="w-20 font-black text-sm border-b-2 border-amber-400 outline-none" value={euroRateInput} onChange={e => setEuroRateInput(e.target.value)} autoFocus />
+                  <button onClick={handleSaveEuroRate} className="text-emerald-500 hover:text-emerald-600"><Check size={16}/></button>
+                  <button onClick={() => {setIsEditingEuro(false); setEuroRateInput(companyInfo?.euro_rate || '42.00')}} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="font-black text-slate-800">{companyInfo?.euro_rate || '0.00'} ₴</span>
+                  <button onClick={() => setIsEditingEuro(true)} className="text-slate-300 hover:text-blue-500 transition-colors"><Edit3 size={14}/></button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <form onSubmit={handleSearch} className="relative w-full mb-8 shadow-xl shadow-slate-200/50 rounded-2xl">
-        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={24} />
+      <form onSubmit={handleSearch} className="relative w-full mb-6 md:mb-8 shadow-xl shadow-slate-200/50 rounded-2xl">
+        <Search className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
         <input 
           type="text" 
           placeholder="Введіть артикул..." 
-          className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-16 pr-32 py-5 outline-none focus:border-blue-500 font-black text-lg text-slate-700 transition-all uppercase placeholder:normal-case placeholder:font-medium" 
+          className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-12 md:pl-16 pr-24 md:pr-32 py-4 md:py-5 outline-none focus:border-blue-500 font-black text-base md:text-lg text-slate-700 transition-all uppercase placeholder:normal-case placeholder:font-medium" 
           value={query} 
           onChange={e => setQuery(e.target.value)} 
         />
-        <button type="submit" disabled={loading} className="absolute right-3 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase text-sm hover:bg-blue-700 transition-all disabled:opacity-50">
-          {loading ? <Loader2 className="animate-spin" size={20} /> : 'Знайти'}
+        <button type="submit" disabled={loading} className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-black uppercase text-xs md:text-sm hover:bg-blue-700 transition-all disabled:opacity-50">
+          {loading ? <Loader2 className="animate-spin" size={18} /> : 'Знайти'}
         </button>
       </form>
 
       {hasSearched && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 md:p-8 flex-1">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-            <h2 className="text-lg font-black uppercase text-slate-800">Результати пошуку: {displayedResults.length}</h2>
+        <div className="bg-white border border-slate-200 rounded-2xl md:rounded-3xl p-4 md:p-8 flex-1">
+          {/* АДАПТИВНИЙ ФІЛЬТР */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-3">
+            <h2 className="text-base md:text-lg font-black uppercase text-slate-800">Результати пошуку: {displayedResults.length}</h2>
             
             {availableLocations.length > 0 && (
-              <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
-                <Filter size={16} className="text-slate-400" />
+              <div className="flex items-center w-full lg:w-auto gap-2 bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200">
+                <Filter size={16} className="text-slate-400 shrink-0" />
                 <select 
                   value={locationFilter} 
                   onChange={(e) => setLocationFilter(e.target.value)}
-                  className="bg-transparent text-slate-700 text-sm font-bold outline-none cursor-pointer"
+                  className="bg-transparent text-slate-700 text-xs md:text-sm font-bold outline-none cursor-pointer w-full"
                 >
                   <option value="">Усі склади (за найдешевшою ціною)</option>
                   {availableLocations.map(loc => (
@@ -288,8 +290,8 @@ const UniversalSearch = () => {
             )}
           </div>
           
-          <div className="overflow-auto">
-            <table className="w-full text-left border-collapse min-w-[750px]">
+          <div className="overflow-x-auto pb-4">
+            <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="border-b-2 border-slate-100">
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest w-36">Джерело</th>
@@ -302,7 +304,6 @@ const UniversalSearch = () => {
               </thead>
               <tbody>
                 {displayedResults.map(item => {
-                  // Бронебійна логіка витягування поточного складу
                   const safeIdx = item.selectedWhIdx || 0;
                   const currentWh = (item.warehouses && item.warehouses.length > 0) ? (item.warehouses[safeIdx] || item.warehouses[0]) : null;
                   const currentPrice = currentWh ? (currentWh.buy_price || item.buy_price || 0) : (item.buy_price || 0);
@@ -339,7 +340,7 @@ const UniversalSearch = () => {
                           <div className="flex flex-col items-center gap-1">
                             <span className="font-bold text-slate-600 text-sm">{currentQty}</span>
                             <select 
-                              className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-1 outline-none w-32 cursor-pointer"
+                              className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 outline-none w-36 cursor-pointer"
                               value={safeIdx}
                               onChange={(e) => updateSelectedWarehouse(item.id, e.target.value)}
                             >
@@ -384,9 +385,10 @@ const UniversalSearch = () => {
         </div>
       )}
 
+      {/* МОДАЛКА З ІНФО */}
       {infoPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl">
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl m-4">
             <button onClick={() => setInfoPart(null)} className="absolute right-4 top-4 text-slate-400 hover:bg-slate-100 p-2 rounded-full transition-colors"><X size={20} /></button>
             <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Info className="text-blue-500"/> Інформація про товар</h2>
             
@@ -434,6 +436,7 @@ const UniversalSearch = () => {
         </div>
       )}
 
+      {/* МОДАЛКА ДОДАВАННЯ В ЧЕК */}
       {selectedPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 md:p-8 relative mt-10 mb-10 shadow-2xl">

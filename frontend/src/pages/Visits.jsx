@@ -31,7 +31,6 @@ const Visits = () => {
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
 
-  // Стан для кнопки копіювання
   const [copiedVin, setCopiedVin] = useState(null);
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
@@ -73,7 +72,6 @@ const Visits = () => {
     }
   }, [selectedVisit?.id, selectedVisit?.comment]);
 
-  // НАДІЙНЕ КОПІЮВАННЯ В БУФЕР ОБМІНУ
   const handleCopyVin = (vin) => {
     if (!vin) return;
     if (navigator.clipboard && window.isSecureContext) {
@@ -101,7 +99,6 @@ const Visits = () => {
     }
   };
 
-  // ФУНКЦІЯ ДЛЯ СТРІЛОЧОК КАЛЕНДАРЯ
   const changeDate = (days) => {
     let current = filterDate ? new Date(filterDate) : new Date();
     current.setDate(current.getDate() + days);
@@ -337,7 +334,7 @@ const Visits = () => {
   );
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col">
+    <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col w-full overflow-x-hidden">
       <style>{`
         @media print {
           body * { display: none !important; }
@@ -356,6 +353,14 @@ const Visits = () => {
           tbody { display: table-row-group !important; }
           thead { display: table-header-group !important; }
         }
+
+        /* ХАК ДЛЯ iPHONE: Робимо текст у полях дати і часу темним, навіть якщо Safari намагається зробити його світлим */
+        input[type="date"], input[type="time"] {
+          color: #334155 !important;
+          -webkit-appearance: none;
+          min-height: 42px;
+        }
+        
       `}</style>
 
       <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 no-print-area shrink-0">
@@ -367,10 +372,9 @@ const Visits = () => {
             <input type="text" placeholder="Пошук (номер, клієнт)..." className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-3 text-sm outline-none focus:border-blue-500 font-medium shadow-sm transition-all" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           </div>
           
-          {/* ОНОВЛЕНО: Блок з кнопками вліво-вправо біля календаря */}
           <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm transition-all focus-within:border-blue-500 w-full md:w-auto">
             <button onClick={() => changeDate(-1)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><ChevronLeft size={16}/></button>
-            <input type="date" className="bg-transparent px-2 py-2 text-sm outline-none font-medium text-slate-600 cursor-pointer w-full text-center" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
+            <input type="date" className="bg-transparent px-2 py-2 text-sm outline-none font-medium text-slate-700 cursor-pointer w-full text-center" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
             <button onClick={() => changeDate(1)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><ChevronRight size={16}/></button>
           </div>
 
@@ -394,7 +398,7 @@ const Visits = () => {
 
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area">
-          <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl mt-10 mb-10 relative">
+          <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl mt-4 md:mt-10 mb-10 relative">
             <button onClick={() => { setIsCreatingVisit(false); setFoundExisting(false); }} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
             <h2 className="text-xl font-black mb-5 flex items-center gap-2"><CarFront className="text-blue-600"/> Новий візит</h2>
             <form onSubmit={handleCreateVisit} className="space-y-4">
@@ -431,22 +435,21 @@ const Visits = () => {
       )}
 
       {selectedVisit && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area">
-          <div className="bg-white rounded-2xl w-full max-w-4xl p-5 md:p-6 shadow-2xl mt-8 mb-16 relative">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
+          <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
             
             <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-4 border-b border-slate-100 pb-3 gap-3">
               <div className="w-full">
                 <h2 className="text-2xl md:text-3xl font-black uppercase leading-tight">{selectedVisit.plate}</h2>
                 
-                {/* ОНОВЛЕНО: Блок з VIN-кодом і кнопкою копіювання в картці */}
                 {selectedVisit.vin_code && (
-                  <div className="flex items-center gap-2 mt-2 mb-1">
-                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
+                  <div className="flex flex-wrap items-center gap-2 mt-2 mb-1">
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest bg-slate-100 px-2 py-1 rounded-md border border-slate-200 break-all">
                       VIN: {selectedVisit.vin_code}
                     </span>
                     <button 
                       onClick={() => handleCopyVin(selectedVisit.vin_code)}
-                      className="p-1.5 bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-md transition-colors border border-slate-200 hover:border-blue-200"
+                      className="p-1.5 bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-md transition-colors border border-slate-200 hover:border-blue-200 shrink-0"
                       title="Скопіювати VIN"
                     >
                       {copiedVin === selectedVisit.vin_code ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
@@ -457,7 +460,7 @@ const Visits = () => {
                   </div>
                 )}
 
-                <p className="text-slate-500 text-[13px] font-bold flex items-center gap-2 mt-1"><CarFront size={14}/> {selectedVisit.client} | <Phone size={14}/> {selectedVisit.phone}</p>
+                <p className="text-slate-500 text-[13px] font-bold flex flex-wrap items-center gap-2 mt-1"><CarFront size={14} className="shrink-0"/> {selectedVisit.client} <span className="hidden sm:inline">|</span> <Phone size={14} className="shrink-0"/> {selectedVisit.phone}</p>
                 
                 <div className="mt-3">
                   {!isEditingTime ? (
@@ -469,7 +472,7 @@ const Visits = () => {
                           const d = selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime) : new Date();
                           setEditTimeData({ date: d.toLocaleDateString('en-CA'), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
                           setIsEditingTime(true);
-                        }} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 p-1 rounded">
+                        }} className="text-blue-500 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 p-1 rounded">
                           <Pencil size={12}/> Редагувати
                         </button>
                       )}
@@ -490,7 +493,7 @@ const Visits = () => {
                 </div>
               </div>
               
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 self-end md:self-start w-full md:w-auto justify-end">
                 {role === 'owner' && (
                   <button onClick={handlePrint} className="bg-blue-600 text-white p-2 md:px-4 md:py-2.5 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2 font-black text-xs uppercase shadow-md shadow-blue-200" title="Друкувати акт">
                     <Printer size={16} /> <span className="hidden md:inline">Друк</span>
@@ -515,10 +518,10 @@ const Visits = () => {
               </div>
             </div>
 
-            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4">
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'PENDING')} className={`flex-1 py-2.5 rounded-lg font-black text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 py-2.5 rounded-lg font-black text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
-              <button onClick={() => updateVisitStatus(selectedVisit.id, 'DONE')} className={`flex-1 py-2.5 rounded-lg font-black text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
+            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
+              <button onClick={() => updateVisitStatus(selectedVisit.id, 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] sm:text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
+              <button onClick={() => updateVisitStatus(selectedVisit.id, 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] sm:text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
+              <button onClick={() => updateVisitStatus(selectedVisit.id, 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] sm:text-[11px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -526,15 +529,16 @@ const Visits = () => {
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Wrench size={16}/> Завдання</h3>
                 <div className="space-y-2 mb-3">
                   {selectedVisit.services?.map(s => (
-                    <div key={s.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-2 group">
+                    <div key={s.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-2 group w-full">
                       <div className="flex justify-between items-start">
                         <span className="font-bold text-slate-700 text-[13px]">{s.name}</span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded text-xs">{s.price} ₴</span>}
-                          {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>}
+                          {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>}
                         </div>
                       </div>
-                      <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`text-[9px] font-black uppercase tracking-widest rounded px-2 py-1 outline-none cursor-pointer border-none w-full ${serviceStatusColors[s.status || 'PENDING']}`}>
+                      {/* ХАК ДЛЯ ВИПАДАЮЧИХ СПИСКІВ: truncate + w-full */}
+                      <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`text-[9px] font-black uppercase tracking-widest rounded px-2 py-1 outline-none cursor-pointer border-none w-full truncate ${serviceStatusColors[s.status || 'PENDING']}`}>
                         <option value="PENDING">⏳ Очікує</option>
                         <option value="IN_PROGRESS">🔧 В роботі</option>
                         <option value="DONE">✅ Виконано</option>
@@ -544,7 +548,7 @@ const Visits = () => {
                 </div>
                 {role === 'owner' && (
                   <form onSubmit={handleAddService} className="bg-slate-50 p-2 md:p-3 rounded-lg border border-slate-200 space-y-2">
-                    <select className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none cursor-pointer text-slate-600 font-bold" value={selectedCatalogId} onChange={(e) => { 
+                    <select className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none cursor-pointer text-slate-600 font-bold truncate" value={selectedCatalogId} onChange={(e) => { 
                         setSelectedCatalogId(e.target.value);
                         const s = catalogServices.find(cat => cat.id === parseInt(e.target.value)); 
                         if (s) setNewService({ name: s.name, price: s.price }); 
@@ -554,7 +558,7 @@ const Visits = () => {
                     </select>
                     <div className="flex gap-2">
                       <input required type="text" placeholder="Назва" className="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
-                      <input required type="number" placeholder="Ціна" className="w-16 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
+                      <input required type="number" placeholder="Ціна" className="w-20 sm:w-24 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
                       <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded transition-colors"><Plus size={16}/></button>
                     </div>
                   </form>
@@ -565,19 +569,19 @@ const Visits = () => {
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
                 <div className="space-y-2 mb-3">
                   {selectedVisit.parts?.map(p => (
-                    <div key={p.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-2 group">
+                    <div key={p.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-2 group w-full">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-bold text-slate-700 text-[13px] leading-tight">{p.name}</p>
-                          <p className="text-[9px] uppercase font-bold text-slate-500 mt-0.5">{p.brand} | {p.article}</p>
-                          {role === 'owner' && <p className="text-[9px] uppercase font-bold text-blue-500">Де: {p.supplier}</p>}
+                        <div className="overflow-hidden">
+                          <p className="font-bold text-slate-700 text-[13px] leading-tight truncate">{p.name}</p>
+                          <p className="text-[9px] uppercase font-bold text-slate-500 mt-0.5 truncate">{p.brand} | {p.article}</p>
+                          {role === 'owner' && <p className="text-[9px] uppercase font-bold text-blue-500 truncate">Де: {p.supplier}</p>}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0 pl-2">
                           {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded text-xs">{p.sell_price} ₴</span>}
-                          {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>}
+                          {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>}
                         </div>
                       </div>
-                      <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[9px] font-black uppercase tracking-widest rounded px-2 py-1 outline-none cursor-pointer border-none w-full ${partStatusColors[p.status || 'WAITING']}`}>
+                      <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[9px] font-black uppercase tracking-widest rounded px-2 py-1 outline-none cursor-pointer border-none w-full truncate ${partStatusColors[p.status || 'WAITING']}`}>
                         <option value="WAITING">⏳ Очікується</option>
                         <option value="IN_TRANSIT">🚚 В дорозі</option>
                         <option value="ARRIVED">✅ Приїхала</option>
@@ -595,9 +599,9 @@ const Visits = () => {
                         <button type="button" onClick={() => setShowManualPartForm(false)} className="absolute right-2 top-2 text-slate-400"><X size={16}/></button>
                         <input required type="text" placeholder="Назва деталі" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
                         <input required type="text" placeholder="Де замовлено" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.supplier} onChange={e => setNewPart({...newPart, supplier: e.target.value})} />
-                        <div className="flex gap-2">
-                          <input type="text" placeholder="Бренд" className="w-1/2 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
-                          <input type="text" placeholder="Артикул" className="w-1/2 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input type="text" placeholder="Бренд" className="w-full sm:w-1/2 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
+                          <input type="text" placeholder="Артикул" className="w-full sm:w-1/2 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
                         </div>
                         <div className="flex gap-2 items-center bg-white p-2 rounded-lg border border-slate-200">
                           <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
@@ -621,7 +625,7 @@ const Visits = () => {
               />
               {editComment !== (selectedVisit.comment || '') && (
                 <div className="flex justify-end mt-3">
-                  <button onClick={handleSaveComment} className="bg-amber-400 hover:bg-amber-500 text-amber-950 px-5 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-sm">
+                  <button onClick={handleSaveComment} className="bg-amber-400 hover:bg-amber-500 text-amber-950 px-5 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-sm w-full sm:w-auto">
                     Зберегти
                   </button>
                 </div>

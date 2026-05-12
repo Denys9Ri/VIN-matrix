@@ -354,16 +354,14 @@ const Visits = () => {
           thead { display: table-header-group !important; }
         }
 
-        /* ХАК ДЛЯ iPHONE: Робимо текст у полях дати і часу темним, навіть якщо Safari намагається зробити його світлим */
         input[type="date"], input[type="time"] {
           color: #334155 !important;
           -webkit-appearance: none;
           min-height: 42px;
         }
-        
       `}</style>
 
-      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 no-print-area shrink-0">
+      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 no-print-area shrink-0 mt-4 md:mt-0">
         <h1 className="text-2xl font-black uppercase italic w-full xl:w-auto">Дошка Візитів</h1>
         
         <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-1 xl:justify-center">
@@ -527,18 +525,23 @@ const Visits = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Wrench size={16}/> Завдання</h3>
-                <div className="space-y-2 mb-3">
+                <div className="space-y-3 mb-3">
                   {selectedVisit.services?.map(s => (
-                    <div key={s.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-2 group w-full">
+                    <div key={s.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex flex-col gap-3 group w-full shadow-sm">
                       <div className="flex justify-between items-start">
-                        <span className="font-bold text-slate-700 text-[13px]">{s.name}</span>
+                        <span className="font-bold text-slate-700 text-sm">{s.name}</span>
                         <div className="flex items-center gap-2 shrink-0">
-                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded text-xs">{s.price} ₴</span>}
-                          {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>}
+                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-100 text-xs">{s.price} ₴</span>}
+                          {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
                         </div>
                       </div>
-                      {/* ХАК ДЛЯ ВИПАДАЮЧИХ СПИСКІВ: truncate + w-full */}
-                      <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`text-[9px] font-black uppercase tracking-widest rounded px-2 py-1 outline-none cursor-pointer border-none w-full truncate ${serviceStatusColors[s.status || 'PENDING']}`}>
+                      
+                      {/* ОНОВЛЕНО: Великий випадаючий список для телефонів */}
+                      <select 
+                        value={s.status || 'PENDING'} 
+                        onChange={(e) => updateServiceStatus(s.id, e.target.value)} 
+                        className={`text-[11px] md:text-xs font-black uppercase tracking-widest rounded-xl px-3 py-3 md:py-2 outline-none cursor-pointer w-full text-center shadow-sm border border-slate-200/50 ${serviceStatusColors[s.status || 'PENDING']}`}
+                      >
                         <option value="PENDING">⏳ Очікує</option>
                         <option value="IN_PROGRESS">🔧 В роботі</option>
                         <option value="DONE">✅ Виконано</option>
@@ -547,8 +550,8 @@ const Visits = () => {
                   ))}
                 </div>
                 {role === 'owner' && (
-                  <form onSubmit={handleAddService} className="bg-slate-50 p-2 md:p-3 rounded-lg border border-slate-200 space-y-2">
-                    <select className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none cursor-pointer text-slate-600 font-bold truncate" value={selectedCatalogId} onChange={(e) => { 
+                  <form onSubmit={handleAddService} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mt-4">
+                    <select className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-xs outline-none cursor-pointer text-slate-600 font-bold truncate" value={selectedCatalogId} onChange={(e) => { 
                         setSelectedCatalogId(e.target.value);
                         const s = catalogServices.find(cat => cat.id === parseInt(e.target.value)); 
                         if (s) setNewService({ name: s.name, price: s.price }); 
@@ -557,9 +560,9 @@ const Visits = () => {
                         {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} - {s.price} ₴</option>)}
                     </select>
                     <div className="flex gap-2">
-                      <input required type="text" placeholder="Назва" className="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
-                      <input required type="number" placeholder="Ціна" className="w-20 sm:w-24 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
-                      <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded transition-colors"><Plus size={16}/></button>
+                      <input required type="text" placeholder="Назва" className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-xs outline-none" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
+                      <input required type="number" placeholder="Ціна" className="w-20 sm:w-24 bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-xs outline-none font-bold" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
+                      <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg transition-colors shadow-sm"><Plus size={18}/></button>
                     </div>
                   </form>
                 )}
@@ -567,21 +570,27 @@ const Visits = () => {
 
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
-                <div className="space-y-2 mb-3">
+                <div className="space-y-3 mb-3">
                   {selectedVisit.parts?.map(p => (
-                    <div key={p.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-2 group w-full">
+                    <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex flex-col gap-3 group w-full shadow-sm">
                       <div className="flex justify-between items-start">
                         <div className="overflow-hidden">
-                          <p className="font-bold text-slate-700 text-[13px] leading-tight truncate">{p.name}</p>
-                          <p className="text-[9px] uppercase font-bold text-slate-500 mt-0.5 truncate">{p.brand} | {p.article}</p>
-                          {role === 'owner' && <p className="text-[9px] uppercase font-bold text-blue-500 truncate">Де: {p.supplier}</p>}
+                          <p className="font-bold text-slate-700 text-sm leading-tight truncate">{p.name}</p>
+                          <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{p.brand} | {p.article}</p>
+                          {role === 'owner' && <p className="text-[10px] uppercase font-bold text-blue-500 truncate mt-0.5">Де: {p.supplier}</p>}
                         </div>
                         <div className="flex items-center gap-2 shrink-0 pl-2">
-                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded text-xs">{p.sell_price} ₴</span>}
-                          {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>}
+                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-100 text-xs">{p.sell_price} ₴</span>}
+                          {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
                         </div>
                       </div>
-                      <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[9px] font-black uppercase tracking-widest rounded px-2 py-1 outline-none cursor-pointer border-none w-full truncate ${partStatusColors[p.status || 'WAITING']}`}>
+                      
+                      {/* ОНОВЛЕНО: Великий випадаючий список для деталей */}
+                      <select 
+                        value={p.status || 'WAITING'} 
+                        onChange={(e) => updatePartStatus(p.id, e.target.value)} 
+                        className={`text-[11px] md:text-xs font-black uppercase tracking-widest rounded-xl px-3 py-3 md:py-2 outline-none cursor-pointer w-full text-center shadow-sm border border-slate-200/50 ${partStatusColors[p.status || 'WAITING']}`}
+                      >
                         <option value="WAITING">⏳ Очікується</option>
                         <option value="IN_TRANSIT">🚚 В дорозі</option>
                         <option value="ARRIVED">✅ Приїхала</option>
@@ -591,21 +600,22 @@ const Visits = () => {
                   ))}
                 </div>
                 {role === 'owner' && (
-                  <div className="mt-3">
+                  <div className="mt-4">
                     {!showManualPartForm ? (
-                      <button onClick={() => setShowManualPartForm(true)} className="w-full p-2 border-2 border-dashed border-slate-200 rounded-lg text-[10px] font-black uppercase text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all">✏️ Додати вручну</button>
+                      <button onClick={() => setShowManualPartForm(true)} className="w-full p-3 border-2 border-dashed border-slate-300 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-all">✏️ Додати вручну</button>
                     ) : (
-                      <form onSubmit={handleAddPart} className="bg-slate-50 p-3 md:p-4 rounded-xl border border-slate-200 space-y-3 relative">
-                        <button type="button" onClick={() => setShowManualPartForm(false)} className="absolute right-2 top-2 text-slate-400"><X size={16}/></button>
-                        <input required type="text" placeholder="Назва деталі" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
-                        <input required type="text" placeholder="Де замовлено" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.supplier} onChange={e => setNewPart({...newPart, supplier: e.target.value})} />
+                      <form onSubmit={handleAddPart} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 relative shadow-sm">
+                        <button type="button" onClick={() => setShowManualPartForm(false)} className="absolute right-3 top-3 text-slate-400 bg-white rounded-full p-1 border border-slate-100 hover:text-slate-600"><X size={16}/></button>
+                        <input required type="text" placeholder="Назва деталі" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-xs outline-none font-bold" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
+                        <input required type="text" placeholder="Де замовлено" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-xs outline-none" value={newPart.supplier} onChange={e => setNewPart({...newPart, supplier: e.target.value})} />
                         <div className="flex flex-col sm:flex-row gap-2">
-                          <input type="text" placeholder="Бренд" className="w-full sm:w-1/2 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
-                          <input type="text" placeholder="Артикул" className="w-full sm:w-1/2 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
+                          <input type="text" placeholder="Бренд" className="w-full sm:w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-xs outline-none" value={newPart.brand} onChange={e => setNewPart({...newPart, brand: e.target.value})} />
+                          <input type="text" placeholder="Артикул" className="w-full sm:w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-xs outline-none" value={newPart.article} onChange={e => setNewPart({...newPart, article: e.target.value})} />
                         </div>
                         <div className="flex gap-2 items-center bg-white p-2 rounded-lg border border-slate-200">
-                          <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none text-sm outline-none" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
-                          <input type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none text-sm outline-none font-black text-blue-600" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
+                          <input type="number" placeholder="Закупка" className="w-1/2 bg-transparent border-none text-sm outline-none px-2" value={newPart.buy_price} onChange={e => setNewPart({...newPart, buy_price: e.target.value})} />
+                          <div className="w-[1px] h-6 bg-slate-200"></div>
+                          <input type="number" placeholder="Продаж" className="w-1/2 bg-transparent border-none text-sm outline-none font-black text-blue-600 px-2 text-right" value={newPart.sell_price} onChange={e => setNewPart({...newPart, sell_price: e.target.value})} />
                         </div>
                         <button type="submit" className="w-full bg-blue-600 text-white font-black uppercase text-xs py-3 rounded-lg mt-2 tracking-widest hover:bg-blue-700 shadow-sm transition-all">Зберегти</button>
                       </form>

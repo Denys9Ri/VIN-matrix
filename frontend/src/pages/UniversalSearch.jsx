@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Search, Plus, Box, Truck, CarFront, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check } from 'lucide-react';
+import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const UniversalSearch = () => {
   const navigate = useNavigate();
   
-  // ЗБЕРЕЖЕННЯ СТАНУ В SESSION STORAGE
   const [query, setQuery] = useState(sessionStorage.getItem('searchQuery') || '');
   const [results, setResults] = useState(JSON.parse(sessionStorage.getItem('searchResults')) || []);
   
@@ -16,7 +15,6 @@ const UniversalSearch = () => {
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [companyInfo, setCompanyInfo] = useState(null);
   
-  // ЛОГІКА ДЛЯ КУРСУ ЄВРО
   const [isEditingEuro, setIsEditingEuro] = useState(false);
   const [euroRateInput, setEuroRateInput] = useState('');
 
@@ -29,6 +27,9 @@ const UniversalSearch = () => {
   const [selectedVisit, setSelectedVisit] = useState(null);
 
   const [addToVisitData, setAddToVisitData] = useState({ sell_price: '' });
+
+  // Стан для фільтра по локації
+  const [locationFilter, setLocationFilter] = useState('');
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -46,7 +47,6 @@ const UniversalSearch = () => {
     fetchSettings();
   }, [token, navigate]);
 
-  // Оновлюємо SessionStorage при зміні
   useEffect(() => {
     sessionStorage.setItem('searchQuery', query);
     sessionStorage.setItem('searchResults', JSON.stringify(results));
@@ -60,6 +60,8 @@ const UniversalSearch = () => {
       );
       setCompanyInfo({ ...companyInfo, euro_rate: euroRateInput });
       setIsEditingEuro(false);
+      
+      if (results.length > 0) handleSearch();
     } catch (error) {
       alert("Помилка збереження курсу");
     }
@@ -72,6 +74,7 @@ const UniversalSearch = () => {
     setLoading(true);
     setHasSearched(true);
     setExpandedRows(new Set()); 
+    setLocationFilter(''); // Скидаємо фільтр при новому пошуку
     try {
       const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(query)}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -138,14 +141,65 @@ const UniversalSearch = () => {
     } catch (error) { alert("Помилка додавання."); }
   };
 
-  // ФУНКЦІЯ ВИЗНАЧЕННЯ КОЛЬОРУ БЕЙДЖА
+  // ЖОРСТКО ЗАБОРОНЯЄМО ПЕРЕНОС ТЕКСТУ (whitespace-nowrap)
   const getBadgeStyle = (sourceName, isLocal) => {
-    if (isLocal) return "bg-slate-800 text-white";
+    if (isLocal) return "bg-slate-800 text-white whitespace-nowrap";
     const name = sourceName.toUpperCase();
-    if (name.includes('VESNA')) return "bg-emerald-600 text-white shadow-md shadow-emerald-200";
-    if (name.includes('OMEGA') || name.includes('ОМЕГА')) return "bg-blue-600 text-white shadow-md shadow-blue-200";
-    return "bg-slate-100 text-slate-600 border border-slate-200";
+    if (name.includes('VESNA')) return "bg-emerald-600 text-white shadow-md shadow-emerald-200 whitespace-nowrap";
+    if (name.includes('OMEGA') || name.includes('ОМЕГА')) return "bg-blue-600 text-white shadow-md shadow-blue-200 whitespace-nowrap";
+    return "bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap";
   };
+
+  // 1. Отримуємо унікальні назви міст/складів для фільтра
+  const availableLocations = useMemo(() => {
+    const locs = new Set();
+    results.forEach(r => {
+      if (r.warehouses) {
+        r.warehouses.forEach(w => {
+          // Беремо перше слово (напр. "Київ-2" -> "Київ")
+          const parts = w.name.split(/[\s-]/);
+          if (parts[0].length > 2) locs.add(parts[0]);
+          else locs.add(w.name);
+        });
+      }
+    });
+    return Array.from(locs).sort();
+  }, [results]);
+
+  // 2. Фільтруємо та сортуємо результати
+  const displayedResults = useMemo(() => {
+    let processed = [...results];
+    
+    // Якщо вибрано фільтр по місту
+    if (locationFilter) {
+      // Залишаємо тільки ті товари, де є хоча б один потрібний склад
+      processed = processed.filter(item => {
+        if (item.is_local) return true;
+        return item.warehouses?.some(w => w.name.toLowerCase().includes(locationFilter.toLowerCase()));
+      });
+      
+      // Піднімаємо потрібний склад наверх, щоб він показувався як основний
+      processed = processed.map(item => {
+        if (item.is_local || !item.warehouses) return item;
+        const matched = item.warehouses.filter(w => w.name.toLowerCase().includes(locationFilter.toLowerCase()));
+        const others = item.warehouses.filter(w => !w.name.toLowerCase().includes(locationFilter.toLowerCase()));
+        
+        if (matched.length > 0) {
+          return {
+            ...item,
+            warehouses: [...matched, ...others],
+            quantity: `${matched[0].quantity} шт (${matched[0].name})` // Оновлюємо відображення на екрані
+          };
+        }
+        return item;
+      });
+    }
+    
+    // СОРТУВАННЯ ЗА НАЙДЕШЕВШОЮ ЦІНОЮ (Завжди)
+    processed.sort((a, b) => a.buy_price - b.buy_price);
+    
+    return processed;
+  }, [results, locationFilter]);
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col">
@@ -155,7 +209,6 @@ const UniversalSearch = () => {
           <p className="text-slate-500 font-bold text-sm">Шукайте запчастини на власному складі та у всіх постачальників одночасно.</p>
         </div>
         
-        {/* КУРС ЄВРО ВГОЛІ СПРАВА */}
         <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-3 flex items-center gap-3">
           <div className="bg-amber-100 p-2 rounded-xl text-amber-600"><Banknote size={20}/></div>
           <div>
@@ -192,13 +245,32 @@ const UniversalSearch = () => {
 
       {hasSearched && (
         <div className="bg-white border border-slate-200 rounded-3xl p-5 md:p-8 flex-1">
-          <h2 className="text-lg font-black uppercase mb-6 text-slate-800">Результати пошуку: {results.length}</h2>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <h2 className="text-lg font-black uppercase text-slate-800">Результати пошуку: {displayedResults.length}</h2>
+            
+            {/* ФІЛЬТР ПО ЛОКАЦІЇ */}
+            {availableLocations.length > 0 && (
+              <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+                <Filter size={16} className="text-slate-400" />
+                <select 
+                  value={locationFilter} 
+                  onChange={(e) => setLocationFilter(e.target.value)}
+                  className="bg-transparent text-slate-700 text-sm font-bold outline-none cursor-pointer"
+                >
+                  <option value="">Усі склади (за найдешевшою ціною)</option>
+                  {availableLocations.map(loc => (
+                    <option key={loc} value={loc}>Склад: {loc}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
           
           <div className="overflow-auto">
-            <table className="w-full text-left border-collapse min-w-[600px]">
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
                 <tr className="border-b-2 border-slate-100">
-                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">Джерело</th>
+                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest w-36">Джерело</th>
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">Артикул / Бренд</th>
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">Опис</th>
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Наявність</th>
@@ -207,40 +279,40 @@ const UniversalSearch = () => {
                 </tr>
               </thead>
               <tbody>
-                {results.map(item => (
+                {displayedResults.map(item => (
                   <React.Fragment key={item.id}>
                     <tr className={`border-b border-slate-50 transition-colors ${item.is_local ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
-                      <td className="p-3">
-                        <div className="flex flex-col gap-1.5 items-start">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${getBadgeStyle(item.source, item.is_local)}`}>
+                      <td className="p-3 align-top pt-4">
+                        <div className="flex flex-col gap-2 items-start w-32">
+                          <span className={`inline-flex items-center justify-center w-full gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${getBadgeStyle(item.source, item.is_local)}`}>
                             {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
                           </span>
                           
                           {item.warehouses && item.warehouses.length > 1 && (
-                            <button onClick={() => toggleRow(item.id)} className="text-slate-500 hover:text-blue-600 bg-white px-2 py-1 rounded-md transition-all flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm ml-1">
-                              {expandedRows.has(item.id) ? <><ChevronUp size={12}/> Сховати</> : <><ChevronDown size={12}/> Ще {item.warehouses.length - 1} склади</>}
+                            <button onClick={() => toggleRow(item.id)} className="w-full text-slate-500 hover:text-blue-600 bg-white px-2 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm whitespace-nowrap">
+                              {expandedRows.has(item.id) ? <><ChevronUp size={12}/> Сховати</> : <><ChevronDown size={12}/> Ще {item.warehouses.length - 1} скл.</>}
                             </button>
                           )}
                         </div>
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 pt-4 align-top">
                         <p className="font-black text-sm text-slate-800">{item.article}</p>
-                        <p className="text-[10px] font-bold text-blue-500 uppercase">{item.brand}</p>
+                        <p className="text-[10px] font-bold text-blue-500 uppercase mt-1">{item.brand}</p>
                       </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-sm text-slate-700">{item.name}</p>
-                          <button onClick={() => setInfoPart(item)} className="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-1.5 rounded-full transition-colors border border-slate-100" title="Детальна інформація"><Info size={16}/></button>
+                      <td className="p-3 pt-4 align-top">
+                        <div className="flex items-start gap-2">
+                          <p className="font-bold text-sm text-slate-700 leading-snug max-w-xs">{item.name}</p>
+                          <button onClick={() => setInfoPart(item)} className="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-1.5 rounded-full transition-colors border border-slate-100 shrink-0" title="Детальна інформація"><Info size={16}/></button>
                         </div>
                       </td>
-                      <td className="p-3 text-center">
-                        <span className="font-bold text-slate-600 text-sm bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">{item.quantity}</span>
+                      <td className="p-3 pt-4 text-center align-top">
+                        <span className="font-bold text-slate-600 text-sm bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 inline-block">{item.quantity}</span>
                       </td>
-                      <td className="p-3 text-right">
-                        <span className="font-black text-slate-800 text-base">{item.buy_price.toLocaleString()} ₴</span>
+                      <td className="p-3 pt-4 text-right align-top">
+                        <span className="font-black text-slate-800 text-base block">{item.buy_price.toLocaleString()} ₴</span>
                       </td>
-                      <td className="p-3 text-right">
-                        <button onClick={() => openAddModal(item)} className="bg-emerald-500 text-white p-2.5 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200" title="Додати в замовлення">
+                      <td className="p-3 pt-4 text-right align-top">
+                        <button onClick={() => openAddModal(item)} className="bg-emerald-500 text-white p-2.5 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200 inline-block" title="Додати в замовлення">
                           <Plus size={18}/>
                         </button>
                       </td>
@@ -264,7 +336,7 @@ const UniversalSearch = () => {
                 ))}
               </tbody>
             </table>
-            {results.length === 0 && !loading && (
+            {displayedResults.length === 0 && !loading && (
               <div className="text-center py-20 text-slate-400 font-bold uppercase">За вашим запитом нічого не знайдено</div>
             )}
           </div>
@@ -338,7 +410,7 @@ const UniversalSearch = () => {
               <p className="text-xs font-bold text-slate-500 uppercase mb-3 pr-20">{selectedPart.brand} | {selectedPart.name}</p>
               <div className="flex justify-between items-end border-t border-slate-200 pt-2">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Закупка:</span>
-                <span className="font-black text-slate-800 text-lg">{selectedPart.buy_price} ₴</span>
+                <span className="font-black text-slate-800 text-lg">{selectedPart.buy_price.toLocaleString()} ₴</span>
               </div>
             </div>
 

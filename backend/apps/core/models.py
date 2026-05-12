@@ -9,6 +9,7 @@ class Company(models.Model):
     address = models.CharField(max_length=255, blank=True, null=True, verbose_name="Адреса СТО")
     document_footer = models.TextField(blank=True, null=True, verbose_name="Текст для чека (Гарантія тощо)")
     global_margin_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, verbose_name="Націнка на запчастини (%)")
+    euro_rate = models.DecimalField(max_digits=6, decimal_places=2, default=42.00, verbose_name="Курс Євро (для Vesna)") # ДОДАНО
 
     def __str__(self): return self.name
 

@@ -12,7 +12,7 @@ const UniversalSearch = () => {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(results.length > 0);
   
-  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [expandedAnalogs, setExpandedAnalogs] = useState(new Set()); // Для аналогів
   const [companyInfo, setCompanyInfo] = useState(null);
   
   const [isEditingEuro, setIsEditingEuro] = useState(false);
@@ -26,9 +26,6 @@ const UniversalSearch = () => {
   const [isSearchingVisits, setIsSearchingVisits] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
 
-  const [addToVisitData, setAddToVisitData] = useState({ sell_price: '' });
-
-  // Стан для фільтра по локації
   const [locationFilter, setLocationFilter] = useState('');
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
@@ -60,7 +57,6 @@ const UniversalSearch = () => {
       );
       setCompanyInfo({ ...companyInfo, euro_rate: euroRateInput });
       setIsEditingEuro(false);
-      
       if (results.length > 0) handleSearch();
     } catch (error) {
       alert("Помилка збереження курсу");
@@ -73,13 +69,18 @@ const UniversalSearch = () => {
     
     setLoading(true);
     setHasSearched(true);
-    setExpandedRows(new Set()); 
-    setLocationFilter(''); // Скидаємо фільтр при новому пошуку
+    setExpandedAnalogs(new Set()); 
+    setLocationFilter(''); 
     try {
       const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(query)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setResults(res.data);
+      // Додаємо кожному результату стан вибраного складу
+      const initialResults = res.data.map(item => ({
+        ...item,
+        selectedWhIdx: 0 // за замовчуванням перший склад
+      }));
+      setResults(initialResults);
     } catch (error) {
       console.error("Помилка пошуку", error);
     } finally {
@@ -87,11 +88,11 @@ const UniversalSearch = () => {
     }
   };
 
-  const toggleRow = (id) => {
-    const newExpanded = new Set(expandedRows);
+  const toggleAnalogs = (id) => {
+    const newExpanded = new Set(expandedAnalogs);
     if (newExpanded.has(id)) newExpanded.delete(id);
     else newExpanded.add(id);
-    setExpandedRows(newExpanded);
+    setExpandedAnalogs(newExpanded);
   };
 
   useEffect(() => {
@@ -115,12 +116,20 @@ const UniversalSearch = () => {
     return () => clearTimeout(timer);
   }, [visitSearchQuery, token]);
 
-  const openAddModal = (part) => {
-    setSelectedPart(part);
+  const openAddModal = (part, whIdx) => {
+    const selectedWh = part.warehouses[whIdx];
+    const finalPart = {
+      ...part,
+      source: `${part.source} (${selectedWh.name})`,
+      buy_price: selectedWh.buy_price,
+      quantity: `${selectedWh.quantity} шт`
+    };
+    
+    setSelectedPart(finalPart);
     setSelectedVisit(null);
     setVisitSearchQuery('');
     const margin = companyInfo?.global_margin_percent ? parseFloat(companyInfo.global_margin_percent) : 0;
-    const sellPrice = (part.buy_price * (1 + margin / 100)).toFixed(2);
+    const sellPrice = (finalPart.buy_price * (1 + margin / 100)).toFixed(2);
     setAddToVisitData({ sell_price: sellPrice });
   };
 
@@ -141,22 +150,20 @@ const UniversalSearch = () => {
     } catch (error) { alert("Помилка додавання."); }
   };
 
-  // ЖОРСТКО ЗАБОРОНЯЄМО ПЕРЕНОС ТЕКСТУ (whitespace-nowrap)
   const getBadgeStyle = (sourceName, isLocal) => {
     if (isLocal) return "bg-slate-800 text-white whitespace-nowrap";
     const name = sourceName.toUpperCase();
     if (name.includes('VESNA')) return "bg-emerald-600 text-white shadow-md shadow-emerald-200 whitespace-nowrap";
     if (name.includes('OMEGA') || name.includes('ОМЕГА')) return "bg-blue-600 text-white shadow-md shadow-blue-200 whitespace-nowrap";
+    if (name.includes('TEHNO') || name.includes('ТЕХНО')) return "bg-rose-600 text-white shadow-md shadow-rose-200 whitespace-nowrap";
     return "bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap";
   };
 
-  // 1. Отримуємо унікальні назви міст/складів для фільтра
   const availableLocations = useMemo(() => {
     const locs = new Set();
     results.forEach(r => {
       if (r.warehouses) {
         r.warehouses.forEach(w => {
-          // Беремо перше слово (напр. "Київ-2" -> "Київ")
           const parts = w.name.split(/[\s-]/);
           if (parts[0].length > 2) locs.add(parts[0]);
           else locs.add(w.name);
@@ -166,19 +173,15 @@ const UniversalSearch = () => {
     return Array.from(locs).sort();
   }, [results]);
 
-  // 2. Фільтруємо та сортуємо результати
   const displayedResults = useMemo(() => {
     let processed = [...results];
     
-    // Якщо вибрано фільтр по місту
     if (locationFilter) {
-      // Залишаємо тільки ті товари, де є хоча б один потрібний склад
       processed = processed.filter(item => {
         if (item.is_local) return true;
         return item.warehouses?.some(w => w.name.toLowerCase().includes(locationFilter.toLowerCase()));
       });
       
-      // Піднімаємо потрібний склад наверх, щоб він показувався як основний
       processed = processed.map(item => {
         if (item.is_local || !item.warehouses) return item;
         const matched = item.warehouses.filter(w => w.name.toLowerCase().includes(locationFilter.toLowerCase()));
@@ -188,18 +191,28 @@ const UniversalSearch = () => {
           return {
             ...item,
             warehouses: [...matched, ...others],
-            quantity: `${matched[0].quantity} шт (${matched[0].name})` // Оновлюємо відображення на екрані
+            selectedWhIdx: 0 // Скидаємо вибраний склад на перший підходящий
           };
         }
         return item;
       });
     }
     
-    // СОРТУВАННЯ ЗА НАЙДЕШЕВШОЮ ЦІНОЮ (Завжди)
-    processed.sort((a, b) => a.buy_price - b.buy_price);
+    processed.sort((a, b) => {
+      const priceA = a.warehouses ? a.warehouses[a.selectedWhIdx].buy_price : a.buy_price;
+      const priceB = b.warehouses ? b.warehouses[b.selectedWhIdx].buy_price : b.buy_price;
+      return priceA - priceB;
+    });
     
     return processed;
   }, [results, locationFilter]);
+
+  // Функція для зміни вибраного складу для конкретного рядка
+  const updateSelectedWarehouse = (itemId, whIndex) => {
+    setResults(prev => prev.map(item => 
+      item.id === itemId ? { ...item, selectedWhIdx: parseInt(whIndex) } : item
+    ));
+  };
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col">
@@ -212,7 +225,7 @@ const UniversalSearch = () => {
         <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-3 flex items-center gap-3">
           <div className="bg-amber-100 p-2 rounded-xl text-amber-600"><Banknote size={20}/></div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Курс € (Vesna)</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Курс € (Vesna/Technomir)</p>
             {isEditingEuro ? (
               <div className="flex items-center gap-2 mt-1">
                 <input type="number" step="0.01" className="w-20 font-black text-sm border-b-2 border-amber-400 outline-none" value={euroRateInput} onChange={e => setEuroRateInput(e.target.value)} autoFocus />
@@ -248,7 +261,6 @@ const UniversalSearch = () => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <h2 className="text-lg font-black uppercase text-slate-800">Результати пошуку: {displayedResults.length}</h2>
             
-            {/* ФІЛЬТР ПО ЛОКАЦІЇ */}
             {availableLocations.length > 0 && (
               <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
                 <Filter size={16} className="text-slate-400" />
@@ -259,7 +271,7 @@ const UniversalSearch = () => {
                 >
                   <option value="">Усі склади (за найдешевшою ціною)</option>
                   {availableLocations.map(loc => (
-                    <option key={loc} value={loc}>Склад: {loc}</option>
+                    <option key={loc} value={loc}>Фільтр: {loc}</option>
                   ))}
                 </select>
               </div>
@@ -267,19 +279,25 @@ const UniversalSearch = () => {
           </div>
           
           <div className="overflow-auto">
-            <table className="w-full text-left border-collapse min-w-[700px]">
+            <table className="w-full text-left border-collapse min-w-[750px]">
               <thead>
                 <tr className="border-b-2 border-slate-100">
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest w-36">Джерело</th>
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">Артикул / Бренд</th>
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">Опис</th>
-                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Наявність</th>
+                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Наявність та Склад</th>
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Закупка</th>
                   <th className="p-3 w-10"></th>
                 </tr>
               </thead>
               <tbody>
-                {displayedResults.map(item => (
+                {displayedResults.map(item => {
+                  // Визначаємо поточний вибраний склад для цього рядка
+                  const currentWh = item.warehouses ? item.warehouses[item.selectedWhIdx] : null;
+                  const currentPrice = currentWh ? currentWh.buy_price : item.buy_price;
+                  const currentQty = currentWh ? currentWh.quantity : item.quantity;
+                  
+                  return (
                   <React.Fragment key={item.id}>
                     <tr className={`border-b border-slate-50 transition-colors ${item.is_local ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
                       <td className="p-3 align-top pt-4">
@@ -288,9 +306,10 @@ const UniversalSearch = () => {
                             {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
                           </span>
                           
-                          {item.warehouses && item.warehouses.length > 1 && (
-                            <button onClick={() => toggleRow(item.id)} className="w-full text-slate-500 hover:text-blue-600 bg-white px-2 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm whitespace-nowrap">
-                              {expandedRows.has(item.id) ? <><ChevronUp size={12}/> Сховати</> : <><ChevronDown size={12}/> Ще {item.warehouses.length - 1} скл.</>}
+                          {/* КНОПКА АНАЛОГІВ ЗЛІВА */}
+                          {!item.is_local && (
+                            <button onClick={() => toggleAnalogs(item.id)} className="w-full text-slate-500 hover:text-blue-600 bg-white px-2 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm whitespace-nowrap">
+                              {expandedAnalogs.has(item.id) ? <><ChevronUp size={12}/> Сховати</> : <><ChevronDown size={12}/> Аналоги</>}
                             </button>
                           )}
                         </div>
@@ -306,34 +325,48 @@ const UniversalSearch = () => {
                         </div>
                       </td>
                       <td className="p-3 pt-4 text-center align-top">
-                        <span className="font-bold text-slate-600 text-sm bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 inline-block">{item.quantity}</span>
+                        {/* ВИПАДАЮЧИЙ СПИСОК СКЛАДІВ СПРАВА */}
+                        {item.warehouses && item.warehouses.length > 1 ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="font-bold text-slate-600 text-sm">{currentQty} шт</span>
+                            <select 
+                              className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-1 outline-none w-32 cursor-pointer"
+                              value={item.selectedWhIdx}
+                              onChange={(e) => updateSelectedWarehouse(item.id, e.target.value)}
+                            >
+                              {item.warehouses.map((wh, idx) => (
+                                <option key={idx} value={idx}>{wh.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <span className="font-bold text-slate-600 text-sm bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 inline-block">{currentQty}</span>
+                        )}
                       </td>
                       <td className="p-3 pt-4 text-right align-top">
-                        <span className="font-black text-slate-800 text-base block">{item.buy_price.toLocaleString()} ₴</span>
+                        <span className="font-black text-slate-800 text-base block">{currentPrice.toLocaleString()} ₴</span>
                       </td>
                       <td className="p-3 pt-4 text-right align-top">
-                        <button onClick={() => openAddModal(item)} className="bg-emerald-500 text-white p-2.5 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200 inline-block" title="Додати в замовлення">
+                        <button onClick={() => openAddModal(item, item.selectedWhIdx)} className="bg-emerald-500 text-white p-2.5 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200 inline-block" title="Додати в замовлення">
                           <Plus size={18}/>
                         </button>
                       </td>
                     </tr>
                     
-                    {expandedRows.has(item.id) && item.warehouses?.slice(1).map((wh, idx) => (
-                      <tr key={`${item.id}_wh_${idx}`} className="bg-slate-50/70 hover:bg-slate-100/70 border-b border-slate-100 transition-colors">
-                        <td className="p-3 pl-8">
-                          <span className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500 tracking-widest"><CornerDownRight size={14} className="text-slate-300"/> {wh.name}</span>
-                        </td>
-                        <td className="p-3"></td>
-                        <td className="p-3 text-xs text-slate-400 font-medium">Альтернативний склад</td>
-                        <td className="p-3 text-center"><span className="font-bold text-slate-500 text-sm">{wh.quantity} шт</span></td>
-                        <td className="p-3 text-right"><span className="font-bold text-slate-500">{item.buy_price.toLocaleString()} ₴</span></td>
-                        <td className="p-3 text-right">
-                          <button onClick={() => openAddModal({...item, source: `${item.source} (${wh.name})`, quantity: `${wh.quantity} шт`})} className="text-emerald-500 hover:text-white hover:bg-emerald-500 p-2 rounded-xl transition-colors border border-emerald-200 hover:border-emerald-500 shadow-sm" title={`Додати з ${wh.name}`}><Plus size={16}/></button>
+                    {/* РОЗКРИТТЯ АНАЛОГІВ */}
+                    {expandedAnalogs.has(item.id) && (
+                      <tr className="bg-slate-50/70 border-b border-slate-100">
+                        <td colSpan="6" className="p-4">
+                          <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 text-center">
+                            <Box className="mx-auto text-slate-300 mb-2" size={32}/>
+                            <h3 className="font-black text-slate-500 uppercase tracking-widest text-sm mb-1">Пошук аналогів</h3>
+                            <p className="text-slate-400 text-xs">Функція завантаження крос-кодів (аналогів) для {item.article} знаходиться в розробці...</p>
+                          </div>
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </React.Fragment>
-                ))}
+                )})}
               </tbody>
             </table>
             {displayedResults.length === 0 && !loading && (

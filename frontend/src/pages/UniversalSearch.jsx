@@ -224,8 +224,7 @@ const UniversalSearch = () => {
 
   return (
     <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col">
-      {/* АДАПТИВНИЙ ХЕДЕР: На мобільному в стовпчик, на ПК в рядок */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 md:mb-8 gap-4 mt-12 md:mt-0">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
         <div>
           <h1 className="text-xl md:text-3xl font-black uppercase italic text-slate-800 mb-1 md:mb-2">Глобальний пошук</h1>
           <p className="text-slate-500 font-bold text-xs md:text-sm">Шукайте запчастини на складі та у всіх постачальників.</p>
@@ -269,8 +268,7 @@ const UniversalSearch = () => {
 
       {hasSearched && (
         <div className="bg-white border border-slate-200 rounded-2xl md:rounded-3xl p-4 md:p-8 flex-1">
-          {/* АДАПТИВНИЙ ФІЛЬТР */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-3">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <h2 className="text-base md:text-lg font-black uppercase text-slate-800">Результати пошуку: {displayedResults.length}</h2>
             
             {availableLocations.length > 0 && (
@@ -290,8 +288,11 @@ const UniversalSearch = () => {
             )}
           </div>
           
-          <div className="overflow-x-auto pb-4">
-            <table className="w-full text-left border-collapse min-w-[800px]">
+          {/* ======================= */}
+          {/* ВЕРСІЯ ДЛЯ КОМП'ЮТЕРІВ  */}
+          {/* ======================= */}
+          <div className="hidden md:block overflow-x-auto pb-4">
+            <table className="w-full text-left border-collapse min-w-[750px]">
               <thead>
                 <tr className="border-b-2 border-slate-100">
                   <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest w-36">Джерело</th>
@@ -378,14 +379,96 @@ const UniversalSearch = () => {
                 )})}
               </tbody>
             </table>
-            {displayedResults.length === 0 && !loading && (
-              <div className="text-center py-20 text-slate-400 font-bold uppercase">За вашим запитом нічого не знайдено</div>
-            )}
           </div>
+
+          {/* ======================= */}
+          {/* ВЕРСІЯ ДЛЯ ТЕЛЕФОНІВ    */}
+          {/* ======================= */}
+          <div className="md:hidden flex flex-col gap-4">
+            {displayedResults.map(item => {
+              const safeIdx = item.selectedWhIdx || 0;
+              const currentWh = (item.warehouses && item.warehouses.length > 0) ? (item.warehouses[safeIdx] || item.warehouses[0]) : null;
+              const currentPrice = currentWh ? (currentWh.buy_price || item.buy_price || 0) : (item.buy_price || 0);
+              const currentQty = currentWh ? currentWh.quantity : item.quantity;
+              
+              return (
+                <div key={`mob_${item.id}`} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden">
+                  
+                  {/* Рядок 1: Джерело та Кнопка додавання */}
+                  <div className="flex justify-between items-center">
+                    <span className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${getBadgeStyle(item.source, item.is_local)}`}>
+                      {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
+                    </span>
+                    <button onClick={() => openAddModal(item, safeIdx)} className="bg-emerald-500 text-white p-2 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200">
+                      <Plus size={18}/>
+                    </button>
+                  </div>
+
+                  {/* Рядок 2: Артикул, Бренд, Ціна */}
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-black text-base text-slate-800 leading-tight">{item.article}</p>
+                      <p className="text-[10px] font-bold text-blue-500 uppercase mt-0.5">{item.brand}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-slate-800 text-lg block">{currentPrice.toLocaleString()} ₴</span>
+                    </div>
+                  </div>
+
+                  {/* Рядок 3: Опис */}
+                  <div className="flex items-start gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <p className="font-bold text-xs text-slate-700 leading-snug flex-1">{item.name}</p>
+                    <button onClick={() => setInfoPart(item)} className="text-slate-400 hover:text-blue-600 p-1 rounded-full shrink-0"><Info size={16}/></button>
+                  </div>
+
+                  {/* Рядок 4: Склади та Аналоги */}
+                  <div className="flex flex-col gap-2 mt-1">
+                    {item.warehouses && item.warehouses.length > 1 ? (
+                      <div className="flex items-center justify-between bg-slate-100 p-2 rounded-xl border border-slate-200">
+                        <span className="font-bold text-slate-600 text-xs px-2 whitespace-nowrap">{currentQty}</span>
+                        <select 
+                          className="text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1.5 outline-none flex-1 ml-2 truncate"
+                          value={safeIdx}
+                          onChange={(e) => updateSelectedWarehouse(item.id, e.target.value)}
+                        >
+                          {item.warehouses.map((wh, idx) => (
+                            <option key={idx} value={idx}>{wh.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-100 p-2 rounded-xl border border-slate-200 flex justify-center">
+                        <span className="font-bold text-slate-600 text-xs">{currentQty}</span>
+                      </div>
+                    )}
+
+                    {!item.is_local && (
+                      <button onClick={() => toggleAnalogs(item.id)} className="w-full text-slate-500 bg-white px-2 py-2 rounded-xl transition-all flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider border border-slate-200 shadow-sm mt-1">
+                        {expandedAnalogs.has(item.id) ? <><ChevronUp size={14}/> Сховати аналоги</> : <><ChevronDown size={14}/> Пошук аналогів</>}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Панель аналогів (Мобільна) */}
+                  {expandedAnalogs.has(item.id) && (
+                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-4 text-center mt-2">
+                      <Box className="mx-auto text-slate-300 mb-1" size={24}/>
+                      <h3 className="font-black text-slate-500 uppercase tracking-widest text-[10px] mb-1">Пошук аналогів</h3>
+                      <p className="text-slate-400 text-[9px]">Функція завантаження аналогів в розробці...</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {displayedResults.length === 0 && !loading && (
+            <div className="text-center py-20 text-slate-400 font-bold uppercase md:hidden">Нічого не знайдено</div>
+          )}
         </div>
       )}
 
-      {/* МОДАЛКА З ІНФО */}
+      {/* МОДАЛКИ (Info та Add) залишаються без змін */}
       {infoPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl m-4">
@@ -436,7 +519,6 @@ const UniversalSearch = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ДОДАВАННЯ В ЧЕК */}
       {selectedPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 md:p-8 relative mt-10 mb-10 shadow-2xl">

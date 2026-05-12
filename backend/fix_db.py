@@ -17,8 +17,8 @@ queries_alter = [
     "ALTER TABLE core_orderservice ADD COLUMN status varchar(20) DEFAULT 'PENDING';",
     "ALTER TABLE core_visit ADD COLUMN comment text;",
     "ALTER TABLE core_visit ADD COLUMN vin_code varchar(17);",
-    "ALTER TABLE core_supplier ADD COLUMN warehouse_prefs jsonb DEFAULT '[]'::jsonb;", # ДОДАНО КОЛОНКУ ДЛЯ НАЛАШТУВАНЬ
-    "ALTER TABLE core_company ADD COLUMN euro_rate numeric(6, 2) DEFAULT 42.00;" # ДОДАНО КОЛОНКУ ДЛЯ КУРСУ ЄВРО
+    "ALTER TABLE core_supplier ADD COLUMN warehouse_prefs jsonb DEFAULT '[]'::jsonb;",
+    "ALTER TABLE core_company ADD COLUMN euro_rate numeric(6, 2) DEFAULT 42.00;"
 ]
 
 print("Починаємо перевірку бази даних PostgreSQL...")

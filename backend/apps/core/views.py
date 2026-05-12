@@ -58,10 +58,10 @@ class VisitViewSet(viewsets.ModelViewSet):
         start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
         end_of_today = start_of_today + timedelta(days=1)
 
+        # ЖОРСТКА ФІКСАЦІЯ ТІЛЬКИ НА СЬОГОДНІШНІ ВІЗИТИ
         queryset = queryset.filter(
-            ( ~Q(status='DONE') & Q(scheduled_datetime__lt=end_of_today) ) | 
-            ( ~Q(status='DONE') & Q(scheduled_datetime__isnull=True) ) | 
-            ( Q(status='DONE') & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today) ) 
+            ( Q(scheduled_datetime__gte=start_of_today) & Q(scheduled_datetime__lt=end_of_today) ) | 
+            ( Q(scheduled_datetime__isnull=True) & Q(created_at__gte=start_of_today) & Q(created_at__lt=end_of_today) )
         ).distinct()
         return queryset.order_by('scheduled_datetime') 
 
@@ -116,7 +116,6 @@ class ProfileSettingsView(APIView):
         if 'company[document_footer]' in request.data: company.document_footer = request.data.get('company[document_footer]')
         if 'company[global_margin_percent]' in request.data: company.global_margin_percent = request.data.get('company[global_margin_percent]')
         
-        # Виправляємо проблему з комами в курсі Євро
         if 'company[euro_rate]' in request.data:
             raw_rate = str(request.data.get('company[euro_rate]')).replace(',', '.')
             try:

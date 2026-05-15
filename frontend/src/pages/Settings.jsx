@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search, ChevronDown, ChevronUp, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert } from 'lucide-react';
+import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search, ChevronDown, ChevronUp, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -7,7 +7,7 @@ const Settings = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState({ 
     user: { first_name: '', email: '', username: '' }, 
-    company: { name: '', logo: null, phone: '', address: '', document_footer: '', global_margin_percent: 20 }, 
+    company: { name: '', logo: null, phone: '', address: '', document_footer: '', global_margin_percent: 20, business_type: 'sto' }, 
     role: 'owner' 
   });
   const [services, setServices] = useState([]);
@@ -26,7 +26,8 @@ const Settings = () => {
   const [editServiceData, setEditServiceData] = useState({ name: '', price: '' });
   const [showAllServices, setShowAllServices] = useState(false);
 
-  const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', global_margin_percent: 20, logo: null });
+  // ДОДАНО: business_type
+  const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', global_margin_percent: 20, logo: null, business_type: 'sto' });
   const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
   const [mechanicData, setMechanicData] = useState({ username: '', password: '', first_name: '' });
   const [editMechanicData, setEditMechanicData] = useState({ first_name: '', new_password: '' });
@@ -57,6 +58,7 @@ const Settings = () => {
           address: profileRes.data.company.address || '',
           document_footer: profileRes.data.company.document_footer || '',
           global_margin_percent: profileRes.data.company.global_margin_percent || 20,
+          business_type: profileRes.data.company.business_type || 'sto',
           logo: null
         });
       }
@@ -75,6 +77,7 @@ const Settings = () => {
     data.append('company[address]', formData.address);
     data.append('company[document_footer]', formData.document_footer);
     data.append('company[global_margin_percent]', formData.global_margin_percent);
+    data.append('company[business_type]', formData.business_type); // ДОДАНО
     if (formData.logo) data.append('company[logo]', formData.logo);
     try {
       await axios.patch(`${API_BASE}/api/settings/`, data, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
@@ -195,7 +198,13 @@ const Settings = () => {
                 ) : <ImageIcon className="text-slate-300" size={32} />}
               </div>
               <div className="flex-1 w-full">
-                <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">{profile.company.name}</h2>
+                <div className="flex justify-between items-start">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">{profile.company.name}</h2>
+                  <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${profile.company.business_type === 'store' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {profile.company.business_type === 'store' ? 'Магазин' : 'СТО'}
+                  </span>
+                </div>
+                
                 <div className="space-y-1 mt-2">
                   <p className="text-slate-500 text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-2 truncate"><MapPin size={14} className="shrink-0"/> <span className="truncate">{profile.company.address || 'Адреса не вказана'}</span></p>
                   <p className="text-slate-500 text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-2"><Phone size={14} className="shrink-0"/> {profile.company.phone || 'Телефон не вказаний'}</p>
@@ -270,32 +279,35 @@ const Settings = () => {
               </button>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-4 md:p-6 bg-slate-50/50 border-b border-slate-50 flex justify-between items-center gap-2">
-                <h3 className="font-black uppercase tracking-wider text-xs sm:text-sm flex items-center gap-2 text-slate-700 truncate">
-                  <Users className="text-green-600 shrink-0" size={18}/> Команда СТО
-                </h3>
-                <button onClick={() => setIsAddingMechanic(true)} className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-all shrink-0"><Plus size={16}/></button>
-              </div>
-              <div className="p-3 md:p-4 space-y-2">
-                {mechanics.length === 0 ? (
-                  <p className="text-slate-400 text-sm text-center py-4">Немає доданих майстрів</p>
-                ) : (
-                  mechanics.map(m => (
-                    <div key={m.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center lg:flex-col lg:items-stretch xl:flex-row xl:items-center gap-2 group">
-                      <div className="overflow-hidden pr-2">
-                        <p className="font-bold text-sm text-slate-800 truncate">{m.first_name}</p>
-                        <p className="text-[10px] sm:text-xs text-slate-500 truncate">Логін: {m.username}</p>
+          {/* КОМАНДА МАЙСТРІВ СХОВАНА ЯКЩО МАГАЗИН */}
+          {profile.company.business_type === 'sto' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-4 md:p-6 bg-slate-50/50 border-b border-slate-50 flex justify-between items-center gap-2">
+                  <h3 className="font-black uppercase tracking-wider text-xs sm:text-sm flex items-center gap-2 text-slate-700 truncate">
+                    <Users className="text-green-600 shrink-0" size={18}/> Команда СТО
+                  </h3>
+                  <button onClick={() => setIsAddingMechanic(true)} className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-all shrink-0"><Plus size={16}/></button>
+                </div>
+                <div className="p-3 md:p-4 space-y-2">
+                  {mechanics.length === 0 ? (
+                    <p className="text-slate-400 text-sm text-center py-4">Немає доданих майстрів</p>
+                  ) : (
+                    mechanics.map(m => (
+                      <div key={m.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center lg:flex-col lg:items-stretch xl:flex-row xl:items-center gap-2 group">
+                        <div className="overflow-hidden pr-2">
+                          <p className="font-bold text-sm text-slate-800 truncate">{m.first_name}</p>
+                          <p className="text-[10px] sm:text-xs text-slate-500 truncate">Логін: {m.username}</p>
+                        </div>
+                        <div className="flex gap-1 lg:opacity-100 xl:opacity-0 group-hover:opacity-100 transition-all shrink-0 self-end xl:self-center">
+                          <button onClick={() => {setIsEditingMechanic(m.id); setEditMechanicData({first_name: m.first_name, new_password: ''});}} className="bg-white text-slate-400 hover:text-blue-600 p-1.5 rounded shadow-sm"><Pencil size={14}/></button>
+                          <button onClick={() => handleDeleteMechanic(m.id)} className="bg-white text-slate-400 hover:text-red-500 p-1.5 rounded shadow-sm"><Trash2 size={14}/></button>
+                        </div>
                       </div>
-                      <div className="flex gap-1 lg:opacity-100 xl:opacity-0 group-hover:opacity-100 transition-all shrink-0 self-end xl:self-center">
-                        <button onClick={() => {setIsEditingMechanic(m.id); setEditMechanicData({first_name: m.first_name, new_password: ''});}} className="bg-white text-slate-400 hover:text-blue-600 p-1.5 rounded shadow-sm"><Pencil size={14}/></button>
-                        <button onClick={() => handleDeleteMechanic(m.id)} className="bg-white text-slate-400 hover:text-red-500 p-1.5 rounded shadow-sm"><Trash2 size={14}/></button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-          </div>
+                    ))
+                  )}
+                </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -351,15 +363,37 @@ const Settings = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-2xl p-4 sm:p-6 md:p-8 shadow-2xl my-auto relative">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg sm:text-2xl font-black italic uppercase truncate pr-8">Налаштування СТО</h2>
+              <h2 className="text-lg sm:text-2xl font-black italic uppercase truncate pr-8">Налаштування системи</h2>
               <button onClick={() => setIsEditingProfile(false)} className="absolute right-4 sm:right-6 top-4 sm:top-6 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors"><X size={20} /></button>
             </div>
             <form onSubmit={handleSaveProfile} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300">
+              
+              {/* НОВИЙ ПЕРЕМИКАЧ: СТО / МАГАЗИН */}
+              <div className="md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <label className="block text-[10px] sm:text-xs font-black uppercase text-slate-500 mb-3">Тип бізнесу</label>
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, business_type: 'sto'})}
+                    className={`flex-1 py-3 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-all ${formData.business_type === 'sto' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
+                  >
+                    <Wrench size={16}/> СТО / Сервіс
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, business_type: 'store'})}
+                    className={`flex-1 py-3 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-all ${formData.business_type === 'store' ? 'bg-amber-500 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
+                  >
+                    <Store size={16}/> Магазин деталей
+                  </button>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300 mt-2">
                 <label className="block text-[10px] sm:text-xs font-black uppercase text-slate-500 mb-2">Логотип (PNG/JPG)</label>
                 <input type="file" accept="image/*" className="text-sm w-full" onChange={(e) => setFormData({...formData, logo: e.target.files[0]})} />
               </div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Назва СТО</label><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500" value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} /></div>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Назва компанії</label><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500" value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Націнка (%)</label><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-black text-blue-600 outline-none focus:border-blue-500" value={formData.global_margin_percent} onChange={e => setFormData({...formData, global_margin_percent: e.target.value})} /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Телефон</label><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Адреса</label><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>

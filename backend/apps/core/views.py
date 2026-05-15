@@ -58,9 +58,11 @@ class VisitViewSet(viewsets.ModelViewSet):
         start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
         end_of_today = start_of_today + timedelta(days=1)
 
+        # ОНОВЛЕНО: Тепер враховує і DONE, і COMPLETED (для магазину)
         queryset = queryset.filter(
-            ( Q(scheduled_datetime__gte=start_of_today) & Q(scheduled_datetime__lt=end_of_today) ) | 
-            ( Q(scheduled_datetime__isnull=True) & Q(created_at__gte=start_of_today) & Q(created_at__lt=end_of_today) )
+            ( ~Q(status__in=['DONE', 'COMPLETED']) & Q(scheduled_datetime__lt=end_of_today) ) | 
+            ( ~Q(status__in=['DONE', 'COMPLETED']) & Q(scheduled_datetime__isnull=True) ) | 
+            ( Q(status__in=['DONE', 'COMPLETED']) & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today) ) 
         ).distinct()
         return queryset.order_by('scheduled_datetime') 
 
@@ -115,7 +117,6 @@ class ProfileSettingsView(APIView):
         if 'company[document_footer]' in request.data: company.document_footer = request.data.get('company[document_footer]')
         if 'company[global_margin_percent]' in request.data: company.global_margin_percent = request.data.get('company[global_margin_percent]')
         
-        # ДОДАНО: ЗБЕРЕЖЕННЯ ТИПУ БІЗНЕСУ
         if 'company[business_type]' in request.data:
             company.business_type = request.data.get('company[business_type]')
         

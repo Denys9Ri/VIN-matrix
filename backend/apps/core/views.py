@@ -115,6 +115,10 @@ class ProfileSettingsView(APIView):
         if 'company[document_footer]' in request.data: company.document_footer = request.data.get('company[document_footer]')
         if 'company[global_margin_percent]' in request.data: company.global_margin_percent = request.data.get('company[global_margin_percent]')
         
+        # ДОДАНО: ЗБЕРЕЖЕННЯ ТИПУ БІЗНЕСУ
+        if 'company[business_type]' in request.data:
+            company.business_type = request.data.get('company[business_type]')
+        
         if 'company[euro_rate]' in request.data:
             raw_rate = str(request.data.get('company[euro_rate]')).replace(',', '.')
             try:
@@ -563,8 +567,6 @@ class PartSearchView(APIView):
                                 elif currency == 'USD':
                                     rest_price = round(rest_price * 40.0, 2) 
                                     
-                                # ЛОГІКА ПРІОРИТЕТУ УКРАЇНИ ДЛЯ ТЕХНОМИРА
-                                # Вважаємо локальним, якщо доставка <= 3 дні, або в назві є маркери України
                                 is_ukraine = False
                                 region_text = w_code.lower()
                                 if days <= 3 or 'украин' in region_text or 'ua' in region_text or 'київ' in region_text or 'наше' in region_text:
@@ -580,7 +582,6 @@ class PartSearchView(APIView):
                                 
                             if not warehouses_list: continue
                             
-                            # Сортуємо: 1. Україна, 2. Ціна, 3. Пріоритет
                             warehouses_list.sort(key=lambda w: (0 if w.get('is_ukraine') else 1, w['buy_price'], w['priority']))
                             cheapest_wh = warehouses_list[0]
                             

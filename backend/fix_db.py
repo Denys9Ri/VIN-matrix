@@ -19,7 +19,10 @@ queries_alter = [
     "ALTER TABLE core_visit ADD COLUMN vin_code varchar(17);",
     "ALTER TABLE core_supplier ADD COLUMN warehouse_prefs jsonb DEFAULT '[]'::jsonb;",
     "ALTER TABLE core_company ADD COLUMN euro_rate numeric(6, 2) DEFAULT 42.00;",
-    "ALTER TABLE core_company ADD COLUMN business_type varchar(20) DEFAULT 'sto';" # ДОДАНО
+    "ALTER TABLE core_company ADD COLUMN business_type varchar(20) DEFAULT 'sto';",
+    "ALTER TABLE core_visit ADD COLUMN delivery_type varchar(50) DEFAULT 'pickup';",
+    "ALTER TABLE core_visit ADD COLUMN delivery_data text;",
+    "ALTER TABLE core_visit ADD COLUMN payment_status varchar(50) DEFAULT 'unpaid';"
 ]
 
 print("Починаємо перевірку бази даних PostgreSQL...")

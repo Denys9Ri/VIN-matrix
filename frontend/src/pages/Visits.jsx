@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2, Printer, MessageSquare, ChevronLeft, ChevronRight, Copy, Check, Truck, Package, CreditCard, Camera, ScanLine } from 'lucide-react';
+import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2, Printer, MessageSquare, ChevronLeft, ChevronRight, Copy, Check, Truck, Package, CreditCard, Camera, ScanLine, Info, ImagePlus } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard'; 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -25,7 +25,8 @@ const Visits = () => {
   const [showManualPartForm, setShowManualPartForm] = useState(false); 
   
   // === СТАН ДЛЯ СКАНУВАННЯ ТЕХПАСПОРТА ===
-  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
 
   const [isEditingTime, setIsEditingTime] = useState(false);
@@ -36,10 +37,15 @@ const Visits = () => {
   
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
 
+  // ПОЛЯ ДЛЯ НОВОГО ВІЗИТУ
   const [newVisitData, setNewVisitData] = useState({ 
     plate: '', vin_code: '', client: '', phone: '', date: '', time: '',
-    delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', brand_model: ''
+    delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '',
+    brand: '', model: '', year: '', engine: ''
   });
+
+  // ПОЛЯ ДЛЯ ВІДКРИТОГО ВІЗИТУ (Щоб редагувати авто)
+  const [editCarData, setEditCarData] = useState({ brand: '', model: '', year: '', engine: '' });
   
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
@@ -71,11 +77,7 @@ const Visits = () => {
 
       if (searchParams.get('scan') === 'true') {
         setIsCreatingVisit(true);
-        setTimeout(() => {
-          if (fileInputRef.current) fileInputRef.current.click();
-        }, 500);
       }
-
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
         setRole('owner'); 
@@ -88,14 +90,37 @@ const Visits = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
-  // === ЛОГІКА СКАНУВАННЯ ТА СТИСНЕННЯ ФОТО ===
+  // Коли відкриваємо візит, парсимо JSON автомобіля
+  useEffect(() => {
+    if (selectedVisit) {
+      setEditComment(selectedVisit.comment || '');
+      try {
+        if (!isStore && selectedVisit.delivery_data && selectedVisit.delivery_data.startsWith('{')) {
+          setEditCarData(JSON.parse(selectedVisit.delivery_data));
+        } else {
+          setEditCarData({ brand: '', model: '', year: '', engine: '' });
+        }
+      } catch (e) {
+        setEditCarData({ brand: '', model: '', year: '', engine: '' });
+      }
+    }
+  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore]);
+
+  // Функція автозбереження даних авто
+  const handleSaveCarData = async () => {
+    const jsonString = JSON.stringify(editCarData);
+    if (jsonString !== selectedVisit.delivery_data) {
+      await updateVisitField('delivery_data', jsonString);
+    }
+  };
+
+  // === ЛОГІКА СКАНУВАННЯ ТА РОЗПОДІЛУ ДАНИХ ===
   const handleScanDocument = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setIsScanning(true);
 
-    // СТВОРЮЄМО АВТОМАТИЧНУ КОМПРЕСІЮ ДЛЯ IPHONE
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
@@ -103,48 +128,49 @@ const Visits = () => {
       img.src = event.target.result;
       img.onload = async () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1200; // Оптимально для OCR
+        const MAX_WIDTH = 1200; 
         const MAX_HEIGHT = 1200;
         let width = img.width;
         let height = img.height;
 
         if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
         } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
         }
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Конвертуємо стиснуту картинку в Blob і відправляємо
         canvas.toBlob(async (blob) => {
           const formData = new FormData();
           formData.append('document', blob, 'scan.jpg');
 
           try {
             const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, {
-              headers: { 
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'multipart/form-data'
-              }
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
             });
             
             if (res.data.success) {
-              console.log("ОРИГІНАЛЬНИЙ ТЕКСТ З ТЕХПАСПОРТА:", res.data.raw_text);
-              
+              const rawBrandModel = res.data.brand_model || '';
+              let extractedBrand = '';
+              let extractedYear = '';
+              let extractedEngine = '';
+
+              if (rawBrandModel) { extractedBrand = rawBrandModel.split(' ')[0] || ''; }
+              const yearMatch = rawBrandModel.match(/\((\d{4})/);
+              if (yearMatch) extractedYear = yearMatch[1];
+              const engineMatch = rawBrandModel.match(/Двигун:\s*(\d+)/);
+              if (engineMatch) extractedEngine = engineMatch[1];
+
               setNewVisitData(prev => ({
                 ...prev,
-                plate: res.data.plate || prev.plate,
-                vin_code: res.data.vin_code || prev.vin_code,
-                brand_model: res.data.brand_model || prev.brand_model
+                plate: res.data.plate ? res.data.plate : prev.plate,
+                vin_code: res.data.vin_code ? res.data.vin_code : prev.vin_code,
+                brand: extractedBrand ? extractedBrand : prev.brand,
+                year: extractedYear ? extractedYear : prev.year,
+                engine: extractedEngine ? extractedEngine : prev.engine
               }));
               
               if (res.data.plate) {
@@ -158,13 +184,14 @@ const Visits = () => {
               }
             }
           } catch (error) {
-            const errorMsg = error.response?.data?.error || "Не вдалося розпізнати документ. Спробуйте інше фото.";
+            const errorMsg = error.response?.data?.error || "Не вдалося розпізнати документ. Спробуйте ще раз.";
             alert(`Помилка: ${errorMsg}`);
           } finally {
             setIsScanning(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+            if (cameraInputRef.current) cameraInputRef.current.value = '';
+            if (galleryInputRef.current) galleryInputRef.current.value = '';
           }
-        }, 'image/jpeg', 0.8); // Якість 80% (ідеально для OCR)
+        }, 'image/jpeg', 0.8);
       };
     };
   };
@@ -239,21 +266,26 @@ const Visits = () => {
         prepayment_amount: isStore && newVisitData.payment_status === 'advance' ? (newVisitData.prepayment_amount || 0) : 0
     };
     
-    if (newVisitData.brand_model && !payload.comment) {
-        payload.comment = `Авто: ${newVisitData.brand_model}`;
+    // ХАК: ЗБЕРІГАЄМО ОКРЕМІ ПОЛЯ АВТО В JSON У ПОЛЕ delivery_data (тільки для СТО)
+    if (!isStore) {
+        payload.delivery_data = JSON.stringify({
+            brand: newVisitData.brand.trim(),
+            model: newVisitData.model.trim(),
+            year: newVisitData.year.trim(),
+            engine: newVisitData.engine.trim()
+        });
     }
     
     try {
       await axios.post(`${API_BASE}/api/visits/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
-      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', brand_model: '' });
+      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', brand: '', model: '', year: '', engine: '' });
       
       if (searchParams.get('scan')) {
           navigate('/visits'); 
       } else {
           setSearchQuery(''); setFilterDate(''); fetchData();
       }
-      
     } catch (error) { alert("Помилка створення"); }
   };
 
@@ -417,6 +449,7 @@ const Visits = () => {
         </div>
       )}
 
+      {/* === МОДАЛКА СТВОРЕННЯ ВІЗИТУ === */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative overflow-hidden">
@@ -425,10 +458,9 @@ const Visits = () => {
               <div className="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm">
                 <div className="relative w-48 h-32 border-2 border-emerald-500 rounded-lg mb-6 overflow-hidden bg-slate-800/50">
                   <div className="laser-line"></div>
-                  <ScanLine size={48} className="text-emerald-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-30" />
                 </div>
                 <h3 className="text-white font-black text-xl mb-2">ШІ розпізнає документ...</h3>
-                <p className="text-slate-400 text-sm font-medium">Читаємо VIN, номер та модель авто</p>
+                <p className="text-slate-400 text-sm font-medium">Читаємо дані з фотографії</p>
               </div>
             )}
 
@@ -442,26 +474,42 @@ const Visits = () => {
               {isStore ? <><Package size={24}/> Нове замовлення</> : <><CarFront size={24}/> Новий візит</>}
             </h2>
             
-            <input 
-              type="file" 
-              accept="image/*" 
-              capture="environment" 
-              className="hidden" 
-              ref={fileInputRef} 
-              onChange={handleScanDocument} 
-            />
+            {/* ПРИХОВАНІ ІНПУТИ (КАМЕРА І ГАЛЕРЕЯ ОКРЕМО) */}
+            <input type="file" accept="image/*" capture="environment" className="hidden" ref={cameraInputRef} onChange={handleScanDocument} />
+            <input type="file" accept="image/*" className="hidden" ref={galleryInputRef} onChange={handleScanDocument} />
 
             <form onSubmit={handleCreateVisit} className="space-y-4">
               
+              {/* БЛОК СТВОРЕННЯ ФОТО */}
               {!isStore && (
-                <button 
-                  type="button"
-                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                  className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors mb-4 group shadow-sm"
-                >
-                  <Camera size={28} className="group-hover:scale-110 transition-transform" />
-                  <span className="font-black uppercase tracking-widest text-[10px]">Сканувати техпаспорт (ШІ)</span>
-                </button>
+                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col gap-3 mb-2 shadow-sm">
+                  <div className="flex items-start gap-2">
+                    <Info size={16} className="text-emerald-600 shrink-0 mt-0.5"/>
+                    <p className="text-[10px] md:text-[11px] font-bold text-emerald-800 leading-tight">
+                      Зробіть <strong>два фото</strong>: спочатку лицьову сторону (Держ. номер, Рік), потім зворотну (VIN, Марка, Двигун).
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button 
+                      type="button"
+                      onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                    >
+                      <Camera size={16} />
+                      <span className="font-black uppercase tracking-widest text-[9px] md:text-[10px]">Камера</span>
+                    </button>
+                    
+                    <button 
+                      type="button"
+                      onClick={() => galleryInputRef.current && galleryInputRef.current.click()}
+                      className="bg-white hover:bg-slate-50 text-emerald-700 border border-emerald-300 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                    >
+                      <ImagePlus size={16} />
+                      <span className="font-black uppercase tracking-widest text-[9px] md:text-[10px]">З галереї</span>
+                    </button>
+                  </div>
+                </div>
               )}
 
               {!isStore && (
@@ -508,30 +556,56 @@ const Visits = () => {
                 </div>
               )}
 
-              <div>
-                <input required={!isStore} type="text" placeholder={isStore ? "Номер замовлення / авто (необов'язково)" : "НОМЕР АВТО (АА1234ВВ)"} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest text-sm" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
-                {foundExisting && <p className="text-emerald-600 text-[10px] font-bold uppercase mt-1 ml-2">✓ Дані підтягнуто з бази</p>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Держ. Номер</label>
+                  <input required={!isStore} type="text" placeholder="АА1234ВВ" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest text-sm" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
+                  {foundExisting && <p className="text-emerald-600 text-[10px] font-black uppercase mt-1 ml-1">✓ З бази</p>}
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">VIN-Код</label>
+                  <input type="text" placeholder="17 знаків" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-sm tracking-wider uppercase" value={newVisitData.vin_code} onChange={e => setNewVisitData({...newVisitData, vin_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)})}/>
+                </div>
               </div>
 
               {!isStore && (
-                <>
-                  <input type="text" placeholder="VIN-КОД (Англ. букви та цифри)" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-sm tracking-widest uppercase" value={newVisitData.vin_code} onChange={e => setNewVisitData({...newVisitData, vin_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)})}/>
-                  {newVisitData.brand_model && (
-                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
-                      <CarFront size={16}/> Розпізнано: {newVisitData.brand_model}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 shadow-inner">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-1.5 flex items-center gap-2"><CarFront size={14}/> Дані автомобіля</p>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Марка</label>
+                      <input type="text" placeholder="Volkswagen" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 uppercase transition-colors" value={newVisitData.brand} onChange={e => setNewVisitData({...newVisitData, brand: e.target.value})} />
                     </div>
-                  )}
-                </>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Модель</label>
+                      <input type="text" placeholder="Passat" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 transition-colors" value={newVisitData.model} onChange={e => setNewVisitData({...newVisitData, model: e.target.value})} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Рік випуску</label>
+                      <input type="number" placeholder="2012" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-blue-600 outline-none focus:border-blue-500 transition-colors" value={newVisitData.year} onChange={e => setNewVisitData({...newVisitData, year: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Двигун (см³)</label>
+                      <input type="number" placeholder="1995" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 transition-colors" value={newVisitData.engine} onChange={e => setNewVisitData({...newVisitData, engine: e.target.value})} />
+                    </div>
+                  </div>
+                </div>
               )}
 
               <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-black uppercase shadow-sm transition-all tracking-widest text-xs mt-4">
-                Створити
+                Створити візит
               </button>
             </form>
           </div>
         </div>
       )}
 
+      {/* === МОДАЛКА ПЕРЕГЛЯДУ/РЕДАГУВАННЯ ВІЗИТУ === */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
@@ -548,6 +622,28 @@ const Visits = () => {
                     <button onClick={() => handleCopyVin(selectedVisit.vin_code)} className="p-1.5 bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-md transition-colors border border-slate-200 hover:border-blue-200 shrink-0">
                       {copiedVin === selectedVisit.vin_code ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
                     </button>
+                  </div>
+                )}
+
+                {/* РЕДАГОВАНІ ПОЛЯ АВТО (Замість звичайного коментаря) */}
+                {!isStore && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                    <div>
+                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
+                      <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={handleSaveCarData}/>
+                    </div>
+                    <div>
+                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Модель</label>
+                      <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={handleSaveCarData}/>
+                    </div>
+                    <div>
+                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Рік</label>
+                      <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600 outline-none focus:border-blue-500" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={handleSaveCarData}/>
+                    </div>
+                    <div>
+                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Двигун (см³)</label>
+                      <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={handleSaveCarData}/>
+                    </div>
                   </div>
                 )}
 

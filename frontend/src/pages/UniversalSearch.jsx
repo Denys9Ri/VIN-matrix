@@ -108,7 +108,7 @@ const UniversalSearch = () => {
   const fetchAnalogs = async (item) => {
     setAnalogLoading(prev => ({ ...prev, [item.id]: true }));
     try {
-      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}`, {
+      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${item.sku}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const processed = res.data.map(a => ({ ...a, selectedWhIdx: 0 }));
@@ -338,9 +338,6 @@ const UniversalSearch = () => {
             )}
           </div>
           
-          {/* ======================= */}
-          {/* ВЕРСІЯ ДЛЯ КОМП'ЮТЕРІВ  */}
-          {/* ======================= */}
           <div className="hidden md:block overflow-x-auto pb-4">
             <table className="w-full text-left border-collapse min-w-[750px]">
               <thead>
@@ -414,7 +411,6 @@ const UniversalSearch = () => {
                       </td>
                     </tr>
                     
-                    {/* ПАНЕЛЬ АНАЛОГІВ (ДЕСКТОП) */}
                     {expandedAnalogs.has(item.id) && (
                       <tr className="bg-slate-50/70 border-b border-slate-100">
                         <td colSpan="6" className="p-4">
@@ -436,7 +432,6 @@ const UniversalSearch = () => {
                                    return (
                                      <div key={analog.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-all gap-4">
                                        <div className="w-36 shrink-0">
-                                         {/* КЛІКАБЕЛЬНИЙ АРТИКУЛ */}
                                          <p 
                                            className="font-black text-sm text-slate-800 hover:text-blue-600 cursor-pointer underline decoration-slate-300 decoration-dashed underline-offset-4 transition-colors"
                                            onClick={() => {
@@ -492,9 +487,6 @@ const UniversalSearch = () => {
             </table>
           </div>
 
-          {/* ======================= */}
-          {/* ВЕРСІЯ ДЛЯ ТЕЛЕФОНІВ    */}
-          {/* ======================= */}
           <div className="md:hidden flex flex-col gap-4">
             {displayedResults.map(item => {
               const safeIdx = item.selectedWhIdx || 0;
@@ -556,7 +548,6 @@ const UniversalSearch = () => {
                     )}
                   </div>
 
-                  {/* ПАНЕЛЬ АНАЛОГІВ (МОБІЛЬНА) */}
                   {expandedAnalogs.has(item.id) && (
                     <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 mt-2">
                       {analogLoading[item.id] ? (
@@ -576,7 +567,6 @@ const UniversalSearch = () => {
                                <div key={analog.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2 relative">
                                   <button onClick={() => openAddModal(analog, analogWhIdx)} className="absolute right-3 top-3 bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 shadow-sm"><Plus size={14}/></button>
                                   <div className="pr-8">
-                                    {/* КЛІКАБЕЛЬНИЙ АРТИКУЛ (МОБ) */}
                                     <p 
                                       className="font-black text-sm text-slate-800 leading-tight hover:text-blue-600 cursor-pointer underline decoration-slate-300 decoration-dashed underline-offset-4"
                                       onClick={() => {

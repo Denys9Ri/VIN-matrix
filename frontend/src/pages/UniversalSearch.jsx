@@ -108,8 +108,7 @@ const UniversalSearch = () => {
   const fetchAnalogs = async (item) => {
     setAnalogLoading(prev => ({ ...prev, [item.id]: true }));
     try {
-      // МАГІЯ: Тепер ми передаємо &brand= на бекенд!
-      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${item.sku}&brand=${encodeURIComponent(item.brand)}`, {
+      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${item.sku}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const processed = res.data.map(a => ({ ...a, selectedWhIdx: 0 }));
@@ -274,7 +273,8 @@ const UniversalSearch = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col w-full overflow-x-hidden">
+    // ЗБІЛЬШЕНА ШИРИНА: max-w-[1600px] замість max-w-7xl
+    <div className="w-full max-w-[1600px] mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col overflow-x-hidden">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
         <div>
           <h1 className="text-xl md:text-3xl font-black uppercase italic text-slate-800 mb-1 md:mb-2">Глобальний пошук</h1>
@@ -340,15 +340,15 @@ const UniversalSearch = () => {
           </div>
           
           <div className="hidden md:block overflow-x-auto pb-4">
-            <table className="w-full text-left border-collapse min-w-[750px]">
+            <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
                 <tr className="border-b-2 border-slate-100">
-                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest w-36">Джерело</th>
-                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">Артикул / Бренд</th>
-                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">Опис</th>
-                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Наявність та Склад</th>
-                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Закупка</th>
-                  <th className="p-3 w-10"></th>
+                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest min-w-[120px] w-32">Джерело</th>
+                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest min-w-[120px] w-32">Артикул / Бренд</th>
+                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest w-full">Опис</th>
+                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[140px] w-40">Наявність та Склад</th>
+                  <th className="p-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right min-w-[100px] w-24">Закупка</th>
+                  <th className="p-3 w-12 min-w-[48px]"></th>
                 </tr>
               </thead>
               <tbody>
@@ -362,7 +362,7 @@ const UniversalSearch = () => {
                   <React.Fragment key={item.id}>
                     <tr className={`border-b border-slate-50 transition-colors ${item.is_local ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
                       <td className="p-3 align-top pt-4">
-                        <div className="flex flex-col gap-2 items-start w-32">
+                        <div className="flex flex-col gap-2 items-start w-full">
                           <span className={`inline-flex items-center justify-center w-full gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${getBadgeStyle(item.source, item.is_local)}`}>
                             {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
                           </span>
@@ -386,10 +386,10 @@ const UniversalSearch = () => {
                       </td>
                       <td className="p-3 pt-4 text-center align-top">
                         {item.warehouses && item.warehouses.length > 1 ? (
-                          <div className="flex flex-col items-center gap-1">
+                          <div className="flex flex-col items-center gap-1 w-full">
                             <span className="font-bold text-slate-600 text-sm">{currentQty}</span>
                             <select 
-                              className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 outline-none w-36 cursor-pointer"
+                              className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 outline-none w-full max-w-[140px] cursor-pointer"
                               value={safeIdx}
                               onChange={(e) => updateSelectedWarehouse(item.id, e.target.value)}
                             >
@@ -421,7 +421,7 @@ const UniversalSearch = () => {
                               <span className="text-xs font-bold uppercase tracking-widest">Шукаємо крос-коди...</span>
                             </div>
                           ) : analogResults[item.id] && analogResults[item.id].length > 0 ? (
-                            <div className="bg-white border border-blue-100 rounded-xl p-4 shadow-inner ml-32">
+                            <div className="bg-white border border-blue-100 rounded-xl p-4 shadow-inner ml-4 md:ml-12 lg:ml-24">
                               <h4 className="text-xs font-black uppercase text-blue-600 mb-3 flex items-center gap-2"><RefreshCcw size={14}/> Знайдені аналоги ({analogResults[item.id].length})</h4>
                               <div className="space-y-2">
                                 {analogResults[item.id].map(analog => {
@@ -431,8 +431,8 @@ const UniversalSearch = () => {
                                    const analogQty = analogWh ? analogWh.quantity : analog.quantity;
                                    
                                    return (
-                                     <div key={analog.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-all gap-4">
-                                       <div className="w-36 shrink-0">
+                                     <div key={analog.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all gap-3 md:gap-4">
+                                       <div className="w-full sm:w-32 md:w-36 shrink-0">
                                          <p 
                                            className="font-black text-sm text-slate-800 hover:text-blue-600 cursor-pointer underline decoration-slate-300 decoration-dashed underline-offset-4 transition-colors"
                                            onClick={() => {
@@ -447,9 +447,9 @@ const UniversalSearch = () => {
                                          <p className="text-[10px] font-bold text-blue-500 uppercase">{analog.brand}</p>
                                        </div>
                                        
-                                       <p className="font-bold text-xs text-slate-600 flex-1">{analog.name}</p>
+                                       <p className="font-bold text-xs text-slate-600 flex-1 leading-snug">{analog.name}</p>
                                        
-                                       <div className="flex items-center gap-4 shrink-0">
+                                       <div className="flex items-center justify-between sm:justify-end gap-3 md:gap-4 shrink-0 w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t border-slate-100 sm:border-0">
                                          {analog.warehouses && analog.warehouses.length > 1 ? (
                                            <select 
                                              className="text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-md px-2 py-1 outline-none w-32 cursor-pointer shadow-sm"
@@ -463,7 +463,7 @@ const UniversalSearch = () => {
                                          ) : (
                                            <span className="font-bold text-slate-600 text-xs bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm w-32 text-center inline-block truncate">{analogQty}</span>
                                          )}
-                                         <span className="font-black text-slate-800 w-20 text-right">{analogPrice.toLocaleString()} ₴</span>
+                                         <span className="font-black text-slate-800 w-16 text-right">{analogPrice.toLocaleString()} ₴</span>
                                          <button onClick={() => openAddModal(analog, analogWhIdx)} className="bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm" title="Додати в замовлення">
                                            <Plus size={16}/>
                                          </button>
@@ -474,7 +474,7 @@ const UniversalSearch = () => {
                               </div>
                             </div>
                           ) : (
-                            <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 text-center ml-32">
+                            <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 text-center ml-4 md:ml-12 lg:ml-24">
                               <Box className="mx-auto text-slate-300 mb-2" size={24}/>
                               <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Аналогів не знайдено</p>
                             </div>

@@ -18,6 +18,10 @@ class Employee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employee_profile')
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='employees')
     role = models.CharField(max_length=20, default='mechanic')
+    
+    # НОВІ ПРАВА ДОСТУПУ ДЛЯ МАЙСТРА
+    can_create_visits = models.BooleanField(default=False)
+    can_view_finances = models.BooleanField(default=False)
 
     def __str__(self): return f"{self.user.username} - {self.company.name}"
 
@@ -29,10 +33,12 @@ class Visit(models.Model):
     phone = models.CharField(max_length=20)
     status = models.CharField(max_length=50, default='SELECTION')
     
-    # НОВІ ПОЛЯ ДЛЯ МАГАЗИНУ
     delivery_type = models.CharField(max_length=50, default='pickup', blank=True, null=True)
     delivery_data = models.TextField(blank=True, null=True)
     payment_status = models.CharField(max_length=50, default='unpaid', blank=True, null=True)
+    
+    # НОВЕ ПОЛЕ: ПЕРЕДОПЛАТА
+    prepayment_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

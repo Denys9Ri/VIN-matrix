@@ -110,7 +110,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                 if not text_upper.strip():
                      return Response({"error": "ШІ не знайшов жодного тексту. Спробуйте інше фото."}, status=400)
                 
-                # --- ПОКРАЩЕНИЙ ПАРСИНГ ЗА МАРКЕРАМИ ТЕХПАСПОРТА ---
+                # --- БРОНЬОВАНИЙ ПАРСИНГ МАРКЕРІВ (з урахуванням помилок ШІ) ---
                 
                 # 1. Пошук VIN (17 символів підряд)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
@@ -120,9 +120,9 @@ class VisitViewSet(viewsets.ModelViewSet):
                 plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
                 plate = plate_match.group(0).replace(' ', '') if plate_match else ""
                 
-                # 3. Марка (Шукаємо поле D.1)
+                # 3. Марка (Шукаємо поле D.1, D.I, D.L)
                 brand = ""
-                brand_match = re.search(r'D[\.\s]*1\s*[:\-]?\s*([A-Z\-]+)', text_upper)
+                brand_match = re.search(r'D[\.\s]*[1ILІ|]\s*[:\-]?\s*([A-Z\-]+)', text_upper)
                 if brand_match:
                     brand = brand_match.group(1).strip()
                 else:
@@ -132,9 +132,9 @@ class VisitViewSet(viewsets.ModelViewSet):
                             brand = b
                             break
 
-                # 4. Модель (Шукаємо поле D.3)
+                # 4. Модель (Шукаємо поле D.3, D.S, D.Z)
                 model = ""
-                model_match = re.search(r'D[\.\s]*3\s*[:\-]?\s*(.*?)(?=\s+E\b|\s+F\.1|\s*[PР]\.1|$)', text_upper)
+                model_match = re.search(r'D[\.\s]*[3ЗZSE]\s*[:\-]?\s*(.*?)(?=\s+[EЕ]\b|\s*F[\.\s]*1|\s*[PРpр][\.\s]*[1ILІ|]|$)', text_upper)
                 if model_match:
                     model = model_match.group(1).strip()
                     if vin_code and len(vin_code) >= 5:
@@ -150,45 +150,41 @@ class VisitViewSet(viewsets.ModelViewSet):
                     year = year_match.group(1)
                 else:
                     fallback_year = re.search(r'\b(199\d|20[0-2]\d)\b', text_upper)
-                    if fallback_year and 'P.1' not in text_upper and 'Р.1' not in text_upper:
+                    if fallback_year and not re.search(r'[PРpр][\.\s]*[1ILІ|]', text_upper):
                         year = fallback_year.group(0)
 
-                # 6. Двигун (P.1 або слова Capacity / см3)
+                # 6. Двигун (P.1, P.I, P.L тощо)
                 engine = ""
-                engine_match = re.search(r'[PРpр][\.\,\s]*1[\s\:\-]*(\d{3,4})\b', text_upper)
+                engine_match = re.search(r'[PРpр][\.\,\s]*[1ILІ|][\s\:\-]*(\d{3,4})\b', text_upper)
                 if engine_match:
                     engine = engine_match.group(1)
                 else:
-                    # Резерв: Шукаємо 4 цифри біля слів CAPACITY або CM3
                     engine_fallback = re.search(r'(?:CAPACITY|СМ3|CM3)[^\d]*(\d{3,4})\b', text_upper)
                     if engine_fallback:
                         engine = engine_fallback.group(1)
 
-                # 7. ТИП ПАЛИВА (P.3 або слово Fuel)
+                # 7. ТИП ПАЛИВА (P.3, P.S, P.З тощо)
                 fuel = ""
                 fuel_code_raw = ""
-                fuel_match = re.search(r'[PРpр][\.\,\s]*3[\s\:\-]*([A-ZА-Я0-9])', text_upper)
+                fuel_match = re.search(r'[PРpр][\.\,\s]*[3ЗZSE][\s\:\-]*([A-ZА-Я0-9])\b', text_upper)
                 if fuel_match:
                     fuel_code_raw = fuel_match.group(1).upper()
                 else:
-                    # Резерв: Шукаємо літеру біля слова FUEL або SOURCE
-                    fuel_fallback = re.search(r'(?:FUEL|ПАЛИВА|SOURCE)[^\dA-ZА-Я]*([A-ZА-Я0-9])', text_upper)
+                    fuel_fallback = re.search(r'(?:FUEL|ПАЛИВА|SOURCE)[^\dA-ZА-Я]*([A-ZА-Я0-9])\b', text_upper)
                     if fuel_fallback:
                         fuel_code_raw = fuel_fallback.group(1).upper()
                 
                 if fuel_code_raw:
-                    # Виправляємо візуальні "глюки" ШІ
                     if fuel_code_raw == '5': fuel_code_raw = 'S'
                     elif fuel_code_raw == '8': fuel_code_raw = 'B'
                     elif fuel_code_raw in ['0', 'O', 'О']: fuel_code_raw = 'D'
                     elif fuel_code_raw in ['C', 'С']: fuel_code_raw = 'S'
                     
-                    # Запобіжник: якщо зачепив літеру R з поля кольору (R КОРИЧНЕВИЙ)
                     if fuel_code_raw == 'R': 
                         fuel_code_raw = '' 
                         
                     fuel_map = {
-                        'B': 'Бензин', 'В': 'Бензин', # Англ і Кирилиця
+                        'B': 'Бензин', 'В': 'Бензин',
                         'D': 'Дизель', 'Д': 'Дизель',
                         'S': 'Газ/Бензин',
                         'E': 'Електро', 'Е': 'Електро',
@@ -205,7 +201,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                     "model": model,
                     "year": year,
                     "engine": engine,
-                    "fuel": fuel,
+                    "fuel": fuel, 
                     "raw_text": text_upper
                 })
             else:

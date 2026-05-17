@@ -29,7 +29,6 @@ const Settings = () => {
   const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', global_margin_percent: 20, logo: null, business_type: 'sto' });
   const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
   
-  // ДОДАНО ПОЛЯ ПРАВ ДОСТУПУ В СТАН
   const [mechanicData, setMechanicData] = useState({ username: '', password: '', first_name: '', can_create_visits: false, can_view_finances: false });
   const [editMechanicData, setEditMechanicData] = useState({ first_name: '', new_password: '', can_create_visits: false, can_view_finances: false });
 
@@ -130,7 +129,7 @@ const Settings = () => {
     e.preventDefault();
     try {
       await axios.post(`${API_BASE}/api/mechanics/`, mechanicData, { headers: { Authorization: `Bearer ${token}` } });
-      alert("Майстра додано!");
+      alert("Працівника додано!");
       setIsAddingMechanic(false);
       setMechanicData({ username: '', password: '', first_name: '', can_create_visits: false, can_view_finances: false });
       fetchData();
@@ -138,7 +137,7 @@ const Settings = () => {
   };
 
   const handleDeleteMechanic = async (id) => {
-    if (window.confirm("Видалити цього майстра назавжди?")) {
+    if (window.confirm("Видалити цього працівника назавжди?")) {
       try {
         await axios.delete(`${API_BASE}/api/mechanics/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
         fetchData();
@@ -150,7 +149,7 @@ const Settings = () => {
     e.preventDefault();
     try {
       await axios.patch(`${API_BASE}/api/mechanics/${isEditingMechanic}/`, editMechanicData, { headers: { Authorization: `Bearer ${token}` } });
-      alert("Дані майстра оновлено!");
+      alert("Дані працівника оновлено!");
       setIsEditingMechanic(null);
       fetchData();
     } catch (e) { alert("Помилка оновлення"); }
@@ -189,8 +188,6 @@ const Settings = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* КАРТКА СТО */}
         <div className="md:col-span-2 space-y-6">
           <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-4 sm:gap-6 items-center sm:items-start text-center sm:text-left">
               <div className="w-20 h-20 sm:w-24 sm:h-24 bg-slate-50 rounded-2xl flex-shrink-0 overflow-hidden border-2 border-slate-100 flex items-center justify-center">
@@ -215,7 +212,6 @@ const Settings = () => {
               </div>
           </div>
 
-          {/* ПРАЙС-ЛИСТ (Тільки якщо це СТО) */}
           {profile.company.business_type === 'sto' && (
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
               <div className="p-4 md:p-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
@@ -271,7 +267,6 @@ const Settings = () => {
           )}
         </div>
 
-        {/* ПРАВА КОЛОНКА (Безпека та Команда) */}
         <div className="space-y-6">
           <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100">
               <h3 className="font-black uppercase tracking-wider text-sm flex items-center gap-2 mb-4 text-slate-700">
@@ -282,7 +277,6 @@ const Settings = () => {
               </button>
           </div>
 
-          {/* КОМАНДА МАЙСТРІВ СХОВАНА ЯКЩО МАГАЗИН */}
           {profile.company.business_type === 'sto' && (
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-4 md:p-6 bg-slate-50/50 border-b border-slate-50 flex justify-between items-center gap-2">
@@ -293,7 +287,7 @@ const Settings = () => {
                 </div>
                 <div className="p-3 md:p-4 space-y-2">
                   {mechanics.length === 0 ? (
-                    <p className="text-slate-400 text-sm text-center py-4">Немає доданих майстрів</p>
+                    <p className="text-slate-400 text-sm text-center py-4">Немає працівників</p>
                   ) : (
                     mechanics.map(m => (
                       <div key={m.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center lg:flex-col lg:items-stretch xl:flex-row xl:items-center gap-2 group">
@@ -322,8 +316,6 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* === МОДАЛКИ === */}
-      
       {isAddingMechanic && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">

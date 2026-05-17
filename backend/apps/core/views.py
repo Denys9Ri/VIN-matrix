@@ -83,11 +83,12 @@ class VisitViewSet(viewsets.ModelViewSet):
             image_data = doc.read()
             b64_image = base64.b64encode(image_data).decode('utf-8')
             
+            # Відправляємо картинку в хмарний OCR
             response = requests.post(
                 'https://api.ocr.space/parse/image',
                 data={
-                    'apikey': 'helloworld',  
-                    'language': 'eng',       
+                    'apikey': 'helloworld',  # Безкоштовний ключ
+                    'language': 'eng',       # Тільки англійська для VIN і номерів
                     'base64Image': 'data:image/jpeg;base64,' + b64_image,
                     'OCREngine': 2,          
                 },
@@ -108,53 +109,39 @@ class VisitViewSet(viewsets.ModelViewSet):
                 text_upper = parsed_text.upper().replace('\n', ' ').replace('\r', ' ')
                 
                 if not text_upper.strip():
-                     return Response({"error": "ШІ не знайшов жодного тексту. Спробуйте інше фото."}, status=400)
+                     return Response({"error": "ШІ не знайшов жодного тексту на цьому фото. Спробуйте інше."}, status=400)
                 
-                # --- РОЗУМНИЙ ПАРСИНГ МАРКЕРІВ ТЕХПАСПОРТА ---
+                # --- РОЗУМНИЙ ПАРСИНГ ЗА МАРКЕРАМИ ТЕХПАСПОРТА ---
                 
-                # 1. VIN (17 символів підряд)
+                # 1. Пошук VIN (17 символів підряд)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
                 vin_code = vin_match.group(0) if vin_match else ""
                 
-                # 2. Номер (напр. BM 8795 CO або ВМ8795СО)
+                # 2. Пошук Держ. Номера
                 plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
                 plate = plate_match.group(0).replace(' ', '') if plate_match else ""
                 
                 # 3. Марка (Шукаємо поле D.1)
-                brand = ""
-                brand_match = re.search(r'D\.1\s+([A-Z\-]+)', text_upper)
-                if brand_match:
-                    brand = brand_match.group(1).strip()
-                else:
-                    # Резервний словник, якщо D.1 затерто
+                brand_match = re.search(r'D[\.\s]*1\s*[:\-]?\s*([A-Z\-]+)', text_upper)
+                brand = brand_match.group(1).strip() if brand_match else ""
+                if not brand:
                     brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT']
                     for b in brands:
                         if b in text_upper:
                             brand = b
                             break
-
+                            
                 # 4. Модель (Шукаємо поле D.3)
-                model = ""
-                model_match = re.search(r'D\.3\s+([A-Z0-9\-\s]+?)(?=\s+E\b|\s+E\.1|\s+F\.1|\s*$)', text_upper)
-                if model_match:
-                    model = model_match.group(1).strip()
-
+                model_match = re.search(r'D[\.\s]*3\s*[:\-]?\s*([A-Z0-9\-]+(?:\s+[A-Z0-9\-]+)?)', text_upper)
+                model = model_match.group(1).strip() if model_match else ""
+                
                 # 5. Рік випуску (Шукаємо поле B.2)
-                year = ""
-                year_match = re.search(r'\(?B\.2\)?\s*(\d{4})', text_upper)
-                if year_match:
-                    year = year_match.group(1)
-                else:
-                    # Резервний пошук року, тільки якщо поруч немає P.1 (щоб не сплутати з двигуном)
-                    fallback_year = re.search(r'\b(199\d|20[0-2]\d)\b', text_upper)
-                    if fallback_year and 'P.1' not in text_upper:
-                        year = fallback_year.group(0)
-
+                year_match = re.search(r'\(?B[\.\s]*2\)?\s*[:\-]?\s*(\d{4})', text_upper)
+                year = year_match.group(1) if year_match else ""
+                
                 # 6. Двигун (Шукаємо поле P.1)
-                engine = ""
-                engine_match = re.search(r'P\.1\s*(\d{3,4})', text_upper)
-                if engine_match:
-                    engine = engine_match.group(1)
+                engine_match = re.search(r'P[\.\s]*1\s*[:\-]?\s*(\d{3,4})', text_upper)
+                engine = engine_match.group(1) if engine_match else ""
 
                 return Response({
                     "success": True,

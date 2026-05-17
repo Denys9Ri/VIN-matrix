@@ -26,7 +26,6 @@ const Analytics = () => {
           axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } })
         ]);
         
-        // Для фінансів беремо тільки успішно закриті візити/замовлення
         const data = Array.isArray(visitsRes.data) ? visitsRes.data : [];
         const completedVisits = data.filter(v => v.status === 'DONE' || v.status === 'COMPLETED');
         
@@ -41,11 +40,9 @@ const Analytics = () => {
     fetchData();
   }, [token, navigate]);
 
-  // Обчислення статистики на основі обраного фільтру
   const stats = useMemo(() => {
     const now = new Date();
     
-    // Фільтруємо по даті
     const filteredVisits = visits.filter(v => {
       const vDate = new Date(v.updated_at || v.created_at);
       if (timeFilter === 'today') {
@@ -71,12 +68,10 @@ const Analytics = () => {
     filteredVisits.forEach(visit => {
       const vDate = new Date(visit.updated_at || visit.created_at);
       
-      // Створюємо правильний ключ для сортування (РРРР-ММ-ДД або РРРР-ММ)
       const sortKey = timeFilter === 'all' 
         ? `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}`
         : `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}-${String(vDate.getDate()).padStart(2, '0')}`;
         
-      // Красивий підпис для графіку
       const displayLabel = timeFilter === 'all' 
         ? vDate.toLocaleDateString('uk-UA', { month: 'short', year: 'numeric' })
         : vDate.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short' });
@@ -88,7 +83,6 @@ const Analytics = () => {
       let visitRevenue = 0;
       let visitCost = 0;
 
-      // Рахуємо послуги
       if (Array.isArray(visit.services)) {
         visit.services.forEach(s => {
           const price = parseFloat(s.price) || 0;
@@ -100,7 +94,6 @@ const Analytics = () => {
         });
       }
 
-      // Рахуємо запчастини (додано артикул і бренд)
       if (Array.isArray(visit.parts)) {
         visit.parts.forEach(p => {
           const sellPrice = parseFloat(p.sell_price) || 0;
@@ -133,16 +126,13 @@ const Analytics = () => {
     const marginPercent = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : 0;
     const averageCheck = filteredVisits.length > 0 ? (totalRevenue / filteredVisits.length).toFixed(0) : 0;
 
-    // СОРТУЄМО ДАНІ ДЛЯ ГРАФІКА ХРОНОЛОГІЧНО (зліва направо)
     const sortedKeys = Object.keys(chartDataMap).sort();
     const chartData = sortedKeys.map(key => chartDataMap[key]);
 
-    // Топ запчастин
     const topParts = Object.values(partsSales)
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
 
-    // Топ послуг
     const topServices = Object.entries(servicesSales)
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.revenue - a.revenue)
@@ -153,7 +143,6 @@ const Analytics = () => {
 
   const maxChartValue = Math.max(...stats.chartData.map(d => d.value), 1);
 
-  // Функція для копіювання артикулу
   const handleCopyArticle = (article) => {
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(article).then(() => {
@@ -237,102 +226,102 @@ const Analytics = () => {
 
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* ШИРОКИЙ ГРАФІК */}
+      <div className="w-full bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col mb-6 md:mb-8">
+        <h3 className="font-black uppercase text-slate-800 mb-2 flex items-center gap-2 text-sm"><Calendar size={16} className="text-blue-500"/> Динаміка доходу</h3>
         
-        {/* ЧИСТИЙ ТЕЙЛВІНД ГРАФІК (Без npm бібліотек) */}
-        <div className="lg:col-span-2 bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
-          <h3 className="font-black uppercase text-slate-800 mb-6 flex items-center gap-2 text-sm"><Calendar size={16} className="text-blue-500"/> Динаміка доходу</h3>
-          
-          {stats.chartData.length > 0 ? (
-            <div className="flex-1 min-h-[250px] md:min-h-[300px] flex items-end gap-2 md:gap-4 pt-10">
-              {stats.chartData.map((data, idx) => (
-                <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
-                  
-                  {/* Tooltip при наведенні */}
-                  <div className="absolute -top-10 bg-slate-800 text-white text-[10px] font-black uppercase px-2 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none mb-2">
-                    {data.value.toLocaleString()} ₴
-                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
-                  </div>
-
-                  {/* Стовпчик графіка */}
-                  <div 
-                    className="w-full bg-blue-100 group-hover:bg-blue-200 rounded-t-lg transition-all duration-500 ease-out relative overflow-hidden flex items-end justify-center pb-2"
-                    style={{ height: `${Math.max((data.value / maxChartValue) * 100, 2)}%` }}
-                  >
-                    <div className="absolute bottom-0 w-full bg-blue-500 rounded-t-lg transition-all duration-500" style={{ height: '100%' }}></div>
-                  </div>
-
-                  {/* Підпис знизу */}
-                  <span className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-2 truncate w-full text-center">{data.label}</span>
+        {stats.chartData.length > 0 ? (
+          // ЗБЕРІГАЄМО ФІКСОВАНУ ВИСОТУ (щоб не розтягувало) І ЦЕНТРУЄМО СТОВПЧИКИ (щоб не були товстими)
+          <div className="h-[250px] md:h-[300px] w-full flex items-end justify-center gap-4 md:gap-6 pt-10">
+            {stats.chartData.map((data, idx) => (
+              <div key={idx} className="flex-1 max-w-[80px] flex flex-col items-center group relative h-full justify-end">
+                
+                {/* Tooltip при наведенні */}
+                <div className="absolute -top-10 bg-slate-800 text-white text-[10px] font-black uppercase px-2 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none mb-2">
+                  {data.value.toLocaleString()} ₴
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
                 </div>
-              ))}
-            </div>
-          ) : (
-             <div className="flex-1 flex flex-col items-center justify-center text-slate-300 min-h-[250px]">
-                <BarChart size={48} className="mb-3 opacity-50"/>
-                <p className="text-xs font-black uppercase tracking-widest">Немає даних за цей період</p>
-             </div>
-          )}
+
+                {/* Стовпчик графіка */}
+                <div 
+                  className="w-full bg-blue-100 group-hover:bg-blue-200 rounded-t-lg transition-all duration-500 ease-out relative overflow-hidden flex items-end justify-center pb-2"
+                  style={{ height: `${Math.max((data.value / maxChartValue) * 100, 2)}%` }}
+                >
+                  <div className="absolute bottom-0 w-full bg-blue-500 rounded-t-lg transition-all duration-500" style={{ height: '100%' }}></div>
+                </div>
+
+                {/* Підпис знизу */}
+                <span className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-2 truncate w-full text-center">{data.label}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+           <div className="h-[250px] md:h-[300px] w-full flex flex-col items-center justify-center text-slate-300">
+              <BarChart size={48} className="mb-3 opacity-50"/>
+              <p className="text-xs font-black uppercase tracking-widest">Немає даних за цей період</p>
+           </div>
+        )}
+      </div>
+
+      {/* ТОП ПРОДАЖІВ - РОЗДІЛЕНІ НА 2 КОЛОНКИ */}
+      <div className={`grid grid-cols-1 ${!isStore ? 'lg:grid-cols-2' : ''} gap-6`}>
+        
+        {/* ТОП ЗАПЧАСТИН */}
+        <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
+          <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm"><Package size={16} className="text-amber-500"/> Топ запчастин</h3>
+          <div className="space-y-3">
+            {stats.topParts.length > 0 ? stats.topParts.map((part, idx) => (
+              <div key={idx} className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-slate-700 leading-snug mb-1.5">{part.name}</p>
+                  
+                  <div className="flex items-center flex-wrap gap-1.5">
+                    <span className="text-[9px] font-black uppercase text-slate-400 bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm">{part.brand}</span>
+                    
+                    <div className="flex items-center gap-1 bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 shadow-sm transition-colors">
+                      <span className="text-[10px] font-black uppercase tracking-wider">{part.article}</span>
+                      <button 
+                        onClick={() => handleCopyArticle(part.article)} 
+                        className="hover:text-blue-800 p-0.5" 
+                        title="Копіювати артикул"
+                      >
+                        {copiedArticle === part.article ? <Check size={12} className="text-green-600"/> : <Copy size={12}/>}
+                      </button>
+                    </div>
+
+                    <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded ml-auto">{part.count} шт</span>
+                  </div>
+                </div>
+                <div className="text-sm font-black text-slate-800 shrink-0 mt-0.5">{part.revenue.toLocaleString()} ₴</div>
+              </div>
+            )) : (
+              <p className="text-[10px] font-black uppercase text-center text-slate-400 py-4">Немає проданих запчастин</p>
+            )}
+          </div>
         </div>
 
-        {/* ТОП ПРОДАЖІВ */}
-        <div className="space-y-6">
+        {/* ТОП ПОСЛУГ */}
+        {!isStore && (
           <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm"><Package size={16} className="text-amber-500"/> Топ запчастин</h3>
+            <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm"><Wrench size={16} className="text-purple-500"/> Топ послуг</h3>
             <div className="space-y-3">
-              {stats.topParts.length > 0 ? stats.topParts.map((part, idx) => (
-                <div key={idx} className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
-                  <div className="flex-1">
-                    {/* Назва без truncate, щоб було видно повністю */}
-                    <p className="text-xs font-bold text-slate-700 leading-snug mb-1.5">{part.name}</p>
-                    
-                    {/* Блок з брендом і копіюванням артикулу */}
-                    <div className="flex items-center flex-wrap gap-1.5">
-                      <span className="text-[9px] font-black uppercase text-slate-400 bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm">{part.brand}</span>
-                      
-                      <div className="flex items-center gap-1 bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 shadow-sm transition-colors">
-                        <span className="text-[10px] font-black uppercase tracking-wider">{part.article}</span>
-                        <button 
-                          onClick={() => handleCopyArticle(part.article)} 
-                          className="hover:text-blue-800 p-0.5" 
-                          title="Копіювати артикул"
-                        >
-                          {copiedArticle === part.article ? <Check size={12} className="text-green-600"/> : <Copy size={12}/>}
-                        </button>
-                      </div>
-
-                      <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded ml-auto">{part.count} шт</span>
-                    </div>
+              {stats.topServices.length > 0 ? stats.topServices.map((service, idx) => (
+                <div key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <div className="overflow-hidden pr-2 flex-1">
+                    <p className="text-xs font-bold text-slate-700 truncate">{service.name}</p>
+                    <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{service.count} разів</p>
                   </div>
-                  <div className="text-sm font-black text-slate-800 shrink-0 mt-0.5">{part.revenue.toLocaleString()} ₴</div>
+                  <div className="text-sm font-black text-slate-800 shrink-0">{service.revenue.toLocaleString()} ₴</div>
                 </div>
               )) : (
-                <p className="text-[10px] font-black uppercase text-center text-slate-400 py-4">Немає проданих запчастин</p>
+                <p className="text-[10px] font-black uppercase text-center text-slate-400 py-4">Немає виконаних послуг</p>
               )}
             </div>
           </div>
-
-          {!isStore && (
-            <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
-              <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm"><Wrench size={16} className="text-purple-500"/> Топ послуг</h3>
-              <div className="space-y-3">
-                {stats.topServices.length > 0 ? stats.topServices.map((service, idx) => (
-                  <div key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <div className="overflow-hidden pr-2 flex-1">
-                      <p className="text-xs font-bold text-slate-700 truncate">{service.name}</p>
-                      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{service.count} разів</p>
-                    </div>
-                    <div className="text-sm font-black text-slate-800 shrink-0">{service.revenue.toLocaleString()} ₴</div>
-                  </div>
-                )) : (
-                  <p className="text-[10px] font-black uppercase text-center text-slate-400 py-4">Немає виконаних послуг</p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        )}
 
       </div>
+
     </div>
   );
 };

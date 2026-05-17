@@ -10,7 +10,7 @@ const Visits = () => {
   const [catalogServices, setCatalogServices] = useState([]); 
   const [role, setRole] = useState(null); 
   const [companyInfo, setCompanyInfo] = useState(null); 
-  const [permissions, setPermissions] = useState({}); // ДОДАНО: ПРАВА МАЙСТРА
+  const [permissions, setPermissions] = useState({}); 
   const [loading, setLoading] = useState(true);
   
   const isStore = companyInfo?.business_type === 'store'; 
@@ -60,7 +60,7 @@ const Visits = () => {
       setVisits(visitsRes.data || []);
       setRole(settingsRes.data.role);
       setCompanyInfo(settingsRes.data.company); 
-      setPermissions(settingsRes.data.permissions || {}); // Зберігаємо права
+      setPermissions(settingsRes.data.permissions || {}); 
       setCatalogServices(servicesRes.data || []);
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
@@ -281,7 +281,6 @@ const Visits = () => {
           )}
         </div>
 
-        {/* МАГІЯ ПРАВ: Кнопку бачить Власник АБО Майстер з правом can_create_visits */}
         {(role === 'owner' || permissions?.can_create_visits) && (
            <button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-5 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all hover:scale-[1.02] w-full xl:w-auto shrink-0">
              <Plus size={16}/> {isStore ? 'Нове замовлення' : 'Нове авто'}
@@ -348,7 +347,6 @@ const Visits = () => {
                     </select>
                   </div>
                   
-                  {/* ПОЛЕ ВВОДУ АВАНСУ ПРИ СТВОРЕННІ */}
                   {newVisitData.payment_status === 'advance' && (
                     <input type="number" placeholder="Внесена сума (₴)" className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm font-black text-blue-600 outline-none" value={newVisitData.prepayment_amount} onChange={e => setNewVisitData({...newVisitData, prepayment_amount: e.target.value})}/>
                   )}
@@ -420,7 +418,6 @@ const Visits = () => {
                         <option value="cod">📦 Накладений платіж</option>
                       </select>
                       
-                      {/* ЛОГІКА РОЗРАХУНКУ ПЕРЕДОПЛАТИ (МАГІЯ) */}
                       {selectedVisit.payment_status === 'advance' && (
                         <div className="mt-2 pt-2 border-t border-slate-200">
                           <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Аванс (Внесена сума)</label>
@@ -519,11 +516,14 @@ const Visits = () => {
                             {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
                           </div>
                         </div>
-                        <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`text-[11px] md:text-xs font-black uppercase tracking-widest rounded-xl px-3 py-3 md:py-2 outline-none cursor-pointer w-full text-center shadow-sm border border-slate-200/50 ${serviceStatusColors[s.status || 'PENDING']}`}>
-                          <option value="PENDING">⏳ Очікує</option>
-                          <option value="IN_PROGRESS">🔧 В роботі</option>
-                          <option value="DONE">✅ Виконано</option>
-                        </select>
+                        {/* ВИПРАВЛЕННЯ ДЛЯ IOS SAFARI */}
+                        <div className="mt-1">
+                          <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`appearance-none block w-full text-[11px] md:text-xs font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer text-center shadow-sm border border-slate-200/50 ${serviceStatusColors[s.status || 'PENDING']}`}>
+                            <option value="PENDING">⏳ Очікує</option>
+                            <option value="IN_PROGRESS">🔧 В роботі</option>
+                            <option value="DONE">✅ Виконано</option>
+                          </select>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -563,7 +563,8 @@ const Visits = () => {
                           {(role === 'owner' || permissions?.can_view_finances) && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-100 text-xs">{p.sell_price} ₴</span>}
                           {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
                         </div>
-                        <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer w-full sm:w-36 text-center shadow-sm border border-slate-200/50 ${partStatusColors[p.status || 'WAITING']}`}>
+                        {/* ВИПРАВЛЕННЯ ДЛЯ IOS SAFARI */}
+                        <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer w-full sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.status || 'WAITING']}`}>
                           <option value="WAITING">⏳ Очікується</option>
                           <option value="IN_TRANSIT">🚚 В дорозі</option>
                           <option value="ARRIVED">✅ Приїхала</option>

@@ -1,4 +1,5 @@
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from rest_framework.decorators import action
 from rest_framework import viewsets, status, generics
 from rest_framework.views import APIView
@@ -418,7 +419,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
 
 # ===============================================
-# ОСНОВНИЙ КЛАС ПОШУКУ (ІЗ ДЕБАГОМ В ТЕРМІНАЛ ТА ВИПРАВЛЕНОЮ ОМЕГОЮ)
+# ОСНОВНИЙ КЛАС ПОШУКУ (ІДЕАЛЬНІ АНАЛОГИ З МУЛЬТИПОТОЧНІСТЮ)
 # ===============================================
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
@@ -436,7 +437,7 @@ class PartSearchView(APIView):
         q_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
         
         print(f"\n==============================================")
-        print(f"[РОУТЕР] Пошук: '{query}', is_analog={is_analog}")
+        print(f"[VIN-MATRIX] Пошук: '{query}', is_analog={is_analog}")
         print(f"==============================================")
         
         if not query or len(query) < 2: return Response([])
@@ -485,8 +486,6 @@ class PartSearchView(APIView):
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             
-                            art_clean = str(item.get('article', '')).upper().replace(' ','').replace('-','').replace('.','')
-                            
                             item_sku = str(item.get('sku', ''))
                             if is_analog and item_sku == sku_param:
                                 continue
@@ -525,9 +524,6 @@ class PartSearchView(APIView):
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
                 try:
                     if is_analog:
-                        print(f"[ОМЕГА] Шукаємо аналоги для ProductId={sku_param}")
-                        
-                        # ВИПРАВЛЕННЯ: Дозволяємо від'ємні числа (наприклад -1138569)
                         is_valid_sku = False
                         try:
                             prod_id_int = int(sku_param)
@@ -539,13 +535,10 @@ class PartSearchView(APIView):
                             cross_url = "https://public.omega.page/public/api/v1.0/product/getAllCrosses"
                             payload = {"Key": sup.api_key.strip(), "ProductId": prod_id_int}
                             
-                            print(f"[ОМЕГА] Payload Аналогів: {payload}")
                             response = requests.post(cross_url, json=payload, timeout=15)
-                            print(f"[ОМЕГА] Статус: {response.status_code}")
                             
                             if response.status_code == 200:
                                 crosses = response.json().get('Data', [])
-                                print(f"[ОМЕГА] Знайдено кросів в API: {len(crosses)}")
                                 seen_codes = set()
                                 valid_crosses = []
                                 
@@ -560,62 +553,76 @@ class PartSearchView(APIView):
                                     seen_codes.add(unique_key)
                                     valid_crosses.append(cross)
                                 
-                                print(f"[ОМЕГА] Після фільтрації дублів: {len(valid_crosses)} унікальних кросів")
-                                
-                                for cross in valid_crosses[:6]:
-                                    c_code_raw = str(cross.get('Code', ''))
-                                    c_brand_raw = str(cross.get('Brand', 'Unknown'))
+                                # ФУНКЦІЯ ДЛЯ МУЛЬТИПОТОЧНОСТІ: Пробиває ціну 1 аналога
+                                def get_omega_price(cross_data):
+                                    c_code_raw = str(cross_data.get('Code', ''))
+                                    c_brand_raw = str(cross_data.get('Brand', 'Unknown'))
                                     
                                     price_url = "https://public.omega.page/public/api/v1.0/product/search"
                                     price_payload = {"Key": sup.api_key.strip(), "SearchPhrase": c_code_raw, "From": 0, "Count": 5}
-                                    price_res = requests.post(price_url, json=price_payload, timeout=5)
                                     
-                                    if price_res.status_code == 200:
-                                        res_items = price_res.json().get('Result', []) or price_res.json().get('Data', [])
-                                        
-                                        best_match = None
-                                        for match_item in res_items:
-                                            prod_id = str(match_item.get('ProductId', '0'))
-                                            if prod_id == sku_param:
-                                                continue
-                                            best_match = match_item
-                                            break
-                                            
-                                        if best_match:
-                                            buy_price = float(best_match.get('CustomerPrice') or best_match.get('EffectivePrice') or best_match.get('Price') or 0)
-                                            prod_name = best_match.get('Description', 'TecDoc Аналог')
-                                            prod_id = str(best_match.get('ProductId', '0'))
-                                            img_url = best_match.get('ImageUrl', '')
-                                            
-                                            warehouses_list = []
-                                            for wh in best_match.get('Rests', []):
-                                                wh_name, wh_qty = str(wh.get('Key', 'Склад Омега')), str(wh.get('Value', '0'))
-                                                pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
-                                                if pref and not pref.get('is_active', True): continue
-                                                warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": buy_price})
+                                    try:
+                                        price_res = requests.post(price_url, json=price_payload, timeout=5)
+                                        if price_res.status_code == 200:
+                                            res_items = price_res.json().get('Result', []) or price_res.json().get('Data', [])
+                                            best_match = None
+                                            for match_item in res_items:
+                                                prod_id = str(match_item.get('ProductId', '0'))
+                                                if prod_id == sku_param:
+                                                    continue
+                                                best_match = match_item
+                                                break
                                                 
-                                            for wh in best_match.get('SupplierRests', []):
-                                                wh_name, wh_qty = str(wh.get('WareHouseName', 'Склад Партнера')), str(wh.get('Rest', '0'))
-                                                pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
-                                                if pref and not pref.get('is_active', True): continue
-                                                warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": buy_price})
-                                            
-                                            if warehouses_list:
-                                                warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
-                                                results.append({
-                                                    "id": f"omega_cross_{sup.id}_{prod_id}", "supplier_id": sup.id, "source": sup.name,
-                                                    "brand": c_brand_raw, "article": c_code_raw,
-                                                    "name": prod_name, "buy_price": buy_price, 
-                                                    "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
-                                                    "is_local": False, "warehouses": warehouses_list, "sku": prod_id,
-                                                    "min_qty": 1, "image_url": img_url, "description": ""
-                                                })
-                            else:
-                                print(f"[ОМЕГА ПОМИЛКА] {response.text}")
-                        else:
-                            print(f"[ОМЕГА] SKU пустий або некоректний: '{sku_param}'")
+                                            if best_match:
+                                                buy_price = float(best_match.get('CustomerPrice') or best_match.get('EffectivePrice') or best_match.get('Price') or 0)
+                                                prod_name = best_match.get('Description', 'TecDoc Аналог')
+                                                prod_id = str(best_match.get('ProductId', '0'))
+                                                img_url = best_match.get('ImageUrl', '')
+                                                
+                                                wh_list = []
+                                                for wh in best_match.get('Rests', []):
+                                                    wh_name, wh_qty = str(wh.get('Key', 'Склад Омега')), str(wh.get('Value', '0'))
+                                                    pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
+                                                    if pref and not pref.get('is_active', True): continue
+                                                    wh_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": buy_price})
+                                                    
+                                                for wh in best_match.get('SupplierRests', []):
+                                                    wh_name, wh_qty = str(wh.get('WareHouseName', 'Склад Партнера')), str(wh.get('Rest', '0'))
+                                                    pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
+                                                    if pref and not pref.get('is_active', True): continue
+                                                    wh_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": buy_price})
+                                                
+                                                if wh_list:
+                                                    wh_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
+                                                    return {
+                                                        "id": f"omega_cross_{sup.id}_{prod_id}", "supplier_id": sup.id, "source": sup.name,
+                                                        "brand": c_brand_raw, "article": c_code_raw,
+                                                        "name": prod_name, "buy_price": buy_price, 
+                                                        "quantity": f"{wh_list[0]['quantity']} шт ({wh_list[0]['name']})",
+                                                        "is_local": False, "warehouses": wh_list, "sku": prod_id,
+                                                        "min_qty": 1, "image_url": img_url, "description": ""
+                                                    }
+                                    except Exception:
+                                        pass
+                                        
+                                    # ЯКЩО НЕМАЄ В НАЯВНОСТІ, ВСЕ ОДНО ПОКАЗУЄМО АРТИКУЛ
+                                    return {
+                                        "id": f"omega_cross_{sup.id}_nostock_{c_code_raw}", "supplier_id": sup.id, "source": sup.name,
+                                        "brand": c_brand_raw, "article": c_code_raw,
+                                        "name": "TecDoc Аналог (Клікніть артикул для пошуку)", "buy_price": 0, 
+                                        "quantity": "Немає в наявності",
+                                        "is_local": False, "warehouses": [{"name": "База Омега", "quantity": "0", "priority": 99, "buy_price": 0}], "sku": "",
+                                        "min_qty": 1, "image_url": "", "description": ""
+                                    }
+
+                                # ЗАПУСКАЄМО 50 АНАЛОГІВ ОДНОЧАСНО
+                                with ThreadPoolExecutor(max_workers=10) as executor:
+                                    future_to_cross = {executor.submit(get_omega_price, c): c for c in valid_crosses[:50]}
+                                    for future in as_completed(future_to_cross):
+                                        res = future.result()
+                                        if res:
+                                            results.append(res)
                     else:
-                        print(f"[ОМЕГА] Звичайний пошук: {query}")
                         omega_url = "https://public.omega.page/public/api/v1.0/product/search"
                         payload = {"Key": sup.api_key.strip(), "SearchPhrase": query, "From": 0, "Count": 50}
                         
@@ -665,8 +672,6 @@ class PartSearchView(APIView):
             # === TECHNOMIR ===
             elif sup.api_key and ('tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower()):
                 try:
-                    print(f"\n[ТЕХНОМІР] Пошук: {query}, is_analog={is_analog}")
-                    
                     payload = {
                         "apiToken": sup.api_key.strip(),
                         "code": query,
@@ -674,9 +679,7 @@ class PartSearchView(APIView):
                         "currency": "UAH" 
                     }
                     
-                    # ВИПРАВЛЕННЯ: Для пошуку аналогів Техномір вимагає brandId
                     if is_analog:
-                        print(f"[ТЕХНОМІР] Шукаємо brandId для бренду: {orig_brand}")
                         brand_url = "https://api.tehnomir.com.ua/info/getBrandsByCode"
                         b_res = requests.post(brand_url, json={"apiToken": sup.api_key.strip(), "code": query}, timeout=10)
                         
@@ -691,24 +694,16 @@ class PartSearchView(APIView):
                         
                         if brand_id:
                             payload['brandId'] = brand_id
-                            print(f"[ТЕХНОМІР] Знайдено brandId: {brand_id}")
-                        else:
-                            print("[ТЕХНОМІР] Не вдалося знайти brandId, можлива помилка 422")
                     
                     tehnomir_url = "https://api.tehnomir.com.ua/price/search"
-                    print(f"[ТЕХНОМІР] Payload: {payload}")
-                    
                     response = requests.post(tehnomir_url, json=payload, timeout=25)
-                    print(f"[ТЕХНОМІР] Статус: {response.status_code}")
                     
                     if response.status_code == 200:
                         raw_data = response.json()
                         if not raw_data.get('success'):
-                            print("[ТЕХНОМІР] API повернув success: false")
                             continue
                             
                         items_data = raw_data.get('data', [])
-                        print(f"[ТЕХНОМІР] Знайдено позицій: {len(items_data)}")
                         
                         for item in items_data:
                             if not isinstance(item, dict): continue
@@ -724,7 +719,6 @@ class PartSearchView(APIView):
                                     continue
                             else:
                                 if prod_id == sku_param:
-                                    print(f"[ТЕХНОМІР] Відкинуто оригінал: {article} ({brand})")
                                     continue 
                                 
                             warehouses_list = []
@@ -782,11 +776,6 @@ class PartSearchView(APIView):
                                 "sku": prod_id,
                                 "min_qty": 1, "image_url": "", "description": ""
                             })
-                    elif response.status_code == 422:
-                        print(f"[ТЕХНОМІР ПОМИЛКА 422] {response.text}")
-                    else:
-                        print(f"[ТЕХНОМІР ПОМИЛКА] {response.status_code} - {response.text}")
-                except Exception as e:
-                    print(f"[ТЕХНОМІР EXCEPTION] {e}")
+                except Exception: pass
                     
         return Response(results)

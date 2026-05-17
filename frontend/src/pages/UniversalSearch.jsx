@@ -108,10 +108,37 @@ const UniversalSearch = () => {
   const fetchAnalogs = async (item) => {
     setAnalogLoading(prev => ({ ...prev, [item.id]: true }));
     try {
-      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${item.sku}`, {
+      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${item.sku}&brand=${encodeURIComponent(item.brand)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
       const processed = res.data.map(a => ({ ...a, selectedWhIdx: 0 }));
+
+      // === СОРТУВАННЯ АНАЛОГІВ: НАЯВНІСТЬ -> НАЙНИЖЧА ЦІНА ===
+      processed.sort((a, b) => {
+        const checkAvailability = (part) => {
+          const qStr = String(part.quantity || '');
+          if (qStr.includes('Немає') || qStr.includes('?') || qStr === '0') return false;
+          // Якщо є цифра більше 0, або знак ">" (наприклад >10)
+          const numMatch = qStr.match(/\d+/);
+          if (numMatch && parseInt(numMatch[0]) > 0) return true;
+          if (qStr.includes('>')) return true;
+          return false;
+        };
+
+        const availA = checkAvailability(a);
+        const availB = checkAvailability(b);
+
+        // Якщо один в наявності, а інший ні - наявний іде вгору
+        if (availA && !availB) return -1;
+        if (!availA && availB) return 1;
+
+        // Якщо обидва в наявності (або обидва відсутні) - сортуємо за ціною від найдешевшого
+        const priceA = parseFloat(a.buy_price) || 0;
+        const priceB = parseFloat(b.buy_price) || 0;
+        return priceA - priceB;
+      });
+
       setAnalogResults(prev => ({ ...prev, [item.id]: processed }));
     } catch (err) {
       console.error(err);
@@ -273,7 +300,6 @@ const UniversalSearch = () => {
   };
 
   return (
-    // ЗБІЛЬШЕНА ШИРИНА: max-w-[1600px] замість max-w-7xl
     <div className="w-full max-w-[1600px] mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col overflow-x-hidden">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
         <div>
@@ -430,11 +456,14 @@ const UniversalSearch = () => {
                                    const analogPrice = analogWh ? analogWh.buy_price : analog.buy_price;
                                    const analogQty = analogWh ? analogWh.quantity : analog.quantity;
                                    
+                                   // Перевірка чи є в наявності для зміни кольору
+                                   const isAvailable = analogPrice > 0 && !String(analogQty).includes('Немає') && !String(analogQty).includes('?');
+                                   
                                    return (
-                                     <div key={analog.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all gap-3 md:gap-4">
+                                     <div key={analog.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all gap-3 md:gap-4 ${!isAvailable ? 'opacity-60 grayscale' : ''}`}>
                                        <div className="w-full sm:w-32 md:w-36 shrink-0">
                                          <p 
-                                           className="font-black text-sm text-slate-800 hover:text-blue-600 cursor-pointer underline decoration-slate-300 decoration-dashed underline-offset-4 transition-colors"
+                                           className={`font-black text-sm hover:text-blue-600 cursor-pointer underline decoration-dashed underline-offset-4 transition-colors ${isAvailable ? 'text-slate-800 decoration-slate-300' : 'text-slate-500 decoration-slate-200'}`}
                                            onClick={() => {
                                              setQuery(analog.article);
                                              performSearch(analog.article);
@@ -464,7 +493,7 @@ const UniversalSearch = () => {
                                            <span className="font-bold text-slate-600 text-xs bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm w-32 text-center inline-block truncate">{analogQty}</span>
                                          )}
                                          <span className="font-black text-slate-800 w-16 text-right">{analogPrice.toLocaleString()} ₴</span>
-                                         <button onClick={() => openAddModal(analog, analogWhIdx)} className="bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm" title="Додати в замовлення">
+                                         <button onClick={() => openAddModal(analog, analogWhIdx)} disabled={!isAvailable} className="bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" title={isAvailable ? "Додати в замовлення" : "Немає в наявності"}>
                                            <Plus size={16}/>
                                          </button>
                                        </div>
@@ -563,13 +592,16 @@ const UniversalSearch = () => {
                              const analogWhIdx = analog.selectedWhIdx || 0;
                              const analogWh = (analog.warehouses && analog.warehouses.length > 0) ? analog.warehouses[analogWhIdx] : null;
                              const analogPrice = analogWh ? analogWh.buy_price : analog.buy_price;
+                             const analogQty = analogWh ? analogWh.quantity : analog.quantity;
+                             
+                             const isAvailable = analogPrice > 0 && !String(analogQty).includes('Немає') && !String(analogQty).includes('?');
                              
                              return (
-                               <div key={analog.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2 relative">
-                                  <button onClick={() => openAddModal(analog, analogWhIdx)} className="absolute right-3 top-3 bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 shadow-sm"><Plus size={14}/></button>
+                               <div key={analog.id} className={`bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2 relative ${!isAvailable ? 'opacity-60 grayscale' : ''}`}>
+                                  <button onClick={() => openAddModal(analog, analogWhIdx)} disabled={!isAvailable} className="absolute right-3 top-3 bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={14}/></button>
                                   <div className="pr-8">
                                     <p 
-                                      className="font-black text-sm text-slate-800 leading-tight hover:text-blue-600 cursor-pointer underline decoration-slate-300 decoration-dashed underline-offset-4"
+                                      className={`font-black text-sm leading-tight hover:text-blue-600 cursor-pointer underline decoration-dashed underline-offset-4 transition-colors ${isAvailable ? 'text-slate-800 decoration-slate-300' : 'text-slate-500 decoration-slate-200'}`}
                                       onClick={() => {
                                         setQuery(analog.article);
                                         performSearch(analog.article);
@@ -594,7 +626,7 @@ const UniversalSearch = () => {
                                          ))}
                                        </select>
                                      ) : (
-                                       <span className="font-bold text-slate-600 text-[10px] bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">1 шт (Склад)</span>
+                                       <span className="font-bold text-slate-600 text-[10px] bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 truncate w-24 text-center">{analogQty}</span>
                                      )}
                                      <span className="font-black text-slate-800 text-sm">{analogPrice.toLocaleString()} ₴</span>
                                   </div>

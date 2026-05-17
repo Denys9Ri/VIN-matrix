@@ -83,14 +83,13 @@ class VisitViewSet(viewsets.ModelViewSet):
             image_data = doc.read()
             b64_image = base64.b64encode(image_data).decode('utf-8')
             
-            # Відправляємо картинку в хмарний OCR
             response = requests.post(
                 'https://api.ocr.space/parse/image',
                 data={
-                    'apikey': 'helloworld',  # Безкоштовний ключ
-                    'language': 'eng',       # <--- ВИПРАВЛЕНО НА АНГЛІЙСЬКУ (ідеально для VIN та номерів)
+                    'apikey': 'helloworld',  
+                    'language': 'eng',       
                     'base64Image': 'data:image/jpeg;base64,' + b64_image,
-                    'OCREngine': 2,          # Engine 2 краще читає складний текст
+                    'OCREngine': 2,          
                 },
                 timeout=20
             )
@@ -100,7 +99,6 @@ class VisitViewSet(viewsets.ModelViewSet):
                 
                 if result.get('IsErroredOnProcessing'):
                     err_msg = result.get('ErrorMessage', ['Невідома помилка OCR'])[0]
-                    print(f"[OCR ПОМИЛКА] {err_msg}")
                     return Response({"error": f"ШІ відмовив: {err_msg}"}, status=400)
                 
                 parsed_text = ""
@@ -110,44 +108,62 @@ class VisitViewSet(viewsets.ModelViewSet):
                 text_upper = parsed_text.upper().replace('\n', ' ').replace('\r', ' ')
                 
                 if not text_upper.strip():
-                     return Response({"error": "ШІ не знайшов жодного тексту на цьому фото. Спробуйте інше."}, status=400)
+                     return Response({"error": "ШІ не знайшов жодного тексту. Спробуйте інше фото."}, status=400)
                 
-                # 1. Пошук VIN (17 символів підряд)
+                # --- РОЗУМНИЙ ПАРСИНГ МАРКЕРІВ ТЕХПАСПОРТА ---
+                
+                # 1. VIN (17 символів підряд)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
                 vin_code = vin_match.group(0) if vin_match else ""
                 
-                # 2. Пошук Держ. Номера (напр. KA 1234 HI)
+                # 2. Номер (напр. BM 8795 CO або ВМ8795СО)
                 plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
                 plate = plate_match.group(0).replace(' ', '') if plate_match else ""
                 
-                # 3. Пошук Року випуску (1990 - 2026)
-                year_match = re.search(r'\b(199\d|20[0-2]\d)\b', text_upper)
-                year = year_match.group(0) if year_match else ""
-                
-                # 4. Пошук Марки авто
-                brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT']
+                # 3. Марка (Шукаємо поле D.1)
                 brand = ""
-                for b in brands:
-                    if b in text_upper:
-                        brand = b
-                        break
-                        
-                brand_model = brand
-                if year:
-                    brand_model += f" ({year} рік)"
-                
-                # Пошук об'єму двигуна (напр. 1995 або 2998)
+                brand_match = re.search(r'D\.1\s+([A-Z\-]+)', text_upper)
+                if brand_match:
+                    brand = brand_match.group(1).strip()
+                else:
+                    # Резервний словник, якщо D.1 затерто
+                    brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT']
+                    for b in brands:
+                        if b in text_upper:
+                            brand = b
+                            break
+
+                # 4. Модель (Шукаємо поле D.3)
+                model = ""
+                model_match = re.search(r'D\.3\s+([A-Z0-9\-\s]+?)(?=\s+E\b|\s+E\.1|\s+F\.1|\s*$)', text_upper)
+                if model_match:
+                    model = model_match.group(1).strip()
+
+                # 5. Рік випуску (Шукаємо поле B.2)
+                year = ""
+                year_match = re.search(r'\(?B\.2\)?\s*(\d{4})', text_upper)
+                if year_match:
+                    year = year_match.group(1)
+                else:
+                    # Резервний пошук року, тільки якщо поруч немає P.1 (щоб не сплутати з двигуном)
+                    fallback_year = re.search(r'\b(199\d|20[0-2]\d)\b', text_upper)
+                    if fallback_year and 'P.1' not in text_upper:
+                        year = fallback_year.group(0)
+
+                # 6. Двигун (Шукаємо поле P.1)
                 engine = ""
-                engine_match = re.search(r'\b([1-6]\d{3})\b', text_upper)
-                if engine_match and engine_match.group(0) != year:
-                    engine = engine_match.group(0)
-                    brand_model += f", Двигун: {engine} см3"
+                engine_match = re.search(r'P\.1\s*(\d{3,4})', text_upper)
+                if engine_match:
+                    engine = engine_match.group(1)
 
                 return Response({
                     "success": True,
                     "plate": plate,
                     "vin_code": vin_code,
-                    "brand_model": brand_model.strip(),
+                    "brand": brand,
+                    "model": model,
+                    "year": year,
+                    "engine": engine,
                     "raw_text": text_upper
                 })
             else:
@@ -512,6 +528,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
         all_suppliers = Supplier.objects.filter(company=company).exclude(api_key='')
         article = request.query_params.get('article', '').strip()
         brand = request.query_params.get('brand', '').strip().upper()
+        sku_param = request.query_params.get('sku', '').strip()
         
         info_data = {"properties": [], "applicability": [], "images": []}
         if not article: return Response(info_data)
@@ -566,23 +583,33 @@ class SupplierViewSet(viewsets.ModelViewSet):
         def fetch_omega(sup):
             try:
                 prod_id = None
-                search_url = "https://public.omega.page/public/api/v1.0/product/search"
-                res = requests.post(search_url, json={"Key": sup.api_key.strip(), "SearchPhrase": article, "From": 0, "Count": 10}, timeout=5)
                 
-                if res.status_code == 200:
-                    items = res.json().get('Result', []) or res.json().get('Data', [])
-                    for item in items:
-                        if str(item.get('BrandDescription', '')).upper() == brand:
-                            prod_id = int(item.get('ProductId', 0))
-                            add_img(item.get('ImageUrl', ''))
-                            if item.get('Weight'): add_prop("Вага (кг)", item.get('Weight'))
-                            if item.get('Info'): add_prop("Додатково", item.get('Info'))
-                            desc = str(item.get('Description', ''))
-                            if 'пр-во' in desc:
-                                cars_str = desc.split('(пр-во')[0].replace('Фильтр масляный двигателя', '').replace('Колодки тормозные', '').strip()
-                                if cars_str:
-                                    for c in cars_str.split(','): add_app(c.strip())
-                            break
+                is_valid_sku = False
+                if sku_param:
+                    try:
+                        prod_id = int(sku_param)
+                        is_valid_sku = True
+                    except ValueError:
+                        pass
+                
+                if not is_valid_sku:
+                    search_url = "https://public.omega.page/public/api/v1.0/product/search"
+                    res = requests.post(search_url, json={"Key": sup.api_key.strip(), "SearchPhrase": article, "From": 0, "Count": 10}, timeout=5)
+                    
+                    if res.status_code == 200:
+                        items = res.json().get('Result', []) or res.json().get('Data', [])
+                        for item in items:
+                            if str(item.get('BrandDescription', '')).upper() == brand:
+                                prod_id = int(item.get('ProductId', 0))
+                                add_img(item.get('ImageUrl', ''))
+                                if item.get('Weight'): add_prop("Вага (кг)", item.get('Weight'))
+                                if item.get('Info'): add_prop("Додатково", item.get('Info'))
+                                desc = str(item.get('Description', ''))
+                                if 'пр-во' in desc:
+                                    cars_str = desc.split('(пр-во')[0].replace('Фильтр масляный двигателя', '').replace('Колодки тормозные', '').strip()
+                                    if cars_str:
+                                        for c in cars_str.split(','): add_app(c.strip())
+                                break
 
                 if prod_id:
                     details_url = "https://public.omega.page/public/api/v1.0/product/details"

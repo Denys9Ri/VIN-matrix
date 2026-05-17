@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2, Printer, MessageSquare, ChevronLeft, ChevronRight, Copy, Check, Truck, Package, CreditCard } from 'lucide-react';
+import { Loader2, Plus, CarFront, Phone, Clock, CheckCircle2, Wrench, X, Store, Pencil, List, Search, RefreshCcw, Trash2, Printer, MessageSquare, ChevronLeft, ChevronRight, Copy, Check, Truck, Package, CreditCard, Camera, ScanLine } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard'; 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const Visits = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const [visits, setVisits] = useState([]);
   const [catalogServices, setCatalogServices] = useState([]); 
   const [role, setRole] = useState(null); 
@@ -22,6 +24,10 @@ const Visits = () => {
   const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
   const [showManualPartForm, setShowManualPartForm] = useState(false); 
   
+  // === СТАН ДЛЯ СКАНУВАННЯ ТЕХПАСПОРТА ===
+  const fileInputRef = useRef(null);
+  const [isScanning, setIsScanning] = useState(false);
+
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [editTimeData, setEditTimeData] = useState({ date: '', time: '' });
   
@@ -32,7 +38,7 @@ const Visits = () => {
 
   const [newVisitData, setNewVisitData] = useState({ 
     plate: '', vin_code: '', client: '', phone: '', date: '', time: '',
-    delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: ''
+    delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', brand_model: ''
   });
   
   const [newService, setNewService] = useState({ name: '', price: '' });
@@ -62,6 +68,15 @@ const Visits = () => {
       setCompanyInfo(settingsRes.data.company); 
       setPermissions(settingsRes.data.permissions || {}); 
       setCatalogServices(servicesRes.data || []);
+
+      // Відкриваємо модалку автоматично, якщо прийшли з Панелі по кнопці "Скан"
+      if (searchParams.get('scan') === 'true') {
+        setIsCreatingVisit(true);
+        setTimeout(() => {
+          if (fileInputRef.current) fileInputRef.current.click();
+        }, 500);
+      }
+
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
         setRole('owner'); 
@@ -74,11 +89,51 @@ const Visits = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
-  useEffect(() => {
-    if (selectedVisit) {
-      setEditComment(selectedVisit.comment || '');
+  // === ЛОГІКА СКАНУВАННЯ ===
+  const handleScanDocument = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    
+    const formData = new FormData();
+    formData.append('document', file);
+
+    try {
+      const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      if (res.data.success) {
+        console.log("ОРИГІНАЛЬНИЙ ТЕКСТ З ТЕХПАСПОРТА:", res.data.raw_text);
+        
+        setNewVisitData(prev => ({
+          ...prev,
+          plate: res.data.plate || prev.plate,
+          vin_code: res.data.vin_code || prev.vin_code,
+          brand_model: res.data.brand_model || prev.brand_model
+        }));
+        
+        if (res.data.plate) {
+           const checkRes = await axios.get(`${API_BASE}/api/visits/?search=${res.data.plate}`, { headers: { Authorization: `Bearer ${token}` } });
+           const existing = checkRes.data.find(v => v.plate.toUpperCase() === res.data.plate.toUpperCase());
+           if (existing) {
+             setNewVisitData(prev => ({ ...prev, client: existing.client, phone: existing.phone }));
+             setFoundExisting(true);
+             setTimeout(() => setFoundExisting(false), 4000);
+           }
+        }
+      }
+    } catch (error) {
+      alert("Не вдалося розпізнати документ. Спробуйте інше фото або введіть вручну.");
+    } finally {
+      setIsScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  }, [selectedVisit?.id, selectedVisit?.comment]);
+  };
 
   const handleCopyVin = (vin) => {
     if (!vin) return;
@@ -150,11 +205,21 @@ const Visits = () => {
         prepayment_amount: isStore && newVisitData.payment_status === 'advance' ? (newVisitData.prepayment_amount || 0) : 0
     };
     
+    if (newVisitData.brand_model && !payload.comment) {
+        payload.comment = `Авто: ${newVisitData.brand_model}`;
+    }
+    
     try {
       await axios.post(`${API_BASE}/api/visits/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
-      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '' });
-      setSearchQuery(''); setFilterDate(''); fetchData();
+      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', brand_model: '' });
+      
+      if (searchParams.get('scan')) {
+          navigate('/visits'); 
+      } else {
+          setSearchQuery(''); setFilterDate(''); fetchData();
+      }
+      
     } catch (error) { alert("Помилка створення"); }
   };
 
@@ -259,6 +324,22 @@ const Visits = () => {
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col w-full overflow-x-hidden">
       <style>{`
         input[type="date"], input[type="time"] { color: #334155 !important; -webkit-appearance: none; min-height: 42px; }
+        
+        /* Анімація лазера для сканера */
+        @keyframes scan-laser {
+          0% { top: 0; }
+          50% { top: 100%; }
+          100% { top: 0; }
+        }
+        .laser-line {
+          position: absolute;
+          left: 0;
+          right: 0;
+          height: 2px;
+          background: #10b981;
+          box-shadow: 0 0 15px 5px rgba(16, 185, 129, 0.4);
+          animation: scan-laser 2s infinite linear;
+        }
       `}</style>
 
       <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 no-print-area shrink-0 mt-4 md:mt-0">
@@ -303,16 +384,56 @@ const Visits = () => {
         </div>
       )}
 
+      {/* МОДАЛКА СТВОРЕННЯ ВІЗИТУ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
-          <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative">
-            <button onClick={() => { setIsCreatingVisit(false); setFoundExisting(false); }} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X size={20} /></button>
+          <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative overflow-hidden">
+            
+            {/* Оверлей Сканування */}
+            {isScanning && (
+              <div className="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm">
+                <div className="relative w-48 h-32 border-2 border-emerald-500 rounded-lg mb-6 overflow-hidden bg-slate-800/50">
+                  <div className="laser-line"></div>
+                  <ScanLine size={48} className="text-emerald-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-30" />
+                </div>
+                <h3 className="text-white font-black text-xl mb-2">ШІ розпізнає документ...</h3>
+                <p className="text-slate-400 text-sm font-medium">Читаємо VIN, номер та модель авто</p>
+              </div>
+            )}
+
+            <button onClick={() => { 
+              setIsCreatingVisit(false); 
+              setFoundExisting(false); 
+              if (searchParams.get('scan')) navigate('/visits');
+            }} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200 z-10"><X size={20} /></button>
+            
             <h2 className="text-xl font-black mb-5 flex items-center gap-2 text-blue-600">
               {isStore ? <><Package size={24}/> Нове замовлення</> : <><CarFront size={24}/> Новий візит</>}
             </h2>
             
+            {/* ПРИХОВАНИЙ ІНПУТ ДЛЯ ФАЙЛУ/КАМЕРИ */}
+            <input 
+              type="file" 
+              accept="image/*" 
+              capture="environment" 
+              className="hidden" 
+              ref={fileInputRef} 
+              onChange={handleScanDocument} 
+            />
+
             <form onSubmit={handleCreateVisit} className="space-y-4">
               
+              {!isStore && (
+                <button 
+                  type="button"
+                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors mb-4 group"
+                >
+                  <Camera size={28} className="group-hover:scale-110 transition-transform" />
+                  <span className="font-black uppercase tracking-widest text-[10px]">Сканувати техпаспорт (ШІ)</span>
+                </button>
+              )}
+
               {!isStore && (
                 <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
                   <div>
@@ -359,11 +480,18 @@ const Visits = () => {
 
               <div>
                 <input required={!isStore} type="text" placeholder={isStore ? "Номер замовлення / авто (необов'язково)" : "НОМЕР АВТО (АА1234ВВ)"} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest text-sm" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
-                {foundExisting && <p className="text-green-600 text-[10px] font-bold uppercase mt-1 ml-2">✓ Дані підтягнуто з бази</p>}
+                {foundExisting && <p className="text-emerald-600 text-[10px] font-bold uppercase mt-1 ml-2">✓ Дані підтягнуто з бази</p>}
               </div>
 
               {!isStore && (
-                <input type="text" placeholder="VIN-КОД (Англ. букви та цифри)" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-sm tracking-widest uppercase" value={newVisitData.vin_code} onChange={e => setNewVisitData({...newVisitData, vin_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)})}/>
+                <>
+                  <input type="text" placeholder="VIN-КОД (Англ. букви та цифри)" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-sm tracking-widest uppercase" value={newVisitData.vin_code} onChange={e => setNewVisitData({...newVisitData, vin_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)})}/>
+                  {newVisitData.brand_model && (
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                      <CarFront size={16}/> Розпізнано: {newVisitData.brand_model}
+                    </div>
+                  )}
+                </>
               )}
 
               <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-black uppercase shadow-sm transition-all tracking-widest text-xs mt-4">
@@ -374,6 +502,7 @@ const Visits = () => {
         </div>
       )}
 
+      {/* Далі йде блок детального перегляду візиту (selectedVisit) - залишається без змін */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
@@ -516,7 +645,6 @@ const Visits = () => {
                             {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
                           </div>
                         </div>
-                        {/* ВИПРАВЛЕННЯ ДЛЯ IOS SAFARI */}
                         <div className="mt-1">
                           <select value={s.status || 'PENDING'} onChange={(e) => updateServiceStatus(s.id, e.target.value)} className={`appearance-none block w-full text-[11px] md:text-xs font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer text-center shadow-sm border border-slate-200/50 ${serviceStatusColors[s.status || 'PENDING']}`}>
                             <option value="PENDING">⏳ Очікує</option>
@@ -563,7 +691,6 @@ const Visits = () => {
                           {(role === 'owner' || permissions?.can_view_finances) && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-100 text-xs">{p.sell_price} ₴</span>}
                           {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
                         </div>
-                        {/* ВИПРАВЛЕННЯ ДЛЯ IOS SAFARI */}
                         <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer w-full sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.status || 'WAITING']}`}>
                           <option value="WAITING">⏳ Очікується</option>
                           <option value="IN_TRANSIT">🚚 В дорозі</option>

@@ -69,7 +69,6 @@ const Visits = () => {
       setPermissions(settingsRes.data.permissions || {}); 
       setCatalogServices(servicesRes.data || []);
 
-      // Відкриваємо модалку автоматично, якщо прийшли з Панелі по кнопці "Скан"
       if (searchParams.get('scan') === 'true') {
         setIsCreatingVisit(true);
         setTimeout(() => {
@@ -89,50 +88,85 @@ const Visits = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
-  // === ЛОГІКА СКАНУВАННЯ ===
+  // === ЛОГІКА СКАНУВАННЯ ТА СТИСНЕННЯ ФОТО ===
   const handleScanDocument = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setIsScanning(true);
-    
-    const formData = new FormData();
-    formData.append('document', file);
 
-    try {
-      const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
+    // СТВОРЮЄМО АВТОМАТИЧНУ КОМПРЕСІЮ ДЛЯ IPHONE
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200; // Оптимально для OCR
+        const MAX_HEIGHT = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
         }
-      });
-      
-      if (res.data.success) {
-        console.log("ОРИГІНАЛЬНИЙ ТЕКСТ З ТЕХПАСПОРТА:", res.data.raw_text);
-        
-        setNewVisitData(prev => ({
-          ...prev,
-          plate: res.data.plate || prev.plate,
-          vin_code: res.data.vin_code || prev.vin_code,
-          brand_model: res.data.brand_model || prev.brand_model
-        }));
-        
-        if (res.data.plate) {
-           const checkRes = await axios.get(`${API_BASE}/api/visits/?search=${res.data.plate}`, { headers: { Authorization: `Bearer ${token}` } });
-           const existing = checkRes.data.find(v => v.plate.toUpperCase() === res.data.plate.toUpperCase());
-           if (existing) {
-             setNewVisitData(prev => ({ ...prev, client: existing.client, phone: existing.phone }));
-             setFoundExisting(true);
-             setTimeout(() => setFoundExisting(false), 4000);
-           }
-        }
-      }
-    } catch (error) {
-      alert("Не вдалося розпізнати документ. Спробуйте інше фото або введіть вручну.");
-    } finally {
-      setIsScanning(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Конвертуємо стиснуту картинку в Blob і відправляємо
+        canvas.toBlob(async (blob) => {
+          const formData = new FormData();
+          formData.append('document', blob, 'scan.jpg');
+
+          try {
+            const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, {
+              headers: { 
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'multipart/form-data'
+              }
+            });
+            
+            if (res.data.success) {
+              console.log("ОРИГІНАЛЬНИЙ ТЕКСТ З ТЕХПАСПОРТА:", res.data.raw_text);
+              
+              setNewVisitData(prev => ({
+                ...prev,
+                plate: res.data.plate || prev.plate,
+                vin_code: res.data.vin_code || prev.vin_code,
+                brand_model: res.data.brand_model || prev.brand_model
+              }));
+              
+              if (res.data.plate) {
+                 const checkRes = await axios.get(`${API_BASE}/api/visits/?search=${res.data.plate}`, { headers: { Authorization: `Bearer ${token}` } });
+                 const existing = checkRes.data.find(v => v.plate.toUpperCase() === res.data.plate.toUpperCase());
+                 if (existing) {
+                   setNewVisitData(prev => ({ ...prev, client: existing.client, phone: existing.phone }));
+                   setFoundExisting(true);
+                   setTimeout(() => setFoundExisting(false), 4000);
+                 }
+              }
+            }
+          } catch (error) {
+            const errorMsg = error.response?.data?.error || "Не вдалося розпізнати документ. Спробуйте інше фото.";
+            alert(`Помилка: ${errorMsg}`);
+          } finally {
+            setIsScanning(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }
+        }, 'image/jpeg', 0.8); // Якість 80% (ідеально для OCR)
+      };
+    };
   };
 
   const handleCopyVin = (vin) => {
@@ -325,7 +359,6 @@ const Visits = () => {
       <style>{`
         input[type="date"], input[type="time"] { color: #334155 !important; -webkit-appearance: none; min-height: 42px; }
         
-        /* Анімація лазера для сканера */
         @keyframes scan-laser {
           0% { top: 0; }
           50% { top: 100%; }
@@ -384,12 +417,10 @@ const Visits = () => {
         </div>
       )}
 
-      {/* МОДАЛКА СТВОРЕННЯ ВІЗИТУ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative overflow-hidden">
             
-            {/* Оверлей Сканування */}
             {isScanning && (
               <div className="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm">
                 <div className="relative w-48 h-32 border-2 border-emerald-500 rounded-lg mb-6 overflow-hidden bg-slate-800/50">
@@ -411,7 +442,6 @@ const Visits = () => {
               {isStore ? <><Package size={24}/> Нове замовлення</> : <><CarFront size={24}/> Новий візит</>}
             </h2>
             
-            {/* ПРИХОВАНИЙ ІНПУТ ДЛЯ ФАЙЛУ/КАМЕРИ */}
             <input 
               type="file" 
               accept="image/*" 
@@ -427,7 +457,7 @@ const Visits = () => {
                 <button 
                   type="button"
                   onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                  className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors mb-4 group"
+                  className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors mb-4 group shadow-sm"
                 >
                   <Camera size={28} className="group-hover:scale-110 transition-transform" />
                   <span className="font-black uppercase tracking-widest text-[10px]">Сканувати техпаспорт (ШІ)</span>
@@ -502,7 +532,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* Далі йде блок детального перегляду візиту (selectedVisit) - залишається без змін */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">

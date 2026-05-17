@@ -72,6 +72,10 @@ const Visits = () => {
       setCompanyInfo(settingsRes.data.company); 
       setPermissions(settingsRes.data.permissions || {}); 
       setCatalogServices(servicesRes.data || []);
+
+      if (searchParams.get('scan') === 'true') {
+        setIsCreatingVisit(true);
+      }
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
         setRole('owner'); 
@@ -89,13 +93,13 @@ const Visits = () => {
       const sd = location.state.scannedData;
       setNewVisitData(prev => ({
         ...prev,
-        plate: sd.plate || prev.plate,
-        vin_code: sd.vin_code || prev.vin_code,
-        brand: sd.brand || prev.brand,
-        model: sd.model || prev.model,
-        year: sd.year || prev.year,
-        engine: sd.engine || prev.engine,
-        fuel: sd.fuel || prev.fuel
+        plate: prev.plate || sd.plate || '',
+        vin_code: prev.vin_code || sd.vin_code || '',
+        brand: prev.brand || sd.brand || '',
+        model: prev.model || sd.model || '',
+        year: prev.year || sd.year || '',
+        engine: prev.engine || sd.engine || '',
+        fuel: prev.fuel || sd.fuel || ''
       }));
       setIsCreatingVisit(true);
       window.history.replaceState({}, document.title);
@@ -104,32 +108,18 @@ const Visits = () => {
 
   useEffect(() => {
     if (selectedVisit) {
-      if (!isStore) {
-        setEditComment(selectedVisit.comment || '');
-        try {
-          if (selectedVisit.delivery_data && selectedVisit.delivery_data.startsWith('{')) {
-            setEditCarData(JSON.parse(selectedVisit.delivery_data));
-          } else {
-            setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '' });
-          }
-        } catch (e) {
+      setEditComment(selectedVisit.comment || '');
+      try {
+        if (!isStore && selectedVisit.delivery_data && selectedVisit.delivery_data.startsWith('{')) {
+          setEditCarData(JSON.parse(selectedVisit.delivery_data));
+        } else {
           setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '' });
         }
-      } else {
-        const pureComment = selectedVisit.comment ? selectedVisit.comment.replace(/^\[Марка:.*?\|.*?\|.*?\|.*?\|.*?\]\s*/, '') : '';
-        setEditComment(pureComment);
-        
-        const data = { brand: '', model: '', year: '', engine: '', fuel: '' };
-        if (selectedVisit.comment) {
-          const match = selectedVisit.comment.match(/^\[Марка:\s*(.*?)\s*\|\s*Модель:\s*(.*?)\s*\|\s*Рік:\s*(.*?)\s*\|\s*Дв:\s*(.*?)\s*\|\s*Паливо:\s*(.*?)\]/);
-          if (match) {
-            data.brand = match[1]; data.model = match[2]; data.year = match[3]; data.engine = match[4]; data.fuel = match[5];
-          }
-        }
-        setEditCarData(data);
+      } catch (e) {
+        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '' });
       }
     }
-  }, [selectedVisit?.id, selectedVisit?.delivery_data, selectedVisit?.comment, isStore]);
+  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore]);
 
   const handleSaveCarData = async () => {
     if (!isStore) {
@@ -176,15 +166,16 @@ const Visits = () => {
               headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
             });
             if (res.data.success) {
+              // ЗАХИСТ ВІД ПЕРЕЗАПИСУ: Беремо нове значення ТІЛЬКИ якщо старе пусте
               setNewVisitData(prev => ({
                 ...prev,
-                plate: res.data.plate ? res.data.plate : prev.plate,
-                vin_code: res.data.vin_code ? res.data.vin_code : prev.vin_code,
-                brand: res.data.brand ? res.data.brand : prev.brand,
-                model: res.data.model ? res.data.model : prev.model,
-                year: res.data.year ? res.data.year : prev.year,
-                engine: res.data.engine ? res.data.engine : prev.engine,
-                fuel: res.data.fuel ? res.data.fuel : prev.fuel
+                plate: prev.plate || res.data.plate || '',
+                vin_code: prev.vin_code || res.data.vin_code || '',
+                brand: prev.brand || res.data.brand || '',
+                model: prev.model || res.data.model || '',
+                year: prev.year || res.data.year || '', // Ніколи не зітре 2011!
+                engine: prev.engine || res.data.engine || '',
+                fuel: prev.fuel || res.data.fuel || ''
               }));
             }
           } catch (error) {
@@ -486,7 +477,6 @@ const Visits = () => {
                 </div>
               </div>
 
-              {/* ПОКРАЩЕНИЙ ДИЗАЙН ПОЛІВ АВТО (Щоб не ламалася верстка) */}
               <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 shadow-inner">
                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-1.5 mb-3">Дані автомобіля</p>
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -523,7 +513,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ПЕРЕГЛЯДУ КАРТКИ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
@@ -540,7 +529,6 @@ const Visits = () => {
                   </div>
                 )}
 
-                {/* ХАРАКТЕРИСТИКИ АВТО ВІДОБРАЖАЮТЬСЯ І ДЛЯ СТО, І ДЛЯ МАГАЗИНУ */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
@@ -566,7 +554,7 @@ const Visits = () => {
 
                 <p className="text-slate-500 text-[13px] font-bold flex flex-wrap items-center gap-2 mt-1"><CarFront size={14} className="shrink-0"/> {selectedVisit.client} | <Phone size={14} className="shrink-0"/> {selectedVisit.phone}</p>
                 
-                {isStore ? (
+                {isStore && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1"><Truck size={12}/> Доставка</p>
@@ -597,36 +585,6 @@ const Visits = () => {
                       )}
                     </div>
                   </div>
-                ) : (
-                  <div className="mt-3">
-                    {!isEditingTime ? (
-                      <div className="flex items-center gap-2 text-slate-500 text-[11px] font-bold group">
-                        <Clock size={12}/>
-                        <span>Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}</span>
-                        {(role === 'owner' || permissions?.can_create_visits) && (
-                          <button onClick={() => {
-                            const d = selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime) : new Date();
-                            setEditTimeData({ date: d.toLocaleDateString('en-CA'), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
-                            setIsEditingTime(true);
-                          }} className="text-blue-500 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 p-1 rounded">
-                            <Pencil size={12}/> Редагувати
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 max-w-sm mt-2">
-                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-2">Новий час візиту</label>
-                        <div className="flex gap-2 mb-2">
-                          <input type="date" className="flex-1 bg-white border border-slate-200 outline-none text-slate-700 rounded-lg p-2 text-xs font-bold" value={editTimeData.date} onChange={e => setEditTimeData({...editTimeData, date: e.target.value})} />
-                          <input type="time" className="w-24 bg-white border border-slate-200 outline-none text-slate-700 rounded-lg p-2 text-xs font-bold" value={editTimeData.time} onChange={e => setEditTimeData({...editTimeData, time: e.target.value})} />
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={handleUpdateTime} className="flex-1 bg-green-500 text-white hover:bg-green-600 rounded-lg py-2 text-[10px] font-black uppercase tracking-widest transition-all">Зберегти</button>
-                          <button onClick={() => setIsEditingTime(false)} className="flex-1 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg py-2 text-[10px] font-black uppercase tracking-widest transition-all">Скас</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0 justify-end w-full md:w-auto">
@@ -634,7 +592,6 @@ const Visits = () => {
               </div>
             </div>
 
-            {/* СТАТУСИ ПАНЕЛЕЙ */}
             <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
               <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Нове' : 'В черзі'}</button>
               <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Чекаємо' : 'В роботі'}</button>
@@ -666,7 +623,6 @@ const Visits = () => {
               </div>
             </div>
 
-            {/* ВНУТРІШНІЙ КОМЕНТАР */}
             <div className="mt-6 bg-amber-50 p-4 md:p-5 rounded-2xl border border-amber-100 relative">
               <h3 className="font-black uppercase text-amber-800 mb-3 flex items-center gap-2 text-xs"><MessageSquare size={16}/> Внутрішній коментар</h3>
               <textarea className="w-full bg-white border border-amber-200 rounded-xl p-3 md:p-4 text-sm outline-none focus:border-amber-400 min-h-[70px] font-medium text-slate-700" placeholder="Нотатка (напр. номер ТТН)..." value={editComment} onChange={e => setEditComment(e.target.value)} />

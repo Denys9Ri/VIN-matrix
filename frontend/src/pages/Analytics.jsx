@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { TrendingUp, DollarSign, Activity, Calendar, Package, Wrench, Wallet, ArrowUpRight, BarChart3, Loader2 } from 'lucide-react';
+import { TrendingUp, DollarSign, Activity, Calendar, Package, Wrench, Wallet, BarChart, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Analytics = () => {
@@ -24,7 +24,9 @@ const Analytics = () => {
         ]);
         
         // Для фінансів беремо тільки успішно закриті візити/замовлення
-        const completedVisits = visitsRes.data.filter(v => v.status === 'DONE' || v.status === 'COMPLETED');
+        const data = Array.isArray(visitsRes.data) ? visitsRes.data : [];
+        const completedVisits = data.filter(v => v.status === 'DONE' || v.status === 'COMPLETED');
+        
         setVisits(completedVisits);
         setCompanyInfo(settingsRes.data.company);
       } catch (error) {
@@ -76,28 +78,32 @@ const Analytics = () => {
       let visitCost = 0;
 
       // Рахуємо послуги
-      visit.services?.forEach(s => {
-        const price = parseFloat(s.price) || 0;
-        visitRevenue += price;
-        
-        if (!servicesSales[s.name]) servicesSales[s.name] = { count: 0, revenue: 0 };
-        servicesSales[s.name].count += 1;
-        servicesSales[s.name].revenue += price;
-      });
+      if (Array.isArray(visit.services)) {
+        visit.services.forEach(s => {
+          const price = parseFloat(s.price) || 0;
+          visitRevenue += price;
+          
+          if (!servicesSales[s.name]) servicesSales[s.name] = { count: 0, revenue: 0 };
+          servicesSales[s.name].count += 1;
+          servicesSales[s.name].revenue += price;
+        });
+      }
 
       // Рахуємо запчастини
-      visit.parts?.forEach(p => {
-        const sellPrice = parseFloat(p.sell_price) || 0;
-        const buyPrice = parseFloat(p.buy_price) || 0;
-        
-        visitRevenue += sellPrice;
-        visitCost += buyPrice;
+      if (Array.isArray(visit.parts)) {
+        visit.parts.forEach(p => {
+          const sellPrice = parseFloat(p.sell_price) || 0;
+          const buyPrice = parseFloat(p.buy_price) || 0;
+          
+          visitRevenue += sellPrice;
+          visitCost += buyPrice;
 
-        const partKey = `${p.name} (${p.brand})`;
-        if (!partsSales[partKey]) partsSales[partKey] = { count: 0, revenue: 0 };
-        partsSales[partKey].count += 1;
-        partsSales[partKey].revenue += sellPrice;
-      });
+          const partKey = `${p.name || 'Деталь'} (${p.brand || 'Без бренду'})`;
+          if (!partsSales[partKey]) partsSales[partKey] = { count: 0, revenue: 0 };
+          partsSales[partKey].count += 1;
+          partsSales[partKey].revenue += sellPrice;
+        });
+      }
 
       totalRevenue += visitRevenue;
       totalCost += visitCost;
@@ -131,7 +137,7 @@ const Analytics = () => {
 
   const maxChartValue = Math.max(...stats.chartData.map(d => d.value), 1);
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">VIN-MATRIX АНАЛІТИКА...</div>;
+  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic text-blue-600"><Loader2 className="animate-spin mr-2"/> ЗАВАНТАЖЕННЯ АНАЛІТИКИ...</div>;
 
   const isStore = companyInfo?.business_type === 'store';
 
@@ -140,7 +146,7 @@ const Analytics = () => {
       
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
         <div>
-          <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 flex items-center gap-2"><BarChart3 className="text-blue-600"/> Аналітика</h1>
+          <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 flex items-center gap-2"><BarChart className="text-blue-600"/> Аналітика</h1>
           <p className="text-slate-500 font-bold text-xs md:text-sm mt-1">Фінансові показники вашого бізнесу</p>
         </div>
         
@@ -223,7 +229,7 @@ const Analytics = () => {
             </div>
           ) : (
              <div className="flex-1 flex flex-col items-center justify-center text-slate-300 min-h-[250px]">
-                <BarChart3 size={48} className="mb-3 opacity-50"/>
+                <BarChart size={48} className="mb-3 opacity-50"/>
                 <p className="text-xs font-black uppercase tracking-widest">Немає даних за цей період</p>
              </div>
           )}

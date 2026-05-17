@@ -88,7 +88,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                 'https://api.ocr.space/parse/image',
                 data={
                     'apikey': 'helloworld',  # Безкоштовний ключ
-                    'language': 'ukr',       # Підтримка української
+                    'language': 'eng',       # <--- ВИПРАВЛЕНО НА АНГЛІЙСЬКУ (ідеально для VIN та номерів)
                     'base64Image': 'data:image/jpeg;base64,' + b64_image,
                     'OCREngine': 2,          # Engine 2 краще читає складний текст
                 },
@@ -98,7 +98,6 @@ class VisitViewSet(viewsets.ModelViewSet):
             if response.status_code == 200:
                 result = response.json()
                 
-                # --- ДОДАНО: ПЕРЕВІРКА НА ПОМИЛКИ ВІД ШІ (НАПРИКЛАД "File too large") ---
                 if result.get('IsErroredOnProcessing'):
                     err_msg = result.get('ErrorMessage', ['Невідома помилка OCR'])[0]
                     print(f"[OCR ПОМИЛКА] {err_msg}")
@@ -110,7 +109,6 @@ class VisitViewSet(viewsets.ModelViewSet):
                     
                 text_upper = parsed_text.upper().replace('\n', ' ').replace('\r', ' ')
                 
-                # --- ДОДАНО: Якщо текст пустий (ШІ нічого не побачив на фото) ---
                 if not text_upper.strip():
                      return Response({"error": "ШІ не знайшов жодного тексту на цьому фото. Спробуйте інше."}, status=400)
                 

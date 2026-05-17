@@ -15,7 +15,6 @@ const Clients = () => {
   
   const [copiedVin, setCopiedVin] = useState(null);
 
-  // Стан для повторного візиту
   const [isRepeatingVisit, setIsRepeatingVisit] = useState(false);
   const [repeatVisitData, setRepeatVisitData] = useState({ date: '', time: '' });
 
@@ -94,14 +93,11 @@ const Clients = () => {
         document.execCommand('copy');
         setCopiedVin(vin);
         setTimeout(() => setCopiedVin(null), 2000);
-      } catch (err) {
-        console.error('Помилка копіювання', err);
-      }
+      } catch (err) {}
       document.body.removeChild(textArea);
     }
   };
 
-  // ФУНКЦІЯ СТВОРЕННЯ ПОВТОРНОГО ВІЗИТУ З КАРТКИ КЛІЄНТА
   const handleCreateRepeatVisit = async (e) => {
     e.preventDefault();
     let scheduled_datetime = null;
@@ -121,7 +117,7 @@ const Clients = () => {
       setIsRepeatingVisit(false);
       setSelectedClient(null);
       setRepeatVisitData({ date: '', time: '' });
-      navigate('/visits'); // Перекидаємо на дошку візитів
+      navigate('/visits'); 
     } catch (error) { alert("Помилка створення візиту"); }
   };
 
@@ -130,18 +126,13 @@ const Clients = () => {
   const currentClients = clients.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(clients.length / itemsPerPage);
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
+  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">VIN-MATRIX ЗАВАНТАЖЕННЯ...</div>;
 
   return (
     <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col overflow-x-hidden">
       
-      {/* Стилі для виправлення інпутів дати/часу на iPhone */}
       <style>{`
-        input[type="date"], input[type="time"] {
-          color: #334155 !important;
-          -webkit-appearance: none;
-          min-height: 42px;
-        }
+        input[type="date"], input[type="time"] { color: #334155 !important; -webkit-appearance: none; min-height: 42px; }
       `}</style>
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4 shrink-0 mt-4 md:mt-0">
@@ -269,7 +260,6 @@ const Clients = () => {
                 <span className="flex items-center gap-1.5 text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-100"><Wallet size={14} className="shrink-0"/> LTV: {selectedClient.totalSpent.toLocaleString()} ₴</span>
               </div>
 
-              {/* НОВА КНОПКА: ПОВТОРИТИ ВІЗИТ */}
               <button 
                 onClick={() => setIsRepeatingVisit(true)} 
                 className="w-full sm:w-auto bg-blue-600 text-white px-5 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-blue-700 shadow-md shadow-blue-200 transition-all mt-2"
@@ -300,8 +290,8 @@ const Clients = () => {
                       <p className="text-[10px] font-black uppercase text-slate-400 mb-2 flex items-center gap-1"><Wrench size={12}/> Роботи</p>
                       <ul className="space-y-1">
                         {visit.services.map(s => (
-                          <li key={s.id} className="flex justify-between text-xs md:text-sm font-medium text-slate-700 gap-2">
-                            <span className="truncate">{s.name}</span>
+                          <li key={s.id} className="flex justify-between text-xs md:text-sm font-medium text-slate-700 gap-2 mb-2">
+                            <span className="truncate flex-1">{s.name}</span>
                             <span className="font-bold shrink-0">{parseFloat(s.price).toLocaleString()} ₴</span>
                           </li>
                         ))}
@@ -314,9 +304,9 @@ const Clients = () => {
                       <p className="text-[10px] font-black uppercase text-slate-400 mb-2 flex items-center gap-1"><Store size={12}/> Запчастини</p>
                       <ul className="space-y-1">
                         {visit.parts.map(p => (
-                          <li key={p.id} className="flex flex-col sm:flex-row sm:justify-between text-xs md:text-sm font-medium text-slate-700 gap-1 sm:gap-2 mb-2 sm:mb-0">
-                            <span className="truncate">{p.name} <span className="text-[9px] md:text-[10px] text-slate-400 ml-1">({p.brand})</span></span>
-                            <span className="font-bold shrink-0 sm:text-right">{parseFloat(p.sell_price).toLocaleString()} ₴</span>
+                          <li key={p.id} className="flex flex-col sm:flex-row sm:justify-between text-xs md:text-sm font-medium text-slate-700 gap-1 sm:gap-2 mb-3 sm:mb-2 border-b sm:border-0 border-slate-100 pb-2 sm:pb-0">
+                            <span className="truncate block w-full">{p.name} <span className="text-[9px] md:text-[10px] text-slate-400 ml-1">({p.brand})</span></span>
+                            <span className="font-bold shrink-0 sm:text-right block w-full sm:w-auto">{parseFloat(p.sell_price).toLocaleString()} ₴</span>
                           </li>
                         ))}
                       </ul>

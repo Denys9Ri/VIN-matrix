@@ -58,7 +58,6 @@ class VisitViewSet(viewsets.ModelViewSet):
         start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
         end_of_today = start_of_today + timedelta(days=1)
 
-        # ОНОВЛЕНО: Тепер враховує і DONE, і COMPLETED (для магазину)
         queryset = queryset.filter(
             ( ~Q(status__in=['DONE', 'COMPLETED']) & Q(scheduled_datetime__lt=end_of_today) ) | 
             ( ~Q(status__in=['DONE', 'COMPLETED']) & Q(scheduled_datetime__isnull=True) ) | 
@@ -96,9 +95,19 @@ class ProfileSettingsView(APIView):
     def get(self, request):
         company = get_user_company(request.user)
         role = 'owner' if hasattr(request.user, 'company') else 'mechanic'
+        
+        # Визначаємо права доступу
+        permissions = {"can_create_visits": True, "can_view_finances": True}
+        if role == 'mechanic':
+            emp = request.user.employee_profile
+            permissions = {
+                "can_create_visits": emp.can_create_visits,
+                "can_view_finances": emp.can_view_finances
+            }
+            
         user_serializer = UserSerializer(request.user)
         company_serializer = CompanySerializer(company, context={'request': request})
-        return Response({ "user": user_serializer.data, "company": company_serializer.data, "role": role })
+        return Response({ "user": user_serializer.data, "company": company_serializer.data, "role": role, "permissions": permissions })
     
     def patch(self, request):
         if not hasattr(request.user, 'company'): return Response({"error": "Тільки власник"}, status=403)
@@ -137,28 +146,47 @@ class MechanicViewSet(viewsets.ViewSet):
     def list(self, request):
         if not hasattr(request.user, 'company'): return Response(status=403)
         mechanics = Employee.objects.filter(company=request.user.company, role='mechanic')
-        data = [{"id": m.user.id, "username": m.user.username, "first_name": m.user.first_name} for m in mechanics]
+        data = [{
+            "id": m.user.id, 
+            "username": m.user.username, 
+            "first_name": m.user.first_name,
+            "can_create_visits": m.can_create_visits,
+            "can_view_finances": m.can_view_finances
+        } for m in mechanics]
         return Response(data)
+        
     def create(self, request):
         if not hasattr(request.user, 'company'): return Response(status=403)
         username = request.data.get('username')
         password = request.data.get('password')
         first_name = request.data.get('first_name')
+        can_create = request.data.get('can_create_visits') == True
+        can_view = request.data.get('can_view_finances') == True
+        
         if User.objects.filter(username=username).exists(): return Response({"error": "Логін зайнятий"}, status=400)
         try:
             user = User.objects.create_user(username=username, password=password, first_name=first_name)
-            Employee.objects.create(user=user, company=request.user.company, role='mechanic')
+            Employee.objects.create(user=user, company=request.user.company, role='mechanic', can_create_visits=can_create, can_view_finances=can_view)
             return Response({"message": "Створено"}, status=201)
         except Exception as e: return Response({"error": str(e)}, status=500)
+        
     def partial_update(self, request, pk=None):
         if not hasattr(request.user, 'company'): return Response(status=403)
         try:
             user = User.objects.get(id=pk, employee_profile__company=request.user.company)
+            emp = user.employee_profile
+            
             if request.data.get('first_name'): user.first_name = request.data.get('first_name')
             if request.data.get('new_password'): user.set_password(request.data.get('new_password'))
             user.save()
+            
+            if 'can_create_visits' in request.data: emp.can_create_visits = request.data.get('can_create_visits') == True
+            if 'can_view_finances' in request.data: emp.can_view_finances = request.data.get('can_view_finances') == True
+            emp.save()
+            
             return Response({"message": "Оновлено"})
         except User.DoesNotExist: return Response(status=404)
+        
     def destroy(self, request, pk=None):
         if not hasattr(request.user, 'company'): return Response(status=403)
         try:

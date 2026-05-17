@@ -417,6 +417,9 @@ class SupplierViewSet(viewsets.ModelViewSet):
         return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
 
 
+# ===============================================
+# ОСНОВНИЙ КЛАС ПОШУКУ (Повноцінні аналоги Омеги з ЦІНАМИ)
+# ===============================================
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -428,6 +431,9 @@ class PartSearchView(APIView):
         is_analog = request.query_params.get('analog') == 'true'
         sup_id = request.query_params.get('supplier_id')
         sku_param = request.query_params.get('sku', '').strip()
+        orig_brand = request.query_params.get('brand', '').strip().upper() 
+        
+        q_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
         
         if not query or len(query) < 2: return Response([])
 
@@ -455,6 +461,7 @@ class PartSearchView(APIView):
             prefs_map = {str(p.get('id')): p for p in prefs if isinstance(p, dict)}
             prefs_map.update({str(p.get('name')).lower(): p for p in prefs if isinstance(p, dict)})
 
+            # === VESNA ===
             if sup.api_key and ('vesna' in sup.name.lower() or 'весна' in sup.name.lower()):
                 try:
                     parts = sup.api_key.split(':')
@@ -466,7 +473,7 @@ class PartSearchView(APIView):
                     
                     headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
                     payload = {"customer_id": customer_id, "article": query}
-                    response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
+                    response = requests.post(vesna_url, json=payload, headers=headers, timeout=15)
                     
                     if response.status_code == 200:
                         raw_data = response.json()
@@ -474,7 +481,11 @@ class PartSearchView(APIView):
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             
-                            if is_analog and str(item.get('article', '')).upper().replace(' ','').replace('-','') == query.upper().replace(' ','').replace('-',''):
+                            art_clean = str(item.get('article', '')).upper().replace(' ','').replace('-','').replace('.','')
+                            item_brand = str(item.get('brand', '')).upper()
+                            
+                            # Якщо шукаємо аналоги - відкидаємо тільки якщо збігається і номер, і бренд
+                            if is_analog and art_clean == q_clean and item_brand == orig_brand:
                                 continue
                                 
                             balances = item.get('balance', [])
@@ -507,78 +518,85 @@ class PartSearchView(APIView):
                             })
                 except Exception: pass
 
+            # === OMEGA ===
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
                 try:
                     if is_analog and sku_param and sku_param.isdigit():
                         cross_url = "https://public.omega.page/public/api/v1.0/product/getAllCrosses"
                         payload = {"Key": sup.api_key.strip(), "ProductId": int(sku_param)}
-                        response = requests.post(cross_url, json=payload, timeout=10)
+                        response = requests.post(cross_url, json=payload, timeout=15)
                         
                         if response.status_code == 200:
                             crosses = response.json().get('Data', [])
                             seen_codes = set()
+                            valid_crosses = []
                             
-                            for cross in crosses[:8]:
-                                c_code = str(cross.get('Code', '')).upper()
-                                c_brand = str(cross.get('Brand', 'Unknown'))
+                            for cross in crosses:
+                                c_code = str(cross.get('Code', '')).upper().replace(' ','').replace('-','').replace('.','')
+                                c_brand = str(cross.get('Brand', '')).upper()
                                 
-                                if c_code == query.upper().replace(' ','').replace('-','') or c_code in seen_codes:
+                                if c_code == q_clean and c_brand == orig_brand:
                                     continue
-                                seen_codes.add(c_code)
+                                if f"{c_code}_{c_brand}" in seen_codes:
+                                    continue
+                                    
+                                seen_codes.add(f"{c_code}_{c_brand}")
+                                valid_crosses.append(cross)
+                            
+                            for cross in valid_crosses[:8]:
+                                c_code_raw = str(cross.get('Code', ''))
+                                c_brand_raw = str(cross.get('Brand', 'Unknown'))
                                 
                                 price_url = "https://public.omega.page/public/api/v1.0/product/search"
-                                price_payload = {"Key": sup.api_key.strip(), "SearchPhrase": c_code, "From": 0, "Count": 1}
+                                price_payload = {"Key": sup.api_key.strip(), "SearchPhrase": c_code_raw, "From": 0, "Count": 5}
                                 price_res = requests.post(price_url, json=price_payload, timeout=5)
-                                
-                                has_price = False
-                                buy_price = 0
-                                warehouses_list = []
-                                prod_name = "TecDoc Аналог (Натисніть артикул для повного пошуку)"
-                                prod_id = "0"
-                                img_url = ""
                                 
                                 if price_res.status_code == 200:
                                     res_items = price_res.json().get('Result', []) or price_res.json().get('Data', [])
-                                    match_item = None
-                                    for ri in res_items:
-                                        if str(ri.get('BrandDescription', '')).upper() == c_brand.upper() or str(ri.get('Number', '')).upper().replace(' ','').replace('-','') == c_code:
-                                          match_item = ri
-                                          break
                                     
-                                    if not match_item and len(res_items) > 0:
-                                        match_item = res_items[0]
+                                    best_match = None
+                                    for match_item in res_items:
+                                        m_brand = str(match_item.get('BrandDescription', '')).upper()
+                                        m_code = str(match_item.get('Number', '')).upper().replace(' ','').replace('-','').replace('.','')
                                         
-                                    if match_item:
-                                        buy_price = float(match_item.get('CustomerPrice') or match_item.get('EffectivePrice') or match_item.get('Price') or 0)
-                                        prod_name = match_item.get('Description', prod_name)
-                                        prod_id = str(match_item.get('ProductId', '0'))
-                                        img_url = match_item.get('ImageUrl', '')
+                                        if m_code == q_clean and m_brand == orig_brand:
+                                            continue
+                                            
+                                        best_match = match_item
+                                        break
                                         
-                                        for wh in match_item.get('Rests', []):
-                                            wh_name, wh_qty = str(wh.get('Key', 'Склад Омега')), str(wh.get('Value', '0'))
-                                            warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": 99, "buy_price": buy_price})
-                                        for wh in match_item.get('SupplierRests', []):
-                                            wh_name, wh_qty = str(wh.get('WareHouseName', 'Склад Партнера')), str(wh.get('Rest', '0'))
-                                            warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": 99, "buy_price": buy_price})
-                                
-                                if warehouses_list:
+                                    if not best_match:
+                                        continue
+                                        
+                                    buy_price = float(best_match.get('CustomerPrice') or best_match.get('EffectivePrice') or best_match.get('Price') or 0)
+                                    prod_name = best_match.get('Description', 'TecDoc Аналог')
+                                    prod_id = str(best_match.get('ProductId', '0'))
+                                    img_url = best_match.get('ImageUrl', '')
+                                    
+                                    warehouses_list = []
+                                    for wh in best_match.get('Rests', []):
+                                        wh_name, wh_qty = str(wh.get('Key', 'Склад Омега')), str(wh.get('Value', '0'))
+                                        pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
+                                        if pref and not pref.get('is_active', True): continue
+                                        warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": buy_price})
+                                        
+                                    for wh in best_match.get('SupplierRests', []):
+                                        wh_name, wh_qty = str(wh.get('WareHouseName', 'Склад Партнера')), str(wh.get('Rest', '0'))
+                                        pref = prefs_map.get(wh_name) or prefs_map.get(wh_name.lower())
+                                        if pref and not pref.get('is_active', True): continue
+                                        warehouses_list.append({"name": wh_name, "quantity": wh_qty, "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": buy_price})
+                                    
+                                    if not warehouses_list: continue
                                     warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
-                                    qty_str = f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})"
-                                    has_price = True
-                                else:
-                                    qty_str = "Немає в наявності"
-                                    warehouses_list = [{"name": "База Омега", "quantity": "0", "priority": 99, "buy_price": 0}]
-                                
-                                results.append({
-                                    "id": f"omega_cross_{sup.id}_{c_code}_{prod_id}", "supplier_id": sup.id, "source": sup.name,
-                                    "brand": c_brand, "article": c_code,
-                                    "name": prod_name, 
-                                    "buy_price": buy_price, 
-                                    "quantity": qty_str,
-                                    "is_local": False, 
-                                    "warehouses": warehouses_list, 
-                                    "sku": prod_id, "min_qty": 1, "image_url": img_url, "description": ""
-                                })
+                                    
+                                    results.append({
+                                        "id": f"omega_cross_{sup.id}_{prod_id}", "supplier_id": sup.id, "source": sup.name,
+                                        "brand": c_brand_raw, "article": c_code_raw,
+                                        "name": prod_name, "buy_price": buy_price, 
+                                        "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
+                                        "is_local": False, "warehouses": warehouses_list, "sku": prod_id,
+                                        "min_qty": 1, "image_url": img_url, "description": ""
+                                    })
                     else:
                         omega_url = "https://public.omega.page/public/api/v1.0/product/search"
                         payload = {"Key": sup.api_key.strip(), "SearchPhrase": query, "From": 0, "Count": 50}
@@ -592,11 +610,10 @@ class PartSearchView(APIView):
                             for item in items_data:
                                 if not isinstance(item, dict): continue
                                 
-                                art_val = str(item.get('Number', '')).upper().replace(' ','').replace('-','')
-                                card_val = str(item.get('Card', '')).upper().replace(' ','').replace('-','')
-                                q_upper = query.upper().replace(' ','').replace('-','')
+                                art_val = str(item.get('Number', '')).upper().replace(' ','').replace('-','').replace('.','')
+                                card_val = str(item.get('Card', '')).upper().replace(' ','').replace('-','').replace('.','')
                                 
-                                if q_upper not in art_val and q_upper not in card_val:
+                                if q_clean not in art_val and q_clean not in card_val:
                                     continue
                                     
                                 warehouses_list = []
@@ -638,7 +655,7 @@ class PartSearchView(APIView):
                         "currency": "UAH" 
                     }
                     
-                    response = requests.post(tehnomir_url, json=payload, timeout=15)
+                    response = requests.post(tehnomir_url, json=payload, timeout=25)
                     
                     if response.status_code == 200:
                         raw_data = response.json()
@@ -650,17 +667,16 @@ class PartSearchView(APIView):
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             
-                            brand = str(item.get('brand', 'Unknown'))
+                            brand = str(item.get('brand', 'Unknown')).upper()
                             article = str(item.get('code', query.upper()))
                             
-                            q_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
                             art_clean = article.upper().replace(' ', '').replace('-', '').replace('.', '')
                             
                             if not is_analog:
                                 if q_clean not in art_clean:
                                     continue
                             else:
-                                if q_clean == art_clean:
+                                if q_clean == art_clean and brand == orig_brand:
                                     continue 
                                 
                             warehouses_list = []

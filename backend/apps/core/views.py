@@ -418,7 +418,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
 
 # ===============================================
-# ОСНОВНИЙ КЛАС ПОШУКУ (АБСОЛЮТНИЙ ДЕБАГЕР)
+# ОСНОВНИЙ КЛАС ПОШУКУ (ІЗ ДЕБАГОМ В ТЕРМІНАЛ ТА ВИПРАВЛЕНОЮ ОМЕГОЮ)
 # ===============================================
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
@@ -485,6 +485,8 @@ class PartSearchView(APIView):
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             
+                            art_clean = str(item.get('article', '')).upper().replace(' ','').replace('-','').replace('.','')
+                            
                             item_sku = str(item.get('sku', ''))
                             if is_analog and item_sku == sku_param:
                                 continue
@@ -524,11 +526,20 @@ class PartSearchView(APIView):
                 try:
                     if is_analog:
                         print(f"[ОМЕГА] Шукаємо аналоги для ProductId={sku_param}")
-                        if sku_param and sku_param.isdigit():
+                        
+                        # ВИПРАВЛЕННЯ: Дозволяємо від'ємні числа (наприклад -1138569)
+                        is_valid_sku = False
+                        try:
+                            prod_id_int = int(sku_param)
+                            is_valid_sku = True
+                        except ValueError:
+                            pass
+
+                        if sku_param and is_valid_sku:
                             cross_url = "https://public.omega.page/public/api/v1.0/product/getAllCrosses"
-                            payload = {"Key": sup.api_key.strip(), "ProductId": int(sku_param)}
-                            print(f"[ОМЕГА] Payload Аналогів: {payload}")
+                            payload = {"Key": sup.api_key.strip(), "ProductId": prod_id_int}
                             
+                            print(f"[ОМЕГА] Payload Аналогів: {payload}")
                             response = requests.post(cross_url, json=payload, timeout=15)
                             print(f"[ОМЕГА] Статус: {response.status_code}")
                             
@@ -542,7 +553,6 @@ class PartSearchView(APIView):
                                     c_code = str(cross.get('Code', '')).upper().replace(' ','').replace('-','').replace('.','')
                                     c_brand = str(cross.get('Brand', '')).upper()
                                     
-                                    # Відкидаємо дублі всередині списку
                                     unique_key = f"{c_code}_{c_brand}"
                                     if unique_key in seen_codes:
                                         continue
@@ -552,12 +562,10 @@ class PartSearchView(APIView):
                                 
                                 print(f"[ОМЕГА] Після фільтрації дублів: {len(valid_crosses)} унікальних кросів")
                                 
-                                # Беремо топ-6
                                 for cross in valid_crosses[:6]:
                                     c_code_raw = str(cross.get('Code', ''))
                                     c_brand_raw = str(cross.get('Brand', 'Unknown'))
                                     
-                                    print(f"[ОМЕГА] Пробиваємо ціну кроса: {c_code_raw}")
                                     price_url = "https://public.omega.page/public/api/v1.0/product/search"
                                     price_payload = {"Key": sup.api_key.strip(), "SearchPhrase": c_code_raw, "From": 0, "Count": 5}
                                     price_res = requests.post(price_url, json=price_payload, timeout=5)
@@ -568,7 +576,7 @@ class PartSearchView(APIView):
                                         best_match = None
                                         for match_item in res_items:
                                             prod_id = str(match_item.get('ProductId', '0'))
-                                            if prod_id == sku_param: # Відкидаємо оригінал, якщо він повернувся
+                                            if prod_id == sku_param:
                                                 continue
                                             best_match = match_item
                                             break
@@ -604,19 +612,18 @@ class PartSearchView(APIView):
                                                 })
                             else:
                                 print(f"[ОМЕГА ПОМИЛКА] {response.text}")
+                        else:
+                            print(f"[ОМЕГА] SKU пустий або некоректний: '{sku_param}'")
                     else:
                         print(f"[ОМЕГА] Звичайний пошук: {query}")
                         omega_url = "https://public.omega.page/public/api/v1.0/product/search"
                         payload = {"Key": sup.api_key.strip(), "SearchPhrase": query, "From": 0, "Count": 50}
-                        print(f"[ОМЕГА] Payload: {payload}")
                         
                         response = requests.post(omega_url, json=payload, timeout=10)
-                        print(f"[ОМЕГА] Статус: {response.status_code}")
                         
                         if response.status_code == 200:
                             raw_data = response.json()
                             items_data = raw_data.get('Result', []) or raw_data.get('Data', [])
-                            print(f"[ОМЕГА] Знайдено {len(items_data)} результатів")
                             
                             for item in items_data:
                                 if not isinstance(item, dict): continue
@@ -625,7 +632,6 @@ class PartSearchView(APIView):
                                 card_val = str(item.get('Card', '')).upper().replace(' ','').replace('-','').replace('.','')
                                 
                                 if q_clean not in art_val and q_clean not in card_val:
-                                    print(f"[ОМЕГА] Відкинуто (не збігається з пошуком): {art_val}")
                                     continue
                                     
                                 warehouses_list = []
@@ -654,21 +660,42 @@ class PartSearchView(APIView):
                                     "is_local": False, "warehouses": warehouses_list, "sku": str(item.get('ProductId', '')),
                                     "min_qty": 1, "image_url": item.get('ImageUrl', ''), "description": item.get('DescriptionUkr', '') or item.get('Info', '')
                                 })
-                        else:
-                            print(f"[ОМЕГА ПОМИЛКА] {response.text}")
                 except Exception as e: print(f"[ОМЕГА EXCEPTION] {e}")
 
             # === TECHNOMIR ===
             elif sup.api_key and ('tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower()):
                 try:
                     print(f"\n[ТЕХНОМІР] Пошук: {query}, is_analog={is_analog}")
-                    tehnomir_url = "https://api.tehnomir.com.ua/price/search"
+                    
                     payload = {
                         "apiToken": sup.api_key.strip(),
                         "code": query,
                         "isShowAnalogs": 1 if is_analog else 0, 
                         "currency": "UAH" 
                     }
+                    
+                    # ВИПРАВЛЕННЯ: Для пошуку аналогів Техномір вимагає brandId
+                    if is_analog:
+                        print(f"[ТЕХНОМІР] Шукаємо brandId для бренду: {orig_brand}")
+                        brand_url = "https://api.tehnomir.com.ua/info/getBrandsByCode"
+                        b_res = requests.post(brand_url, json={"apiToken": sup.api_key.strip(), "code": query}, timeout=10)
+                        
+                        brand_id = None
+                        if b_res.status_code == 200 and b_res.json().get('success'):
+                            for b in b_res.json().get('data', []):
+                                if str(b.get('brand', '')).upper() == orig_brand:
+                                    brand_id = b.get('brandId')
+                                    break
+                            if not brand_id and len(b_res.json().get('data', [])) > 0:
+                                brand_id = b_res.json().get('data')[0].get('brandId') 
+                        
+                        if brand_id:
+                            payload['brandId'] = brand_id
+                            print(f"[ТЕХНОМІР] Знайдено brandId: {brand_id}")
+                        else:
+                            print("[ТЕХНОМІР] Не вдалося знайти brandId, можлива помилка 422")
+                    
+                    tehnomir_url = "https://api.tehnomir.com.ua/price/search"
                     print(f"[ТЕХНОМІР] Payload: {payload}")
                     
                     response = requests.post(tehnomir_url, json=payload, timeout=25)
@@ -694,12 +721,10 @@ class PartSearchView(APIView):
                             
                             if not is_analog:
                                 if q_clean not in art_clean:
-                                    print(f"[ТЕХНОМІР] Відкинуто не збіг: {art_clean}")
                                     continue
                             else:
-                                # ЯКЩО АНАЛОГ: Відкидаємо ТІЛЬКИ ЯКЩО збігається ID оригіналу! (Бронебійно)
                                 if prod_id == sku_param:
-                                    print(f"[ТЕХНОМІР] Відкинуто оригінал: {article}")
+                                    print(f"[ТЕХНОМІР] Відкинуто оригінал: {article} ({brand})")
                                     continue 
                                 
                             warehouses_list = []

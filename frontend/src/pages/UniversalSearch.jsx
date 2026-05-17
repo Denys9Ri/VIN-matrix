@@ -108,7 +108,8 @@ const UniversalSearch = () => {
   const fetchAnalogs = async (item) => {
     setAnalogLoading(prev => ({ ...prev, [item.id]: true }));
     try {
-      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${item.sku}`, {
+      // МАГІЯ: Тепер ми передаємо &brand= на бекенд!
+      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${item.sku}&brand=${encodeURIComponent(item.brand)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const processed = res.data.map(a => ({ ...a, selectedWhIdx: 0 }));

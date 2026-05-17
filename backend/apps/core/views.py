@@ -417,9 +417,110 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
         return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
 
+    # =========================================================================
+    # НОВИЙ МЕТОД ДЛЯ ОТРИМАННЯ ДЕТАЛЬНОЇ ІНФО (ХАРАКТЕРИСТИКИ / ЗАСТОСОВНІСТЬ)
+    # =========================================================================
+    @action(detail=True, methods=['get'], url_path='part_info')
+    def part_info(self, request, pk=None):
+        sup = self.get_object()
+        article = request.query_params.get('article', '').strip()
+        brand = request.query_params.get('brand', '').strip().upper()
+        
+        info_data = {
+            "properties": [],
+            "applicability": [],
+            "images": []
+        }
+        
+        if not sup.api_key:
+            return Response(info_data)
+
+        # === ДЕБАГ ТЕХНОМІРА ===
+        if 'tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower():
+            print(f"\n[INFO ДЕБАГ] ТЕХНОМІР: Шукаємо деталі для {brand} {article}")
+            try:
+                # 1. Шукаємо BrandId
+                brand_url = "https://api.tehnomir.com.ua/info/getBrandsByCode"
+                brand_payload = {"apiToken": sup.api_key.strip(), "code": article}
+                b_res = requests.post(brand_url, json=brand_payload, timeout=10)
+                
+                brand_id = None
+                if b_res.status_code == 200 and b_res.json().get('success'):
+                    for b in b_res.json().get('data', []):
+                        if str(b.get('brand', '')).upper() == brand:
+                            brand_id = b.get('brandId')
+                            break
+                    if not brand_id and len(b_res.json().get('data', [])) > 0:
+                        brand_id = b_res.json().get('data')[0].get('brandId')
+                
+                if brand_id:
+                    # 2. Отримуємо ProductInfo
+                    info_url = "https://api.tehnomir.com.ua/info/getProductInfo"
+                    info_payload = {"apiToken": sup.api_key.strip(), "brandId": brand_id, "code": article}
+                    info_res = requests.post(info_url, json=info_payload, timeout=15)
+                    
+                    print(f"[INFO ДЕБАГ] ТЕХНОМІР Відповідь: {info_res.text[:1000]}...") # Виводимо перші 1000 символів
+                    
+                    if info_res.status_code == 200 and info_res.json().get('success'):
+                        data = info_res.json().get('data', {})
+                        
+                        # Характеристики
+                        for prop in data.get('properties', []):
+                            info_data['properties'].append({"name": prop.get('name', ''), "value": prop.get('value', '')})
+                            
+                        # Зображення
+                        for img in data.get('images', []):
+                            info_data['images'].append(img.get('image', ''))
+                            
+            except Exception as e:
+                print(f"[INFO ДЕБАГ] ТЕХНОМІР ПОМИЛКА: {e}")
+
+        # === ДЕБАГ ОМЕГИ ===
+        elif 'omega' in sup.name.lower() or 'омега' in sup.name.lower():
+            print(f"\n[INFO ДЕБАГ] ОМЕГА: Шукаємо деталі для {brand} {article}")
+            try:
+                search_url = "https://public.omega.page/public/api/v1.0/product/search"
+                search_payload = {"Key": sup.api_key.strip(), "SearchPhrase": article, "From": 0, "Count": 5}
+                res = requests.post(search_url, json=search_payload, timeout=10)
+                
+                print(f"[INFO ДЕБАГ] ОМЕГА Відповідь: {res.text[:1000]}...") # Виводимо перші 1000 символів
+                
+                if res.status_code == 200:
+                    items = res.json().get('Result', []) or res.json().get('Data', [])
+                    for item in items:
+                        if str(item.get('BrandDescription', '')).upper() == brand:
+                            # Омега часто не має масиву властивостей, тому виводимо все, що є
+                            info_data['properties'].append({"name": "Опис", "value": item.get('DescriptionUkr') or item.get('Description', '')})
+                            info_data['properties'].append({"name": "Доп. інфо", "value": item.get('Info', '')})
+                            if item.get('CrossesCount'):
+                                info_data['properties'].append({"name": "Кількість аналогів у базі", "value": str(item.get('CrossesCount'))})
+                            break
+            except Exception as e:
+                print(f"[INFO ДЕБАГ] ОМЕГА ПОМИЛКА: {e}")
+
+        # === ДЕБАГ ВЕСНИ ===
+        elif 'vesna' in sup.name.lower() or 'весна' in sup.name.lower():
+             print(f"\n[INFO ДЕБАГ] ВЕСНА: Шукаємо деталі для {brand} {article}")
+             try:
+                 parts = sup.api_key.split(':')
+                 customer_id = int(parts[0]) if len(parts) > 1 else 0
+                 token_raw = parts[1] if len(parts) > 1 else sup.api_key
+                 token = token_raw.replace('Token', '').replace('token', '').strip()
+                 
+                 vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
+                 headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
+                 payload = {"customer_id": customer_id, "article": article}
+                 
+                 res = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
+                 print(f"[INFO ДЕБАГ] ВЕСНА Відповідь: {res.text[:1000]}...")
+             except Exception as e:
+                 print(f"[INFO ДЕБАГ] ВЕСНА ПОМИЛКА: {e}")
+
+        return Response(info_data)
+
 
 # ===============================================
-# ОСНОВНИЙ КЛАС ПОШУКУ (ІДЕАЛЬНІ АНАЛОГИ З МУЛЬТИПОТОЧНІСТЮ)
+# ОСНОВНИЙ КЛАС ПОШУКУ (ІДЕАЛЬНІ АНАЛОГИ)
 # ===============================================
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
@@ -435,10 +536,6 @@ class PartSearchView(APIView):
         orig_brand = request.query_params.get('brand', '').strip().upper() 
         
         q_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
-        
-        print(f"\n==============================================")
-        print(f"[VIN-MATRIX] Пошук: '{query}', is_analog={is_analog}")
-        print(f"==============================================")
         
         if not query or len(query) < 2: return Response([])
 
@@ -553,7 +650,6 @@ class PartSearchView(APIView):
                                     seen_codes.add(unique_key)
                                     valid_crosses.append(cross)
                                 
-                                # ФУНКЦІЯ ДЛЯ МУЛЬТИПОТОЧНОСТІ: Пробиває ціну 1 аналога
                                 def get_omega_price(cross_data):
                                     c_code_raw = str(cross_data.get('Code', ''))
                                     c_brand_raw = str(cross_data.get('Brand', 'Unknown'))
@@ -605,7 +701,6 @@ class PartSearchView(APIView):
                                     except Exception:
                                         pass
                                         
-                                    # ЯКЩО НЕМАЄ В НАЯВНОСТІ, ВСЕ ОДНО ПОКАЗУЄМО АРТИКУЛ
                                     return {
                                         "id": f"omega_cross_{sup.id}_nostock_{c_code_raw}", "supplier_id": sup.id, "source": sup.name,
                                         "brand": c_brand_raw, "article": c_code_raw,
@@ -615,7 +710,6 @@ class PartSearchView(APIView):
                                         "min_qty": 1, "image_url": "", "description": ""
                                     }
 
-                                # ЗАПУСКАЄМО 50 АНАЛОГІВ ОДНОЧАСНО
                                 with ThreadPoolExecutor(max_workers=10) as executor:
                                     future_to_cross = {executor.submit(get_omega_price, c): c for c in valid_crosses[:50]}
                                     for future in as_completed(future_to_cross):

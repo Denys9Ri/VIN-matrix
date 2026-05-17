@@ -39,10 +39,10 @@ const Visits = () => {
   const [newVisitData, setNewVisitData] = useState({ 
     plate: '', vin_code: '', client: '', phone: '', date: '', time: '',
     delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '',
-    brand: '', model: '', year: '', engine: ''
+    brand: '', model: '', year: '', engine: '', fuel: ''
   });
 
-  const [editCarData, setEditCarData] = useState({ brand: '', model: '', year: '', engine: '' });
+  const [editCarData, setEditCarData] = useState({ brand: '', model: '', year: '', engine: '', fuel: '' });
   
   const [newService, setNewService] = useState({ name: '', price: '' });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
@@ -94,10 +94,10 @@ const Visits = () => {
         if (!isStore && selectedVisit.delivery_data && selectedVisit.delivery_data.startsWith('{')) {
           setEditCarData(JSON.parse(selectedVisit.delivery_data));
         } else {
-          setEditCarData({ brand: '', model: '', year: '', engine: '' });
+          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '' });
         }
       } catch (e) {
-        setEditCarData({ brand: '', model: '', year: '', engine: '' });
+        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '' });
       }
     }
   }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore]);
@@ -154,7 +154,8 @@ const Visits = () => {
                 brand: res.data.brand ? res.data.brand : prev.brand,
                 model: res.data.model ? res.data.model : prev.model,
                 year: res.data.year ? res.data.year : prev.year,
-                engine: res.data.engine ? res.data.engine : prev.engine
+                engine: res.data.engine ? res.data.engine : prev.engine,
+                fuel: res.data.fuel ? res.data.fuel : prev.fuel
               }));
               
               if (res.data.plate) {
@@ -168,7 +169,7 @@ const Visits = () => {
               }
             }
           } catch (error) {
-            const errorMsg = error.response?.data?.error || "Не вдалося розпізнати документ. Спробуйте ще раз.";
+            const errorMsg = error.response?.data?.error || "Не вдалося розпізнати документ.";
             alert(`Помилка: ${errorMsg}`);
           } finally {
             setIsScanning(false);
@@ -255,14 +256,25 @@ const Visits = () => {
             brand: newVisitData.brand.trim(),
             model: newVisitData.model.trim(),
             year: newVisitData.year.trim(),
-            engine: newVisitData.engine.trim()
+            engine: newVisitData.engine.trim(),
+            fuel: newVisitData.fuel.trim()
         });
+        
+        let engStr = [];
+        if (newVisitData.engine) engStr.push(`${newVisitData.engine} см³`);
+        if (newVisitData.fuel) engStr.push(newVisitData.fuel);
+        let engineInfo = engStr.length > 0 ? `Дв: ${engStr.join(', ')}` : '';
+        
+        const carInfo = `${newVisitData.brand || ''} ${newVisitData.model || ''} ${newVisitData.year ? `(${newVisitData.year} р.)` : ''} ${engineInfo}`.trim();
+        if (carInfo) {
+            payload.comment = `Авто: ${carInfo}`;
+        }
     }
     
     try {
       await axios.post(`${API_BASE}/api/visits/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
-      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', brand: '', model: '', year: '', engine: '' });
+      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', brand: '', model: '', year: '', engine: '', fuel: '' });
       
       if (searchParams.get('scan')) {
           navigate('/visits'); 
@@ -419,7 +431,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* МОДАЛКА СТВОРЕННЯ ВІЗИТУ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative overflow-hidden">
@@ -459,20 +470,11 @@ const Visits = () => {
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 mt-1">
-                    <button 
-                      type="button"
-                      onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
-                    >
+                    <button type="button" onClick={() => cameraInputRef.current && cameraInputRef.current.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm">
                       <Camera size={16} />
                       <span className="font-black uppercase tracking-widest text-[9px] md:text-[10px]">Камера</span>
                     </button>
-                    
-                    <button 
-                      type="button"
-                      onClick={() => galleryInputRef.current && galleryInputRef.current.click()}
-                      className="bg-white hover:bg-slate-50 text-emerald-700 border border-emerald-300 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
-                    >
+                    <button type="button" onClick={() => galleryInputRef.current && galleryInputRef.current.click()} className="bg-white hover:bg-slate-50 text-emerald-700 border border-emerald-300 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm">
                       <ImagePlus size={16} />
                       <span className="font-black uppercase tracking-widest text-[9px] md:text-[10px]">З галереї</span>
                     </button>
@@ -498,6 +500,32 @@ const Visits = () => {
                 <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium text-sm" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
               </div>
 
+              {isStore && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex gap-2">
+                    <select className="flex-1 bg-white border border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none" value={newVisitData.delivery_type} onChange={e => setNewVisitData({...newVisitData, delivery_type: e.target.value})}>
+                      <option value="pickup">Самовивіз</option>
+                      <option value="np">Нова Пошта</option>
+                      <option value="courier">Кур'єр</option>
+                    </select>
+                    <select className="flex-1 bg-white border border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none" value={newVisitData.payment_status} onChange={e => setNewVisitData({...newVisitData, payment_status: e.target.value})}>
+                      <option value="unpaid">Не оплачено</option>
+                      <option value="advance">Передоплата</option>
+                      <option value="paid">Оплачено</option>
+                      <option value="cod">Накладений платіж</option>
+                    </select>
+                  </div>
+                  
+                  {newVisitData.payment_status === 'advance' && (
+                    <input type="number" placeholder="Внесена сума (₴)" className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm font-black text-blue-600 outline-none" value={newVisitData.prepayment_amount} onChange={e => setNewVisitData({...newVisitData, prepayment_amount: e.target.value})}/>
+                  )}
+                  
+                  {newVisitData.delivery_type === 'np' && (
+                    <textarea placeholder="Місто, Відділення..." className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm outline-none resize-none font-medium" rows="2" value={newVisitData.delivery_data} onChange={e => setNewVisitData({...newVisitData, delivery_data: e.target.value})}/>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Держ. Номер</label>
@@ -513,6 +541,7 @@ const Visits = () => {
               {!isStore && (
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3 shadow-inner">
                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-1.5">Дані автомобіля</p>
+                  
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Марка</label>
@@ -523,14 +552,19 @@ const Visits = () => {
                       <input type="text" placeholder="Passat" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.model} onChange={e => setNewVisitData({...newVisitData, model: e.target.value})} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Рік випуску</label>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Рік</label>
                       <input type="number" placeholder="2012" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-blue-600 outline-none focus:border-blue-500" value={newVisitData.year} onChange={e => setNewVisitData({...newVisitData, year: e.target.value})} />
                     </div>
                     <div>
                       <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Двигун (см³)</label>
                       <input type="number" placeholder="1995" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.engine} onChange={e => setNewVisitData({...newVisitData, engine: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Паливо</label>
+                      <input type="text" placeholder="Бензин" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.fuel} onChange={e => setNewVisitData({...newVisitData, fuel: e.target.value})} />
                     </div>
                   </div>
                 </div>
@@ -544,7 +578,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* === МОДАЛКА ПЕРЕГЛЯДУ/РЕДАГУВАННЯ ВІЗИТУ === */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
@@ -564,24 +597,28 @@ const Visits = () => {
                   </div>
                 )}
 
-                {/* РЕДАГОВАНІ ПОЛЯ АВТО */}
+                {/* РЕДАГОВАНІ ПОЛЯ АВТО В КАРТЦІ */}
                 {!isStore && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                    <div>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                    <div className="col-span-1 sm:col-span-1">
                       <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
                       <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={handleSaveCarData}/>
                     </div>
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Модель</label>
                       <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={handleSaveCarData}/>
                     </div>
-                    <div>
+                    <div className="col-span-1">
                       <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Рік</label>
                       <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600 outline-none focus:border-blue-500" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={handleSaveCarData}/>
                     </div>
-                    <div>
-                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Двигун (см³)</label>
+                    <div className="col-span-1">
+                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Дв. (см³)</label>
                       <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={handleSaveCarData}/>
+                    </div>
+                    <div className="col-span-1">
+                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Паливо</label>
+                      <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={handleSaveCarData}/>
                     </div>
                   </div>
                 )}
@@ -680,12 +717,20 @@ const Visits = () => {
               </div>
             </div>
 
-            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
-              <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Нове' : 'В черзі'}</button>
-              <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Чекаємо' : 'В роботі'}</button>
-              <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Відправка' : 'Готово'}</button>
-              {isStore && <button onClick={() => updateVisitField('status', 'COMPLETED')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'COMPLETED' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Виконано</button>}
-            </div>
+            {isStore ? (
+              <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
+                <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>Нове</button>
+                <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-orange-500 shadow shadow-orange-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Чекаємо</button>
+                <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Відправка</button>
+                <button onClick={() => updateVisitField('status', 'COMPLETED')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'COMPLETED' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Виконано</button>
+              </div>
+            ) : (
+              <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
+                <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
+                <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
+                <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
+              </div>
+            )}
 
             <div className={`grid grid-cols-1 ${!isStore ? 'md:grid-cols-2' : ''} gap-6`}>
               {!isStore && (

@@ -96,7 +96,6 @@ class ProfileSettingsView(APIView):
         company = get_user_company(request.user)
         role = 'owner' if hasattr(request.user, 'company') else 'mechanic'
         
-        # Визначаємо права доступу
         permissions = {"can_create_visits": True, "can_view_finances": True}
         if role == 'mechanic':
             emp = request.user.employee_profile
@@ -418,6 +417,9 @@ class SupplierViewSet(viewsets.ModelViewSet):
         return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
 
 
+# ===============================================
+# ОСНОВНИЙ КЛАС ПОШУКУ (Оновлено для Аналогів)
+# ===============================================
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -426,36 +428,48 @@ class PartSearchView(APIView):
         euro_rate = float(company.euro_rate) if company.euro_rate else 42.00
         
         query = request.query_params.get('q', '').strip()
+        is_analog = request.query_params.get('analog') == 'true'
+        sup_id = request.query_params.get('supplier_id')
+        
         if not query or len(query) < 2: return Response([])
 
         results = []
 
-        local_items = InventoryItem.objects.filter(
-            Q(company=company) & 
-            (Q(article__icontains=query) | Q(name__icontains=query) | Q(brand__icontains=query))
-        )
-        for item in local_items:
-            results.append({
-                "id": f"local_{item.id}", "source": "Мій склад", "brand": item.brand, "article": item.article,
-                "name": item.name, "buy_price": float(item.buy_price), "quantity": f"{item.quantity} шт",
-                "is_local": True, "sku": "", "min_qty": 1, "image_url": "", "description": "",
-                "warehouses": [{"name": "Мій склад", "quantity": f"{item.quantity} шт", "priority": 1, "buy_price": float(item.buy_price)}]
-            })
+        # Якщо це звичайний пошук, шукаємо на локальному складі
+        if not is_analog:
+            local_items = InventoryItem.objects.filter(
+                Q(company=company) & 
+                (Q(article__icontains=query) | Q(name__icontains=query) | Q(brand__icontains=query))
+            )
+            for item in local_items:
+                results.append({
+                    "id": f"local_{item.id}", "supplier_id": "local", "source": "Мій склад", "brand": item.brand, "article": item.article,
+                    "name": item.name, "buy_price": float(item.buy_price), "quantity": f"{item.quantity} шт",
+                    "is_local": True, "sku": "", "min_qty": 1, "image_url": "", "description": "",
+                    "warehouses": [{"name": "Мій склад", "quantity": f"{item.quantity} шт", "priority": 1, "buy_price": float(item.buy_price)}]
+                })
 
+        # Завантажуємо постачальників
         suppliers = Supplier.objects.filter(company=company)
+        if is_analog and sup_id:
+            suppliers = suppliers.filter(id=sup_id) # Для аналогів опитуємо тільки того, кого натиснули
         
         for sup in suppliers:
             prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
             prefs_map = {str(p.get('id')): p for p in prefs if isinstance(p, dict)}
             prefs_map.update({str(p.get('name')).lower(): p for p in prefs if isinstance(p, dict)})
 
+            # === VESNA ===
             if sup.api_key and ('vesna' in sup.name.lower() or 'весна' in sup.name.lower()):
                 try:
                     parts = sup.api_key.split(':')
                     customer_id = int(parts[0]) if len(parts) > 1 else 0
                     token_raw = parts[1] if len(parts) > 1 else sup.api_key
                     token = token_raw.replace('Token', '').replace('token', '').strip()
-                    vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
+                    
+                    # Магія: Якщо analog=true, міняємо URL на крос-коди!
+                    vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-cross/" if is_analog else "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
+                    
                     headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
                     payload = {"customer_id": customer_id, "article": query}
                     response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
@@ -465,6 +479,11 @@ class PartSearchView(APIView):
                         items_data = raw_data.get('data', []) if isinstance(raw_data, dict) else (raw_data if isinstance(raw_data, list) else [])
                         for item in items_data:
                             if not isinstance(item, dict): continue
+                            
+                            # Якщо це пошук аналогів, ВІДКИДАЄМО оригінальну деталь
+                            if is_analog and str(item.get('article', '')).upper().replace(' ','').replace('-','') == query.upper().replace(' ','').replace('-',''):
+                                continue
+                                
                             balances = item.get('balance', [])
                             if not balances: continue
                             warehouses_list = []
@@ -487,7 +506,7 @@ class PartSearchView(APIView):
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
                             
                             results.append({
-                                "id": f"vesna_{sup.id}_{item.get('sku', '0')}", "source": sup.name, "brand": item.get('brand', 'Unknown'),
+                                "id": f"vesna_{sup.id}_{item.get('sku', '0')}", "supplier_id": sup.id, "source": sup.name, "brand": item.get('brand', 'Unknown'),
                                 "article": item.get('article', query.upper()), "name": item.get('name', 'Деталь Vesna'),
                                 "buy_price": uah_price, "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
                                 "is_local": False, "warehouses": warehouses_list, "sku": item.get('sku', ''), "min_qty": item.get('min_order_quantity', 1),
@@ -495,6 +514,7 @@ class PartSearchView(APIView):
                             })
                 except Exception: pass
 
+            # === OMEGA ===
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):
                 try:
                     omega_url = "https://public.omega.page/public/api/v1.0/product/search"
@@ -509,12 +529,17 @@ class PartSearchView(APIView):
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             
-                            art_val = str(item.get('Number', '')).upper()
-                            card_val = str(item.get('Card', '')).upper()
-                            q_upper = query.upper()
+                            art_val = str(item.get('Number', '')).upper().replace(' ','').replace('-','')
+                            card_val = str(item.get('Card', '')).upper().replace(' ','').replace('-','')
+                            q_upper = query.upper().replace(' ','').replace('-','')
                             
-                            if q_upper not in art_val and q_upper not in card_val:
-                                continue
+                            # Магія: при звичайному пошуку відкидаємо аналоги. При пошуку аналогів - ВІДКИДАЄМО оригінал!
+                            if not is_analog:
+                                if q_upper not in art_val and q_upper not in card_val:
+                                    continue
+                            else:
+                                if q_upper in art_val or q_upper in card_val:
+                                    continue
                                 
                             warehouses_list = []
                             buy_price = float(item.get('CustomerPrice') or item.get('EffectivePrice') or item.get('Price') or 0)
@@ -535,7 +560,7 @@ class PartSearchView(APIView):
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
                             
                             results.append({
-                                "id": f"omega_{sup.id}_{item.get('ProductId', '0')}", "source": sup.name,
+                                "id": f"omega_{sup.id}_{item.get('ProductId', '0')}", "supplier_id": sup.id, "source": sup.name,
                                 "brand": item.get('BrandDescription', 'Unknown'), "article": item.get('Number', query.upper()),
                                 "name": item.get('Description', 'Деталь Omega'), "buy_price": buy_price, 
                                 "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
@@ -544,13 +569,14 @@ class PartSearchView(APIView):
                             })
                 except Exception: pass
 
+            # === TECHNOMIR ===
             elif sup.api_key and ('tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower()):
                 try:
                     tehnomir_url = "https://api.tehnomir.com.ua/price/search"
                     payload = {
                         "apiToken": sup.api_key.strip(),
                         "code": query,
-                        "isShowAnalogs": 0,
+                        "isShowAnalogs": 1 if is_analog else 0, # Магія: 1 для аналогів
                         "currency": "UAH" 
                     }
                     
@@ -569,8 +595,15 @@ class PartSearchView(APIView):
                             brand = str(item.get('brand', 'Unknown'))
                             article = str(item.get('code', query.upper()))
                             
-                            if query.upper().replace(' ', '').replace('-', '').replace('.', '') not in article.upper().replace(' ', '').replace('-', '').replace('.', ''):
-                                continue
+                            q_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
+                            art_clean = article.upper().replace(' ', '').replace('-', '').replace('.', '')
+                            
+                            if not is_analog:
+                                if q_clean not in art_clean:
+                                    continue
+                            else:
+                                if q_clean == art_clean:
+                                    continue # Відкидаємо оригінал у видачі аналогів
                                 
                             warehouses_list = []
                             for rest in item.get('rests', []):
@@ -615,8 +648,8 @@ class PartSearchView(APIView):
                             cheapest_wh = warehouses_list[0]
                             
                             results.append({
-                                "id": f"tehno_{sup.id}_{item.get('productId', '0')}_{brand}", 
-                                "source": sup.name,
+                                "id": f"tehno_{sup.id}_{item.get('productId', '0')}_{brand}_{cheapest_wh['name']}", 
+                                "supplier_id": sup.id, "source": sup.name,
                                 "brand": brand, 
                                 "article": article,
                                 "name": item.get('descriptionRus') or item.get('descriptionUa') or 'Деталь Technomir', 

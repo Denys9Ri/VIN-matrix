@@ -70,9 +70,6 @@ class VisitViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
-    # ==========================================================
-    # РЕАЛЬНИЙ ШІ СКАНЕР ТЕХПАСПОРТІВ (OCR.SPACE API)
-    # ==========================================================
     @action(detail=False, methods=['post'], url_path='recognize_document', parser_classes=[MultiPartParser, FormParser])
     def recognize_document(self, request):
         doc = request.FILES.get('document')
@@ -111,10 +108,10 @@ class VisitViewSet(viewsets.ModelViewSet):
                      return Response({"error": "ШІ не знайшов жодного тексту на фото."}, status=400)
                 
                 # =======================================================
-                # СУВОРИЙ ПАРСИНГ (ТІЛЬКИ ЗА МАРКЕРАМИ ТЕХПАСПОРТА)
+                # ЖОРСТКИЙ І ПРОСТИЙ ПАРСИНГ
                 # =======================================================
                 
-                # 1. VIN (17 символів підряд)
+                # 1. VIN (17 символів)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
                 vin_code = vin_match.group(0) if vin_match else ""
                 
@@ -122,64 +119,56 @@ class VisitViewSet(viewsets.ModelViewSet):
                 plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
                 plate = plate_match.group(0).replace(' ', '') if plate_match else ""
                 
-                # 3. Марка (D.1 або словник)
+                # 3. Марка (тільки зі словника)
                 brand = ""
-                brand_match = re.search(r'D[\.\s]*1\s*[:\-]?\s*([A-Z\-]+)', text_upper)
-                if brand_match:
-                    brand = brand_match.group(1).strip()
-                else:
-                    brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT']
-                    for b in brands:
-                        if b in text_upper:
-                            brand = b
-                            break
+                brands = ['HONDA', 'VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT', 'TESLA', 'LAND ROVER', 'JEEP', 'ACURA', 'INFINITI', 'DODGE', 'CHRYSLER']
+                for b in brands:
+                    if b in text_upper:
+                        brand = b
+                        break
 
-                # 4. Модель (D.3)
+                # 4. Модель (Строго латиниця і цифри після D.3, ніякої кирилиці)
                 model = ""
-                model_match = re.search(r'D[\.\,\s]*3\s*[:\-]?\s*([A-Z0-9\-]+)', text_upper)
+                model_match = re.search(r'D[\.\,\s]*3[\s\:\-]+([A-Z0-9\-]+(?:\s+[A-Z0-9\-]+)?)', text_upper)
                 if model_match:
                     model = model_match.group(1).strip()
                     if vin_code and vin_code in model:
                         model = model.replace(vin_code, '').strip()
 
-                # 5. Рік випуску (СУВОРО маркер B.2 або слова Рік/Year)
-                # Допускаємо до 15 символів між B.2 і цифрою
+                # 5. Рік та Двигун (Просто шукаємо всі цифри)
                 year = ""
-                year_match = re.search(r'(?:B[\.\,\s]*2|РІК|YEAR)[^\d]{0,15}(\d{4})\b', text_upper)
-                if year_match:
-                    year = year_match.group(1)
-
-                # 6. Двигун (СУВОРО маркер P.1 або слова Capacity/СМ3)
-                # Допускаємо до 15 символів між маркером і цифрою
                 engine = ""
-                engine_match = re.search(r'(?:[PРpр][\.\,\s]*[1I\|l]|CAPACITY|СМ3|CM3)[^\d]{0,15}(\d{3,4})\b', text_upper)
-                if engine_match:
-                    engine = engine_match.group(1)
+                
+                # Знаходимо всі 4-значні числа
+                four_digits = re.findall(r'\b(\d{4})\b', text_upper)
+                
+                for num_str in four_digits:
+                    val = int(num_str)
+                    if 1980 <= val <= 2026:
+                        if not year:
+                            year = num_str
+                        elif num_str != year and not engine:
+                            engine = num_str
+                    else:
+                        if not engine:
+                            engine = num_str
+                            
+                # Якщо двигун не 4-значний (наприклад 998 см3)
+                if not engine:
+                    three_digits = re.findall(r'\b(\d{3})\b', text_upper)
+                    if three_digits:
+                        engine = three_digits[0]
 
-                # 7. ТИП ПАЛИВА (СУВОРО маркер P.3 або слова Fuel/Палива)
+                # 6. ТИП ПАЛИВА
                 fuel = ""
-                fuel_code = ""
-                # Шукаємо тільки букви BDSEM (або помилкові 58C) біля маркера P.3
-                fuel_match = re.search(r'(?:[PРpр][\.\,\s]*[3ЗZ]|FUEL|ПАЛИВА)[^A-ZА-Я0-9]{0,15}([BDSEMВДС58C])\b', text_upper)
+                fuel_match = re.search(r'P[\.\,\s]*3[\s\:\-]+([A-ZА-Я0-9])', text_upper)
                 if fuel_match:
-                    fuel_code = fuel_match.group(1).upper()
-                    
-                    # Виправляємо помилки зору ШІ
-                    if fuel_code in ['5', 'C', 'С']: fuel_code = 'S'
-                    elif fuel_code == '8': fuel_code = 'B'
-                    elif fuel_code in ['0', 'O', 'О', 'Д']: fuel_code = 'D'
-                    elif fuel_code in ['В']: fuel_code = 'B'
-                    elif fuel_code in ['Е']: fuel_code = 'E'
-                    elif fuel_code in ['М']: fuel_code = 'M'
-                        
-                    fuel_map = {
-                        'B': 'Бензин',
-                        'D': 'Дизель',
-                        'S': 'Газ/Бензин',
-                        'E': 'Електро',
-                        'M': 'Гібрид'
-                    }
-                    fuel = fuel_map.get(fuel_code, '')
+                    f_char = fuel_match.group(1).upper()
+                    if f_char in ['S', '5', 'C', 'С']: fuel = 'Газ/Бензин'
+                    elif f_char in ['B', 'В', '8']: fuel = 'Бензин'
+                    elif f_char in ['D', 'Д', '0', 'O', 'О']: fuel = 'Дизель'
+                    elif f_char in ['E', 'Е']: fuel = 'Електро'
+                    elif f_char in ['M', 'М']: fuel = 'Гібрид'
 
                 return Response({
                     "success": True,

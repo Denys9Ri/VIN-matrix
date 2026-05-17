@@ -1,4 +1,6 @@
 import requests
+import base64
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from rest_framework.decorators import action
 from rest_framework import viewsets, status, generics
@@ -67,6 +69,84 @@ class VisitViewSet(viewsets.ModelViewSet):
         return queryset.order_by('scheduled_datetime') 
 
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
+
+    # ==========================================================
+    # РЕАЛЬНИЙ ШІ СКАНЕР ТЕХПАСПОРТІВ (OCR.SPACE API)
+    # ==========================================================
+    @action(detail=False, methods=['post'], url_path='recognize_document', parser_classes=[MultiPartParser, FormParser])
+    def recognize_document(self, request):
+        doc = request.FILES.get('document')
+        if not doc:
+            return Response({"error": "Файл не знайдено"}, status=400)
+            
+        try:
+            image_data = doc.read()
+            b64_image = base64.b64encode(image_data).decode('utf-8')
+            
+            # Відправляємо картинку в хмарний OCR
+            response = requests.post(
+                'https://api.ocr.space/parse/image',
+                data={
+                    'apikey': 'helloworld',  # Безкоштовний ключ
+                    'language': 'ukr',       # Підтримка української
+                    'base64Image': 'data:image/jpeg;base64,' + b64_image,
+                    'OCREngine': 2,          # Engine 2 краще читає складний текст
+                },
+                timeout=20
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                parsed_text = ""
+                
+                for res in result.get('ParsedResults', []):
+                    parsed_text += res.get('ParsedText', '') + " "
+                    
+                text_upper = parsed_text.upper().replace('\n', ' ').replace('\r', ' ')
+                
+                # 1. Пошук VIN (17 символів підряд)
+                vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
+                vin_code = vin_match.group(0) if vin_match else ""
+                
+                # 2. Пошук Держ. Номера (напр. KA 1234 HI)
+                plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
+                plate = plate_match.group(0).replace(' ', '') if plate_match else ""
+                
+                # 3. Пошук Року випуску (1990 - 2026)
+                year_match = re.search(r'\b(199\d|20[0-2]\d)\b', text_upper)
+                year = year_match.group(0) if year_match else ""
+                
+                # 4. Пошук Марки авто
+                brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT']
+                brand = ""
+                for b in brands:
+                    if b in text_upper:
+                        brand = b
+                        break
+                        
+                brand_model = brand
+                if year:
+                    brand_model += f" ({year} рік)"
+                
+                # Пошук об'єму двигуна (напр. 1995 або 2998)
+                engine = ""
+                engine_match = re.search(r'\b([1-6]\d{3})\b', text_upper)
+                if engine_match and engine_match.group(0) != year:
+                    engine = engine_match.group(0)
+                    brand_model += f", Двигун: {engine} см3"
+
+                return Response({
+                    "success": True,
+                    "plate": plate,
+                    "vin_code": vin_code,
+                    "brand_model": brand_model.strip(),
+                    "raw_text": text_upper
+                })
+            else:
+                return Response({"error": "Помилка API розпізнавання"}, status=500)
+                
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
 class OrderPartViewSet(viewsets.ModelViewSet):
     serializer_class = OrderPartSerializer
@@ -417,30 +497,17 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
         return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
 
-    # =========================================================================
-    # МАГІЯ: ГЛОБАЛЬНЕ ОБ'ЄДНАННЯ ІНФОРМАЦІЇ ЗІ ВСІХ ПОСТАЧАЛЬНИКІВ
-    # =========================================================================
     @action(detail=True, methods=['get'], url_path='part_info')
     def part_info(self, request, pk=None):
         base_sup = self.get_object()
         company = base_sup.company
-        
-        # Беремо ВСІХ постачальників компанії з активними ключами
         all_suppliers = Supplier.objects.filter(company=company).exclude(api_key='')
-        
         article = request.query_params.get('article', '').strip()
         brand = request.query_params.get('brand', '').strip().upper()
         
-        info_data = {
-            "properties": [],
-            "applicability": [],
-            "images": []
-        }
-        
-        if not article:
-            return Response(info_data)
+        info_data = {"properties": [], "applicability": [], "images": []}
+        if not article: return Response(info_data)
 
-        # Сховища для уникнення дублікатів
         seen_props = set()
         seen_apps = set()
         seen_images = set()
@@ -465,13 +532,10 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 info_data['images'].append(url)
                 seen_images.add(url)
 
-        # 1. ТЕХНОМІР (Характеристики)
         def fetch_tehno(sup):
             try:
                 brand_url = "https://api.tehnomir.com.ua/info/getBrandsByCode"
-                brand_payload = {"apiToken": sup.api_key.strip(), "code": article}
-                b_res = requests.post(brand_url, json=brand_payload, timeout=5)
-                
+                b_res = requests.post(brand_url, json={"apiToken": sup.api_key.strip(), "code": article}, timeout=5)
                 brand_id = None
                 if b_res.status_code == 200 and b_res.json().get('success'):
                     for b in b_res.json().get('data', []):
@@ -480,7 +544,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
                             break
                     if not brand_id and len(b_res.json().get('data', [])) > 0:
                         brand_id = b_res.json().get('data')[0].get('brandId')
-                
                 if brand_id:
                     info_url = "https://api.tehnomir.com.ua/info/getProductInfo"
                     info_res = requests.post(info_url, json={"apiToken": sup.api_key.strip(), "brandId": brand_id, "code": article}, timeout=10)
@@ -492,13 +555,11 @@ class SupplierViewSet(viewsets.ModelViewSet):
                             add_img(img.get('image', ''))
             except Exception: pass
 
-        # 2. ОМЕГА (Дерево авто + Характеристики)
         def fetch_omega(sup):
             try:
                 prod_id = None
                 search_url = "https://public.omega.page/public/api/v1.0/product/search"
-                search_payload = {"Key": sup.api_key.strip(), "SearchPhrase": article, "From": 0, "Count": 10}
-                res = requests.post(search_url, json=search_payload, timeout=5)
+                res = requests.post(search_url, json={"Key": sup.api_key.strip(), "SearchPhrase": article, "From": 0, "Count": 10}, timeout=5)
                 
                 if res.status_code == 200:
                     items = res.json().get('Result', []) or res.json().get('Data', [])
@@ -508,7 +569,6 @@ class SupplierViewSet(viewsets.ModelViewSet):
                             add_img(item.get('ImageUrl', ''))
                             if item.get('Weight'): add_prop("Вага (кг)", item.get('Weight'))
                             if item.get('Info'): add_prop("Додатково", item.get('Info'))
-                            # Витягуємо авто з опису, як запасний варіант
                             desc = str(item.get('Description', ''))
                             if 'пр-во' in desc:
                                 cars_str = desc.split('(пр-во')[0].replace('Фильтр масляный двигателя', '').replace('Колодки тормозные', '').strip()
@@ -518,34 +578,25 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
                 if prod_id:
                     details_url = "https://public.omega.page/public/api/v1.0/product/details"
-                    details_payload = {"Key": sup.api_key.strip(), "ProductIdList": [prod_id]}
-                    det_res = requests.post(details_url, json=details_payload, timeout=10)
-                    
+                    det_res = requests.post(details_url, json={"Key": sup.api_key.strip(), "ProductIdList": [prod_id]}, timeout=10)
                     if det_res.status_code == 200:
                         data_list = det_res.json().get('Data', [])
                         if data_list:
                             prod_data = data_list[0]
-                            # Специфікації
                             for spec in prod_data.get('SpecificationList', []):
-                                name = spec.get('Descr') or spec.get('Key', '')
-                                add_prop(name, spec.get('Value', ''))
-                            # Оригінальні коди
+                                add_prop(spec.get('Descr') or spec.get('Key', ''), spec.get('Value', ''))
                             oe_codes = prod_data.get('OECodeList', [])
                             if oe_codes:
-                                oe_str = ", ".join([f"{oe.get('Code')} ({oe.get('CarModel', '')})" for oe in oe_codes])
-                                add_prop("Оригінальні (OE) коди", oe_str)
-                            # Застосовність (Дерево авто)
+                                add_prop("Оригінальні (OE) коди", ", ".join([f"{oe.get('Code')} ({oe.get('CarModel', '')})" for oe in oe_codes]))
                             for app in prod_data.get('ApplicabilityList', []):
                                 brand_name = app.get('Name', '')
                                 children = app.get('Children', [])
                                 if children:
-                                    for child in children:
-                                        add_app(f"{brand_name} {child.get('Name', '')}")
+                                    for child in children: add_app(f"{brand_name} {child.get('Name', '')}")
                                 else:
                                     add_app(brand_name)
             except Exception: pass
 
-        # 3. ВЕСНА (Фото)
         def fetch_vesna(sup):
              try:
                  parts = sup.api_key.split(':')
@@ -564,25 +615,19 @@ class SupplierViewSet(viewsets.ModelViewSet):
                              break
              except Exception: pass
 
-        # Запускаємо всі 3 запити паралельно для максимальної швидкості
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = []
             for sup in all_suppliers:
-                if 'omega' in sup.name.lower() or 'омега' in sup.name.lower():
-                    futures.append(executor.submit(fetch_omega, sup))
-                elif 'tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower():
-                    futures.append(executor.submit(fetch_tehno, sup))
-                elif 'vesna' in sup.name.lower() or 'весна' in sup.name.lower():
-                    futures.append(executor.submit(fetch_vesna, sup))
-            
-            for future in as_completed(futures):
-                pass
+                if 'omega' in sup.name.lower() or 'омега' in sup.name.lower(): futures.append(executor.submit(fetch_omega, sup))
+                elif 'tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower(): futures.append(executor.submit(fetch_tehno, sup))
+                elif 'vesna' in sup.name.lower() or 'весна' in sup.name.lower(): futures.append(executor.submit(fetch_vesna, sup))
+            for future in as_completed(futures): pass
 
         return Response(info_data)
 
 
 # ===============================================
-# ОСНОВНИЙ КЛАС ПОШУКУ (ІДЕАЛЬНІ АНАЛОГИ)
+# ОСНОВНИЙ КЛАС ПОШУКУ
 # ===============================================
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
@@ -823,7 +868,7 @@ class PartSearchView(APIView):
                                     "is_local": False, "warehouses": warehouses_list, "sku": str(item.get('ProductId', '')),
                                     "min_qty": 1, "image_url": item.get('ImageUrl', ''), "description": item.get('DescriptionUkr', '') or item.get('Info', '')
                                 })
-                except Exception as e: print("Omega error", e)
+                except Exception: pass
 
             # === TECHNOMIR ===
             elif sup.api_key and ('tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower()):

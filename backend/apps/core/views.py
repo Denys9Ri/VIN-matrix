@@ -418,7 +418,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
 
 # ===============================================
-# ОСНОВНИЙ КЛАС ПОШУКУ (Повноцінні аналоги Омеги з ЦІНАМИ)
+# ОСНОВНИЙ КЛАС ПОШУКУ (ІДЕАЛЬНА ФІЛЬТРАЦІЯ АНАЛОГІВ)
 # ===============================================
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]
@@ -430,10 +430,7 @@ class PartSearchView(APIView):
         query = request.query_params.get('q', '').strip()
         is_analog = request.query_params.get('analog') == 'true'
         sup_id = request.query_params.get('supplier_id')
-        sku_param = request.query_params.get('sku', '').strip()
-        orig_brand = request.query_params.get('brand', '').strip().upper() 
-        
-        q_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
+        sku_param = request.query_params.get('sku', '').strip() # Головна річ для відкидання дублів
         
         if not query or len(query) < 2: return Response([])
 
@@ -473,7 +470,7 @@ class PartSearchView(APIView):
                     
                     headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
                     payload = {"customer_id": customer_id, "article": query}
-                    response = requests.post(vesna_url, json=payload, headers=headers, timeout=15)
+                    response = requests.post(vesna_url, json=payload, headers=headers, timeout=10)
                     
                     if response.status_code == 200:
                         raw_data = response.json()
@@ -481,11 +478,9 @@ class PartSearchView(APIView):
                         for item in items_data:
                             if not isinstance(item, dict): continue
                             
-                            art_clean = str(item.get('article', '')).upper().replace(' ','').replace('-','').replace('.','')
-                            item_brand = str(item.get('brand', '')).upper()
-                            
-                            # Якщо шукаємо аналоги - відкидаємо тільки якщо збігається і номер, і бренд
-                            if is_analog and art_clean == q_clean and item_brand == orig_brand:
+                            # БРОНЕБІЙНО: Якщо це аналог, відкидаємо деталь з тим самим SKU
+                            item_sku = str(item.get('sku', ''))
+                            if is_analog and item_sku == sku_param:
                                 continue
                                 
                             balances = item.get('balance', [])
@@ -510,10 +505,10 @@ class PartSearchView(APIView):
                             warehouses_list.sort(key=lambda w: (0 if float(str(w['quantity']).replace('>', '').replace('+', '') or 0) > 0 else 1, w['priority']))
                             
                             results.append({
-                                "id": f"vesna_{sup.id}_{item.get('sku', '0')}", "supplier_id": sup.id, "source": sup.name, "brand": item.get('brand', 'Unknown'),
+                                "id": f"vesna_{sup.id}_{item_sku}", "supplier_id": sup.id, "source": sup.name, "brand": item.get('brand', 'Unknown'),
                                 "article": item.get('article', query.upper()), "name": item.get('name', 'Деталь Vesna'),
                                 "buy_price": uah_price, "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
-                                "is_local": False, "warehouses": warehouses_list, "sku": item.get('sku', ''), "min_qty": item.get('min_order_quantity', 1),
+                                "is_local": False, "warehouses": warehouses_list, "sku": item_sku, "min_qty": item.get('min_order_quantity', 1),
                                 "image_url": item.get('image') or item.get('picture') or '', "description": item.get('description') or ''
                             })
                 except Exception: pass
@@ -533,17 +528,13 @@ class PartSearchView(APIView):
                             
                             for cross in crosses:
                                 c_code = str(cross.get('Code', '')).upper().replace(' ','').replace('-','').replace('.','')
-                                c_brand = str(cross.get('Brand', '')).upper()
-                                
-                                if c_code == q_clean and c_brand == orig_brand:
+                                if not c_code or c_code in seen_codes:
                                     continue
-                                if f"{c_code}_{c_brand}" in seen_codes:
-                                    continue
-                                    
-                                seen_codes.add(f"{c_code}_{c_brand}")
+                                seen_codes.add(c_code)
                                 valid_crosses.append(cross)
                             
-                            for cross in valid_crosses[:8]:
+                            # Щоб не було таймауту, беремо 6 топових кросів
+                            for cross in valid_crosses[:6]:
                                 c_code_raw = str(cross.get('Code', ''))
                                 c_brand_raw = str(cross.get('Brand', 'Unknown'))
                                 
@@ -556,12 +547,10 @@ class PartSearchView(APIView):
                                     
                                     best_match = None
                                     for match_item in res_items:
-                                        m_brand = str(match_item.get('BrandDescription', '')).upper()
-                                        m_code = str(match_item.get('Number', '')).upper().replace(' ','').replace('-','').replace('.','')
-                                        
-                                        if m_code == q_clean and m_brand == orig_brand:
+                                        prod_id = str(match_item.get('ProductId', '0'))
+                                        # БРОНЕБІЙНО: Відкидаємо оригінальну деталь по ID
+                                        if prod_id == sku_param:
                                             continue
-                                            
                                         best_match = match_item
                                         break
                                         
@@ -610,6 +599,7 @@ class PartSearchView(APIView):
                             for item in items_data:
                                 if not isinstance(item, dict): continue
                                 
+                                q_clean = query.upper().replace(' ','').replace('-','').replace('.','')
                                 art_val = str(item.get('Number', '')).upper().replace(' ','').replace('-','').replace('.','')
                                 card_val = str(item.get('Card', '')).upper().replace(' ','').replace('-','').replace('.','')
                                 
@@ -655,7 +645,7 @@ class PartSearchView(APIView):
                         "currency": "UAH" 
                     }
                     
-                    response = requests.post(tehnomir_url, json=payload, timeout=25)
+                    response = requests.post(tehnomir_url, json=payload, timeout=20)
                     
                     if response.status_code == 200:
                         raw_data = response.json()
@@ -669,15 +659,17 @@ class PartSearchView(APIView):
                             
                             brand = str(item.get('brand', 'Unknown')).upper()
                             article = str(item.get('code', query.upper()))
+                            prod_id = str(item.get('productId', '0'))
                             
+                            q_clean = query.upper().replace(' ', '').replace('-', '').replace('.', '')
                             art_clean = article.upper().replace(' ', '').replace('-', '').replace('.', '')
                             
-                            if not is_analog:
-                                if q_clean not in art_clean:
-                                    continue
-                            else:
-                                if q_clean == art_clean and brand == orig_brand:
-                                    continue 
+                            # БРОНЕБІЙНО: Якщо шукаємо аналоги, відкидаємо тільки ту деталь, на яку клікнули (по ID)
+                            if is_analog and prod_id == sku_param:
+                                continue 
+                                
+                            if not is_analog and q_clean not in art_clean:
+                                continue
                                 
                             warehouses_list = []
                             for rest in item.get('rests', []):
@@ -722,7 +714,7 @@ class PartSearchView(APIView):
                             cheapest_wh = warehouses_list[0]
                             
                             results.append({
-                                "id": f"tehno_{sup.id}_{item.get('productId', '0')}_{brand}_{cheapest_wh['name']}", 
+                                "id": f"tehno_{sup.id}_{prod_id}_{brand}_{cheapest_wh['name']}", 
                                 "supplier_id": sup.id, "source": sup.name,
                                 "brand": brand, 
                                 "article": article,
@@ -731,7 +723,7 @@ class PartSearchView(APIView):
                                 "quantity": f"{cheapest_wh['quantity']} шт ({cheapest_wh['name']})",
                                 "is_local": False, 
                                 "warehouses": warehouses_list, 
-                                "sku": str(item.get('productId', '')),
+                                "sku": prod_id,
                                 "min_qty": 1, "image_url": "", "description": ""
                             })
                 except Exception: pass

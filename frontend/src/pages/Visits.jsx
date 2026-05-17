@@ -10,9 +10,10 @@ const Visits = () => {
   const [catalogServices, setCatalogServices] = useState([]); 
   const [role, setRole] = useState(null); 
   const [companyInfo, setCompanyInfo] = useState(null); 
+  const [permissions, setPermissions] = useState({}); // ДОДАНО: ПРАВА МАЙСТРА
   const [loading, setLoading] = useState(true);
   
-  const isStore = companyInfo?.business_type === 'store'; // ЧАРІВНА ЗМІННА
+  const isStore = companyInfo?.business_type === 'store'; 
   
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState('');
@@ -29,10 +30,9 @@ const Visits = () => {
   
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
 
-  // РОЗШИРЕНА ФОРМА ДЛЯ МАГАЗИНУ
   const [newVisitData, setNewVisitData] = useState({ 
     plate: '', vin_code: '', client: '', phone: '', date: '', time: '',
-    delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid'
+    delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: ''
   });
   
   const [newService, setNewService] = useState({ name: '', price: '' });
@@ -60,6 +60,7 @@ const Visits = () => {
       setVisits(visitsRes.data || []);
       setRole(settingsRes.data.role);
       setCompanyInfo(settingsRes.data.company); 
+      setPermissions(settingsRes.data.permissions || {}); // Зберігаємо права
       setCatalogServices(servicesRes.data || []);
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
@@ -99,9 +100,7 @@ const Visits = () => {
         document.execCommand('copy');
         setCopiedVin(vin);
         setTimeout(() => setCopiedVin(null), 2000);
-      } catch (err) {
-        console.error('Помилка', err);
-      }
+      } catch (err) {}
       document.body.removeChild(textArea);
     }
   };
@@ -132,13 +131,11 @@ const Visits = () => {
     e.preventDefault();
     let scheduled_datetime = null;
     
-    // Якщо це СТО і є дата/час
     if (!isStore && newVisitData.date && newVisitData.time) {
       const localDate = new Date(`${newVisitData.date}T${newVisitData.time}`);
       scheduled_datetime = localDate.toISOString();
     }
     
-    // ГЕНЕРУЄМО НОМЕР ДЛЯ МАГАЗИНУ, ЯКЩО НЕ ВВЕЛИ
     const finalPlate = newVisitData.plate ? newVisitData.plate.toUpperCase() : (isStore ? `ORD-${Math.floor(Math.random()*100000)}` : '');
 
     const payload = {
@@ -147,16 +144,16 @@ const Visits = () => {
         client: newVisitData.client,
         phone: newVisitData.phone,
         scheduled_datetime: scheduled_datetime,
-        // Додаємо поля магазину
         delivery_type: isStore ? newVisitData.delivery_type : 'pickup',
         delivery_data: isStore ? newVisitData.delivery_data : '',
-        payment_status: isStore ? newVisitData.payment_status : 'unpaid'
+        payment_status: isStore ? newVisitData.payment_status : 'unpaid',
+        prepayment_amount: isStore && newVisitData.payment_status === 'advance' ? (newVisitData.prepayment_amount || 0) : 0
     };
     
     try {
       await axios.post(`${API_BASE}/api/visits/`, payload, { headers: { Authorization: `Bearer ${token}` } });
       setIsCreatingVisit(false);
-      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid' });
+      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: '', time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '' });
       setSearchQuery(''); setFilterDate(''); fetchData();
     } catch (error) { alert("Помилка створення"); }
   };
@@ -184,7 +181,7 @@ const Visits = () => {
       await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`, { [field]: value }, { headers: { Authorization: `Bearer ${token}` } });
       setSelectedVisit({ ...selectedVisit, [field]: value });
       fetchData();
-    } catch (error) { alert("Помилка статусу"); }
+    } catch (error) { alert("Помилка збереження"); }
   };
 
   const handleSaveComment = async () => {
@@ -237,13 +234,12 @@ const Visits = () => {
 
   const handlePrint = () => { window.print(); };
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
+  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">VIN-MATRIX ЗАВАНТАЖЕННЯ...</div>;
 
-  // ФІЛЬТРИ ДЛЯ КОЛОНОК (Магазин vs СТО)
   const pending = visits.filter(v => v.status === 'PENDING' || v.status === 'SELECTION');
   const inProgress = visits.filter(v => v.status === 'IN_PROGRESS');
   const done = visits.filter(v => v.status === 'DONE');
-  const completed = visits.filter(v => v.status === 'COMPLETED'); // Для магазину
+  const completed = visits.filter(v => v.status === 'COMPLETED'); 
 
   const Column = ({ title, icon, items, colorClass }) => (
     <div className="bg-slate-50/50 rounded-3xl p-4 flex flex-col border border-slate-100 no-print-area">
@@ -285,14 +281,14 @@ const Visits = () => {
           )}
         </div>
 
-        {role !== 'mechanic' && (
+        {/* МАГІЯ ПРАВ: Кнопку бачить Власник АБО Майстер з правом can_create_visits */}
+        {(role === 'owner' || permissions?.can_create_visits) && (
            <button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-5 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all hover:scale-[1.02] w-full xl:w-auto shrink-0">
              <Plus size={16}/> {isStore ? 'Нове замовлення' : 'Нове авто'}
            </button>
         )}
       </div>
 
-      {/* ДИНАМІЧНІ КОЛОНКИ: 4 для магазину, 3 для СТО */}
       {isStore ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 flex-1 no-print-area">
           <Column title="Нові" icon={<Package size={18}/>} items={pending} colorClass="text-slate-600" />
@@ -308,7 +304,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* ФОРМА СТВОРЕННЯ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative">
@@ -352,6 +347,12 @@ const Visits = () => {
                       <option value="cod">Накладений платіж</option>
                     </select>
                   </div>
+                  
+                  {/* ПОЛЕ ВВОДУ АВАНСУ ПРИ СТВОРЕННІ */}
+                  {newVisitData.payment_status === 'advance' && (
+                    <input type="number" placeholder="Внесена сума (₴)" className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm font-black text-blue-600 outline-none" value={newVisitData.prepayment_amount} onChange={e => setNewVisitData({...newVisitData, prepayment_amount: e.target.value})}/>
+                  )}
+                  
                   {newVisitData.delivery_type === 'np' && (
                     <textarea placeholder="Місто, Відділення..." className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm outline-none resize-none font-medium" rows="2" value={newVisitData.delivery_data} onChange={e => setNewVisitData({...newVisitData, delivery_data: e.target.value})}/>
                   )}
@@ -375,7 +376,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* КАРТКА ВІЗИТУ / ЗАМОВЛЕННЯ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
@@ -397,7 +397,6 @@ const Visits = () => {
 
                 <p className="text-slate-500 text-[13px] font-bold flex flex-wrap items-center gap-2 mt-1"><CarFront size={14} className="shrink-0"/> {selectedVisit.client} <span className="hidden sm:inline">|</span> <Phone size={14} className="shrink-0"/> {selectedVisit.phone}</p>
                 
-                {/* ЛОГІСТИКА ТА ОПЛАТА ДЛЯ МАГАЗИНУ */}
                 {isStore ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -411,6 +410,7 @@ const Visits = () => {
                         <textarea value={selectedVisit.delivery_data || ''} onChange={e => updateVisitField('delivery_data', e.target.value)} placeholder="Місто, Відділення..." className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium outline-none resize-none" rows="2" />
                       )}
                     </div>
+                    
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1"><CreditCard size={12}/> Статус оплати</p>
                       <select value={selectedVisit.payment_status || 'unpaid'} onChange={e => updateVisitField('payment_status', e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none cursor-pointer">
@@ -419,6 +419,26 @@ const Visits = () => {
                         <option value="paid">✅ Оплачено повністю</option>
                         <option value="cod">📦 Накладений платіж</option>
                       </select>
+                      
+                      {/* ЛОГІКА РОЗРАХУНКУ ПЕРЕДОПЛАТИ (МАГІЯ) */}
+                      {selectedVisit.payment_status === 'advance' && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Аванс (Внесена сума)</label>
+                          <input 
+                            type="number" 
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-black text-blue-600 outline-none"
+                            value={selectedVisit.prepayment_amount || ''}
+                            onChange={(e) => updateVisitField('prepayment_amount', e.target.value)}
+                            placeholder="Наприклад: 500"
+                          />
+                          <div className="mt-2 flex justify-between items-center bg-white p-2 rounded-lg border border-slate-100">
+                            <span className="text-[10px] font-black uppercase text-slate-500">Залишок до сплати:</span>
+                            <span className="text-sm font-black text-red-500">
+                              {(grandTotal - (parseFloat(selectedVisit.prepayment_amount) || 0)).toLocaleString()} ₴
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -427,7 +447,7 @@ const Visits = () => {
                       <div className="flex items-center gap-2 text-slate-500 text-[11px] font-bold group">
                         <Clock size={12}/>
                         <span>Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}</span>
-                        {role === 'owner' && (
+                        {(role === 'owner' || permissions?.can_create_visits) && (
                           <button onClick={() => {
                             const d = selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime) : new Date();
                             setEditTimeData({ date: d.toLocaleDateString('en-CA'), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
@@ -456,7 +476,7 @@ const Visits = () => {
               </div>
               
               <div className="flex items-center gap-2 shrink-0 self-end md:self-start w-full md:w-auto justify-end">
-                {role === 'owner' && (
+                {(role === 'owner' || permissions?.can_view_finances) && (
                   <button onClick={handlePrint} className="bg-blue-600 text-white p-2 md:px-4 md:py-2.5 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2 font-black text-xs uppercase shadow-md shadow-blue-200" title="Друкувати акт">
                     <Printer size={16} /> <span className="hidden md:inline">Друк</span>
                   </button>
@@ -470,7 +490,6 @@ const Visits = () => {
               </div>
             </div>
 
-            {/* ВЕЛИКІ КНОПКИ СТАТУСУ */}
             {isStore ? (
               <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
                 <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>Нове</button>
@@ -487,7 +506,6 @@ const Visits = () => {
             )}
 
             <div className={`grid grid-cols-1 ${!isStore ? 'md:grid-cols-2' : ''} gap-6`}>
-              {/* РОБОТИ/ЗАВДАННЯ (ПРИХОВАНО ДЛЯ МАГАЗИНУ) */}
               {!isStore && (
                 <div>
                   <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Wrench size={16}/> Завдання</h3>
@@ -497,7 +515,7 @@ const Visits = () => {
                         <div className="flex justify-between items-start">
                           <span className="font-bold text-slate-700 text-sm">{s.name}</span>
                           <div className="flex items-center gap-2 shrink-0">
-                            {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-100 text-xs">{s.price} ₴</span>}
+                            {(role === 'owner' || permissions?.can_view_finances) && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-100 text-xs">{s.price} ₴</span>}
                             {role === 'owner' && <button onClick={() => handleDeleteService(s.id)} className="text-slate-300 hover:text-red-500 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
                           </div>
                         </div>
@@ -509,7 +527,7 @@ const Visits = () => {
                       </div>
                     ))}
                   </div>
-                  {role === 'owner' && (
+                  {(role === 'owner' || permissions?.can_create_visits) && (
                     <form onSubmit={handleAddService} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mt-4">
                       <select className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-xs outline-none cursor-pointer text-slate-600 font-bold truncate" value={selectedCatalogId} onChange={(e) => { 
                           setSelectedCatalogId(e.target.value);
@@ -529,7 +547,6 @@ const Visits = () => {
                 </div>
               )}
 
-              {/* ЗАПЧАСТИНИ (Для магазину розтягнуто на всю ширину) */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
                 <div className="space-y-3 mb-3">
@@ -543,7 +560,7 @@ const Visits = () => {
                       
                       <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
                         <div className="flex items-center justify-between sm:justify-end gap-2 w-full">
-                          {role === 'owner' && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-100 text-xs">{p.sell_price} ₴</span>}
+                          {(role === 'owner' || permissions?.can_view_finances) && <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-100 text-xs">{p.sell_price} ₴</span>}
                           {role === 'owner' && <button onClick={() => handleDeletePart(p.id)} className="text-slate-300 hover:text-red-500 md:opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>}
                         </div>
                         <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer w-full sm:w-36 text-center shadow-sm border border-slate-200/50 ${partStatusColors[p.status || 'WAITING']}`}>
@@ -556,7 +573,7 @@ const Visits = () => {
                     </div>
                   ))}
                 </div>
-                {role === 'owner' && (
+                {(role === 'owner' || permissions?.can_create_visits) && (
                   <div className="mt-4">
                     {!showManualPartForm ? (
                       <button onClick={() => setShowManualPartForm(true)} className="w-full p-3 border-2 border-dashed border-slate-300 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-all">✏️ Додати вручну</button>
@@ -599,10 +616,12 @@ const Visits = () => {
               )}
             </div>
 
-            <div className="mt-6 bg-slate-50 border border-slate-200 p-4 md:p-5 rounded-2xl flex justify-between items-center">
-               <div className="text-xs font-bold uppercase text-slate-500 tracking-wide">Загальна сума:</div>
-               <div className="text-xl md:text-2xl font-black text-slate-800">{grandTotal.toLocaleString()} ₴</div>
-            </div>
+            {(role === 'owner' || permissions?.can_view_finances) && (
+              <div className="mt-6 bg-slate-50 border border-slate-200 p-4 md:p-5 rounded-2xl flex justify-between items-center">
+                 <div className="text-xs font-bold uppercase text-slate-500 tracking-wide">Загальна сума:</div>
+                 <div className="text-xl md:text-2xl font-black text-slate-800">{grandTotal.toLocaleString()} ₴</div>
+              </div>
+            )}
 
           </div>
         </div>

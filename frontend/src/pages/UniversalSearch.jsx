@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw } from 'lucide-react';
+import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const UniversalSearch = () => {
@@ -22,7 +22,11 @@ const UniversalSearch = () => {
   const [euroRateInput, setEuroRateInput] = useState('');
 
   const [selectedPart, setSelectedPart] = useState(null);
+  
+  // СТАН ДЛЯ ІНФОРМАЦІЇ (Характеристики)
   const [infoPart, setInfoPart] = useState(null);
+  const [detailedInfo, setDetailedInfo] = useState(null);
+  const [infoLoading, setInfoLoading] = useState(false);
   
   const [visitSearchQuery, setVisitSearchQuery] = useState('');
   const [visitSearchResults, setVisitSearchResults] = useState([]);
@@ -114,12 +118,10 @@ const UniversalSearch = () => {
       
       const processed = res.data.map(a => ({ ...a, selectedWhIdx: 0 }));
 
-      // === СОРТУВАННЯ АНАЛОГІВ: НАЯВНІСТЬ -> НАЙНИЖЧА ЦІНА ===
       processed.sort((a, b) => {
         const checkAvailability = (part) => {
           const qStr = String(part.quantity || '');
           if (qStr.includes('Немає') || qStr.includes('?') || qStr === '0') return false;
-          // Якщо є цифра більше 0, або знак ">" (наприклад >10)
           const numMatch = qStr.match(/\d+/);
           if (numMatch && parseInt(numMatch[0]) > 0) return true;
           if (qStr.includes('>')) return true;
@@ -129,11 +131,9 @@ const UniversalSearch = () => {
         const availA = checkAvailability(a);
         const availB = checkAvailability(b);
 
-        // Якщо один в наявності, а інший ні - наявний іде вгору
         if (availA && !availB) return -1;
         if (!availA && availB) return 1;
 
-        // Якщо обидва в наявності (або обидва відсутні) - сортуємо за ціною від найдешевшого
         const priceA = parseFloat(a.buy_price) || 0;
         const priceB = parseFloat(b.buy_price) || 0;
         return priceA - priceB;
@@ -171,6 +171,25 @@ const UniversalSearch = () => {
       );
       return { ...prev, [parentId]: updated };
     });
+  };
+
+  // === НОВА ЛОГІКА: ВІДКРИТТЯ ІНФО З ПІДВАНТАЖЕННЯМ ХАРАКТЕРИСТИК ===
+  const openInfoModal = async (part) => {
+    setInfoPart(part);
+    setDetailedInfo(null);
+    if (part.is_local || !part.supplier_id) return;
+
+    setInfoLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/api/suppliers/${part.supplier_id}/part_info/?article=${encodeURIComponent(part.article)}&brand=${encodeURIComponent(part.brand)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDetailedInfo(res.data);
+    } catch (e) {
+      console.error("Не вдалося завантажити інфо", e);
+    } finally {
+      setInfoLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -407,7 +426,8 @@ const UniversalSearch = () => {
                       <td className="p-3 pt-4 align-top">
                         <div className="flex items-start gap-2">
                           <p className="font-bold text-sm text-slate-700 leading-snug max-w-xs">{item.name}</p>
-                          <button onClick={() => setInfoPart(item)} className="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-1.5 rounded-full transition-colors border border-slate-100 shrink-0" title="Детальна інформація"><Info size={16}/></button>
+                          {/* КНОПКА ІНФО (ВИКЛИКАЄ МОДАЛКУ) */}
+                          <button onClick={() => openInfoModal(item)} className="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-1.5 rounded-full transition-colors border border-slate-100 shrink-0" title="Характеристики та застосовність"><Info size={16}/></button>
                         </div>
                       </td>
                       <td className="p-3 pt-4 text-center align-top">
@@ -456,7 +476,6 @@ const UniversalSearch = () => {
                                    const analogPrice = analogWh ? analogWh.buy_price : analog.buy_price;
                                    const analogQty = analogWh ? analogWh.quantity : analog.quantity;
                                    
-                                   // Перевірка чи є в наявності для зміни кольору
                                    const isAvailable = analogPrice > 0 && !String(analogQty).includes('Немає') && !String(analogQty).includes('?');
                                    
                                    return (
@@ -548,7 +567,8 @@ const UniversalSearch = () => {
 
                   <div className="flex items-start gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
                     <p className="font-bold text-xs text-slate-700 leading-snug flex-1">{item.name}</p>
-                    <button onClick={() => setInfoPart(item)} className="text-slate-400 hover:text-blue-600 p-1 rounded-full shrink-0"><Info size={16}/></button>
+                    {/* КНОПКА ІНФО */}
+                    <button onClick={() => openInfoModal(item)} className="text-slate-400 hover:text-blue-600 p-1 rounded-full shrink-0"><Info size={16}/></button>
                   </div>
 
                   <div className="flex flex-col gap-2 mt-1">
@@ -653,15 +673,18 @@ const UniversalSearch = () => {
         </div>
       )}
 
+      {/* === МОДАЛКА ІНФОРМАЦІЇ (ХАРАКТЕРИСТИКИ) === */}
       {infoPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl m-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl p-6 md:p-8 relative shadow-2xl m-4 mt-10 mb-10">
             <button onClick={() => setInfoPart(null)} className="absolute right-4 top-4 text-slate-400 hover:bg-slate-100 p-2 rounded-full transition-colors"><X size={20} /></button>
-            <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Info className="text-blue-500"/> Інформація про товар</h2>
+            <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Info className="text-blue-500"/> Картка товару</h2>
             
             <div className="flex flex-col md:flex-row gap-6 mb-6">
               <div className="w-full md:w-2/5 aspect-square bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
-                {infoPart.image_url ? (
+                {(detailedInfo?.images && detailedInfo.images.length > 0) ? (
+                  <img src={detailedInfo.images[0]} alt="Part" className="w-full h-full object-contain p-2" />
+                ) : infoPart.image_url ? (
                   <img src={infoPart.image_url} alt="Part" className="w-full h-full object-contain p-2" />
                 ) : (
                   <div className="flex flex-col items-center text-slate-300">
@@ -680,24 +703,35 @@ const UniversalSearch = () => {
                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Артикул</p>
                   <p className="font-black text-slate-800 text-xl">{infoPart.article}</p>
                 </div>
-                <div className="flex gap-4 border-t border-slate-100 pt-4">
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">SKU</p>
-                    <p className="font-bold text-slate-700 text-sm">{infoPart.sku || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Мін. замовлення</p>
-                    <p className="font-bold text-slate-700 text-sm">{infoPart.min_qty} шт</p>
-                  </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                  <p className="text-sm font-medium text-slate-700 leading-snug">{infoPart.description || infoPart.name}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Опис з каталогу</p>
-              <p className="text-sm font-medium text-slate-700 leading-relaxed">
-                {infoPart.description || infoPart.name}
-              </p>
+            {/* БЛОК ХАРАКТЕРИСТИК */}
+            <div className="border-t border-slate-200 pt-6">
+              <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2"><Activity size={18} className="text-emerald-500"/> Характеристики</h3>
+              
+              {infoLoading ? (
+                <div className="flex flex-col items-center justify-center py-8 text-blue-500">
+                  <Loader2 className="animate-spin mb-3" size={32}/>
+                  <span className="text-xs font-bold uppercase tracking-widest">Завантаження даних...</span>
+                </div>
+              ) : detailedInfo && detailedInfo.properties && detailedInfo.properties.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                  {detailedInfo.properties.map((prop, idx) => (
+                    <div key={idx} className="flex flex-col bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">{prop.name}</span>
+                      <span className="text-xs font-black text-slate-700 leading-tight">{prop.value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6 text-center">
+                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Характеристики недоступні</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

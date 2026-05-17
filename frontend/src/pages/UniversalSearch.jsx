@@ -14,7 +14,6 @@ const UniversalSearch = () => {
   const [hasSearched, setHasSearched] = useState(results.length > 0);
   
   const [expandedAnalogs, setExpandedAnalogs] = useState(new Set()); 
-  // НОВІ СТАНИ ДЛЯ АНАЛОГІВ
   const [analogResults, setAnalogResults] = useState({});
   const [analogLoading, setAnalogLoading] = useState({});
 
@@ -106,7 +105,6 @@ const UniversalSearch = () => {
     performSearch(query);
   };
 
-  // МАГІЯ АНАЛОГІВ: Робимо запит до бекенду
   const fetchAnalogs = async (item) => {
     setAnalogLoading(prev => ({ ...prev, [item.id]: true }));
     try {
@@ -371,7 +369,6 @@ const UniversalSearch = () => {
                             {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
                           </span>
                           
-                          {/* КНОПКА АНАЛОГІВ */}
                           {!item.is_local && (
                             <button onClick={() => toggleAnalogs(item)} className="w-full text-slate-500 hover:text-blue-600 bg-white px-2 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm whitespace-nowrap">
                               {expandedAnalogs.has(item.id) ? <><ChevronUp size={12}/> Сховати</> : <><ChevronDown size={12}/> Аналоги</>}
@@ -439,7 +436,18 @@ const UniversalSearch = () => {
                                    return (
                                      <div key={analog.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-all gap-4">
                                        <div className="w-36 shrink-0">
-                                         <p className="font-black text-sm text-slate-800">{analog.article}</p>
+                                         {/* КЛІКАБЕЛЬНИЙ АРТИКУЛ */}
+                                         <p 
+                                           className="font-black text-sm text-slate-800 hover:text-blue-600 cursor-pointer underline decoration-slate-300 decoration-dashed underline-offset-4 transition-colors"
+                                           onClick={() => {
+                                             setQuery(analog.article);
+                                             performSearch(analog.article);
+                                             window.scrollTo({ top: 0, behavior: 'smooth' });
+                                           }}
+                                           title="Шукати цей артикул скрізь"
+                                         >
+                                           {analog.article}
+                                         </p>
                                          <p className="text-[10px] font-bold text-blue-500 uppercase">{analog.brand}</p>
                                        </div>
                                        
@@ -568,7 +576,17 @@ const UniversalSearch = () => {
                                <div key={analog.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2 relative">
                                   <button onClick={() => openAddModal(analog, analogWhIdx)} className="absolute right-3 top-3 bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 shadow-sm"><Plus size={14}/></button>
                                   <div className="pr-8">
-                                    <p className="font-black text-sm text-slate-800 leading-tight">{analog.article}</p>
+                                    {/* КЛІКАБЕЛЬНИЙ АРТИКУЛ (МОБ) */}
+                                    <p 
+                                      className="font-black text-sm text-slate-800 leading-tight hover:text-blue-600 cursor-pointer underline decoration-slate-300 decoration-dashed underline-offset-4"
+                                      onClick={() => {
+                                        setQuery(analog.article);
+                                        performSearch(analog.article);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                      }}
+                                    >
+                                      {analog.article}
+                                    </p>
                                     <p className="text-[10px] font-bold text-blue-500 uppercase">{analog.brand}</p>
                                   </div>
                                   <p className="font-bold text-[11px] text-slate-600 leading-snug">{analog.name}</p>
@@ -612,7 +630,6 @@ const UniversalSearch = () => {
         </div>
       )}
 
-      {/* МОДАЛКИ (Info та Add) залишаються без змін */}
       {infoPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl m-4">

@@ -22,7 +22,10 @@ queries_alter = [
     "ALTER TABLE core_company ADD COLUMN business_type varchar(20) DEFAULT 'sto';",
     "ALTER TABLE core_visit ADD COLUMN delivery_type varchar(50) DEFAULT 'pickup';",
     "ALTER TABLE core_visit ADD COLUMN delivery_data text;",
-    "ALTER TABLE core_visit ADD COLUMN payment_status varchar(50) DEFAULT 'unpaid';"
+    "ALTER TABLE core_visit ADD COLUMN payment_status varchar(50) DEFAULT 'unpaid';",
+    "ALTER TABLE core_visit ADD COLUMN prepayment_amount numeric(10, 2) DEFAULT 0;",
+    "ALTER TABLE core_employee ADD COLUMN can_create_visits boolean DEFAULT false;",
+    "ALTER TABLE core_employee ADD COLUMN can_view_finances boolean DEFAULT false;"
 ]
 
 print("Починаємо перевірку бази даних PostgreSQL...")

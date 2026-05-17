@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter } from 'lucide-react';
+import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const UniversalSearch = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams(); // ДОДАНО ДЛЯ URL
+  const [searchParams, setSearchParams] = useSearchParams(); 
   
   const [query, setQuery] = useState(sessionStorage.getItem('searchQuery') || '');
   const [results, setResults] = useState(JSON.parse(sessionStorage.getItem('searchResults')) || []);
@@ -14,8 +14,11 @@ const UniversalSearch = () => {
   const [hasSearched, setHasSearched] = useState(results.length > 0);
   
   const [expandedAnalogs, setExpandedAnalogs] = useState(new Set()); 
+  // НОВІ СТАНИ ДЛЯ АНАЛОГІВ
+  const [analogResults, setAnalogResults] = useState({});
+  const [analogLoading, setAnalogLoading] = useState({});
+
   const [companyInfo, setCompanyInfo] = useState(null);
-  
   const [isEditingEuro, setIsEditingEuro] = useState(false);
   const [euroRateInput, setEuroRateInput] = useState('');
 
@@ -52,7 +55,6 @@ const UniversalSearch = () => {
     sessionStorage.setItem('searchResults', JSON.stringify(results));
   }, [query, results]);
 
-  // МАГІЯ: Ловимо запит з Header (з URL адреси)
   useEffect(() => {
     const urlQuery = searchParams.get('q');
     if (urlQuery) {
@@ -75,7 +77,6 @@ const UniversalSearch = () => {
     }
   };
 
-  // Виніс логіку пошуку в окрему функцію
   const performSearch = async (searchString) => {
     if (!searchString.trim()) return;
     
@@ -92,7 +93,6 @@ const UniversalSearch = () => {
         selectedWhIdx: 0 
       }));
       setResults(initialResults);
-      // Очищаємо URL після пошуку, щоб не зациклювалось при оновленні сторінки
       setSearchParams({}, { replace: true });
     } catch (error) {
       console.error("Помилка пошуку", error);
@@ -106,11 +106,46 @@ const UniversalSearch = () => {
     performSearch(query);
   };
 
-  const toggleAnalogs = (id) => {
+  // МАГІЯ АНАЛОГІВ: Робимо запит до бекенду
+  const fetchAnalogs = async (item) => {
+    setAnalogLoading(prev => ({ ...prev, [item.id]: true }));
+    try {
+      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const processed = res.data.map(a => ({ ...a, selectedWhIdx: 0 }));
+      setAnalogResults(prev => ({ ...prev, [item.id]: processed }));
+    } catch (err) {
+      console.error(err);
+      setAnalogResults(prev => ({ ...prev, [item.id]: [] }));
+    } finally {
+      setAnalogLoading(prev => ({ ...prev, [item.id]: false }));
+    }
+  };
+
+  const toggleAnalogs = (item) => {
+    const id = item.id;
     const newExpanded = new Set(expandedAnalogs);
-    if (newExpanded.has(id)) newExpanded.delete(id);
-    else newExpanded.add(id);
-    setExpandedAnalogs(newExpanded);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+      setExpandedAnalogs(newExpanded);
+    } else {
+      newExpanded.add(id);
+      setExpandedAnalogs(newExpanded);
+      if (!analogResults[id]) {
+        fetchAnalogs(item);
+      }
+    }
+  };
+
+  const updateAnalogWarehouse = (parentId, analogId, whIndex) => {
+    setAnalogResults(prev => {
+      const parentAnalogs = prev[parentId] || [];
+      const updated = parentAnalogs.map(a => 
+        a.id === analogId ? { ...a, selectedWhIdx: parseInt(whIndex) } : a
+      );
+      return { ...prev, [parentId]: updated };
+    });
   };
 
   useEffect(() => {
@@ -121,7 +156,7 @@ const UniversalSearch = () => {
           const res = await axios.get(`${API_BASE}/api/visits/?search=${visitSearchQuery}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
-          setVisitSearchResults(res.data.filter(v => v.status !== 'DONE'));
+          setVisitSearchResults(res.data.filter(v => v.status !== 'DONE' && v.status !== 'COMPLETED'));
         } catch (err) {
           console.error(err);
         } finally {
@@ -155,7 +190,7 @@ const UniversalSearch = () => {
 
   const handleAddToVisit = async (e) => {
     e.preventDefault();
-    if (!selectedVisit) { alert("Будь ласка, знайдіть та оберіть автомобіль!"); return; }
+    if (!selectedVisit) { alert("Будь ласка, знайдіть та оберіть замовлення/авто!"); return; }
     
     const payload = {
       visit: selectedVisit.id, brand: selectedPart.brand, article: selectedPart.article,
@@ -305,6 +340,9 @@ const UniversalSearch = () => {
             )}
           </div>
           
+          {/* ======================= */}
+          {/* ВЕРСІЯ ДЛЯ КОМП'ЮТЕРІВ  */}
+          {/* ======================= */}
           <div className="hidden md:block overflow-x-auto pb-4">
             <table className="w-full text-left border-collapse min-w-[750px]">
               <thead>
@@ -333,8 +371,9 @@ const UniversalSearch = () => {
                             {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
                           </span>
                           
+                          {/* КНОПКА АНАЛОГІВ */}
                           {!item.is_local && (
-                            <button onClick={() => toggleAnalogs(item.id)} className="w-full text-slate-500 hover:text-blue-600 bg-white px-2 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm whitespace-nowrap">
+                            <button onClick={() => toggleAnalogs(item)} className="w-full text-slate-500 hover:text-blue-600 bg-white px-2 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm whitespace-nowrap">
                               {expandedAnalogs.has(item.id) ? <><ChevronUp size={12}/> Сховати</> : <><ChevronDown size={12}/> Аналоги</>}
                             </button>
                           )}
@@ -378,14 +417,64 @@ const UniversalSearch = () => {
                       </td>
                     </tr>
                     
+                    {/* ПАНЕЛЬ АНАЛОГІВ (ДЕСКТОП) */}
                     {expandedAnalogs.has(item.id) && (
                       <tr className="bg-slate-50/70 border-b border-slate-100">
                         <td colSpan="6" className="p-4">
-                          <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 text-center">
-                            <Box className="mx-auto text-slate-300 mb-2" size={32}/>
-                            <h3 className="font-black text-slate-500 uppercase tracking-widest text-sm mb-1">Пошук аналогів</h3>
-                            <p className="text-slate-400 text-xs">Функція завантаження крос-кодів (аналогів) для {item.article} знаходиться в розробці...</p>
-                          </div>
+                          {analogLoading[item.id] ? (
+                            <div className="flex flex-col items-center justify-center py-6 text-blue-500">
+                              <Loader2 className="animate-spin mb-2" size={24}/>
+                              <span className="text-xs font-bold uppercase tracking-widest">Шукаємо крос-коди...</span>
+                            </div>
+                          ) : analogResults[item.id] && analogResults[item.id].length > 0 ? (
+                            <div className="bg-white border border-blue-100 rounded-xl p-4 shadow-inner ml-32">
+                              <h4 className="text-xs font-black uppercase text-blue-600 mb-3 flex items-center gap-2"><RefreshCcw size={14}/> Знайдені аналоги ({analogResults[item.id].length})</h4>
+                              <div className="space-y-2">
+                                {analogResults[item.id].map(analog => {
+                                   const analogWhIdx = analog.selectedWhIdx || 0;
+                                   const analogWh = (analog.warehouses && analog.warehouses.length > 0) ? analog.warehouses[analogWhIdx] : null;
+                                   const analogPrice = analogWh ? analogWh.buy_price : analog.buy_price;
+                                   const analogQty = analogWh ? analogWh.quantity : analog.quantity;
+                                   
+                                   return (
+                                     <div key={analog.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-all gap-4">
+                                       <div className="w-36 shrink-0">
+                                         <p className="font-black text-sm text-slate-800">{analog.article}</p>
+                                         <p className="text-[10px] font-bold text-blue-500 uppercase">{analog.brand}</p>
+                                       </div>
+                                       
+                                       <p className="font-bold text-xs text-slate-600 flex-1">{analog.name}</p>
+                                       
+                                       <div className="flex items-center gap-4 shrink-0">
+                                         {analog.warehouses && analog.warehouses.length > 1 ? (
+                                           <select 
+                                             className="text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-md px-2 py-1 outline-none w-32 cursor-pointer shadow-sm"
+                                             value={analogWhIdx}
+                                             onChange={(e) => updateAnalogWarehouse(item.id, analog.id, e.target.value)}
+                                           >
+                                             {analog.warehouses.map((wh, idx) => (
+                                               <option key={idx} value={idx}>{wh.name} - {wh.quantity}</option>
+                                             ))}
+                                           </select>
+                                         ) : (
+                                           <span className="font-bold text-slate-600 text-xs bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm w-32 text-center inline-block truncate">{analogQty}</span>
+                                         )}
+                                         <span className="font-black text-slate-800 w-20 text-right">{analogPrice.toLocaleString()} ₴</span>
+                                         <button onClick={() => openAddModal(analog, analogWhIdx)} className="bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm" title="Додати в замовлення">
+                                           <Plus size={16}/>
+                                         </button>
+                                       </div>
+                                     </div>
+                                   );
+                                })}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 text-center ml-32">
+                              <Box className="mx-auto text-slate-300 mb-2" size={24}/>
+                              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Аналогів не знайдено</p>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}
@@ -395,6 +484,9 @@ const UniversalSearch = () => {
             </table>
           </div>
 
+          {/* ======================= */}
+          {/* ВЕРСІЯ ДЛЯ ТЕЛЕФОНІВ    */}
+          {/* ======================= */}
           <div className="md:hidden flex flex-col gap-4">
             {displayedResults.map(item => {
               const safeIdx = item.selectedWhIdx || 0;
@@ -450,17 +542,63 @@ const UniversalSearch = () => {
                     )}
 
                     {!item.is_local && (
-                      <button onClick={() => toggleAnalogs(item.id)} className="w-full text-slate-500 bg-white px-2 py-2 rounded-xl transition-all flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider border border-slate-200 shadow-sm mt-1">
+                      <button onClick={() => toggleAnalogs(item)} className="w-full text-slate-500 bg-white px-2 py-2 rounded-xl transition-all flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider border border-slate-200 shadow-sm mt-1">
                         {expandedAnalogs.has(item.id) ? <><ChevronUp size={14}/> Сховати аналоги</> : <><ChevronDown size={14}/> Пошук аналогів</>}
                       </button>
                     )}
                   </div>
 
+                  {/* ПАНЕЛЬ АНАЛОГІВ (МОБІЛЬНА) */}
                   {expandedAnalogs.has(item.id) && (
-                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-4 text-center mt-2">
-                      <Box className="mx-auto text-slate-300 mb-1" size={24}/>
-                      <h3 className="font-black text-slate-500 uppercase tracking-widest text-[10px] mb-1">Пошук аналогів</h3>
-                      <p className="text-slate-400 text-[9px]">Функція завантаження аналогів в розробці...</p>
+                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 mt-2">
+                      {analogLoading[item.id] ? (
+                         <div className="flex flex-col items-center justify-center py-4 text-blue-500">
+                           <Loader2 className="animate-spin mb-2" size={20}/>
+                           <span className="text-[10px] font-bold uppercase tracking-widest">Шукаємо...</span>
+                         </div>
+                      ) : analogResults[item.id] && analogResults[item.id].length > 0 ? (
+                         <div className="space-y-3">
+                           <h4 className="text-[10px] font-black uppercase text-blue-600 mb-2 text-center border-b border-slate-200 pb-2">Знайдені аналоги ({analogResults[item.id].length})</h4>
+                           {analogResults[item.id].map(analog => {
+                             const analogWhIdx = analog.selectedWhIdx || 0;
+                             const analogWh = (analog.warehouses && analog.warehouses.length > 0) ? analog.warehouses[analogWhIdx] : null;
+                             const analogPrice = analogWh ? analogWh.buy_price : analog.buy_price;
+                             
+                             return (
+                               <div key={analog.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2 relative">
+                                  <button onClick={() => openAddModal(analog, analogWhIdx)} className="absolute right-3 top-3 bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 shadow-sm"><Plus size={14}/></button>
+                                  <div className="pr-8">
+                                    <p className="font-black text-sm text-slate-800 leading-tight">{analog.article}</p>
+                                    <p className="text-[10px] font-bold text-blue-500 uppercase">{analog.brand}</p>
+                                  </div>
+                                  <p className="font-bold text-[11px] text-slate-600 leading-snug">{analog.name}</p>
+                                  
+                                  <div className="flex items-center justify-between border-t border-slate-50 pt-2 mt-1">
+                                    {analog.warehouses && analog.warehouses.length > 1 ? (
+                                       <select 
+                                         className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-1 py-1 outline-none w-28 truncate"
+                                         value={analogWhIdx}
+                                         onChange={(e) => updateAnalogWarehouse(item.id, analog.id, e.target.value)}
+                                       >
+                                         {analog.warehouses.map((wh, idx) => (
+                                           <option key={idx} value={idx}>{wh.name}</option>
+                                         ))}
+                                       </select>
+                                     ) : (
+                                       <span className="font-bold text-slate-600 text-[10px] bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">1 шт (Склад)</span>
+                                     )}
+                                     <span className="font-black text-slate-800 text-sm">{analogPrice.toLocaleString()} ₴</span>
+                                  </div>
+                               </div>
+                             );
+                           })}
+                         </div>
+                      ) : (
+                         <div className="text-center py-4">
+                           <Box className="mx-auto text-slate-300 mb-1" size={20}/>
+                           <p className="text-slate-400 text-[10px] font-bold uppercase">Аналогів не знайдено</p>
+                         </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -474,6 +612,7 @@ const UniversalSearch = () => {
         </div>
       )}
 
+      {/* МОДАЛКИ (Info та Add) залишаються без змін */}
       {infoPart && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-lg p-6 md:p-8 relative shadow-2xl m-4">
@@ -528,7 +667,7 @@ const UniversalSearch = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 md:p-8 relative mt-10 mb-10 shadow-2xl">
             <button onClick={() => setSelectedPart(null)} className="absolute right-4 top-4 text-slate-400 hover:bg-slate-100 p-2 rounded-full"><X size={20} /></button>
-            <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Plus className="text-emerald-500"/> Додати в авто</h2>
+            <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Plus className="text-emerald-500"/> Додати в замовлення</h2>
             
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 relative overflow-hidden">
               <div className={`absolute top-0 right-0 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-bl-xl ${getBadgeStyle(selectedPart.source, selectedPart.is_local)}`}>
@@ -545,11 +684,11 @@ const UniversalSearch = () => {
 
             <div className="space-y-5">
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Знайдіть авто (Номер або VIN)</label>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Знайдіть замовлення / авто</label>
                 {!selectedVisit ? (
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input type="text" placeholder="Напр. АА1234..." className="w-full bg-white border-2 border-slate-200 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-blue-500 font-bold text-slate-700 uppercase" value={visitSearchQuery} onChange={(e) => setVisitSearchQuery(e.target.value)} />
+                    <input type="text" placeholder="Пошук..." className="w-full bg-white border-2 border-slate-200 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-blue-500 font-bold text-slate-700 uppercase" value={visitSearchQuery} onChange={(e) => setVisitSearchQuery(e.target.value)} />
                     {visitSearchResults.length > 0 && (
                       <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
                         {visitSearchResults.map(v => (

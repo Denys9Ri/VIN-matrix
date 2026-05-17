@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { TrendingUp, DollarSign, Activity, Calendar, Package, Wrench, Wallet, BarChart, Loader2 } from 'lucide-react';
+import { TrendingUp, DollarSign, Activity, Calendar, Package, Wrench, Wallet, BarChart, Loader2, Copy, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Analytics = () => {
@@ -11,6 +11,9 @@ const Analytics = () => {
   
   // Фільтр часу: 'today', 'week', 'month', 'all'
   const [timeFilter, setTimeFilter] = useState('week');
+  
+  // Стан для копіювання артикулу
+  const [copiedArticle, setCopiedArticle] = useState(null);
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -67,12 +70,20 @@ const Analytics = () => {
 
     filteredVisits.forEach(visit => {
       const vDate = new Date(visit.updated_at || visit.created_at);
-      // Формуємо ключ для графіка (День або Місяць)
-      const dateKey = timeFilter === 'all' 
+      
+      // Створюємо правильний ключ для сортування (РРРР-ММ-ДД або РРРР-ММ)
+      const sortKey = timeFilter === 'all' 
+        ? `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}`
+        : `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}-${String(vDate.getDate()).padStart(2, '0')}`;
+        
+      // Красивий підпис для графіку
+      const displayLabel = timeFilter === 'all' 
         ? vDate.toLocaleDateString('uk-UA', { month: 'short', year: 'numeric' })
         : vDate.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short' });
 
-      if (!chartDataMap[dateKey]) chartDataMap[dateKey] = 0;
+      if (!chartDataMap[sortKey]) {
+        chartDataMap[sortKey] = { label: displayLabel, value: 0 };
+      }
 
       let visitRevenue = 0;
       let visitCost = 0;
@@ -89,7 +100,7 @@ const Analytics = () => {
         });
       }
 
-      // Рахуємо запчастини
+      // Рахуємо запчастини (додано артикул і бренд)
       if (Array.isArray(visit.parts)) {
         visit.parts.forEach(p => {
           const sellPrice = parseFloat(p.sell_price) || 0;
@@ -98,31 +109,36 @@ const Analytics = () => {
           visitRevenue += sellPrice;
           visitCost += buyPrice;
 
-          const partKey = `${p.name || 'Деталь'} (${p.brand || 'Без бренду'})`;
-          if (!partsSales[partKey]) partsSales[partKey] = { count: 0, revenue: 0 };
-          partsSales[partKey].count += 1;
-          partsSales[partKey].revenue += sellPrice;
+          const uniqueKey = `${p.article}_${p.brand}_${p.name}`;
+          if (!partsSales[uniqueKey]) {
+            partsSales[uniqueKey] = { 
+              name: p.name || 'Деталь', 
+              brand: p.brand || 'Без бренду', 
+              article: p.article || 'Без артикулу', 
+              count: 0, 
+              revenue: 0 
+            };
+          }
+          partsSales[uniqueKey].count += 1;
+          partsSales[uniqueKey].revenue += sellPrice;
         });
       }
 
       totalRevenue += visitRevenue;
       totalCost += visitCost;
-      chartDataMap[dateKey] += visitRevenue;
+      chartDataMap[sortKey].value += visitRevenue;
     });
 
     const netProfit = totalRevenue - totalCost;
     const marginPercent = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : 0;
     const averageCheck = filteredVisits.length > 0 ? (totalRevenue / filteredVisits.length).toFixed(0) : 0;
 
-    // Сортуємо дані для графіка за часом
-    const chartData = Object.keys(chartDataMap).map(key => ({
-      label: key,
-      value: chartDataMap[key]
-    }));
+    // СОРТУЄМО ДАНІ ДЛЯ ГРАФІКА ХРОНОЛОГІЧНО (зліва направо)
+    const sortedKeys = Object.keys(chartDataMap).sort();
+    const chartData = sortedKeys.map(key => chartDataMap[key]);
 
     // Топ запчастин
-    const topParts = Object.entries(partsSales)
-      .map(([name, data]) => ({ name, ...data }))
+    const topParts = Object.values(partsSales)
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
 
@@ -136,6 +152,30 @@ const Analytics = () => {
   }, [visits, timeFilter]);
 
   const maxChartValue = Math.max(...stats.chartData.map(d => d.value), 1);
+
+  // Функція для копіювання артикулу
+  const handleCopyArticle = (article) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(article).then(() => {
+        setCopiedArticle(article);
+        setTimeout(() => setCopiedArticle(null), 2000);
+      });
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = article;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopiedArticle(article);
+        setTimeout(() => setCopiedArticle(null), 2000);
+      } catch (err) {}
+      document.body.removeChild(textArea);
+    }
+  };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic text-blue-600"><Loader2 className="animate-spin mr-2"/> ЗАВАНТАЖЕННЯ АНАЛІТИКИ...</div>;
 
@@ -241,12 +281,30 @@ const Analytics = () => {
             <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm"><Package size={16} className="text-amber-500"/> Топ запчастин</h3>
             <div className="space-y-3">
               {stats.topParts.length > 0 ? stats.topParts.map((part, idx) => (
-                <div key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  <div className="overflow-hidden pr-2 flex-1">
-                    <p className="text-xs font-bold text-slate-700 truncate">{part.name}</p>
-                    <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{part.count} шт</p>
+                <div key={idx} className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+                  <div className="flex-1">
+                    {/* Назва без truncate, щоб було видно повністю */}
+                    <p className="text-xs font-bold text-slate-700 leading-snug mb-1.5">{part.name}</p>
+                    
+                    {/* Блок з брендом і копіюванням артикулу */}
+                    <div className="flex items-center flex-wrap gap-1.5">
+                      <span className="text-[9px] font-black uppercase text-slate-400 bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm">{part.brand}</span>
+                      
+                      <div className="flex items-center gap-1 bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 shadow-sm transition-colors">
+                        <span className="text-[10px] font-black uppercase tracking-wider">{part.article}</span>
+                        <button 
+                          onClick={() => handleCopyArticle(part.article)} 
+                          className="hover:text-blue-800 p-0.5" 
+                          title="Копіювати артикул"
+                        >
+                          {copiedArticle === part.article ? <Check size={12} className="text-green-600"/> : <Copy size={12}/>}
+                        </button>
+                      </div>
+
+                      <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded ml-auto">{part.count} шт</span>
+                    </div>
                   </div>
-                  <div className="text-sm font-black text-slate-800 shrink-0">{part.revenue.toLocaleString()} ₴</div>
+                  <div className="text-sm font-black text-slate-800 shrink-0 mt-0.5">{part.revenue.toLocaleString()} ₴</div>
                 </div>
               )) : (
                 <p className="text-[10px] font-black uppercase text-center text-slate-400 py-4">Немає проданих запчастин</p>

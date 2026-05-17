@@ -110,68 +110,61 @@ class VisitViewSet(viewsets.ModelViewSet):
                 if not text_upper.strip():
                      return Response({"error": "ШІ не знайшов жодного тексту на фото."}, status=400)
                 
-                # --- СУВОРИЙ ПАРСИНГ БЕЗ ФАНТАЗІЙ ШІ ---
+                # =======================================================
+                # СУВОРИЙ ПАРСИНГ (ТІЛЬКИ ЗА МАРКЕРАМИ ТЕХПАСПОРТА)
+                # =======================================================
                 
-                # 1. Пошук VIN (17 символів підряд)
+                # 1. VIN (17 символів підряд)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
                 vin_code = vin_match.group(0) if vin_match else ""
                 
-                # 2. Пошук Держ. Номера
+                # 2. Держ. Номер
                 plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
                 plate = plate_match.group(0).replace(' ', '') if plate_match else ""
                 
-                # 3. Марка (За жорстким словником)
+                # 3. Марка (D.1 або словник)
                 brand = ""
-                brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT']
-                for b in brands:
-                    if b in text_upper:
-                        brand = b
-                        break
+                brand_match = re.search(r'D[\.\s]*1\s*[:\-]?\s*([A-Z\-]+)', text_upper)
+                if brand_match:
+                    brand = brand_match.group(1).strip()
+                else:
+                    brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT']
+                    for b in brands:
+                        if b in text_upper:
+                            brand = b
+                            break
 
-                # 4. Модель (Суворий пошук маркера D.3)
+                # 4. Модель (D.3)
                 model = ""
-                model_match = re.search(r'D[\.\,\s]*3\s*([A-Z0-9\-]+)', text_upper)
+                model_match = re.search(r'D[\.\,\s]*3\s*[:\-]?\s*([A-Z0-9\-]+)', text_upper)
                 if model_match:
                     model = model_match.group(1).strip()
                     if vin_code and vin_code in model:
                         model = model.replace(vin_code, '').strip()
 
-                # 5. Рік випуску (Тільки маркер B.2 або тільки на лицьовій стороні!)
+                # 5. Рік випуску (СУВОРО маркер B.2 або слова Рік/Year)
+                # Допускаємо до 15 символів між B.2 і цифрою
                 year = ""
-                year_match = re.search(r'[BВbв][\.\,\s]*2[\s\:\-]*(\d{4})', text_upper)
+                year_match = re.search(r'(?:B[\.\,\s]*2|РІК|YEAR)[^\d]{0,15}(\d{4})\b', text_upper)
                 if year_match:
                     year = year_match.group(1)
-                else:
-                    # Шукаємо рік тільки якщо це лицьова сторона (є слова Свідоцтво/Україна)
-                    if 'СВІДОЦТВО' in text_upper or 'УКРАЇНА' in text_upper or 'UKRAINE' in text_upper or 'REGISTRATION' in text_upper:
-                        fallback_year = re.search(r'\b(199\d|20[0-2]\d)\b', text_upper)
-                        if fallback_year:
-                            year = fallback_year.group(0)
 
-                # 6. Двигун (Суворо маркер P.1 або слова Capacity / см3)
+                # 6. Двигун (СУВОРО маркер P.1 або слова Capacity/СМ3)
+                # Допускаємо до 15 символів між маркером і цифрою
                 engine = ""
-                # Регулярка: шукає P.1, P.I, P.l або Р.1 і після нього 3-4 цифри
-                engine_match = re.search(r'[PРpр][\.\,\s]*[1I\|l][\s\:\-]*(\d{3,4})\b', text_upper)
+                engine_match = re.search(r'(?:[PРpр][\.\,\s]*[1I\|l]|CAPACITY|СМ3|CM3)[^\d]{0,15}(\d{3,4})\b', text_upper)
                 if engine_match:
                     engine = engine_match.group(1)
-                else:
-                    eng_fb = re.search(r'(?:CAPACITY|СМ3|CM3|ОБ\'ЄМ)[^\d]*(\d{3,4})\b', text_upper)
-                    if eng_fb: 
-                        engine = eng_fb.group(1)
 
-                # 7. ТИП ПАЛИВА (Жорсткий фільтр, щоб не лізла буква R або інші)
+                # 7. ТИП ПАЛИВА (СУВОРО маркер P.3 або слова Fuel/Палива)
                 fuel = ""
                 fuel_code = ""
-                # Шукаємо P.3, P.З, P.S і після нього тільки дозволені символи B, D, S, E, M (або помилкові 5, 8, C)
-                fuel_match = re.search(r'[PРpр][\.\,\s]*[3ЗZ][\s\:\-]*([BDSEMВДС58C])\b', text_upper)
+                # Шукаємо тільки букви BDSEM (або помилкові 58C) біля маркера P.3
+                fuel_match = re.search(r'(?:[PРpр][\.\,\s]*[3ЗZ]|FUEL|ПАЛИВА)[^A-ZА-Я0-9]{0,15}([BDSEMВДС58C])\b', text_upper)
                 if fuel_match:
                     fuel_code = fuel_match.group(1).upper()
-                else:
-                    fuel_fb = re.search(r'(?:FUEL|ПАЛИВА)[^\dA-ZА-Я]*([BDSEMВДС58C])\b', text_upper)
-                    if fuel_fb: 
-                        fuel_code = fuel_fb.group(1).upper()
-                
-                if fuel_code:
+                    
+                    # Виправляємо помилки зору ШІ
                     if fuel_code in ['5', 'C', 'С']: fuel_code = 'S'
                     elif fuel_code == '8': fuel_code = 'B'
                     elif fuel_code in ['0', 'O', 'О', 'Д']: fuel_code = 'D'

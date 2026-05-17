@@ -108,9 +108,9 @@ class VisitViewSet(viewsets.ModelViewSet):
                 text_upper = parsed_text.upper().replace('\n', ' ').replace('\r', ' ')
                 
                 if not text_upper.strip():
-                     return Response({"error": "ШІ не знайшов жодного тексту. Спробуйте інше фото."}, status=400)
+                     return Response({"error": "ШІ не знайшов жодного тексту на фото."}, status=400)
                 
-                # --- БРОНЬОВАНИЙ ПАРСИНГ МАРКЕРІВ (з урахуванням помилок ШІ) ---
+                # --- ІДЕАЛЬНИЙ ПАРСИНГ ЗА МАРКЕРАМИ ТЕХПАСПОРТА ---
                 
                 # 1. Пошук VIN (17 символів підряд)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
@@ -120,78 +120,64 @@ class VisitViewSet(viewsets.ModelViewSet):
                 plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
                 plate = plate_match.group(0).replace(' ', '') if plate_match else ""
                 
-                # 3. Марка (Шукаємо поле D.1, D.I, D.L)
+                # 3. Марка (За словником - найнадійніший спосіб)
+                brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT', 'TESLA', 'LAND ROVER', 'JEEP', 'ACURA', 'INFINITI', 'DODGE', 'CHRYSLER']
                 brand = ""
-                brand_match = re.search(r'D[\.\s]*[1ILІ|]\s*[:\-]?\s*([A-Z\-]+)', text_upper)
-                if brand_match:
-                    brand = brand_match.group(1).strip()
-                else:
-                    brands = ['VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'HONDA', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT']
-                    for b in brands:
-                        if b in text_upper:
-                            brand = b
-                            break
-
-                # 4. Модель (Шукаємо поле D.3, D.S, D.Z)
+                for b in brands:
+                    if b in text_upper:
+                        brand = b
+                        break
+                
+                # 4. Модель (Суворий пошук маркера D.3)
                 model = ""
-                model_match = re.search(r'D[\.\s]*[3ЗZSE]\s*[:\-]?\s*(.*?)(?=\s+[EЕ]\b|\s*F[\.\s]*1|\s*[PРpр][\.\s]*[1ILІ|]|$)', text_upper)
+                model_match = re.search(r'\bD[\.\,\s]*3\s*([A-Z0-9\-]+)', text_upper)
                 if model_match:
                     model = model_match.group(1).strip()
-                    if vin_code and len(vin_code) >= 5:
-                        vin_prefix = vin_code[:5]
-                        if vin_prefix in model:
-                            model = model.split(vin_prefix)[0].strip()
-                    model = re.sub(r'\s+[EЕ]$', '', model).strip()
+                    if vin_code and vin_code in model:
+                        model = model.replace(vin_code, '').strip()
 
-                # 5. Рік випуску (Шукаємо поле B.2)
-                year = ""
-                year_match = re.search(r'\(?B[\.\s]*2\)?\s*[:\-]?\s*(\d{4})', text_upper)
-                if year_match:
-                    year = year_match.group(1)
-                else:
-                    fallback_year = re.search(r'\b(199\d|20[0-2]\d)\b', text_upper)
-                    if fallback_year and not re.search(r'[PРpр][\.\s]*[1ILІ|]', text_upper):
-                        year = fallback_year.group(0)
-
-                # 6. Двигун (P.1, P.I, P.L тощо)
+                # 5. Двигун (Суворий пошук маркера P.1)
                 engine = ""
-                engine_match = re.search(r'[PРpр][\.\,\s]*[1ILІ|][\s\:\-]*(\d{3,4})\b', text_upper)
+                engine_match = re.search(r'\bP[\.\,\s]*1\s*(\d{3,4})\b', text_upper)
                 if engine_match:
                     engine = engine_match.group(1)
                 else:
-                    engine_fallback = re.search(r'(?:CAPACITY|СМ3|CM3)[^\d]*(\d{3,4})\b', text_upper)
-                    if engine_fallback:
-                        engine = engine_fallback.group(1)
+                    # Резерв: Шукаємо біля слова CAPACITY
+                    eng_fb = re.search(r'(?:CAPACITY|СМ3|CM3|ОБ\'ЄМ)[^\d]*(\d{3,4})\b', text_upper)
+                    if eng_fb: engine = eng_fb.group(1)
 
-                # 7. ТИП ПАЛИВА (P.3, P.S, P.З тощо)
-                fuel = ""
-                fuel_code_raw = ""
-                fuel_match = re.search(r'[PРpр][\.\,\s]*[3ЗZSE][\s\:\-]*([A-ZА-Я0-9])\b', text_upper)
-                if fuel_match:
-                    fuel_code_raw = fuel_match.group(1).upper()
+                # 6. Рік випуску (Суворий пошук маркера B.2 або 4 цифри)
+                year = ""
+                year_match = re.search(r'\bB[\.\,\s]*2\s*(\d{4})\b', text_upper)
+                if year_match:
+                    year = year_match.group(1)
                 else:
-                    fuel_fallback = re.search(r'(?:FUEL|ПАЛИВА|SOURCE)[^\dA-ZА-Я]*([A-ZА-Я0-9])\b', text_upper)
-                    if fuel_fallback:
-                        fuel_code_raw = fuel_fallback.group(1).upper()
-                
-                if fuel_code_raw:
-                    if fuel_code_raw == '5': fuel_code_raw = 'S'
-                    elif fuel_code_raw == '8': fuel_code_raw = 'B'
-                    elif fuel_code_raw in ['0', 'O', 'О']: fuel_code_raw = 'D'
-                    elif fuel_code_raw in ['C', 'С']: fuel_code_raw = 'S'
+                    years = re.findall(r'\b(199\d|20[0-2]\d)\b', text_upper)
+                    if years:
+                        # Запобіжник: відфільтровуємо цифру, якщо вона є об'ємом двигуна!
+                        valid_years = [y for y in years if y != engine]
+                        if valid_years:
+                            year = valid_years[0]
+                        elif years:
+                            year = years[0]
+
+                # 7. ТИП ПАЛИВА (Суворий пошук маркера P.3)
+                fuel = ""
+                fuel_code = ""
+                fuel_match = re.search(r'\bP[\.\,\s]*3\s*([A-Z0-9])\b', text_upper)
+                if fuel_match:
+                    fuel_code = fuel_match.group(1)
+                else:
+                    fuel_fb = re.search(r'(?:FUEL|ПАЛИВА)[^\dA-Z]*([A-Z0-9])\b', text_upper)
+                    if fuel_fb: fuel_code = fuel_fb.group(1)
+
+                if fuel_code:
+                    if fuel_code == '5': fuel_code = 'S'
+                    elif fuel_code == '8': fuel_code = 'B'
+                    elif fuel_code in ['0', 'O', 'О']: fuel_code = 'D'
                     
-                    if fuel_code_raw == 'R': 
-                        fuel_code_raw = '' 
-                        
-                    fuel_map = {
-                        'B': 'Бензин', 'В': 'Бензин',
-                        'D': 'Дизель', 'Д': 'Дизель',
-                        'S': 'Газ/Бензин',
-                        'E': 'Електро', 'Е': 'Електро',
-                        'M': 'Гібрид', 'М': 'Гібрид'
-                    }
-                    if fuel_code_raw:
-                        fuel = fuel_map.get(fuel_code_raw, fuel_code_raw)
+                    fuel_map = {'B': 'Бензин', 'D': 'Дизель', 'S': 'Газ/Бензин', 'E': 'Електро', 'M': 'Гібрид'}
+                    fuel = fuel_map.get(fuel_code, fuel_code)
 
                 return Response({
                     "success": True,

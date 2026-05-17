@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search, ChevronDown, ChevronUp, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, Wrench } from 'lucide-react';
+import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search, ChevronDown, ChevronUp, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, Wrench, CheckSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -26,11 +26,12 @@ const Settings = () => {
   const [editServiceData, setEditServiceData] = useState({ name: '', price: '' });
   const [showAllServices, setShowAllServices] = useState(false);
 
-  // ДОДАНО: business_type
   const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', global_margin_percent: 20, logo: null, business_type: 'sto' });
   const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
-  const [mechanicData, setMechanicData] = useState({ username: '', password: '', first_name: '' });
-  const [editMechanicData, setEditMechanicData] = useState({ first_name: '', new_password: '' });
+  
+  // ДОДАНО ПОЛЯ ПРАВ ДОСТУПУ В СТАН
+  const [mechanicData, setMechanicData] = useState({ username: '', password: '', first_name: '', can_create_visits: false, can_view_finances: false });
+  const [editMechanicData, setEditMechanicData] = useState({ first_name: '', new_password: '', can_create_visits: false, can_view_finances: false });
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -77,7 +78,7 @@ const Settings = () => {
     data.append('company[address]', formData.address);
     data.append('company[document_footer]', formData.document_footer);
     data.append('company[global_margin_percent]', formData.global_margin_percent);
-    data.append('company[business_type]', formData.business_type); // ДОДАНО
+    data.append('company[business_type]', formData.business_type); 
     if (formData.logo) data.append('company[logo]', formData.logo);
     try {
       await axios.patch(`${API_BASE}/api/settings/`, data, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
@@ -131,7 +132,7 @@ const Settings = () => {
       await axios.post(`${API_BASE}/api/mechanics/`, mechanicData, { headers: { Authorization: `Bearer ${token}` } });
       alert("Майстра додано!");
       setIsAddingMechanic(false);
-      setMechanicData({ username: '', password: '', first_name: '' });
+      setMechanicData({ username: '', password: '', first_name: '', can_create_visits: false, can_view_finances: false });
       fetchData();
     } catch (error) { alert(error.response?.data?.error || "Помилка. Логін може бути зайнятий."); }
   };
@@ -156,7 +157,7 @@ const Settings = () => {
   };
 
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">R16 ЗАВАНТАЖЕННЯ...</div>;
+  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic">VIN-MATRIX ЗАВАНТАЖЕННЯ...</div>;
 
   if (profile.role === 'mechanic') {
     return (
@@ -166,7 +167,7 @@ const Settings = () => {
             <User size={40}/>
           </div>
           <h1 className="text-2xl font-black text-slate-900">{profile.user.first_name || profile.user.username}</h1>
-          <p className="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2">{profile.company.name} • Майстер</p>
+          <p className="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2">{profile.company.name} • Працівник</p>
           <button onClick={() => {localStorage.clear(); navigate('/login');}} className="w-full flex items-center justify-center gap-3 bg-red-50 text-red-500 py-4 rounded-xl font-black uppercase tracking-widest mt-10 hover:bg-red-100 transition-colors">
             <LogOut size={20}/> Вийти з акаунта
           </button>
@@ -214,58 +215,60 @@ const Settings = () => {
               </div>
           </div>
 
-          {/* ПРАЙС-ЛИСТ */}
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-4 md:p-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
-              <h2 className="font-black uppercase text-sm tracking-wider flex items-center gap-2"><DollarSign size={18} className="text-green-600"/> Прайс послуг</h2>
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input type="text" placeholder="Пошук послуги..." className="w-full border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm outline-none focus:border-blue-500" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-              </div>
-            </div>
-            <div className="p-4 md:p-6">
-              <form onSubmit={handleAddService} className="flex flex-col sm:flex-row gap-2 mb-6">
-                <input required type="text" placeholder="Назва послуги" className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:border-blue-500 font-medium" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
-                <div className="flex gap-2">
-                  <input required type="number" placeholder="Ціна" className="flex-1 sm:w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:border-blue-500 font-black" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
-                  <button type="submit" className="bg-blue-600 text-white px-4 rounded-xl hover:bg-blue-700 transition-all shadow-sm flex items-center justify-center shrink-0"><Plus size={20}/></button>
+          {/* ПРАЙС-ЛИСТ (Тільки якщо це СТО) */}
+          {profile.company.business_type === 'sto' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-4 md:p-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+                <h2 className="font-black uppercase text-sm tracking-wider flex items-center gap-2"><DollarSign size={18} className="text-green-600"/> Прайс послуг</h2>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input type="text" placeholder="Пошук послуги..." className="w-full border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm outline-none focus:border-blue-500" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                 </div>
-              </form>
+              </div>
+              <div className="p-4 md:p-6">
+                <form onSubmit={handleAddService} className="flex flex-col sm:flex-row gap-2 mb-6">
+                  <input required type="text" placeholder="Назва послуги" className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:border-blue-500 font-medium" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} />
+                  <div className="flex gap-2">
+                    <input required type="number" placeholder="Ціна" className="flex-1 sm:w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:border-blue-500 font-black" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} />
+                    <button type="submit" className="bg-blue-600 text-white px-4 rounded-xl hover:bg-blue-700 transition-all shadow-sm flex items-center justify-center shrink-0"><Plus size={20}/></button>
+                  </div>
+                </form>
 
-              <div className="space-y-2">
-                {displayedServices.map(s => (
-                  <div key={s.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-blue-100 transition-all gap-2">
-                    {editingServiceId === s.id ? (
-                      <div className="w-full flex flex-col sm:flex-row gap-2 items-center">
-                        <input type="text" className="w-full sm:flex-1 bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2 outline-none text-sm font-medium" value={editServiceData.name} onChange={e => setEditServiceData({...editServiceData, name: e.target.value})} />
-                        <div className="w-full sm:w-auto flex gap-2">
-                          <input type="number" className="flex-1 sm:w-24 bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2 outline-none text-sm font-black" value={editServiceData.price} onChange={e => setEditServiceData({...editServiceData, price: e.target.value})} />
-                          <button onClick={() => handleUpdateService(s.id)} className="bg-green-100 text-green-600 px-3 rounded-lg"><Save size={18}/></button>
-                          <button onClick={() => setEditingServiceId(null)} className="bg-slate-100 text-slate-600 px-3 rounded-lg"><X size={18}/></button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <span className="font-bold text-slate-700 text-sm sm:text-base leading-tight pr-2">{s.name}</span>
-                        <div className="flex items-center justify-between w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-0 border-slate-50">
-                          <span className="font-black text-slate-900 text-sm sm:text-base mr-2">{s.price} ₴</span>
-                          <div className="flex gap-1">
-                            <button onClick={() => { setEditingServiceId(s.id); setEditServiceData({ name: s.name, price: s.price }); }} className="text-slate-400 bg-slate-50 hover:bg-blue-50 hover:text-blue-600 p-2 rounded-lg transition-colors"><Pencil size={16}/></button>
-                            <button onClick={() => handleDeleteService(s.id)} className="text-slate-400 bg-slate-50 hover:bg-red-50 hover:text-red-500 p-2 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                <div className="space-y-2">
+                  {displayedServices.map(s => (
+                    <div key={s.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-blue-100 transition-all gap-2">
+                      {editingServiceId === s.id ? (
+                        <div className="w-full flex flex-col sm:flex-row gap-2 items-center">
+                          <input type="text" className="w-full sm:flex-1 bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2 outline-none text-sm font-medium" value={editServiceData.name} onChange={e => setEditServiceData({...editServiceData, name: e.target.value})} />
+                          <div className="w-full sm:w-auto flex gap-2">
+                            <input type="number" className="flex-1 sm:w-24 bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2 outline-none text-sm font-black" value={editServiceData.price} onChange={e => setEditServiceData({...editServiceData, price: e.target.value})} />
+                            <button onClick={() => handleUpdateService(s.id)} className="bg-green-100 text-green-600 px-3 rounded-lg"><Save size={18}/></button>
+                            <button onClick={() => setEditingServiceId(null)} className="bg-slate-100 text-slate-600 px-3 rounded-lg"><X size={18}/></button>
                           </div>
                         </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-                {filteredServices.length > 5 && (
-                  <button onClick={() => setShowAllServices(!showAllServices)} className="w-full py-4 text-blue-600 font-black text-xs uppercase tracking-widest bg-blue-50/50 rounded-2xl mt-4 flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors">
-                    {showAllServices ? <><ChevronUp size={16}/> Сховати список</> : <><ChevronDown size={16}/> Показати всі ({filteredServices.length})</>}
-                  </button>
-                )}
+                      ) : (
+                        <>
+                          <span className="font-bold text-slate-700 text-sm sm:text-base leading-tight pr-2">{s.name}</span>
+                          <div className="flex items-center justify-between w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-0 border-slate-50">
+                            <span className="font-black text-slate-900 text-sm sm:text-base mr-2">{s.price} ₴</span>
+                            <div className="flex gap-1">
+                              <button onClick={() => { setEditingServiceId(s.id); setEditServiceData({ name: s.name, price: s.price }); }} className="text-slate-400 bg-slate-50 hover:bg-blue-50 hover:text-blue-600 p-2 rounded-lg transition-colors"><Pencil size={16}/></button>
+                              <button onClick={() => handleDeleteService(s.id)} className="text-slate-400 bg-slate-50 hover:bg-red-50 hover:text-red-500 p-2 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {filteredServices.length > 5 && (
+                    <button onClick={() => setShowAllServices(!showAllServices)} className="w-full py-4 text-blue-600 font-black text-xs uppercase tracking-widest bg-blue-50/50 rounded-2xl mt-4 flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors">
+                      {showAllServices ? <><ChevronUp size={16}/> Сховати список</> : <><ChevronDown size={16}/> Показати всі ({filteredServices.length})</>}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* ПРАВА КОЛОНКА (Безпека та Команда) */}
@@ -299,7 +302,15 @@ const Settings = () => {
                           <p className="text-[10px] sm:text-xs text-slate-500 truncate">Логін: {m.username}</p>
                         </div>
                         <div className="flex gap-1 lg:opacity-100 xl:opacity-0 group-hover:opacity-100 transition-all shrink-0 self-end xl:self-center">
-                          <button onClick={() => {setIsEditingMechanic(m.id); setEditMechanicData({first_name: m.first_name, new_password: ''});}} className="bg-white text-slate-400 hover:text-blue-600 p-1.5 rounded shadow-sm"><Pencil size={14}/></button>
+                          <button onClick={() => {
+                            setIsEditingMechanic(m.id); 
+                            setEditMechanicData({
+                              first_name: m.first_name, 
+                              new_password: '',
+                              can_create_visits: m.can_create_visits || false,
+                              can_view_finances: m.can_view_finances || false
+                            });
+                          }} className="bg-white text-slate-400 hover:text-blue-600 p-1.5 rounded shadow-sm"><Pencil size={14}/></button>
                           <button onClick={() => handleDeleteMechanic(m.id)} className="bg-white text-slate-400 hover:text-red-500 p-1.5 rounded shadow-sm"><Trash2 size={14}/></button>
                         </div>
                       </div>
@@ -317,11 +328,24 @@ const Settings = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
             <button onClick={() => setIsAddingMechanic(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full"><X size={20} /></button>
-            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Users className="text-green-600"/> Новий майстер</h2>
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Users className="text-green-600"/> Новий працівник</h2>
             <form onSubmit={handleAddMechanic} className="space-y-4">
-              <input required type="text" placeholder="Ім'я майстра" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-green-500 font-medium text-sm" value={mechanicData.first_name} onChange={e => setMechanicData({...mechanicData, first_name: e.target.value})}/>
+              <input required type="text" placeholder="Ім'я" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-green-500 font-medium text-sm" value={mechanicData.first_name} onChange={e => setMechanicData({...mechanicData, first_name: e.target.value})}/>
               <input required type="text" placeholder="Логін для входу" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-green-500 font-medium text-sm" value={mechanicData.username} onChange={e => setMechanicData({...mechanicData, username: e.target.value})}/>
               <input required type="password" placeholder="Пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-green-500 font-medium text-sm" value={mechanicData.password} onChange={e => setMechanicData({...mechanicData, password: e.target.value})}/>
+              
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mt-2 space-y-3">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Права доступу</p>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={mechanicData.can_create_visits} onChange={e => setMechanicData({...mechanicData, can_create_visits: e.target.checked})} />
+                  <span className="text-sm font-bold text-slate-700">Може створювати записи/авто</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={mechanicData.can_view_finances} onChange={e => setMechanicData({...mechanicData, can_view_finances: e.target.checked})} />
+                  <span className="text-sm font-bold text-slate-700">Бачить фінанси (ціни, загальну касу)</span>
+                </label>
+              </div>
+
               <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-black uppercase mt-6 shadow-lg shadow-green-100 transition-all text-xs tracking-widest">Створити акаунт</button>
             </form>
           </div>
@@ -329,15 +353,28 @@ const Settings = () => {
       )}
 
       {isEditingMechanic && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto pt-10">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative my-auto">
             <button onClick={() => setIsEditingMechanic(null)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full"><X size={20} /></button>
-            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Pencil className="text-blue-600"/> Редагувати майстра</h2>
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Pencil className="text-blue-600"/> Редагувати працівника</h2>
             <form onSubmit={handleUpdateMechanic} className="space-y-4">
               <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Нове ім'я (необов'язково)</label>
               <input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 text-sm" value={editMechanicData.first_name} onChange={e => setEditMechanicData({...editMechanicData, first_name: e.target.value})}/>
               <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 mt-4">Новий пароль (залиште пустим, якщо не міняєте)</label>
               <input type="password" placeholder="Новий пароль..." className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 text-sm" value={editMechanicData.new_password} onChange={e => setEditMechanicData({...editMechanicData, new_password: e.target.value})}/>
+              
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mt-2 space-y-3">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Права доступу</p>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={editMechanicData.can_create_visits} onChange={e => setEditMechanicData({...editMechanicData, can_create_visits: e.target.checked})} />
+                  <span className="text-sm font-bold text-slate-700">Може створювати записи/авто</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={editMechanicData.can_view_finances} onChange={e => setEditMechanicData({...editMechanicData, can_view_finances: e.target.checked})} />
+                  <span className="text-sm font-bold text-slate-700">Бачить фінанси (ціни, загальну касу)</span>
+                </label>
+              </div>
+
               <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black uppercase mt-6 transition-all text-xs tracking-widest">Зберегти зміни</button>
             </form>
           </div>
@@ -368,7 +405,6 @@ const Settings = () => {
             </div>
             <form onSubmit={handleSaveProfile} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
-              {/* НОВИЙ ПЕРЕМИКАЧ: СТО / МАГАЗИН */}
               <div className="md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                 <label className="block text-[10px] sm:text-xs font-black uppercase text-slate-500 mb-3">Тип бізнесу</label>
                 <div className="flex gap-2">

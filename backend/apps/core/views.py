@@ -97,12 +97,22 @@ class VisitViewSet(viewsets.ModelViewSet):
             
             if response.status_code == 200:
                 result = response.json()
-                parsed_text = ""
                 
+                # --- ДОДАНО: ПЕРЕВІРКА НА ПОМИЛКИ ВІД ШІ (НАПРИКЛАД "File too large") ---
+                if result.get('IsErroredOnProcessing'):
+                    err_msg = result.get('ErrorMessage', ['Невідома помилка OCR'])[0]
+                    print(f"[OCR ПОМИЛКА] {err_msg}")
+                    return Response({"error": f"ШІ відмовив: {err_msg}"}, status=400)
+                
+                parsed_text = ""
                 for res in result.get('ParsedResults', []):
                     parsed_text += res.get('ParsedText', '') + " "
                     
                 text_upper = parsed_text.upper().replace('\n', ' ').replace('\r', ' ')
+                
+                # --- ДОДАНО: Якщо текст пустий (ШІ нічого не побачив на фото) ---
+                if not text_upper.strip():
+                     return Response({"error": "ШІ не знайшов жодного тексту на цьому фото. Спробуйте інше."}, status=400)
                 
                 # 1. Пошук VIN (17 символів підряд)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)

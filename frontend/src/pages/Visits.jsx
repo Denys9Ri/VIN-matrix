@@ -84,7 +84,6 @@ const Visits = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
-  // ПЕРЕХОПЛЕННЯ СКАНОВАНИХ ДАНИХ З ГОЛОВНОЇ ПАНЕЛІ
   useEffect(() => {
     if (location.state?.scannedData) {
       const sd = location.state.scannedData;
@@ -99,12 +98,10 @@ const Visits = () => {
         fuel: sd.fuel || prev.fuel
       }));
       setIsCreatingVisit(true);
-      // Очищуємо історію стейту, щоб модалка не вилітала при рефреші
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
-  // СИНХРОНІЗАЦІЯ ДАНИХ АВТО ПРИ ВІДКРИТТІ КАРТКИ ВІЗИТУ/ЗАМОВЛЕННЯ
   useEffect(() => {
     if (selectedVisit) {
       if (!isStore) {
@@ -119,7 +116,6 @@ const Visits = () => {
           setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '' });
         }
       } else {
-        // Логіка для Магазину: дістаємо дані з мікро-тегу в коментарі
         const pureComment = selectedVisit.comment ? selectedVisit.comment.replace(/^\[Марка:.*?\|.*?\|.*?\|.*?\|.*?\]\s*/, '') : '';
         setEditComment(pureComment);
         
@@ -135,7 +131,6 @@ const Visits = () => {
     }
   }, [selectedVisit?.id, selectedVisit?.delivery_data, selectedVisit?.comment, isStore]);
 
-  // АВТОЗБЕРЕЖЕННЯ ХАРАКТЕРИСТИК АВТО ПРИ РЕДАГУВАННІ ГРАФИ
   const handleSaveCarData = async () => {
     if (!isStore) {
       const jsonString = JSON.stringify(editCarData);
@@ -246,7 +241,6 @@ const Visits = () => {
         prepayment_amount: isStore && newVisitData.payment_status === 'advance' ? (newVisitData.prepayment_amount || 0) : 0
     };
     
-    // ПАКУВАННЯ ДАНИХ ПРИ СТВОРЕННІ
     if (!isStore) {
         payload.delivery_data = JSON.stringify({ brand: newVisitData.brand.trim(), model: newVisitData.model.trim(), year: newVisitData.year.trim(), engine: newVisitData.engine.trim(), fuel: newVisitData.fuel.trim() });
     } else {
@@ -421,7 +415,6 @@ const Visits = () => {
 
             <form onSubmit={handleCreateVisit} className="space-y-4">
               
-              {/* СКАНЕР ДОСТУПНИЙ ДЛЯ ОБОХ РЕЖИМІВ */}
               <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col gap-3 mb-2 shadow-sm">
                 <div className="flex items-start gap-2">
                   <Info size={16} className="text-emerald-600 shrink-0 mt-0.5"/>
@@ -493,10 +486,10 @@ const Visits = () => {
                 </div>
               </div>
 
-              {/* ПОЛЯ ДАНИХ АВТО ТЕПЕР ВИДНО ЗАВЖДИ ДЛЯ ОБОХ РЕЖИМІВ */}
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3 shadow-inner">
-                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-1.5">Дані автомобіля</p>
-                <div className="grid grid-cols-2 gap-3">
+              {/* ПОКРАЩЕНИЙ ДИЗАЙН ПОЛІВ АВТО (Щоб не ламалася верстка) */}
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 shadow-inner">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-1.5 mb-3">Дані автомобіля</p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Марка</label>
                     <input type="text" placeholder="HONDA" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 uppercase" value={newVisitData.brand} onChange={e => setNewVisitData({...newVisitData, brand: e.target.value})} />
@@ -506,7 +499,7 @@ const Visits = () => {
                     <input type="text" placeholder="CR-V" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.model} onChange={e => setNewVisitData({...newVisitData, model: e.target.value})} />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Рік</label>
                     <input type="number" placeholder="2011" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-blue-600 outline-none focus:border-blue-500" value={newVisitData.year} onChange={e => setNewVisitData({...newVisitData, year: e.target.value})} />
@@ -515,10 +508,10 @@ const Visits = () => {
                     <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Двигун (см³)</label>
                     <input type="number" placeholder="1995" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.engine} onChange={e => setNewVisitData({...newVisitData, engine: e.target.value})} />
                   </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Паливо</label>
-                    <input type="text" placeholder="Газ/Бензин" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.fuel} onChange={e => setNewVisitData({...newVisitData, fuel: e.target.value})} />
-                  </div>
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Паливо</label>
+                  <input type="text" placeholder="Газ/Бензин" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.fuel} onChange={e => setNewVisitData({...newVisitData, fuel: e.target.value})} />
                 </div>
               </div>
 
@@ -530,7 +523,7 @@ const Visits = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ПЕРЕГЛЯДУ КАРТКИ (ХАРАКТЕРИСТИКИ АВТО ТЕПЕР ТУТ ДЛЯ ВСІХ) */}
+      {/* МОДАЛКА ПЕРЕГЛЯДУ КАРТКИ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
@@ -548,24 +541,24 @@ const Visits = () => {
                 )}
 
                 {/* ХАРАКТЕРИСТИКИ АВТО ВІДОБРАЖАЮТЬСЯ І ДЛЯ СТО, І ДЛЯ МАГАЗИНУ */}
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                  <div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                  <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
                     <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
-                  <div>
+                  <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Модель</label>
                     <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
-                  <div>
+                  <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Рік</label>
                     <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600 outline-none focus:border-blue-500" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
-                  <div>
+                  <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Дв. (см³)</label>
                     <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
-                  <div>
+                  <div className="col-span-2 sm:col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Паливо</label>
                     <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
@@ -573,7 +566,7 @@ const Visits = () => {
 
                 <p className="text-slate-500 text-[13px] font-bold flex flex-wrap items-center gap-2 mt-1"><CarFront size={14} className="shrink-0"/> {selectedVisit.client} | <Phone size={14} className="shrink-0"/> {selectedVisit.phone}</p>
                 
-                {isStore && (
+                {isStore ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1"><Truck size={12}/> Доставка</p>
@@ -586,6 +579,7 @@ const Visits = () => {
                         <textarea value={selectedVisit.delivery_data || ''} onChange={e => updateVisitField('delivery_data', e.target.value)} placeholder="Місто, Відділення..." className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium outline-none resize-none" rows="2" />
                       )}
                     </div>
+                    
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1"><CreditCard size={12}/> Статус оплати</p>
                       <select value={selectedVisit.payment_status || 'unpaid'} onChange={e => updateVisitField('payment_status', e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none cursor-pointer">
@@ -594,6 +588,7 @@ const Visits = () => {
                         <option value="paid">✅ Оплачено повністю</option>
                         <option value="cod">📦 Накладений платіж</option>
                       </select>
+                      
                       {selectedVisit.payment_status === 'advance' && (
                         <div className="mt-2 pt-2 border-t border-slate-200">
                           <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Аванс</label>
@@ -601,6 +596,36 @@ const Visits = () => {
                         </div>
                       )}
                     </div>
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    {!isEditingTime ? (
+                      <div className="flex items-center gap-2 text-slate-500 text-[11px] font-bold group">
+                        <Clock size={12}/>
+                        <span>Запис: {selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Без дати'}</span>
+                        {(role === 'owner' || permissions?.can_create_visits) && (
+                          <button onClick={() => {
+                            const d = selectedVisit.scheduled_datetime ? new Date(selectedVisit.scheduled_datetime) : new Date();
+                            setEditTimeData({ date: d.toLocaleDateString('en-CA'), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
+                            setIsEditingTime(true);
+                          }} className="text-blue-500 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 p-1 rounded">
+                            <Pencil size={12}/> Редагувати
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 max-w-sm mt-2">
+                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-2">Новий час візиту</label>
+                        <div className="flex gap-2 mb-2">
+                          <input type="date" className="flex-1 bg-white border border-slate-200 outline-none text-slate-700 rounded-lg p-2 text-xs font-bold" value={editTimeData.date} onChange={e => setEditTimeData({...editTimeData, date: e.target.value})} />
+                          <input type="time" className="w-24 bg-white border border-slate-200 outline-none text-slate-700 rounded-lg p-2 text-xs font-bold" value={editTimeData.time} onChange={e => setEditTimeData({...editTimeData, time: e.target.value})} />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={handleUpdateTime} className="flex-1 bg-green-500 text-white hover:bg-green-600 rounded-lg py-2 text-[10px] font-black uppercase tracking-widest transition-all">Зберегти</button>
+                          <button onClick={() => setIsEditingTime(false)} className="flex-1 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg py-2 text-[10px] font-black uppercase tracking-widest transition-all">Скас</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

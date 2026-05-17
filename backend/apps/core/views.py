@@ -418,14 +418,18 @@ class SupplierViewSet(viewsets.ModelViewSet):
         return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
 
     # =========================================================================
-    # МЕТОД ДЛЯ ОТРИМАННЯ ДЕТАЛЬНОЇ ІНФО (ХАРАКТЕРИСТИКИ ТА ЗАСТОСОВНІСТЬ)
+    # МАГІЯ: ГЛОБАЛЬНЕ ОБ'ЄДНАННЯ ІНФОРМАЦІЇ ЗІ ВСІХ ПОСТАЧАЛЬНИКІВ
     # =========================================================================
     @action(detail=True, methods=['get'], url_path='part_info')
     def part_info(self, request, pk=None):
-        sup = self.get_object()
+        base_sup = self.get_object()
+        company = base_sup.company
+        
+        # Беремо ВСІХ постачальників компанії з активними ключами
+        all_suppliers = Supplier.objects.filter(company=company).exclude(api_key='')
+        
         article = request.query_params.get('article', '').strip()
         brand = request.query_params.get('brand', '').strip().upper()
-        sku_param = request.query_params.get('sku', '').strip()
         
         info_data = {
             "properties": [],
@@ -433,15 +437,40 @@ class SupplierViewSet(viewsets.ModelViewSet):
             "images": []
         }
         
-        if not sup.api_key:
+        if not article:
             return Response(info_data)
 
-        # === ТЕХНОМІР ===
-        if 'tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower():
+        # Сховища для уникнення дублікатів
+        seen_props = set()
+        seen_apps = set()
+        seen_images = set()
+
+        def add_prop(name, val):
+            if not name or not val: return
+            k = f"{name}:{val}".lower().strip()
+            if k not in seen_props:
+                info_data['properties'].append({"name": str(name), "value": str(val)})
+                seen_props.add(k)
+
+        def add_app(val):
+            if not val: return
+            k = str(val).strip()
+            if k.lower() not in seen_apps:
+                info_data['applicability'].append(k)
+                seen_apps.add(k.lower())
+
+        def add_img(url):
+            if not url: return
+            if url not in seen_images:
+                info_data['images'].append(url)
+                seen_images.add(url)
+
+        # 1. ТЕХНОМІР (Характеристики)
+        def fetch_tehno(sup):
             try:
                 brand_url = "https://api.tehnomir.com.ua/info/getBrandsByCode"
                 brand_payload = {"apiToken": sup.api_key.strip(), "code": article}
-                b_res = requests.post(brand_url, json=brand_payload, timeout=10)
+                b_res = requests.post(brand_url, json=brand_payload, timeout=5)
                 
                 brand_id = None
                 if b_res.status_code == 200 and b_res.json().get('success'):
@@ -454,107 +483,106 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 
                 if brand_id:
                     info_url = "https://api.tehnomir.com.ua/info/getProductInfo"
-                    info_payload = {"apiToken": sup.api_key.strip(), "brandId": brand_id, "code": article}
-                    info_res = requests.post(info_url, json=info_payload, timeout=15)
-                    
+                    info_res = requests.post(info_url, json={"apiToken": sup.api_key.strip(), "brandId": brand_id, "code": article}, timeout=10)
                     if info_res.status_code == 200 and info_res.json().get('success'):
                         data = info_res.json().get('data', {})
                         for prop in data.get('properties', []):
-                            info_data['properties'].append({"name": prop.get('name', ''), "value": prop.get('value', '')})
+                            add_prop(prop.get('name', ''), prop.get('value', ''))
                         for img in data.get('images', []):
-                            info_data['images'].append(img.get('image', ''))
-            except Exception:
-                pass
+                            add_img(img.get('image', ''))
+            except Exception: pass
 
-        # === ОМЕГА (НОВИЙ МЕТОД: DETAILS) ===
-        elif 'omega' in sup.name.lower() or 'омега' in sup.name.lower():
+        # 2. ОМЕГА (Дерево авто + Характеристики)
+        def fetch_omega(sup):
             try:
                 prod_id = None
+                search_url = "https://public.omega.page/public/api/v1.0/product/search"
+                search_payload = {"Key": sup.api_key.strip(), "SearchPhrase": article, "From": 0, "Count": 10}
+                res = requests.post(search_url, json=search_payload, timeout=5)
                 
-                # Якщо ми вже знаємо ProductId (через sku_param), беремо його
-                is_valid_sku = False
-                if sku_param:
-                    try:
-                        prod_id = int(sku_param)
-                        is_valid_sku = True
-                    except ValueError:
-                        pass
-                
-                # Якщо ProductId немає (наприклад, деталь зі складу або кешу), шукаємо його швидким запитом
-                if not is_valid_sku:
-                    search_url = "https://public.omega.page/public/api/v1.0/product/search"
-                    search_payload = {"Key": sup.api_key.strip(), "SearchPhrase": article, "From": 0, "Count": 5}
-                    res = requests.post(search_url, json=search_payload, timeout=10)
-                    
-                    if res.status_code == 200:
-                        items = res.json().get('Result', []) or res.json().get('Data', [])
-                        for item in items:
-                            if str(item.get('BrandDescription', '')).upper() == brand:
-                                prod_id = int(item.get('ProductId', 0))
-                                break
+                if res.status_code == 200:
+                    items = res.json().get('Result', []) or res.json().get('Data', [])
+                    for item in items:
+                        if str(item.get('BrandDescription', '')).upper() == brand:
+                            prod_id = int(item.get('ProductId', 0))
+                            add_img(item.get('ImageUrl', ''))
+                            if item.get('Weight'): add_prop("Вага (кг)", item.get('Weight'))
+                            if item.get('Info'): add_prop("Додатково", item.get('Info'))
+                            # Витягуємо авто з опису, як запасний варіант
+                            desc = str(item.get('Description', ''))
+                            if 'пр-во' in desc:
+                                cars_str = desc.split('(пр-во')[0].replace('Фильтр масляный двигателя', '').replace('Колодки тормозные', '').strip()
+                                if cars_str:
+                                    for c in cars_str.split(','): add_app(c.strip())
+                            break
 
-                # Якщо ми успішно знайшли ProductId - стукаємо в метод DETAILS!
                 if prod_id:
                     details_url = "https://public.omega.page/public/api/v1.0/product/details"
                     details_payload = {"Key": sup.api_key.strip(), "ProductIdList": [prod_id]}
-                    det_res = requests.post(details_url, json=details_payload, timeout=15)
+                    det_res = requests.post(details_url, json=details_payload, timeout=10)
                     
                     if det_res.status_code == 200:
                         data_list = det_res.json().get('Data', [])
                         if data_list:
                             prod_data = data_list[0]
-                            
-                            # 1. Характеристики (Специфікації)
+                            # Специфікації
                             for spec in prod_data.get('SpecificationList', []):
                                 name = spec.get('Descr') or spec.get('Key', '')
-                                value = spec.get('Value', '')
-                                if name and value:
-                                    info_data['properties'].append({"name": name, "value": value})
-                                    
-                            # 2. OE Коди (Додаємо як характеристику)
+                                add_prop(name, spec.get('Value', ''))
+                            # Оригінальні коди
                             oe_codes = prod_data.get('OECodeList', [])
                             if oe_codes:
                                 oe_str = ", ".join([f"{oe.get('Code')} ({oe.get('CarModel', '')})" for oe in oe_codes])
-                                info_data['properties'].append({"name": "Оригінальні (OE) коди", "value": oe_str})
-                                
-                            # 3. Застосовність (Розгортаємо дерево)
+                                add_prop("Оригінальні (OE) коди", oe_str)
+                            # Застосовність (Дерево авто)
                             for app in prod_data.get('ApplicabilityList', []):
                                 brand_name = app.get('Name', '')
                                 children = app.get('Children', [])
-                                
                                 if children:
                                     for child in children:
-                                        model_name = child.get('Name', '')
-                                        if brand_name and model_name:
-                                            info_data['applicability'].append(f"{brand_name} {model_name}")
+                                        add_app(f"{brand_name} {child.get('Name', '')}")
                                 else:
-                                    if brand_name:
-                                        info_data['applicability'].append(brand_name)
-                                        
-            except Exception as e:
-                print(f"[INFO ДЕБАГ] ОМЕГА ПОМИЛКА DETAILS: {e}")
+                                    add_app(brand_name)
+            except Exception: pass
 
-        # === ВЕСНА ===
-        elif 'vesna' in sup.name.lower() or 'весна' in sup.name.lower():
+        # 3. ВЕСНА (Фото)
+        def fetch_vesna(sup):
              try:
                  parts = sup.api_key.split(':')
                  customer_id = int(parts[0]) if len(parts) > 1 else 0
-                 token_raw = parts[1] if len(parts) > 1 else sup.api_key
-                 token = token_raw.replace('Token', '').replace('token', '').strip()
-                 
+                 token = (parts[1] if len(parts) > 1 else sup.api_key).replace('Token', '').replace('token', '').strip()
                  vesna_url = "https://api.vesna-auto.com.ua/public-api/search-methods/search-by-article/"
                  headers = {"Authorization": f"Token {token}", "Content-Type": "application/json", "Accept-Language": "uk"}
-                 payload = {"customer_id": customer_id, "article": article}
+                 res = requests.post(vesna_url, json={"customer_id": customer_id, "article": article}, headers=headers, timeout=5)
                  
-                 requests.post(vesna_url, json=payload, headers=headers, timeout=10)
-             except Exception:
-                 pass
+                 if res.status_code == 200:
+                     raw_data = res.json()
+                     items_data = raw_data.get('data', []) if isinstance(raw_data, dict) else (raw_data if isinstance(raw_data, list) else [])
+                     for item in items_data:
+                         if str(item.get('brand', '')).upper() == brand:
+                             add_img(item.get('image') or item.get('picture') or '')
+                             break
+             except Exception: pass
+
+        # Запускаємо всі 3 запити паралельно для максимальної швидкості
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = []
+            for sup in all_suppliers:
+                if 'omega' in sup.name.lower() or 'омега' in sup.name.lower():
+                    futures.append(executor.submit(fetch_omega, sup))
+                elif 'tehnomir' in sup.name.lower() or 'техномир' in sup.name.lower():
+                    futures.append(executor.submit(fetch_tehno, sup))
+                elif 'vesna' in sup.name.lower() or 'весна' in sup.name.lower():
+                    futures.append(executor.submit(fetch_vesna, sup))
+            
+            for future in as_completed(futures):
+                pass
 
         return Response(info_data)
 
 
 # ===============================================
-# ОСНОВНИЙ КЛАС ПОШУКУ
+# ОСНОВНИЙ КЛАС ПОШУКУ (ІДЕАЛЬНІ АНАЛОГИ)
 # ===============================================
 class PartSearchView(APIView):
     permission_classes = [IsAuthenticated]

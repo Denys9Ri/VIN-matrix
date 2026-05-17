@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { 
   LayoutGrid, Plus, CalendarDays, AlertCircle, 
   Wallet, Search, CarFront, Package, ArrowRight, 
-  Settings2, X, Clock, CheckCircle2, DollarSign, Wrench, Loader2
+  Settings2, X, Clock, CheckCircle2, DollarSign, Wrench, Loader2, Camera, ImagePlus
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -14,10 +14,15 @@ const Dashboard = () => {
   const [companyInfo, setCompanyInfo] = useState(null);
   const [profile, setProfile] = useState(null);
 
-  // СТАН ВІДЖЕТІВ (Збереження в localStorage)
+  const dashCameraRef = useRef(null);
+  const dashGalleryRef = useRef(null);
+  const [isDashboardScanning, setIsDashboardScanning] = useState(false);
+
+  // СТАН ВІДЖЕТІВ
   const defaultWidgets = {
     welcome: true,
     quickActions: true,
+    aiScanner: true, // Новий віджет сканера
     todayTasks: true,
     financialPulse: true,
     alerts: true
@@ -52,18 +57,60 @@ const Dashboard = () => {
     fetchData();
   }, [token, navigate]);
 
-  // Збереження налаштувань віджетів
   const toggleWidget = (key) => {
     const updated = { ...activeWidgets, [key]: !activeWidgets[key] };
     setActiveWidgets(updated);
     localStorage.setItem('vinMatrixDashboardWidgets', JSON.stringify(updated));
   };
 
-  // === ОБЧИСЛЕННЯ ДАНИХ ДЛЯ ВІДЖЕТІВ ===
+  // ЛОГІКА СКАНУВАННЯ ПРЯМО З ПАНЕЛІ
+  const handleDashboardScan = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsDashboardScanning(true);
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 1200;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        } else {
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+        }
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(async (blob) => {
+          const formData = new FormData();
+          formData.append('document', blob, 'scan.jpg');
+          try {
+            const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, {
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+            });
+            if (res.data.success) {
+              // Перенаправляємо у візити/замовлення і передаємо розпізнані дані у стейті роутера
+              navigate('/visits', { state: { scannedData: res.data } });
+            }
+          } catch (error) {
+            alert("Не вдалося розпізнати. Спробуйте чіткіше фото.");
+          } finally {
+            setIsDashboardScanning(false);
+          }
+        }, 'image/jpeg', 0.8);
+      };
+    };
+  };
+
   const dashboardData = useMemo(() => {
     const today = new Date().toDateString();
     
-    // 1. Завдання на сьогодні (створені сьогодні АБО заплановані на сьогодні)
     const todayTasks = visits.filter(v => {
       const isPendingOrProgress = v.status !== 'DONE' && v.status !== 'COMPLETED';
       const createdToday = new Date(v.created_at).toDateString() === today;
@@ -71,7 +118,6 @@ const Dashboard = () => {
       return isPendingOrProgress && (createdToday || scheduledToday);
     });
 
-    // 2. Гроші за сьогодні (тільки закриті візити)
     const todayCompleted = visits.filter(v => 
       (v.status === 'DONE' || v.status === 'COMPLETED') && 
       new Date(v.updated_at).toDateString() === today
@@ -82,12 +128,9 @@ const Dashboard = () => {
       return sum + srvSum + prtSum;
     }, 0);
 
-    // 3. Алерти (Проблеми)
-    // - Борги: Виконано, але не оплачено
     const unpaidDebts = visits.filter(v => 
       (v.status === 'DONE' || v.status === 'COMPLETED') && v.payment_status === 'unpaid'
     );
-    // - Очікують запчастини (IN_PROGRESS)
     const waitingParts = visits.filter(v => v.status === 'IN_PROGRESS');
 
     return { todayTasks, todayRevenue, todayCompletedCount: todayCompleted.length, unpaidDebts, waitingParts };
@@ -101,7 +144,6 @@ const Dashboard = () => {
   return (
     <div className="max-w-[1600px] mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col w-full overflow-x-hidden pb-24">
       
-      {/* ШАПКА З КНОПКОЮ НАЛАШТУВАННЯ */}
       <div className="flex justify-between items-center mb-6 mt-4 md:mt-0">
         <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 flex items-center gap-2">
           <LayoutGrid className="text-blue-600"/> Панель
@@ -114,10 +156,9 @@ const Dashboard = () => {
         </button>
       </div>
 
-      {/* BENTO GRID (СІТКА ВІДЖЕТІВ) */}
+      {/* BENTO GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 auto-rows-min">
 
-        {/* ВІДЖЕТ 1: WELCOME & SEARCH (Широкий) */}
         {activeWidgets.welcome && (
           <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-6 md:p-8 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
@@ -159,20 +200,49 @@ const Dashboard = () => {
                 <div className="bg-white p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform">
                   <Plus size={24} className="text-blue-500" />
                 </div>
-                <span className="font-bold text-xs md:text-sm uppercase">{isStore ? 'Нове замовлення' : 'Новий запис'}</span>
+                <span className="font-bold text-xs md:text-sm uppercase text-center">{isStore ? 'Нове замовлення' : 'Новий запис'}</span>
               </button>
               
               <button onClick={() => navigate('/search')} className="bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 p-4 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all group">
                 <div className="bg-white p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform">
                   <Package size={24} className="text-indigo-500" />
                 </div>
-                <span className="font-bold text-xs md:text-sm uppercase">Підбір деталі</span>
+                <span className="font-bold text-xs md:text-sm uppercase text-center">Підбір деталі</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* ВІДЖЕТ 3: ПЛАН НА СЬОГОДНІ (Великий) */}
+        {/* ВІДЖЕТ ПРЕMІУМ: ШВИДКИЙ ШІ-СКАНЕР (BENTO BOX) */}
+        {activeWidgets.aiScanner && (
+          <div className="col-span-1 md:col-span-2 bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 text-white border border-slate-700 shadow-md relative overflow-hidden flex flex-col justify-between min-h-[180px]">
+            {isDashboardScanning && (
+              <div className="absolute inset-0 bg-slate-950/90 z-20 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
+                <div className="relative w-36 h-24 border border-emerald-500 rounded-lg overflow-hidden bg-slate-900/50 mb-3">
+                  <div className="laser-line"></div>
+                </div>
+                <p className="text-[11px] font-black uppercase tracking-wider text-emerald-400">ШІ розпізнає техпаспорт...</p>
+              </div>
+            )}
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded mb-3 inline-block">ШІ-Модуль</span>
+              <h3 className="text-base font-black uppercase italic leading-tight mb-1 flex items-center gap-2"><Camera size={18} className="text-emerald-400"/> Швидкий OCR Скан</h3>
+              <p className="text-[11px] text-slate-400 font-bold max-w-xs leading-tight">Завантажте техпаспорт для миттєвого заповнення картки</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-4 z-10">
+              <button onClick={() => dashCameraRef.current.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-wider py-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/50">
+                <Camera size={14}/> Камера
+              </button>
+              <button onClick={() => dashGalleryRef.current.click()} className="bg-slate-700 hover:bg-slate-600 text-white font-black uppercase text-[10px] tracking-wider py-3 rounded-xl flex items-center justify-center gap-1.5 transition-all">
+                <ImagePlus size={14}/> Галерея
+              </button>
+            </div>
+            <input type="file" accept="image/*" capture="environment" className="hidden" ref={dashCameraRef} onChange={handleDashboardScan} />
+            <input type="file" accept="image/*" className="hidden" ref={dashGalleryRef} onChange={handleDashboardScan} />
+          </div>
+        )}
+
+        {/* ВІДЖЕТ 3: ПЛАН НА СЬОГОДНІ */}
         {activeWidgets.todayTasks && (
           <div className="col-span-1 md:col-span-2 lg:row-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col h-full">
             <div className="flex justify-between items-center mb-5 pb-4 border-b border-slate-100">
@@ -216,7 +286,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* ВІДЖЕТ 4: ФІНАНСИ (Квадратний) */}
+        {/* ВІДЖЕТ 4: ФІНАНСИ */}
         {activeWidgets.financialPulse && (
           <div 
             onClick={() => navigate('/analytics')}
@@ -238,7 +308,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* ВІДЖЕТ 5: АЛЕРТИ (Квадратний) */}
+        {/* ВІДЖЕТ 5: АЛЕРТИ */}
         {activeWidgets.alerts && (
           <div className="col-span-1 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col min-h-[180px]">
             <h3 className="text-xs font-black uppercase text-slate-800 tracking-widest mb-4 flex items-center gap-2">
@@ -273,7 +343,7 @@ const Dashboard = () => {
 
       </div>
 
-      {/* === МОДАЛКА НАЛАШТУВАННЯ ВІДЖЕТІВ === */}
+      {/* МОДАЛКА НАЛАШТУВАННЯ */}
       {isConfigModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative border border-slate-100">
@@ -292,6 +362,11 @@ const Dashboard = () => {
               </label>
 
               <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-colors">
+                <span className="text-sm font-bold text-slate-700 flex items-center gap-2"><Camera size={16} className="text-slate-400"/> Хмарний ШІ-сканер</span>
+                <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.aiScanner} onChange={() => toggleWidget('aiScanner')} />
+              </label>
+
+              <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-colors">
                 <span className="text-sm font-bold text-slate-700 flex items-center gap-2"><CalendarDays size={16} className="text-slate-400"/> План на сьогодні</span>
                 <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.todayTasks} onChange={() => toggleWidget('todayTasks')} />
               </label>
@@ -301,7 +376,7 @@ const Dashboard = () => {
                 <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.financialPulse} onChange={() => toggleWidget('financialPulse')} />
               </label>
 
-              <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-colors">
+              <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200/50 cursor-pointer hover:border-blue-300 transition-colors">
                 <span className="text-sm font-bold text-slate-700 flex items-center gap-2"><AlertCircle size={16} className="text-slate-400"/> Алерти (Борги, очікування)</span>
                 <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.alerts} onChange={() => toggleWidget('alerts')} />
               </label>

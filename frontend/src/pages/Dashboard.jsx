@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   LayoutGrid, Plus, CalendarDays, AlertCircle, 
   Wallet, Search, CarFront, Package, ArrowRight, 
-  Settings2, X, Clock, CheckCircle2, DollarSign, Wrench
+  Settings2, X, Clock, CheckCircle2, DollarSign, Wrench, Loader2
 } from 'lucide-react';
 
 const Dashboard = () => {

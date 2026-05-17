@@ -83,12 +83,11 @@ class VisitViewSet(viewsets.ModelViewSet):
             image_data = doc.read()
             b64_image = base64.b64encode(image_data).decode('utf-8')
             
-            # Відправляємо картинку в хмарний OCR
             response = requests.post(
                 'https://api.ocr.space/parse/image',
                 data={
-                    'apikey': 'helloworld',  # Безкоштовний ключ
-                    'language': 'eng',       # Тільки англійська для VIN і номерів
+                    'apikey': 'helloworld',  
+                    'language': 'eng',       
                     'base64Image': 'data:image/jpeg;base64,' + b64_image,
                     'OCREngine': 2,          
                 },
@@ -109,7 +108,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                 text_upper = parsed_text.upper().replace('\n', ' ').replace('\r', ' ')
                 
                 if not text_upper.strip():
-                     return Response({"error": "ШІ не знайшов жодного тексту на цьому фото. Спробуйте інше."}, status=400)
+                     return Response({"error": "ШІ не знайшов жодного тексту. Спробуйте інше фото."}, status=400)
                 
                 # --- РОЗУМНИЙ ПАРСИНГ ЗА МАРКЕРАМИ ТЕХПАСПОРТА ---
                 
@@ -130,18 +129,52 @@ class VisitViewSet(viewsets.ModelViewSet):
                         if b in text_upper:
                             brand = b
                             break
-                            
+
                 # 4. Модель (Шукаємо поле D.3)
-                model_match = re.search(r'D[\.\s]*3\s*[:\-]?\s*([A-Z0-9\-]+(?:\s+[A-Z0-9\-]+)?)', text_upper)
-                model = model_match.group(1).strip() if model_match else ""
-                
+                model = ""
+                # Збираємо текст до маркерів E (VIN), F.1 (Маса) або P.1 (Двигун)
+                model_match = re.search(r'D[\.\s]*3\s+(.*?)(?=\s+[EЕ]\b|\s*F\.1|\s*[PР]\.1|$)', text_upper)
+                if model_match:
+                    model = model_match.group(1).strip()
+                    
+                    # ЗАПОБІЖНИК: Якщо ШІ випадково приклеїв VIN-код до моделі
+                    if vin_code and len(vin_code) >= 5:
+                        vin_prefix = vin_code[:5]
+                        if vin_prefix in model:
+                            model = model.split(vin_prefix)[0].strip()
+                    
+                    # Прибираємо зайві літери E в кінці, якщо вони лишилися
+                    model = re.sub(r'\s+[EЕ]$', '', model).strip()
+
                 # 5. Рік випуску (Шукаємо поле B.2)
-                year_match = re.search(r'\(?B[\.\s]*2\)?\s*[:\-]?\s*(\d{4})', text_upper)
-                year = year_match.group(1) if year_match else ""
-                
-                # 6. Двигун (Шукаємо поле P.1)
-                engine_match = re.search(r'P[\.\s]*1\s*[:\-]?\s*(\d{3,4})', text_upper)
-                engine = engine_match.group(1) if engine_match else ""
+                year = ""
+                year_match = re.search(r'[BВ][\.\s]*2\s*[:\-]?\s*(\d{4})', text_upper)
+                if year_match:
+                    year = year_match.group(1)
+                else:
+                    fallback_year = re.search(r'\b(199\d|20[0-2]\d)\b', text_upper)
+                    if fallback_year and 'P.1' not in text_upper and 'Р.1' not in text_upper:
+                        year = fallback_year.group(0)
+
+                # 6. Двигун (Шукаємо поле P.1, підтримує і латинську P і кириличну Р)
+                engine = ""
+                engine_match = re.search(r'[PР][\.\s]*1\s*[:\-]?\s*(\d{3,4})', text_upper)
+                if engine_match:
+                    engine = engine_match.group(1)
+
+                # 7. ТИП ПАЛИВА (Шукаємо поле P.3)
+                fuel = ""
+                fuel_match = re.search(r'[PР][\.\s]*3\s*[:\-]?\s*([A-Z])', text_upper)
+                if fuel_match:
+                    fuel_code = fuel_match.group(1).upper()
+                    fuel_map = {
+                        'B': 'Бензин',
+                        'D': 'Дизель',
+                        'S': 'Газ/Бензин',
+                        'E': 'Електро',
+                        'M': 'Гібрид'
+                    }
+                    fuel = fuel_map.get(fuel_code, fuel_code)
 
                 return Response({
                     "success": True,
@@ -151,6 +184,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                     "model": model,
                     "year": year,
                     "engine": engine,
+                    "fuel": fuel, # ПАЛИВО!
                     "raw_text": text_upper
                 })
             else:

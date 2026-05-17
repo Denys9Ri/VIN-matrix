@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
 import Clients from './pages/Clients'; // <--- ДОДАЛИ ІМПОРТ
+import Analytics from './pages/Analytics'; // <--- ДОДАЛИ ІМПОРТ АНАЛІТИКИ
 
 // Захисник роутів: якщо немає токена, викидає на /login
 const ProtectedRoute = ({ children }) => {
@@ -36,7 +37,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<Visits />} /> 
           <Route path="clients" element={<Clients />} /> {/* <--- ЗАМІНИЛИ ЗАГЛУШКУ */}
-          <Route path="analytics" element={<Placeholder title="Analytics" />} />
+          <Route path="analytics" element={<Analytics />} /> {/* <--- ЗАМІНИЛИ ЗАГЛУШКУ АНАЛІТИКИ */}
         </Route>
       </Routes>
     </BrowserRouter>

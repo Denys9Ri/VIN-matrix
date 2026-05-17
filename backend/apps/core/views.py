@@ -108,7 +108,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                      return Response({"error": "ШІ не знайшов жодного тексту на фото."}, status=400)
                 
                 # =======================================================
-                # ЖОРСТКИЙ І ПРОСТИЙ ПАРСИНГ
+                # ЖОРСТКИЙ СНАЙПЕРСЬКИЙ ПАРСИНГ
                 # =======================================================
                 
                 # 1. VIN (17 символів)
@@ -127,41 +127,30 @@ class VisitViewSet(viewsets.ModelViewSet):
                         brand = b
                         break
 
-                # 4. Модель (Строго латиниця і цифри після D.3, ніякої кирилиці)
+                # 4. Модель (Суворо після D.3, і відрізаємо E)
                 model = ""
-                model_match = re.search(r'D[\.\,\s]*3[\s\:\-]+([A-Z0-9\-]+(?:\s+[A-Z0-9\-]+)?)', text_upper)
+                model_match = re.search(r'D[\.\,\s]*3\s*[:\-]?\s*([A-Z0-9\-]+)', text_upper)
                 if model_match:
                     model = model_match.group(1).strip()
-                    if vin_code and vin_code in model:
-                        model = model.replace(vin_code, '').strip()
+                    # Прибираємо літеру E, якщо вона випадково прилипла
+                    if model.endswith(' E'): model = model[:-2]
+                    if model == 'E': model = ""
 
-                # 5. Рік та Двигун (Просто шукаємо всі цифри)
+                # 5. Рік випуску (ТІЛЬКИ маркери B.1, B.2 або YEAR. Ніяких здогадок)
                 year = ""
-                engine = ""
-                
-                # Знаходимо всі 4-значні числа
-                four_digits = re.findall(r'\b(\d{4})\b', text_upper)
-                
-                for num_str in four_digits:
-                    val = int(num_str)
-                    if 1980 <= val <= 2026:
-                        if not year:
-                            year = num_str
-                        elif num_str != year and not engine:
-                            engine = num_str
-                    else:
-                        if not engine:
-                            engine = num_str
-                            
-                # Якщо двигун не 4-значний (наприклад 998 см3)
-                if not engine:
-                    three_digits = re.findall(r'\b(\d{3})\b', text_upper)
-                    if three_digits:
-                        engine = three_digits[0]
+                year_match = re.search(r'(?:B[\.\,\s]*[12]|YEAR|РІК)[^\d]{0,10}(\d{4})\b', text_upper)
+                if year_match:
+                    year = year_match.group(1)
 
-                # 6. ТИП ПАЛИВА
+                # 6. Двигун (ТІЛЬКИ маркер P.1 або слова CM3/CAPACITY)
+                engine = ""
+                engine_match = re.search(r'(?:[PРpрFf][\.\,\s]*1|СМ3|CM3|CAPACITY)[^\d]{0,10}(\d{3,4})\b', text_upper)
+                if engine_match:
+                    engine = engine_match.group(1)
+
+                # 7. ТИП ПАЛИВА (ТІЛЬКИ маркер P.3 або слова FUEL/ПАЛИВА)
                 fuel = ""
-                fuel_match = re.search(r'P[\.\,\s]*3[\s\:\-]+([A-ZА-Я0-9])', text_upper)
+                fuel_match = re.search(r'(?:[PРpрFf][\.\,\s]*3|FUEL|ПАЛИВА)[^A-ZА-Я0-9]{0,10}([A-ZА-Я0-9])\b', text_upper)
                 if fuel_match:
                     f_char = fuel_match.group(1).upper()
                     if f_char in ['S', '5', 'C', 'С']: fuel = 'Газ/Бензин'

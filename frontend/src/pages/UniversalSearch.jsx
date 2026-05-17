@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront } from 'lucide-react';
+import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const UniversalSearch = () => {
@@ -10,6 +10,11 @@ const UniversalSearch = () => {
   const [query, setQuery] = useState(sessionStorage.getItem('searchQuery') || '');
   const [results, setResults] = useState(JSON.parse(sessionStorage.getItem('searchResults')) || []);
   
+  // === НОВИЙ СТАН: ІСТОРІЯ ПОШУКУ ===
+  const [searchHistory, setSearchHistory] = useState(
+    JSON.parse(localStorage.getItem('partSearchHistory')) || []
+  );
+
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(results.length > 0);
   
@@ -81,6 +86,17 @@ const UniversalSearch = () => {
   const performSearch = async (searchString) => {
     if (!searchString.trim()) return;
     
+    // ДОДАЄМО В ІСТОРІЮ ПОШУКУ
+    const upperSearch = searchString.trim().toUpperCase();
+    setSearchHistory(prev => {
+      // Видаляємо такий самий запит, якщо він вже є, щоб перенести його на перше місце
+      const filtered = prev.filter(item => item !== upperSearch);
+      // Додаємо на початок і залишаємо тільки 6 останніх
+      const newHistory = [upperSearch, ...filtered].slice(0, 6);
+      localStorage.setItem('partSearchHistory', JSON.stringify(newHistory));
+      return newHistory;
+    });
+
     setLoading(true);
     setHasSearched(true);
     setExpandedAnalogs(new Set()); 
@@ -105,6 +121,11 @@ const UniversalSearch = () => {
   const handleSearchFormSubmit = (e) => {
     e.preventDefault();
     performSearch(query);
+  };
+
+  const clearHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem('partSearchHistory');
   };
 
   const fetchAnalogs = async (item) => {
@@ -345,19 +366,49 @@ const UniversalSearch = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSearchFormSubmit} className="relative w-full mb-6 md:mb-8 shadow-xl shadow-slate-200/50 rounded-2xl">
-        <Search className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-        <input 
-          type="text" 
-          placeholder="Введіть артикул..." 
-          className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-12 md:pl-16 pr-24 md:pr-32 py-4 md:py-5 outline-none focus:border-blue-500 font-black text-base md:text-lg text-slate-700 transition-all uppercase placeholder:normal-case placeholder:font-medium" 
-          value={query} 
-          onChange={e => setQuery(e.target.value)} 
-        />
-        <button type="submit" disabled={loading} className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-black uppercase text-xs md:text-sm hover:bg-blue-700 transition-all disabled:opacity-50">
-          {loading ? <Loader2 className="animate-spin" size={18} /> : 'Знайти'}
-        </button>
-      </form>
+      <div className="mb-6 md:mb-8">
+        <form onSubmit={handleSearchFormSubmit} className="relative w-full shadow-xl shadow-slate-200/50 rounded-2xl mb-3">
+          <Search className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <input 
+            type="text" 
+            placeholder="Введіть артикул..." 
+            className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-12 md:pl-16 pr-24 md:pr-32 py-4 md:py-5 outline-none focus:border-blue-500 font-black text-base md:text-lg text-slate-700 transition-all uppercase placeholder:normal-case placeholder:font-medium" 
+            value={query} 
+            onChange={e => setQuery(e.target.value)} 
+          />
+          <button type="submit" disabled={loading} className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-black uppercase text-xs md:text-sm hover:bg-blue-700 transition-all disabled:opacity-50">
+            {loading ? <Loader2 className="animate-spin" size={18} /> : 'Знайти'}
+          </button>
+        </form>
+
+        {/* ІСТОРІЯ ПОШУКУ (ТЕГИ) */}
+        {searchHistory.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <span className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1">
+              <History size={12}/> Нещодавні:
+            </span>
+            {searchHistory.map((item, idx) => (
+              <button 
+                key={idx}
+                onClick={() => {
+                  setQuery(item);
+                  performSearch(item);
+                }}
+                className="bg-white border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 hover:bg-blue-50 text-[10px] md:text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm"
+              >
+                {item}
+              </button>
+            ))}
+            <button 
+              onClick={clearHistory}
+              className="text-slate-400 hover:text-red-500 p-1 rounded-full transition-colors ml-auto"
+              title="Очистити історію"
+            >
+              <X size={14}/>
+            </button>
+          </div>
+        )}
+      </div>
 
       {hasSearched && (
         <div className="bg-white border border-slate-200 rounded-2xl md:rounded-3xl p-4 md:p-8 flex-1">
@@ -670,7 +721,7 @@ const UniversalSearch = () => {
 
       {/* === МОДАЛКА ІНФОРМАЦІЇ === */}
       {infoPart && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto pt-10 pb-20">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-6 md:p-8 relative shadow-2xl m-auto">
             <button onClick={() => setInfoPart(null)} className="absolute right-4 top-4 text-slate-400 hover:bg-slate-100 p-2 rounded-full transition-colors"><X size={20} /></button>
             <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-2"><Info className="text-blue-500"/> Картка товару</h2>

@@ -24,7 +24,6 @@ const Visits = () => {
   const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
   const [showManualPartForm, setShowManualPartForm] = useState(false); 
   
-  // === СТАН ДЛЯ СКАНУВАННЯ ТЕХПАСПОРТА ===
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -37,14 +36,12 @@ const Visits = () => {
   
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
 
-  // ПОЛЯ ДЛЯ НОВОГО ВІЗИТУ
   const [newVisitData, setNewVisitData] = useState({ 
     plate: '', vin_code: '', client: '', phone: '', date: '', time: '',
     delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '',
     brand: '', model: '', year: '', engine: ''
   });
 
-  // ПОЛЯ ДЛЯ ВІДКРИТОГО ВІЗИТУ (Щоб редагувати авто)
   const [editCarData, setEditCarData] = useState({ brand: '', model: '', year: '', engine: '' });
   
   const [newService, setNewService] = useState({ name: '', price: '' });
@@ -90,7 +87,6 @@ const Visits = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterDate, navigate, token]);
 
-  // Коли відкриваємо візит, парсимо JSON автомобіля
   useEffect(() => {
     if (selectedVisit) {
       setEditComment(selectedVisit.comment || '');
@@ -106,7 +102,6 @@ const Visits = () => {
     }
   }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore]);
 
-  // Функція автозбереження даних авто
   const handleSaveCarData = async () => {
     const jsonString = JSON.stringify(editCarData);
     if (jsonString !== selectedVisit.delivery_data) {
@@ -114,7 +109,6 @@ const Visits = () => {
     }
   };
 
-  // === ЛОГІКА СКАНУВАННЯ ТА РОЗПОДІЛУ ДАНИХ ===
   const handleScanDocument = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -153,24 +147,14 @@ const Visits = () => {
             });
             
             if (res.data.success) {
-              const rawBrandModel = res.data.brand_model || '';
-              let extractedBrand = '';
-              let extractedYear = '';
-              let extractedEngine = '';
-
-              if (rawBrandModel) { extractedBrand = rawBrandModel.split(' ')[0] || ''; }
-              const yearMatch = rawBrandModel.match(/\((\d{4})/);
-              if (yearMatch) extractedYear = yearMatch[1];
-              const engineMatch = rawBrandModel.match(/Двигун:\s*(\d+)/);
-              if (engineMatch) extractedEngine = engineMatch[1];
-
               setNewVisitData(prev => ({
                 ...prev,
                 plate: res.data.plate ? res.data.plate : prev.plate,
                 vin_code: res.data.vin_code ? res.data.vin_code : prev.vin_code,
-                brand: extractedBrand ? extractedBrand : prev.brand,
-                year: extractedYear ? extractedYear : prev.year,
-                engine: extractedEngine ? extractedEngine : prev.engine
+                brand: res.data.brand ? res.data.brand : prev.brand,
+                model: res.data.model ? res.data.model : prev.model,
+                year: res.data.year ? res.data.year : prev.year,
+                engine: res.data.engine ? res.data.engine : prev.engine
               }));
               
               if (res.data.plate) {
@@ -266,7 +250,6 @@ const Visits = () => {
         prepayment_amount: isStore && newVisitData.payment_status === 'advance' ? (newVisitData.prepayment_amount || 0) : 0
     };
     
-    // ХАК: ЗБЕРІГАЄМО ОКРЕМІ ПОЛЯ АВТО В JSON У ПОЛЕ delivery_data (тільки для СТО)
     if (!isStore) {
         payload.delivery_data = JSON.stringify({
             brand: newVisitData.brand.trim(),
@@ -390,21 +373,8 @@ const Visits = () => {
     <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen flex flex-col w-full overflow-x-hidden">
       <style>{`
         input[type="date"], input[type="time"] { color: #334155 !important; -webkit-appearance: none; min-height: 42px; }
-        
-        @keyframes scan-laser {
-          0% { top: 0; }
-          50% { top: 100%; }
-          100% { top: 0; }
-        }
-        .laser-line {
-          position: absolute;
-          left: 0;
-          right: 0;
-          height: 2px;
-          background: #10b981;
-          box-shadow: 0 0 15px 5px rgba(16, 185, 129, 0.4);
-          animation: scan-laser 2s infinite linear;
-        }
+        @keyframes scan-laser { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
+        .laser-line { position: absolute; left: 0; right: 0; height: 2px; background: #10b981; box-shadow: 0 0 15px 5px rgba(16, 185, 129, 0.4); animation: scan-laser 2s infinite linear; }
       `}</style>
 
       <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 no-print-area shrink-0 mt-4 md:mt-0">
@@ -449,7 +419,7 @@ const Visits = () => {
         </div>
       )}
 
-      {/* === МОДАЛКА СТВОРЕННЯ ВІЗИТУ === */}
+      {/* МОДАЛКА СТВОРЕННЯ ВІЗИТУ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative overflow-hidden">
@@ -474,13 +444,11 @@ const Visits = () => {
               {isStore ? <><Package size={24}/> Нове замовлення</> : <><CarFront size={24}/> Новий візит</>}
             </h2>
             
-            {/* ПРИХОВАНІ ІНПУТИ (КАМЕРА І ГАЛЕРЕЯ ОКРЕМО) */}
             <input type="file" accept="image/*" capture="environment" className="hidden" ref={cameraInputRef} onChange={handleScanDocument} />
             <input type="file" accept="image/*" className="hidden" ref={galleryInputRef} onChange={handleScanDocument} />
 
             <form onSubmit={handleCreateVisit} className="space-y-4">
               
-              {/* БЛОК СТВОРЕННЯ ФОТО */}
               {!isStore && (
                 <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col gap-3 mb-2 shadow-sm">
                   <div className="flex items-start gap-2">
@@ -530,39 +498,12 @@ const Visits = () => {
                 <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium text-sm" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
               </div>
 
-              {isStore && (
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                  <div className="flex gap-2">
-                    <select className="flex-1 bg-white border border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none" value={newVisitData.delivery_type} onChange={e => setNewVisitData({...newVisitData, delivery_type: e.target.value})}>
-                      <option value="pickup">Самовивіз</option>
-                      <option value="np">Нова Пошта</option>
-                      <option value="courier">Кур'єр</option>
-                    </select>
-                    <select className="flex-1 bg-white border border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none" value={newVisitData.payment_status} onChange={e => setNewVisitData({...newVisitData, payment_status: e.target.value})}>
-                      <option value="unpaid">Не оплачено</option>
-                      <option value="advance">Передоплата</option>
-                      <option value="paid">Оплачено</option>
-                      <option value="cod">Накладений платіж</option>
-                    </select>
-                  </div>
-                  
-                  {newVisitData.payment_status === 'advance' && (
-                    <input type="number" placeholder="Внесена сума (₴)" className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm font-black text-blue-600 outline-none" value={newVisitData.prepayment_amount} onChange={e => setNewVisitData({...newVisitData, prepayment_amount: e.target.value})}/>
-                  )}
-                  
-                  {newVisitData.delivery_type === 'np' && (
-                    <textarea placeholder="Місто, Відділення..." className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm outline-none resize-none font-medium" rows="2" value={newVisitData.delivery_data} onChange={e => setNewVisitData({...newVisitData, delivery_data: e.target.value})}/>
-                  )}
-                </div>
-              )}
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Держ. Номер</label>
                   <input required={!isStore} type="text" placeholder="АА1234ВВ" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest text-sm" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
                   {foundExisting && <p className="text-emerald-600 text-[10px] font-black uppercase mt-1 ml-1">✓ З бази</p>}
                 </div>
-
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">VIN-Код</label>
                   <input type="text" placeholder="17 знаків" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-sm tracking-wider uppercase" value={newVisitData.vin_code} onChange={e => setNewVisitData({...newVisitData, vin_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)})}/>
@@ -570,28 +511,26 @@ const Visits = () => {
               </div>
 
               {!isStore && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 shadow-inner">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-1.5 flex items-center gap-2"><CarFront size={14}/> Дані автомобіля</p>
-                  
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3 shadow-inner">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-1.5">Дані автомобіля</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Марка</label>
-                      <input type="text" placeholder="Volkswagen" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 uppercase transition-colors" value={newVisitData.brand} onChange={e => setNewVisitData({...newVisitData, brand: e.target.value})} />
+                      <input type="text" placeholder="Volkswagen" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 uppercase" value={newVisitData.brand} onChange={e => setNewVisitData({...newVisitData, brand: e.target.value})} />
                     </div>
                     <div>
                       <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Модель</label>
-                      <input type="text" placeholder="Passat" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 transition-colors" value={newVisitData.model} onChange={e => setNewVisitData({...newVisitData, model: e.target.value})} />
+                      <input type="text" placeholder="Passat" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.model} onChange={e => setNewVisitData({...newVisitData, model: e.target.value})} />
                     </div>
                   </div>
-
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Рік випуску</label>
-                      <input type="number" placeholder="2012" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-blue-600 outline-none focus:border-blue-500 transition-colors" value={newVisitData.year} onChange={e => setNewVisitData({...newVisitData, year: e.target.value})} />
+                      <input type="number" placeholder="2012" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-blue-600 outline-none focus:border-blue-500" value={newVisitData.year} onChange={e => setNewVisitData({...newVisitData, year: e.target.value})} />
                     </div>
                     <div>
                       <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Двигун (см³)</label>
-                      <input type="number" placeholder="1995" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 transition-colors" value={newVisitData.engine} onChange={e => setNewVisitData({...newVisitData, engine: e.target.value})} />
+                      <input type="number" placeholder="1995" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.engine} onChange={e => setNewVisitData({...newVisitData, engine: e.target.value})} />
                     </div>
                   </div>
                 </div>
@@ -625,7 +564,7 @@ const Visits = () => {
                   </div>
                 )}
 
-                {/* РЕДАГОВАНІ ПОЛЯ АВТО (Замість звичайного коментаря) */}
+                {/* РЕДАГОВАНІ ПОЛЯ АВТО */}
                 {!isStore && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
                     <div>
@@ -741,20 +680,12 @@ const Visits = () => {
               </div>
             </div>
 
-            {isStore ? (
-              <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
-                <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>Нове</button>
-                <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-orange-500 shadow shadow-orange-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Чекаємо</button>
-                <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Відправка</button>
-                <button onClick={() => updateVisitField('status', 'COMPLETED')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'COMPLETED' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Виконано</button>
-              </div>
-            ) : (
-              <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
-                <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>В черзі</button>
-                <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>В роботі</button>
-                <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Готово</button>
-              </div>
-            )}
+            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
+              <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Нове' : 'В черзі'}</button>
+              <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Чекаємо' : 'В роботі'}</button>
+              <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Відправка' : 'Готово'}</button>
+              {isStore && <button onClick={() => updateVisitField('status', 'COMPLETED')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'COMPLETED' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Виконано</button>}
+            </div>
 
             <div className={`grid grid-cols-1 ${!isStore ? 'md:grid-cols-2' : ''} gap-6`}>
               {!isStore && (

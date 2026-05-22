@@ -39,34 +39,37 @@ class VisitViewSet(viewsets.ModelViewSet):
         date_str = self.request.query_params.get('date', '').strip()
         history_mode = self.request.query_params.get('history', '').strip()
         
+        # 1. Режим повної історії
         if history_mode == 'true':
             if search:
                 queryset = queryset.filter(Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(client__icontains=search) | Q(phone__icontains=search))
             return queryset.order_by('-created_at')
 
+        # 2. Швидкий пошук авто на головній
         if search:
             queryset = queryset.filter(Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(client__icontains=search) | Q(phone__icontains=search))
             return queryset.order_by('-created_at')
             
-        elif date_str and len(date_str) == 10:
+        # 3. Фільтрація по днях СТО (Якщо не передано — строго поточний день)
+        if date_str and len(date_str) == 10:
             try:
-                parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                start_of_day = timezone.make_aware(datetime.combine(parsed_date, dt_time.min))
-                end_of_day = start_of_day + timedelta(days=1)
-                queryset = queryset.filter((Q(scheduled_datetime__gte=start_of_day) & Q(scheduled_datetime__lt=end_of_day)) | (Q(scheduled_datetime__isnull=True) & Q(created_at__gte=start_of_day) & Q(created_at__lt=end_of_day))).distinct()
-                return queryset.order_by('scheduled_datetime')
-            except Exception: pass
-                
-        today = timezone.localdate()
-        start_of_today = timezone.make_aware(datetime.combine(today, dt_time.min))
-        end_of_today = start_of_today + timedelta(days=1)
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except Exception:
+                target_date = timezone.localdate()
+        else:
+            target_date = timezone.localdate()
+            
+        start_of_day = timezone.make_aware(datetime.combine(target_date, dt_time.min))
+        end_of_day = start_of_day + timedelta(days=1)
 
+        # Показуємо тільки ті візити, які фізично створені або заплановані на обраний день
         queryset = queryset.filter(
-            ( ~Q(status__in=['DONE', 'COMPLETED']) & Q(scheduled_datetime__lt=end_of_today) ) | 
-            ( ~Q(status__in=['DONE', 'COMPLETED']) & Q(scheduled_datetime__isnull=True) ) | 
-            ( Q(status__in=['DONE', 'COMPLETED']) & Q(updated_at__gte=start_of_today) & Q(updated_at__lt=end_of_today) ) 
+            Q(created_at__gte=start_of_day, created_at__lt=end_of_day) |
+            Q(scheduled_datetime__gte=start_of_day, scheduled_datetime__lt=end_of_day)
         ).distinct()
-        return queryset.order_by('scheduled_datetime') 
+        
+        # Сортуємо за часом планування, а для поточної дати — найновіші зверху
+        return queryset.order_by('scheduled_datetime' if date_str else '-created_at')
 
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
 
@@ -107,19 +110,15 @@ class VisitViewSet(viewsets.ModelViewSet):
                 if not text_upper.strip():
                      return Response({"error": "ШІ не знайшов жодного тексту на фото."}, status=400)
                 
-                # =======================================================
-                # ЖОРСТКИЙ СНАЙПЕРСЬКИЙ ПАРСИНГ
-                # =======================================================
-                
-                # 1. VIN (17 символів)
+                # VIN (17 символів)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
                 vin_code = vin_match.group(0) if vin_match else ""
                 
-                # 2. Держ. Номер
+                # Держ. Номер
                 plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
                 plate = plate_match.group(0).replace(' ', '') if plate_match else ""
                 
-                # 3. Марка (тільки зі словника)
+                # Марка
                 brand = ""
                 brands = ['HONDA', 'VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT', 'TESLA', 'LAND ROVER', 'JEEP', 'ACURA', 'INFINITI', 'DODGE', 'CHRYSLER']
                 for b in brands:
@@ -127,28 +126,27 @@ class VisitViewSet(viewsets.ModelViewSet):
                         brand = b
                         break
 
-                # 4. Модель (Суворо після D.3, і відрізаємо E)
+                # Модель
                 model = ""
                 model_match = re.search(r'D[\.\,\s]*3\s*[:\-]?\s*([A-Z0-9\-]+)', text_upper)
                 if model_match:
                     model = model_match.group(1).strip()
-                    # Прибираємо літеру E, якщо вона випадково прилипла
                     if model.endswith(' E'): model = model[:-2]
                     if model == 'E': model = ""
 
-                # 5. Рік випуску (ТІЛЬКИ маркери B.1, B.2 або YEAR. Ніяких здогадок)
+                # Рік випуску
                 year = ""
                 year_match = re.search(r'(?:B[\.\,\s]*[12]|YEAR|РІК)[^\d]{0,10}(\d{4})\b', text_upper)
                 if year_match:
                     year = year_match.group(1)
 
-                # 6. Двигун (ТІЛЬКИ маркер P.1 або слова CM3/CAPACITY)
+                # Двигун
                 engine = ""
                 engine_match = re.search(r'(?:[PРpрFf][\.\,\s]*1|СМ3|CM3|CAPACITY)[^\d]{0,10}(\d{3,4})\b', text_upper)
                 if engine_match:
                     engine = engine_match.group(1)
 
-                # 7. ТИП ПАЛИВА (ТІЛЬКИ маркер P.3 або слова FUEL/ПАЛИВА)
+                # Тип палива
                 fuel = ""
                 fuel_match = re.search(r'(?:[PРpрFf][\.\,\s]*3|FUEL|ПАЛИВА)[^A-ZА-Я0-9]{0,10}([A-ZА-Я0-9])\b', text_upper)
                 if fuel_match:
@@ -786,10 +784,10 @@ class PartSearchView(APIView):
                                 valid_crosses = []
                                 
                                 for cross in crosses:
-                                    c_code = str(cross.get('Code', '')).upper().replace(' ','').replace('-','').replace('.','')
-                                    c_brand = str(cross.get('Brand', '')).upper()
+                                    cross_code = str(cross.get('Code', '')).upper().replace(' ','').replace('-','').replace('.','')
+                                    cross_brand = str(cross.get('Brand', '')).upper()
                                     
-                                    unique_key = f"{c_code}_{c_brand}"
+                                    unique_key = f"{cross_code}_{cross_brand}"
                                     if unique_key in seen_codes:
                                         continue
                                         

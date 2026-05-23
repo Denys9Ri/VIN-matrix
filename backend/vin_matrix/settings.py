@@ -52,9 +52,9 @@ TEMPLATES = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -67,8 +67,11 @@ ROOT_URLCONF = 'vin_matrix.urls'
 WSGI_APPLICATION = 'vin_matrix.wsgi.application'
 
 # Налаштування CORS для React
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True 
+# Для production краще використовувати whitelist або regex для доменів
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https?://[a-z0-9-]+\.95\.217\.211\.207\.sslip\.io$",
+]
 CORS_ALLOW_HEADERS = [
     "accept",
     "authorization",
@@ -76,6 +79,12 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+]
+CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://*.95.217.211.207.sslip.io",
+    "https://*.95.217.211.207.sslip.io",
 ]
 
 # Налаштування Бази Даних
@@ -135,8 +144,3 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 TIME_ZONE = 'Europe/Kyiv'
 USE_TZ = True
 
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_HEADERS = [
-    "accept", "authorization", "content-type", "user-agent", "x-csrftoken", "x-requested-with",
-]
-CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]

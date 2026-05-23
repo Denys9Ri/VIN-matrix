@@ -380,13 +380,25 @@ const Visits = () => {
         </div>
       )}
 
+      {/* МОДАЛКА СТВОРЕННЯ КАРТКИ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative overflow-hidden">
+            {isScanning && (
+              <div className="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm">
+                <div className="relative w-48 h-32 border-2 border-emerald-500 rounded-lg mb-6 overflow-hidden bg-slate-800/50">
+                  <div className="laser-line"></div>
+                </div>
+                <h3 className="text-white font-black text-xl mb-2">ШІ розпізнає документ...</h3>
+                <p className="text-slate-400 text-sm font-medium">Читаємо дані з фотографії</p>
+              </div>
+            )}
             <button onClick={() => { setIsCreatingVisit(false); setFoundExisting(false); }} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200 z-10"><X size={20} /></button>
             <h2 className="text-xl font-black mb-5 flex items-center gap-2 text-blue-600">
               {isStore ? <><Package size={24}/> Нове замовлення</> : <><CarFront size={24}/> Новий візит</>}
             </h2>
+            <input type="file" accept="image/*" capture="environment" className="hidden" ref={cameraInputRef} onChange={handleScanDocument} />
+            <input type="file" accept="image/*" className="hidden" ref={galleryInputRef} onChange={handleScanDocument} />
             <form onSubmit={handleCreateVisit} className="space-y-4">
               <input required type="text" placeholder="ПІБ Клієнта" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none text-sm" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
               <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none text-sm" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
@@ -400,33 +412,67 @@ const Visits = () => {
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
-            <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-3">
-              <h2 className="text-2xl font-black uppercase leading-tight">{selectedVisit.plate}</h2>
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-4 border-b border-slate-100 pb-3 gap-3">
+              <div className="w-full">
+                <h2 className="text-2xl md:text-3xl font-black uppercase leading-tight">{selectedVisit.plate}</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                  <div className="col-span-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={handleSaveCarData}/>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Модель</label>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={handleSaveCarData}/>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Рік</label>
+                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={handleSaveCarData}/>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Дв. (см³)</label>
+                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={handleSaveCarData}/>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Паливо</label>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={handleSaveCarData}/>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Пробіг (км)</label>
+                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={handleSaveCarData} placeholder="150000"/>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 justify-end w-full md:w-auto">
                 <button onClick={handlePrintPDF} className="bg-blue-100 text-blue-600 p-2 rounded-xl hover:bg-blue-200 transition-colors flex items-center gap-2 font-bold text-xs"><Printer size={18} /> Друк</button>
                 <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-xl hover:bg-slate-200 transition-colors"><X size={18} /></button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
+              <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 py-2.5 rounded-lg font-black text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow' : 'text-slate-400'}`}>Черга</button>
+              <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 py-2.5 rounded-lg font-black text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>В роботі</button>
+              <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 py-2.5 rounded-lg font-black text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 text-white' : 'text-slate-400'}`}>Готово</button>
+            </div>
+
+            <div className={`grid grid-cols-1 ${!isStore ? 'lg:grid-cols-2' : ''} gap-6`}>
               {!isStore && (
                 <div>
                   <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-black uppercase text-slate-700 flex items-center gap-2 text-sm"><Wrench size={16}/> Роботи</h3>
+                    <h3 className="font-black uppercase text-slate-700 text-sm"><Wrench size={16}/> Роботи</h3>
                     <button onClick={() => setShowServiceForm(!showServiceForm)} className="text-[10px] font-bold uppercase bg-slate-100 px-2 py-1 rounded">Додати</button>
                   </div>
                   {showServiceForm && (
                     <form onSubmit={handleAddService} className="bg-slate-50 p-3 rounded-xl mb-3 space-y-2">
-                      <select className="w-full text-xs p-2" onChange={e => {
-                          const s = catalogServices.find(x => x.id === parseInt(e.target.value));
-                          if (s) setNewService({ name: s.name, price: s.price || s.default_price, quantity: 1 });
-                      }}>
-                        <option value="">Ввести вручну</option>
-                        {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} ({s.price || s.default_price} ₴)</option>)}
-                      </select>
-                      <input required type="text" placeholder="Назва" className="w-full p-2 text-xs border rounded" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})}/>
-                      <input required type="number" placeholder="Ціна" className="w-full p-2 text-xs border rounded" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})}/>
-                      <button type="submit" className="w-full bg-blue-600 text-white text-xs py-2 rounded">Зберегти</button>
+                        <select className="w-full text-xs p-2" onChange={e => {
+                            const s = catalogServices.find(x => x.id === parseInt(e.target.value));
+                            if(s) setNewService({ name: s.name, price: s.price || s.default_price, quantity: 1 });
+                        }}>
+                            <option value="">Ввести вручну</option>
+                            {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} ({s.price || s.default_price} ₴)</option>)}
+                        </select>
+                        <input required type="text" placeholder="Назва" className="w-full p-2 text-xs border rounded" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})}/>
+                        <input required type="number" placeholder="Ціна" className="w-full p-2 text-xs border rounded" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})}/>
+                        <button type="submit" className="w-full bg-blue-600 text-white text-xs py-2 rounded">Зберегти</button>
                     </form>
                   )}
                   <div className="space-y-2">

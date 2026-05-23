@@ -169,19 +169,45 @@ class VisitViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=500)
 
     # --- ГЕНЕРАЦІЯ PDF НА ПРЯМОМУ ШЛЯХУ ---
-    @action(detail=True, methods=['get'], url_path='pdf')
+   @action(detail=True, methods=['get'], url_path='pdf')
     def export_pdf(self, request, pk=None):
         visit = self.get_object()
-        
+        company = visit.company
+
+        # Парсимо дані авто з JSON
+        car_data = {}
+        if visit.delivery_data and visit.delivery_data.startswith('{'):
+            try:
+                import json
+                car_data = json.loads(visit.delivery_data)
+            except:
+                pass
+                
+        brand = car_data.get('brand', '-')
+        model = car_data.get('model', '')
+        year = car_data.get('year', '-')
+        mileage = car_data.get('mileage', '-')
+
+        # Дані компанії
+        comp_name = company.name if company and company.name else "АВТОСЕРВІС"
+        comp_phone = company.phone if company and company.phone else ""
+        comp_addr = company.address if company and company.address else ""
+        footer_text = company.document_footer if company and company.document_footer else "Дякуємо, що обрали нас!"
+
         html_content = f"""
         <html>
         <head>
             <meta charset="utf-8">
-            <title>Наряд-замовлення №{visit.id}</title>
+            <title>Акт виконаних робіт №{visit.id}</title>
             <style>
                 body {{ font-family: 'Arial', sans-serif; margin: 30px; color: #222; font-size: 14px; }}
-                .header {{ text-align: center; margin-bottom: 25px; line-height: 1.5; }}
-                .info-table {{ width: 100%; margin-bottom: 25px; border-collapse: collapse; }}
+                .header {{ display: flex; justify-content: space-between; margin-bottom: 25px; border-bottom: 2px solid #222; padding-bottom: 10px; }}
+                .company-info {{ font-size: 13px; color: #555; width: 50%; float: left; }}
+                .company-info h2 {{ margin: 0 0 5px 0; color: #222; }}
+                .doc-title {{ text-align: right; width: 50%; float: right; }}
+                .doc-title h2 {{ margin: 0 0 5px 0; }}
+                .clearfix::after {{ content: ""; clear: both; display: table; }}
+                .info-table {{ width: 100%; margin-bottom: 25px; border-collapse: collapse; clear: both; }}
                 .info-table td {{ padding: 8px; border: 1px solid #bbb; }}
                 .items-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
                 .items-table th, .items-table td {{ padding: 10px; border: 1px solid #999; text-align: left; }}
@@ -189,29 +215,36 @@ class VisitViewSet(viewsets.ModelViewSet):
                 .total {{ text-align: right; margin-top: 30px; font-size: 18px; font-weight: bold; color: #000; }}
                 .signatures {{ margin-top: 60px; width: 100%; }}
                 .signatures td {{ border: none; padding: 10px; }}
+                .footer {{ margin-top: 40px; text-align: center; font-size: 12px; color: #777; border-top: 1px solid #ddd; padding-top: 10px; }}
             </style>
         </head>
         <body onload="window.print()">
-            <div class="header">
-                <h2>НАРЯД-ЗАМОВЛЕННЯ № {visit.id}</h2>
-                <p>Дата відкриття: {visit.created_at.strftime('%d.%m.%Y %H:%M')}</p>
+            <div class="header clearfix">
+                <div class="company-info">
+                    <h2>{comp_name}</h2>
+                    <p>{comp_addr}<br>{comp_phone}</p>
+                </div>
+                <div class="doc-title">
+                    <h2>АКТ ВИКОНАНИХ РОБІТ № {visit.id}</h2>
+                    <p>Дата: {visit.created_at.strftime('%d.%m.%Y %H:%M')}</p>
+                </div>
             </div>
             
             <table class="info-table">
                 <tr>
-                    <td><strong>Автомобіль:</strong> {getattr(visit, 'brand', '')} {getattr(visit, 'model', '')} ({getattr(visit, 'year', '-')})</td>
+                    <td><strong>Автомобіль:</strong> {brand} {model} ({year})</td>
                     <td><strong>Держ. номер:</strong> {visit.plate}</td>
                 </tr>
                 <tr>
                     <td><strong>VIN-код:</strong> {getattr(visit, 'vin_code', '-')}</td>
-                    <td><strong>Пробіг:</strong> {getattr(visit, 'mileage', '-')} км</td>
+                    <td><strong>Пробіг:</strong> {mileage} км</td>
                 </tr>
                 <tr>
                     <td colspan="2"><strong>Власник (Клієнт):</strong> {getattr(visit, 'client', '-')} | Тел: {getattr(visit, 'phone', '-')}</td>
                 </tr>
             </table>
 
-            <h3>1. Виконані роботи та послуги автосервісу</h3>
+            <h3>1. Виконані роботи та послуги</h3>
             <table class="items-table">
                 <thead>
                     <tr>
@@ -225,7 +258,6 @@ class VisitViewSet(viewsets.ModelViewSet):
         """
         
         total_amount = Decimal('0.00')
-        
         services = getattr(visit, 'services', getattr(visit, 'orderservice_set', None))
         services_all = services.all() if services else []
         
@@ -240,8 +272,8 @@ class VisitViewSet(viewsets.ModelViewSet):
                     <tr>
                         <td>{name}</td>
                         <td>{qty}</td>
-                        <td>{price} UAH</td>
-                        <td>{subtotal} UAH</td>
+                        <td>{price}</td>
+                        <td>{subtotal}</td>
                     </tr>
                 """
         else:
@@ -270,16 +302,16 @@ class VisitViewSet(viewsets.ModelViewSet):
         if parts_all:
             for p in parts_all:
                 name = getattr(p, 'name', 'Запчастина')
-                brand = getattr(p, 'brand', '')
+                brand_part = getattr(p, 'brand', '')
                 article = getattr(p, 'article', getattr(p, 'part_number', ''))
                 sell_price = Decimal(str(getattr(p, 'sell_price', getattr(p, 'price', 0))))
                 total_amount += sell_price
                 html_content += f"""
                     <tr>
-                        <td>{brand}</td>
+                        <td>{brand_part}</td>
                         <td>{article}</td>
                         <td>{name}</td>
-                        <td>{sell_price} UAH</td>
+                        <td>{sell_price}</td>
                     </tr>
                 """
         else:
@@ -289,19 +321,20 @@ class VisitViewSet(viewsets.ModelViewSet):
                 </tbody>
             </table>
 
-            <div class="total">Загальна вартість замовлення: {total_amount} UAH</div>
+            <div class="total">Разом до сплати: {total_amount} UAH</div>
             
             <table class="signatures">
                 <tr>
-                    <td>Майстер-приймальник: _________________</td>
-                    <td style="text-align: right;">З об'ємом робіт згоден (Клієнт): _________________</td>
+                    <td>Представник Виконавця: _________________</td>
+                    <td style="text-align: right;">Замовник: _________________</td>
                 </tr>
             </table>
+
+            <div class="footer">{footer_text}</div>
         </body>
         </html>
         """
         return HttpResponse(html_content, content_type='text/html; charset=utf-8')
-
 
 class OrderPartViewSet(viewsets.ModelViewSet):
     serializer_class = OrderPartSerializer

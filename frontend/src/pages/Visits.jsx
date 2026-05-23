@@ -67,21 +67,15 @@ const Visits = () => {
         axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) 
       ]);
-      const fetchData = async () => {
-    try {
-      const [visitsRes, settingsRes, servicesRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) 
-      ]);
-      
-      // ДОДАЙ ЦЕЙ ЛОГ:
-      console.log("Дані з сервера:", visitsRes.data);
       setVisits(visitsRes.data || []);
       setRole(settingsRes.data.role);
       setCompanyInfo(settingsRes.data.company); 
       setPermissions(settingsRes.data.permissions || {}); 
       setCatalogServices(servicesRes.data || []);
+
+      if (searchParams.get('scan') === 'true') {
+        setIsCreatingVisit(true);
+      }
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
         setRole('owner'); 
@@ -117,48 +111,39 @@ const Visits = () => {
       setEditComment(selectedVisit.comment || '');
       try {
         if (!isStore && selectedVisit.delivery_data && selectedVisit.delivery_data.startsWith('{')) {
-          const parsed = JSON.parse(selectedVisit.delivery_data);
-          setEditCarData({ brand: parsed.brand || '', model: parsed.model || '', year: parsed.year || '', engine: parsed.engine || '', fuel: parsed.fuel || '', mileage: selectedVisit.mileage || '' });
+          const parsedData = JSON.parse(selectedVisit.delivery_data);
+          setEditCarData({ ...parsedData, mileage: parsedData.mileage || '' });
         } else {
-          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: selectedVisit.mileage || '' });
+          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: '' });
         }
       } catch (e) {
-        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: selectedVisit.mileage || '' });
+        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: '' });
       }
     }
-  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore, selectedVisit?.mileage]);
+  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore]);
 
   const handleSaveCarData = async () => {
     if (!isStore) {
-        if (editCarData.mileage !== selectedVisit.mileage) await updateVisitField('mileage', editCarData.mileage);
-        const carDataToSave = { ...editCarData };
-        delete carDataToSave.mileage;
-        const jsonString = JSON.stringify(carDataToSave);
-        if (jsonString !== selectedVisit.delivery_data) await updateVisitField('delivery_data', jsonString);
+      // ПРАВИЛЬНЕ ЗБЕРЕЖЕННЯ ПРОБІГУ В JSON
+      const carDataToSave = { ...editCarData };
+      const jsonString = JSON.stringify(carDataToSave);
+      if (jsonString !== selectedVisit.delivery_data) {
+        await updateVisitField('delivery_data', jsonString);
+      }
     } else {
       const pureComment = selectedVisit.comment ? selectedVisit.comment.replace(/^\[Марка:.*?\|.*?\|.*?\|.*?\|.*?\]\s*/, '') : '';
       const newCommentStr = `[Марка: ${editCarData.brand} | Модель: ${editCarData.model} | Рік: ${editCarData.year} | Дв: ${editCarData.engine} | Паливо: ${editCarData.fuel}] ${pureComment}`.trim();
-      if (newCommentStr !== selectedVisit.comment) await updateVisitField('comment', newCommentStr);
+      if (newCommentStr !== selectedVisit.comment) {
+        await updateVisitField('comment', newCommentStr);
+      }
     }
-  };
-
-
-
-  const updateCarDetails = async () => {
-    if (!selectedVisit) return;
-    await handleSaveCarData();
-  };
-
-  const handleMileageBlur = async () => {
-    if (!selectedVisit) return;
-    if (`${editCarData.mileage ?? ''}` === `${selectedVisit.mileage ?? ''}`) return;
-    await updateVisitField('mileage', editCarData.mileage);
   };
 
   const handleScanDocument = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setIsScanning(true);
+
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
@@ -168,33 +153,69 @@ const Visits = () => {
         const canvas = document.createElement('canvas');
         const MAX_WIDTH = 1200; const MAX_HEIGHT = 1200;
         let width = img.width; let height = img.height;
-        if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
-        else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+        if (width > height) {
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        } else {
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+        }
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
         canvas.toBlob(async (blob) => {
           const formData = new FormData();
           formData.append('document', blob, 'scan.jpg');
           try {
-            const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
+            const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, {
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+            });
             if (res.data.success) {
-              setNewVisitData(prev => ({ ...prev, ...res.data }));
+              setNewVisitData(prev => ({
+                ...prev,
+                plate: prev.plate || res.data.plate || '',
+                vin_code: prev.vin_code || res.data.vin_code || '',
+                brand: prev.brand || res.data.brand || '',
+                model: prev.model || res.data.model || '',
+                year: prev.year || res.data.year || '', 
+                engine: prev.engine || res.data.engine || '',
+                fuel: prev.fuel || res.data.fuel || ''
+              }));
             }
-          } catch (error) { alert("Помилка сканування."); } finally { setIsScanning(false); }
+          } catch (error) {
+            alert("Помилка сканування. Спробуйте інший ракурс.");
+          } finally {
+            setIsScanning(false);
+            if (cameraInputRef.current) cameraInputRef.current.value = '';
+            if (galleryInputRef.current) galleryInputRef.current.value = '';
+          }
         }, 'image/jpeg', 0.8);
       };
     };
   };
 
+  // ФІКС КОПІЮВАННЯ VIN (Безпечно)
   const handleCopyVin = (vin) => {
     if (!vin) return;
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(vin).then(() => { setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000); });
-    } else {
-        const textArea = document.createElement("textarea"); textArea.value = vin; document.body.appendChild(textArea); textArea.select();
-        document.execCommand('copy'); document.body.removeChild(textArea);
+      navigator.clipboard.writeText(vin).then(() => {
         setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
+      }).catch(() => fallbackCopy(vin));
+    } else {
+      fallbackCopy(vin);
     }
+  };
+
+  const fallbackCopy = (text) => {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopiedVin(text); setTimeout(() => setCopiedVin(null), 2000);
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      }
+      document.body.removeChild(textArea);
   };
 
   const changeDate = (days) => {
@@ -264,11 +285,14 @@ const Visits = () => {
     } catch (error) { alert("Помилка"); }
   };
 
+  // ФІКС 3: Оновлення статусу запчастини йде у вірну таблицю
   const updatePartStatus = async (id, newStatus) => {
     try {
         await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); 
         refreshSelectedVisit();
-    } catch (e) { alert("Помилка оновлення"); }
+    } catch (e) {
+        alert("Помилка оновлення статусу");
+    }
   };
 
   const handleAddService = async (e) => {
@@ -281,29 +305,31 @@ const Visits = () => {
             quantity: parseFloat(newService.quantity || 1)
         }, { headers: { Authorization: `Bearer ${token}` } });
         setNewService({ name: '', price: '', quantity: 1 }); setSelectedCatalogId(''); setShowServiceForm(false); refreshSelectedVisit();
-    } catch(err) { alert("Помилка додавання послуги"); }
+    } catch(err) {
+        alert("Помилка додавання послуги");
+    }
   };
 
   const handleDeleteService = async (id) => {
-    if (window.confirm("Видалити?")) {
-        try { await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit(); } 
-        catch(e) { alert("Помилка"); }
+    if (window.confirm("Видалити цю роботу?")) {
+        try {
+            await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
+            refreshSelectedVisit();
+        } catch(e) { alert("Помилка видалення роботи"); }
     }
   };
 
   const handleDeletePart = async (id) => {
-    if (window.confirm("Видалити?")) {
-        try { await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit(); } 
-        catch(e) { alert("Помилка"); }
+    if (window.confirm("Видалити цю запчастину?")) {
+        try {
+            await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
+            refreshSelectedVisit();
+        } catch(e) { alert("Помилка видалення запчастини"); }
     }
   };
 
-  const handlePrintPDF = async () => {
-    try {
-        window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
-    } catch (error) {
-        alert("Помилка генерації документа.");
-    }
+  const handlePrintPDF = () => {
+    window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
   };
 
   const refreshSelectedVisit = async () => {
@@ -321,7 +347,10 @@ const Visits = () => {
         {icon} {title} <span className="ml-auto bg-white px-2 py-1 rounded-lg shadow-sm text-slate-500">{items.length}</span>
       </h3>
       <div className="space-y-4 flex-1 pb-4">
-        {items.map(visit => <VisitCard key={visit.id} visit={visit} onClick={() => setSelectedVisit(visit)} isStore={isStore} />)}
+        {items.map(visit => (
+          <VisitCard key={visit.id} visit={visit} onClick={() => setSelectedVisit(visit)} isStore={isStore} />
+        ))}
+        {items.length === 0 && <div className="text-center text-slate-400 text-xs font-bold uppercase mt-10">Пусто</div>}
       </div>
     </div>
   );
@@ -334,8 +363,8 @@ const Visits = () => {
         .laser-line { position: absolute; left: 0; right: 0; height: 2px; background: #10b981; box-shadow: 0 0 15px 5px rgba(16, 185, 129, 0.4); animation: scan-laser 2s infinite linear; }
       `}</style>
 
-      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl font-black uppercase italic">{isStore ? 'Замовлення' : 'Дошка Візитів'}</h1>
+      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 no-print-area shrink-0 mt-4 md:mt-0">
+        <h1 className="text-2xl font-black uppercase italic w-full xl:w-auto">{isStore ? 'Замовлення' : 'Дошка Візитів'}</h1>
         
         <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-1 xl:justify-center">
           <div className="relative w-full md:w-64">
@@ -521,27 +550,27 @@ const Visits = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={updateCarDetails}/>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Модель</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={updateCarDetails}/>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Рік</label>
-                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600 outline-none focus:border-blue-500" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={updateCarDetails}/>
+                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600 outline-none focus:border-blue-500" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Дв. (см³)</label>
-                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={updateCarDetails}/>
+                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Паливо</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={updateCarDetails}/>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Пробіг (км)</label>
-                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={handleMileageBlur} placeholder="150000"/>
+                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={handleSaveCarData} placeholder="150000"/>
                   </div>
                 </div>
 
@@ -624,14 +653,27 @@ const Visits = () => {
                     </form>
                   )}
 
-                  <div className="space-y-2">
-                    { (selectedVisit.services || selectedVisit.orderservice_set)?.map(s => (
-                        <div key={s.id} className="flex justify-between p-2 bg-slate-50 rounded text-xs items-center">
-                            <span>{s.name} - {s.quantity} од.</span>
-                            <span className="font-bold">{(parseFloat(s.quantity || 0) * parseFloat(s.price || 0)).toFixed(2)} ₴</span>
-                            <button onClick={() => handleDeleteService(s.id)} className="text-red-500"><Trash2 size={14}/></button>
+                  <div className="space-y-2 mb-3">
+                    {(selectedVisit.services || selectedVisit.orderservice_set) && (selectedVisit.services || selectedVisit.orderservice_set).length > 0 ? (
+                      (selectedVisit.services || selectedVisit.orderservice_set).map(s => (
+                        <div key={s.id} className="p-3 bg-white rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+                          <div className="flex-1 pr-2">
+                            <p className="font-bold text-slate-700 text-xs">{s.name || s.custom_name}</p>
+                            <p className="text-[10px] font-medium text-slate-400 mt-0.5">{parseFloat(s.quantity || 1)} од. × {parseFloat(s.price || 0)} ₴</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="font-black text-sm text-slate-800">
+                              {(parseFloat(s.quantity || 1) * parseFloat(s.price || 0)).toFixed(2)} ₴
+                            </div>
+                            <button onClick={() => handleDeleteService(s.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-lg transition-colors" title="Видалити роботу">
+                                <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
-                    ))}
+                      ))
+                    ) : (
+                      <p className="text-xs text-center text-slate-400 italic py-4">Немає доданих робіт</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -639,24 +681,33 @@ const Visits = () => {
               {/* ЗАПЧАСТИНИ */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
-                <div className="space-y-2">
-                  { (selectedVisit.parts || selectedVisit.items)?.map(p => (
-                      <div key={p.id} className="p-3 bg-slate-50 rounded text-xs flex justify-between items-center">
-                          <span>{p.name}</span>
-                          <select
-                            className="mx-2 bg-white border border-slate-200 rounded px-2 py-1 text-[10px] font-bold"
-                            value={p.status || 'WAITING'}
-                            onChange={(e) => updatePartStatus(p.id, e.target.value)}
-                          >
-                            <option value="WAITING">WAITING</option>
-                            <option value="IN_TRANSIT">IN_TRANSIT</option>
-                            <option value="ARRIVED">ARRIVED</option>
-                            <option value="UNAVAILABLE">UNAVAILABLE</option>
-                          </select>
-                          <span className="font-bold">{parseFloat(p.sell_price || p.price || 0).toFixed(2)} ₴</span>
-                          <button onClick={() => handleDeletePart(p.id)} className="text-red-500"><Trash2 size={14}/></button>
+                <div className="space-y-3 mb-3">
+                  {(selectedVisit.parts || selectedVisit.items) && (selectedVisit.parts || selectedVisit.items).length > 0 ? (
+                    (selectedVisit.parts || selectedVisit.items).map(p => (
+                      <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex flex-col sm:flex-row sm:items-center gap-3 group w-full shadow-sm">
+                        <div className="flex-1 overflow-hidden">
+                          <p className="font-bold text-slate-700 text-sm leading-tight truncate">{p.name}</p>
+                          <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{p.brand} | {p.part_number || p.article}</p>
+                          <p className="text-[11px] font-black text-blue-600 mt-1">{p.sell_price} ₴</p>
+                        </div>
+                        <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <select value={p.status || p.logistics_status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer flex-1 sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.status || p.logistics_status || 'WAITING'] || partStatusColors['WAITING']}`}>
+                              <option value="WAITING">⏳ Очікується</option>
+                              <option value="IN_TRANSIT">🚚 В дорозі</option>
+                              <option value="ARRIVED">📦 На складі</option>
+                              <option value="UNAVAILABLE">❌ Відмова</option>
+                            </select>
+                            <button onClick={() => handleDeletePart(p.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-1" title="Видалити запчастину">
+                                <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                  ))}
+                    ))
+                  ) : (
+                     <p className="text-xs text-center text-slate-400 italic py-4">Кошик запчастин порожній</p>
+                  )}
                 </div>
               </div>
             </div>

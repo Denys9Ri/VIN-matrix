@@ -111,24 +111,21 @@ const Visits = () => {
       setEditComment(selectedVisit.comment || '');
       try {
         if (!isStore && selectedVisit.delivery_data && selectedVisit.delivery_data.startsWith('{')) {
-          setEditCarData(JSON.parse(selectedVisit.delivery_data));
+          const parsedData = JSON.parse(selectedVisit.delivery_data);
+          setEditCarData({ ...parsedData, mileage: parsedData.mileage || '' });
         } else {
-          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: selectedVisit.mileage || '' });
+          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: '' });
         }
       } catch (e) {
-        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: selectedVisit.mileage || '' });
+        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: '' });
       }
     }
-  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore, selectedVisit?.mileage]);
+  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore]);
 
   const handleSaveCarData = async () => {
     if (!isStore) {
-      if (editCarData.mileage !== selectedVisit.mileage) {
-        await updateVisitField('mileage', editCarData.mileage);
-      }
+      // ПРАВИЛЬНЕ ЗБЕРЕЖЕННЯ ПРОБІГУ В JSON
       const carDataToSave = { ...editCarData };
-      delete carDataToSave.mileage;
-      
       const jsonString = JSON.stringify(carDataToSave);
       if (jsonString !== selectedVisit.delivery_data) {
         await updateVisitField('delivery_data', jsonString);
@@ -195,27 +192,30 @@ const Visits = () => {
     };
   };
 
+  // ФІКС КОПІЮВАННЯ VIN (Безпечно)
   const handleCopyVin = (vin) => {
     if (!vin) return;
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(vin).then(() => {
         setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
-      });
+      }).catch(() => fallbackCopy(vin));
     } else {
+      fallbackCopy(vin);
+    }
+  };
+
+  const fallbackCopy = (text) => {
       const textArea = document.createElement("textarea");
-      textArea.value = vin;
-      textArea.style.position = "absolute";
-      textArea.style.left = "-999999px";
+      textArea.value = text;
       document.body.appendChild(textArea);
       textArea.select();
       try {
         document.execCommand('copy');
-        setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
+        setCopiedVin(text); setTimeout(() => setCopiedVin(null), 2000);
       } catch (err) {
         console.error('Fallback copy failed', err);
       }
       document.body.removeChild(textArea);
-    }
   };
 
   const changeDate = (days) => {
@@ -254,7 +254,7 @@ const Visits = () => {
     };
     
     if (!isStore) {
-        payload.delivery_data = JSON.stringify({ brand: newVisitData.brand.trim(), model: newVisitData.model.trim(), year: newVisitData.year.trim(), engine: newVisitData.engine.trim(), fuel: newVisitData.fuel.trim() });
+        payload.delivery_data = JSON.stringify({ brand: newVisitData.brand.trim(), model: newVisitData.model.trim(), year: newVisitData.year.trim(), engine: newVisitData.engine.trim(), fuel: newVisitData.fuel.trim(), mileage: '' });
     } else {
         payload.comment = `[Марка: ${newVisitData.brand.trim()} | Модель: ${newVisitData.model.trim()} | Рік: ${newVisitData.year.trim()} | Дв: ${newVisitData.engine.trim()} | Паливо: ${newVisitData.fuel.trim()}]`.trim();
     }
@@ -285,8 +285,14 @@ const Visits = () => {
     } catch (error) { alert("Помилка"); }
   };
 
+  // ФІКС 3: Оновлення статусу запчастини йде у вірну таблицю
   const updatePartStatus = async (id, newStatus) => {
-    await axios.patch(`${API_BASE}/api/item/${id}/status/`, { logistics_status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit();
+    try {
+        await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); 
+        refreshSelectedVisit();
+    } catch (e) {
+        alert("Помилка оновлення статусу");
+    }
   };
 
   const handleAddService = async (e) => {
@@ -305,7 +311,7 @@ const Visits = () => {
   };
 
   const handleDeleteService = async (id) => {
-    if (window.confirm("Ви дійсно хочете видалити цю роботу?")) {
+    if (window.confirm("Видалити цю роботу?")) {
         try {
             await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
             refreshSelectedVisit();
@@ -314,7 +320,7 @@ const Visits = () => {
   };
 
   const handleDeletePart = async (id) => {
-    if (window.confirm("Ви дійсно хочете видалити цю запчастину?")) {
+    if (window.confirm("Видалити цю запчастину?")) {
         try {
             await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
             refreshSelectedVisit();
@@ -322,25 +328,8 @@ const Visits = () => {
     }
   };
 
-  const handlePrintPDF = async () => {
-    try {
-        // ВИПРАВЛЕНО: Беремо сторінку через axios з токеном, потім друкуємо
-        const response = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, {
-            headers: { Authorization: `Bearer ${token}` },
-            responseType: 'text' 
-        });
-        
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.open();
-            printWindow.document.write(response.data);
-            printWindow.document.close();
-        } else {
-            alert("Будь ласка, дозвольте спливаючі вікна для цього сайту, щоб роздрукувати наряд.");
-        }
-    } catch (error) {
-        alert("Помилка генерації документа. Сервер не зміг сформувати акт.");
-    }
+  const handlePrintPDF = () => {
+    window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
   };
 
   const refreshSelectedVisit = async () => {
@@ -665,16 +654,16 @@ const Visits = () => {
                   )}
 
                   <div className="space-y-2 mb-3">
-                    {selectedVisit.services && selectedVisit.services.length > 0 ? (
-                      selectedVisit.services.map(s => (
+                    {(selectedVisit.services || selectedVisit.orderservice_set) && (selectedVisit.services || selectedVisit.orderservice_set).length > 0 ? (
+                      (selectedVisit.services || selectedVisit.orderservice_set).map(s => (
                         <div key={s.id} className="p-3 bg-white rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
                           <div className="flex-1 pr-2">
                             <p className="font-bold text-slate-700 text-xs">{s.name || s.custom_name}</p>
-                            <p className="text-[10px] font-medium text-slate-400 mt-0.5">{s.quantity} од. × {s.price} ₴</p>
+                            <p className="text-[10px] font-medium text-slate-400 mt-0.5">{parseFloat(s.quantity || 1)} од. × {parseFloat(s.price || 0)} ₴</p>
                           </div>
                           <div className="flex items-center gap-3">
                             <div className="font-black text-sm text-slate-800">
-                              {(parseFloat(s.quantity || 0) * parseFloat(s.price || 0)).toFixed(2)} ₴
+                              {(parseFloat(s.quantity || 1) * parseFloat(s.price || 0)).toFixed(2)} ₴
                             </div>
                             <button onClick={() => handleDeleteService(s.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-lg transition-colors" title="Видалити роботу">
                                 <Trash2 size={16} />
@@ -703,12 +692,11 @@ const Visits = () => {
                         </div>
                         <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
                           <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <select value={p.logistics_status || p.status || 'PENDING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer flex-1 sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.logistics_status || p.status || 'PENDING']}`}>
-                              <option value="PENDING">⏳ Очікується</option>
-                              <option value="ORDERED">🛒 Замовлено</option>
+                            <select value={p.status || p.logistics_status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer flex-1 sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.status || p.logistics_status || 'WAITING'] || partStatusColors['WAITING']}`}>
+                              <option value="WAITING">⏳ Очікується</option>
                               <option value="IN_TRANSIT">🚚 В дорозі</option>
-                              <option value="IN_STOCK">📦 На складі</option>
-                              <option value="INSTALLED">✅ Встановлено</option>
+                              <option value="ARRIVED">📦 На складі</option>
+                              <option value="UNAVAILABLE">❌ Відмова</option>
                             </select>
                             <button onClick={() => handleDeletePart(p.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-1" title="Видалити запчастину">
                                 <Trash2 size={16} />

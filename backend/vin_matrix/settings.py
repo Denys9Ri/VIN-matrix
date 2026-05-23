@@ -146,6 +146,7 @@ USE_TZ = True
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
 CORS_ALLOW_HEADERS = [
     "accept",
     "authorization",
@@ -154,9 +155,7 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
 ]
-CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
-
 CSRF_TRUSTED_ORIGINS = [
-    "http://*.95.217.211.207.sslip.io",
-    "https://*.95.217.211.207.sslip.io",
+    "http://ydy3swnvdledj1sdinrvvleo.95.217.211.207.sslip.io",
+    "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io",
 ]

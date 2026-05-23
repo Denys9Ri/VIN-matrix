@@ -53,7 +53,7 @@ class VisitViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(client__icontains=search) | Q(phone__icontains=search))
             return queryset.order_by('-created_at')
             
-        # 3. Фільтрація по днях СТО (Якщо не передано — строго поточний день)
+        # 3. Фільтрація по днях СТО
         if date_str and len(date_str) == 10:
             try:
                 target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -65,13 +65,11 @@ class VisitViewSet(viewsets.ModelViewSet):
         start_of_day = timezone.make_aware(datetime.combine(target_date, dt_time.min))
         end_of_day = start_of_day + timedelta(days=1)
 
-        # Показуємо тільки ті візити, які фізично створені або заплановані на обраний день
         queryset = queryset.filter(
             Q(created_at__gte=start_of_day, created_at__lt=end_of_day) |
             Q(scheduled_datetime__gte=start_of_day, scheduled_datetime__lt=end_of_day)
         ).distinct()
         
-        # Сортуємо за часом планування, а для поточної дати — найновіші зверху
         return queryset.order_by('scheduled_datetime' if date_str else '-created_at')
 
     def perform_create(self, serializer): serializer.save(company=get_user_company(self.request.user))
@@ -113,15 +111,12 @@ class VisitViewSet(viewsets.ModelViewSet):
                 if not text_upper.strip():
                      return Response({"error": "ШІ не знайшов жодного тексту на фото."}, status=400)
                 
-                # VIN (17 символів)
                 vin_match = re.search(r'\b[A-HJ-NPR-Z0-9]{17}\b', text_upper)
                 vin_code = vin_match.group(0) if vin_match else ""
                 
-                # Держ. Номер
                 plate_match = re.search(r'\b[A-ZІЇЄ]{2}\s*\d{4}\s*[A-ZІЇЄ]{2}\b', text_upper)
                 plate = plate_match.group(0).replace(' ', '') if plate_match else ""
                 
-                # Марка
                 brand = ""
                 brands = ['HONDA', 'VOLKSWAGEN', 'BMW', 'AUDI', 'TOYOTA', 'RENAULT', 'SKODA', 'FORD', 'HYUNDAI', 'KIA', 'NISSAN', 'MERCEDES', 'PEUGEOT', 'MAZDA', 'LEXUS', 'CHEVROLET', 'MITSUBISHI', 'PORSCHE', 'SUBARU', 'SUZUKI', 'VOLVO', 'FIAT', 'TESLA', 'LAND ROVER', 'JEEP', 'ACURA', 'INFINITI', 'DODGE', 'CHRYSLER']
                 for b in brands:
@@ -129,7 +124,6 @@ class VisitViewSet(viewsets.ModelViewSet):
                         brand = b
                         break
 
-                # Модель
                 model = ""
                 model_match = re.search(r'D[\.\,\s]*3\s*[:\-]?\s*([A-Z0-9\-]+)', text_upper)
                 if model_match:
@@ -137,19 +131,16 @@ class VisitViewSet(viewsets.ModelViewSet):
                     if model.endswith(' E'): model = model[:-2]
                     if model == 'E': model = ""
 
-                # Рік випуску
                 year = ""
                 year_match = re.search(r'(?:B[\.\,\s]*[12]|YEAR|РІК)[^\d]{0,10}(\d{4})\b', text_upper)
                 if year_match:
                     year = year_match.group(1)
 
-                # Двигун
                 engine = ""
                 engine_match = re.search(r'(?:[PРpрFf][\.\,\s]*1|СМ3|CM3|CAPACITY)[^\d]{0,10}(\d{3,4})\b', text_upper)
                 if engine_match:
                     engine = engine_match.group(1)
 
-                # Тип палива
                 fuel = ""
                 fuel_match = re.search(r'(?:[PРpрFf][\.\,\s]*3|FUEL|ПАЛИВА)[^A-ZА-Я0-9]{0,10}([A-ZА-Я0-9])\b', text_upper)
                 if fuel_match:
@@ -177,6 +168,7 @@ class VisitViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+    # --- ГЕНЕРАЦІЯ PDF НА ПРЯМОМУ ШЛЯХУ ---
     @action(detail=True, methods=['get'], url_path='pdf')
     def export_pdf(self, request, pk=None):
         visit = self.get_object()

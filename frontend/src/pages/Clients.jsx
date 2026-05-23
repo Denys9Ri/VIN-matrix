@@ -158,6 +158,47 @@ const Clients = () => {
     }
   };
 
+
+  const handleEditPartSupplierPrice = async (visitId, part) => {
+    const currentSupplierPrice = parseFloat(part.purchase_price ?? part.buy_price ?? 0);
+    const newSupplierPriceRaw = window.prompt('Введіть нову ціну постачальника (₴):', String(currentSupplierPrice));
+    if (newSupplierPriceRaw === null) return;
+
+    const normalizedPrice = String(newSupplierPriceRaw).replace(',', '.').trim();
+    const parsedPrice = Number(normalizedPrice);
+
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      alert('Некоректна ціна постачальника');
+      return;
+    }
+
+    setEditingVisitId(part.id);
+    try {
+      await axios.patch(`${API_BASE}/api/order-parts/${part.id}/`, { buy_price: parsedPrice.toFixed(2) }, { headers: { Authorization: `Bearer ${token}` } });
+      await fetchClients();
+      setSelectedClient(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          visits: prev.visits.map(v => v.id !== visitId
+            ? v
+            : {
+                ...v,
+                parts: (v.parts || []).map(item => item.id === part.id
+                  ? { ...item, buy_price: parsedPrice.toFixed(2), purchase_price: parsedPrice.toFixed(2) }
+                  : item
+                )
+              }
+          )
+        };
+      });
+    } catch (error) {
+      alert('Не вдалося оновити ціну постачальника');
+    } finally {
+      setEditingVisitId(null);
+    }
+  };
+
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentClients = clients.slice(indexOfFirstItem, indexOfLastItem);
@@ -353,7 +394,18 @@ const Clients = () => {
                             <span className="truncate block w-full">{p.name} <span className="text-[9px] md:text-[10px] text-slate-400 ml-1">({p.brand})</span></span>
                             <span className="shrink-0 sm:text-right block w-full sm:w-auto">
                               <span className="font-bold block">{parseFloat(p.sell_price).toLocaleString()} ₴</span>
-                              <span className="text-[10px] text-slate-500 font-semibold block">Закупівля: {parseFloat(p.buy_price || 0).toLocaleString()} ₴</span>
+                              <span className="text-[10px] text-slate-500 font-semibold block">Постачальник: {parseFloat(p.purchase_price ?? p.buy_price ?? 0).toLocaleString()} ₴</span>
+                              <span className="text-[10px] text-slate-400 font-semibold flex items-center justify-end gap-1 mt-1">
+                                {new Date(visit.created_at).toLocaleDateString()}
+                                <button
+                                  onClick={() => handleEditPartSupplierPrice(visit.id, p)}
+                                  className="text-slate-400 hover:text-blue-600 bg-white border border-slate-200 hover:border-blue-300 rounded-md p-0.5 transition-colors"
+                                  title="Редагувати ціну постачальника"
+                                  disabled={editingVisitId === p.id}
+                                >
+                                  <Pencil size={11} />
+                                </button>
+                              </span>
                             </span>
                           </li>
                         ))}

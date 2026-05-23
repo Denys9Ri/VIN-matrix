@@ -136,16 +136,13 @@ const Visits = () => {
 
   const updateCarDetails = async () => {
     if (!selectedVisit) return;
-    try {
-      await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`,
-        { delivery_data: JSON.stringify(editCarData) },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setSelectedVisit({ ...selectedVisit, delivery_data: JSON.stringify(editCarData) });
-      fetchData();
-    } catch (e) {
-      console.error("Помилка збереження авто");
-    }
+    await handleSaveCarData();
+  };
+
+  const handleMileageBlur = async () => {
+    if (!selectedVisit) return;
+    if (`${editCarData.mileage ?? ''}` === `${selectedVisit.mileage ?? ''}`) return;
+    await updateVisitField('mileage', editCarData.mileage);
   };
 
   const handleScanDocument = async (e) => {
@@ -534,7 +531,7 @@ const Visits = () => {
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Пробіг (км)</label>
-                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={updateCarDetails} placeholder="150000"/>
+                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={handleMileageBlur} placeholder="150000"/>
                   </div>
                 </div>
 
@@ -621,7 +618,7 @@ const Visits = () => {
                     { (selectedVisit.services || selectedVisit.orderservice_set)?.map(s => (
                         <div key={s.id} className="flex justify-between p-2 bg-slate-50 rounded text-xs items-center">
                             <span>{s.name} - {s.quantity} од.</span>
-                            <span className="font-bold">{parseFloat(s.price || 0).toFixed(2)} ₴</span>
+                            <span className="font-bold">{(parseFloat(s.quantity || 0) * parseFloat(s.price || 0)).toFixed(2)} ₴</span>
                             <button onClick={() => handleDeleteService(s.id)} className="text-red-500"><Trash2 size={14}/></button>
                         </div>
                     ))}
@@ -636,6 +633,16 @@ const Visits = () => {
                   { (selectedVisit.parts || selectedVisit.items)?.map(p => (
                       <div key={p.id} className="p-3 bg-slate-50 rounded text-xs flex justify-between items-center">
                           <span>{p.name}</span>
+                          <select
+                            className="mx-2 bg-white border border-slate-200 rounded px-2 py-1 text-[10px] font-bold"
+                            value={p.status || 'WAITING'}
+                            onChange={(e) => updatePartStatus(p.id, e.target.value)}
+                          >
+                            <option value="WAITING">WAITING</option>
+                            <option value="IN_TRANSIT">IN_TRANSIT</option>
+                            <option value="ARRIVED">ARRIVED</option>
+                            <option value="UNAVAILABLE">UNAVAILABLE</option>
+                          </select>
                           <span className="font-bold">{parseFloat(p.sell_price || p.price || 0).toFixed(2)} ₴</span>
                           <button onClick={() => handleDeletePart(p.id)} className="text-red-500"><Trash2 size={14}/></button>
                       </div>

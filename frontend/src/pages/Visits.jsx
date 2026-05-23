@@ -311,6 +311,18 @@ const Visits = () => {
     setIsEditingTime(false);
   };
 
+  const handleCancelVisit = async () => {
+    if (!selectedVisit?.id) return;
+    if (!window.confirm("Скасувати запис? Цю дію неможливо відмінити.")) return;
+    try {
+      await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } });
+      setSelectedVisit(null);
+      fetchData();
+    } catch (error) {
+      alert("Помилка скасування запису");
+    }
+  };
+
   // ФІКС 3: Оновлення статусу запчастини йде у вірну таблицю
   const updatePartStatus = async (id, newStatus) => {
     try {
@@ -679,6 +691,7 @@ const Visits = () => {
               </div>
               <div className="flex items-center gap-2 shrink-0 justify-end w-full md:w-auto">
                 <button onClick={handlePrintPDF} className="bg-blue-100 text-blue-600 p-2 rounded-xl hover:bg-blue-200 transition-colors flex items-center gap-2 font-bold text-xs"><Printer size={18} /> Друк</button>
+                <button onClick={handleCancelVisit} className="bg-red-100 text-red-600 p-2 rounded-xl hover:bg-red-200 transition-colors flex items-center gap-2 font-bold text-xs"><Trash2 size={18} /> Скасувати запис</button>
                 <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-xl hover:bg-slate-200 transition-colors"><X size={18} /></button>
               </div>
             </div>

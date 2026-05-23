@@ -25,7 +25,6 @@ INSTALLED_APPS = [
     
     # Сторонні
     'rest_framework',
-    'corsheaders',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     
@@ -52,9 +51,9 @@ TEMPLATES = [
 ]
 
 MIDDLEWARE = [
+    'apps.core.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -66,18 +65,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'vin_matrix.urls'
 WSGI_APPLICATION = 'vin_matrix.wsgi.application'
 
-# Налаштування CORS для React
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True 
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "authorization",
-    "content-type",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-]
-
+# Налаштування CORS для React (кастомний middleware у apps.core.middleware)
 # Налаштування Бази Даних
 if os.getenv('USE_POSTGRES') == 'True':
     DATABASES = {
@@ -135,8 +123,3 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 TIME_ZONE = 'Europe/Kyiv'
 USE_TZ = True
 
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_HEADERS = [
-    "accept", "authorization", "content-type", "user-agent", "x-csrftoken", "x-requested-with",
-]
-CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]

@@ -118,17 +118,19 @@ const Visits = () => {
     }
   }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore, selectedVisit?.mileage]);
 
-  const handleSaveCarData = async () => {
-    if (!isStore) {
-        if (editCarData.mileage !== selectedVisit.mileage) await updateVisitField('mileage', editCarData.mileage);
-        const carDataToSave = { ...editCarData };
-        delete carDataToSave.mileage;
-        const jsonString = JSON.stringify(carDataToSave);
-        if (jsonString !== selectedVisit.delivery_data) await updateVisitField('delivery_data', jsonString);
-    } else {
-      const pureComment = selectedVisit.comment ? selectedVisit.comment.replace(/^\[Марка:.*?\|.*?\|.*?\|.*?\|.*?\]\s*/, '') : '';
-      const newCommentStr = `[Марка: ${editCarData.brand} | Модель: ${editCarData.model} | Рік: ${editCarData.year} | Дв: ${editCarData.engine} | Паливо: ${editCarData.fuel}] ${pureComment}`.trim();
-      if (newCommentStr !== selectedVisit.comment) await updateVisitField('comment', newCommentStr);
+  const updateCarDetails = async () => {
+    if (!selectedVisit?.id) return;
+    try {
+      await axios.patch(
+        `${API_BASE}/api/visits/${selectedVisit.id}/`,
+        {
+          mileage: editCarData.mileage,
+          delivery_data: JSON.stringify(editCarData),
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (e) {
+      console.error("Помилка збереження авто");
     }
   };
 
@@ -498,27 +500,27 @@ const Visits = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={handleSaveCarData}/>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={updateCarDetails}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Модель</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={handleSaveCarData}/>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={updateCarDetails}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Рік</label>
-                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600 outline-none focus:border-blue-500" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={handleSaveCarData}/>
+                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600 outline-none focus:border-blue-500" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={updateCarDetails}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Дв. (см³)</label>
-                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={handleSaveCarData}/>
+                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={updateCarDetails}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Паливо</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={handleSaveCarData}/>
+                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={updateCarDetails}/>
                   </div>
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Пробіг (км)</label>
-                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={handleSaveCarData} placeholder="150000"/>
+                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={updateCarDetails} placeholder="150000"/>
                   </div>
                 </div>
 
@@ -601,27 +603,14 @@ const Visits = () => {
                     </form>
                   )}
 
-                  <div className="space-y-2 mb-3">
-                    {(selectedVisit.services || selectedVisit.orderservice_set) && (selectedVisit.services || selectedVisit.orderservice_set).length > 0 ? (
-                      (selectedVisit.services || selectedVisit.orderservice_set).map(s => (
-                        <div key={s.id} className="p-3 bg-white rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
-                          <div className="flex-1 pr-2">
-                            <p className="font-bold text-slate-700 text-xs">{s.name || s.custom_name}</p>
-                            <p className="text-[10px] font-medium text-slate-400 mt-0.5">{parseFloat(s.quantity || 1)} од. × {parseFloat(s.price || 0)} ₴</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="font-black text-sm text-slate-800">
-                              {(parseFloat(s.quantity || 1) * parseFloat(s.price || 0)).toFixed(2)} ₴
-                            </div>
-                            <button onClick={() => handleDeleteService(s.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-lg transition-colors" title="Видалити роботу">
-                                <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-center text-slate-400 italic py-4">Немає доданих робіт</p>
-                    )}
+                  <div className="space-y-2">
+                    {(selectedVisit.services || selectedVisit.orderservice_set)?.map(s => (
+                      <div key={s.id} className="flex justify-between p-2 bg-slate-50 rounded text-xs items-center">
+                        <span>{s.name} - {s.quantity} од.</span>
+                        <span className="font-bold">{parseFloat(s.price || 0).toFixed(2)} ₴</span>
+                        <button onClick={() => handleDeleteService(s.id)} className="text-red-500"><Trash2 size={14}/></button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -629,33 +618,14 @@ const Visits = () => {
               {/* ЗАПЧАСТИНИ */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
-                <div className="space-y-3 mb-3">
-                  {(selectedVisit.parts || selectedVisit.items) && (selectedVisit.parts || selectedVisit.items).length > 0 ? (
-                    (selectedVisit.parts || selectedVisit.items).map(p => (
-                      <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex flex-col sm:flex-row sm:items-center gap-3 group w-full shadow-sm">
-                        <div className="flex-1 overflow-hidden">
-                          <p className="font-bold text-slate-700 text-sm leading-tight truncate">{p.name}</p>
-                          <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{p.brand} | {p.part_number || p.article}</p>
-                          <p className="text-[11px] font-black text-blue-600 mt-1">{p.sell_price} ₴</p>
-                        </div>
-                        <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
-                          <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <select value={p.status || p.logistics_status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer flex-1 sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.status || p.logistics_status || 'WAITING'] || partStatusColors['WAITING']}`}>
-                              <option value="WAITING">⏳ Очікується</option>
-                              <option value="IN_TRANSIT">🚚 В дорозі</option>
-                              <option value="ARRIVED">📦 На складі</option>
-                              <option value="UNAVAILABLE">❌ Відмова</option>
-                            </select>
-                            <button onClick={() => handleDeletePart(p.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-1" title="Видалити запчастину">
-                                <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                     <p className="text-xs text-center text-slate-400 italic py-4">Кошик запчастин порожній</p>
-                  )}
+                <div className="space-y-2">
+                  {(selectedVisit.parts || selectedVisit.items)?.map(p => (
+                    <div key={p.id} className="p-3 bg-slate-50 rounded text-xs flex justify-between items-center">
+                      <span>{p.name}</span>
+                      <span className="font-bold">{parseFloat(p.sell_price || p.price || 0).toFixed(2)} ₴</span>
+                      <button onClick={() => handleDeletePart(p.id)} className="text-red-500"><Trash2 size={14}/></button>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

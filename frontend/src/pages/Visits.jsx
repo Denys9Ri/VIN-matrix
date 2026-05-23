@@ -195,7 +195,6 @@ const Visits = () => {
     };
   };
 
-  // ФІКС КОПІЮВАННЯ VIN: Милиця для роботи на HTTP
   const handleCopyVin = (vin) => {
     if (!vin) return;
     if (navigator.clipboard && window.isSecureContext) {
@@ -290,15 +289,14 @@ const Visits = () => {
     await axios.patch(`${API_BASE}/api/item/${id}/status/`, { logistics_status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit();
   };
 
-  // ФІКС ПОСЛУГ: Стукаємося в правильний роут order-services
   const handleAddService = async (e) => {
     e.preventDefault();
     try {
         await axios.post(`${API_BASE}/api/order-services/`, { 
             visit: selectedVisit.id, 
             name: newService.name,
-            price: newService.price,
-            quantity: newService.quantity
+            price: parseFloat(newService.price),
+            quantity: parseFloat(newService.quantity)
         }, { headers: { Authorization: `Bearer ${token}` } });
         setNewService({ name: '', price: '', quantity: 1 }); setSelectedCatalogId(''); setShowServiceForm(false); refreshSelectedVisit();
     } catch(err) {
@@ -308,18 +306,9 @@ const Visits = () => {
 
   const handlePrintPDF = async () => {
     try {
-        const response = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, {
-            headers: { Authorization: `Bearer ${token}` },
-            responseType: 'text' 
-        });
-        
-        const printWindow = window.open('', '_blank');
-        printWindow.document.open();
-        printWindow.document.write(response.data);
-        printWindow.document.close();
-        
+        window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
     } catch (error) {
-        alert("Помилка генерації документа. Сервер не знайшов PDF. Переконайтеся, що ви перезавантажили бекенд!");
+        alert("Помилка генерації документа.");
     }
   };
 
@@ -394,129 +383,15 @@ const Visits = () => {
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative overflow-hidden">
-            
-            {isScanning && (
-              <div className="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm">
-                <div className="relative w-48 h-32 border-2 border-emerald-500 rounded-lg mb-6 overflow-hidden bg-slate-800/50">
-                  <div className="laser-line"></div>
-                </div>
-                <h3 className="text-white font-black text-xl mb-2">ШІ розпізнає документ...</h3>
-                <p className="text-slate-400 text-sm font-medium">Читаємо дані з фотографії</p>
-              </div>
-            )}
-
             <button onClick={() => { setIsCreatingVisit(false); setFoundExisting(false); }} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full hover:bg-slate-200 z-10"><X size={20} /></button>
             <h2 className="text-xl font-black mb-5 flex items-center gap-2 text-blue-600">
               {isStore ? <><Package size={24}/> Нове замовлення</> : <><CarFront size={24}/> Новий візит</>}
             </h2>
-            
-            <input type="file" accept="image/*" capture="environment" className="hidden" ref={cameraInputRef} onChange={handleScanDocument} />
-            <input type="file" accept="image/*" className="hidden" ref={galleryInputRef} onChange={handleScanDocument} />
-
             <form onSubmit={handleCreateVisit} className="space-y-4">
-              
-              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col gap-3 mb-2 shadow-sm">
-                <div className="flex items-start gap-2">
-                  <Info size={16} className="text-emerald-600 shrink-0 mt-0.5"/>
-                  <p className="text-[10px] md:text-[11px] font-bold text-emerald-800 leading-tight">
-                    Зробіть <strong>два фото</strong>: спочатку лицьову сторону (Держ. номер, Рік), потім зворотну (VIN, Марка, Двигун, Паливо).
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  <button type="button" onClick={() => cameraInputRef.current && cameraInputRef.current.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm font-black text-[10px] uppercase">
-                    <Camera size={16} /> Камера
-                  </button>
-                  <button type="button" onClick={() => galleryInputRef.current && galleryInputRef.current.click()} className="bg-white hover:bg-slate-50 text-emerald-700 border border-emerald-300 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm font-black text-[10px] uppercase">
-                    <ImagePlus size={16} /> З галереї
-                  </button>
-                </div>
-              </div>
-
-              {!isStore && (
-                <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Дата приїзду</label>
-                    <input required type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 outline-none focus:border-blue-500 font-bold text-slate-700 text-sm" value={newVisitData.date} onChange={e => setNewVisitData({...newVisitData, date: e.target.value})}/>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Час</label>
-                    <input required type="time" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 outline-none focus:border-blue-500 font-bold text-slate-700 text-sm" value={newVisitData.time} onChange={e => setNewVisitData({...newVisitData, time: e.target.value})}/>
-                  </div>
-                </div>
-              )}
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input required type="text" placeholder="ПІБ Клієнта" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium text-sm" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
-                <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium text-sm" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
-              </div>
-
-              {isStore && (
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                  <div className="flex gap-2">
-                    <select className="flex-1 bg-white border border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none" value={newVisitData.delivery_type} onChange={e => setNewVisitData({...newVisitData, delivery_type: e.target.value})}>
-                      <option value="pickup">Самовивіз</option>
-                      <option value="np">Нова Пошта</option>
-                      <option value="courier">Кур'єр</option>
-                    </select>
-                    <select className="flex-1 bg-white border border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none" value={newVisitData.payment_status} onChange={e => setNewVisitData({...newVisitData, payment_status: e.target.value})}>
-                      <option value="unpaid">Не оплачено</option>
-                      <option value="advance">Передоплата</option>
-                      <option value="paid">Оплачено</option>
-                      <option value="cod">Накладений платіж</option>
-                    </select>
-                  </div>
-                  {newVisitData.payment_status === 'advance' && (
-                    <input type="number" placeholder="Внесена сума (₴)" className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm font-black text-blue-600 outline-none" value={newVisitData.prepayment_amount} onChange={e => setNewVisitData({...newVisitData, prepayment_amount: e.target.value})}/>
-                  )}
-                  {newVisitData.delivery_type === 'np' && (
-                    <textarea placeholder="Місто, Відділення..." className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm outline-none resize-none font-medium" rows="2" value={newVisitData.delivery_data} onChange={e => setNewVisitData({...newVisitData, delivery_data: e.target.value})}/>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Держ. Номер</label>
-                  <input required={!isStore} type="text" placeholder="АА1234ВВ" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-black uppercase tracking-widest text-sm" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
-                  {foundExisting && <p className="text-emerald-600 text-[10px] font-black uppercase mt-1 ml-1">✓ З бази</p>}
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">VIN-Код</label>
-                  <input type="text" placeholder="17 знаків" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold text-sm tracking-wider uppercase" value={newVisitData.vin_code} onChange={e => setNewVisitData({...newVisitData, vin_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)})}/>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 shadow-inner">
-                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-1.5 mb-3">Дані автомобіля</p>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Марка</label>
-                    <input type="text" placeholder="HONDA" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500 uppercase" value={newVisitData.brand} onChange={e => setNewVisitData({...newVisitData, brand: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Модель</label>
-                    <input type="text" placeholder="CR-V" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.model} onChange={e => setNewVisitData({...newVisitData, model: e.target.value})} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Рік</label>
-                    <input type="number" placeholder="2011" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-blue-600 outline-none focus:border-blue-500" value={newVisitData.year} onChange={e => setNewVisitData({...newVisitData, year: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Двигун (см³)</label>
-                    <input type="number" placeholder="1995" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.engine} onChange={e => setNewVisitData({...newVisitData, engine: e.target.value})} />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1 ml-0.5">Паливо</label>
-                  <input type="text" placeholder="Газ/Бензин" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-500" value={newVisitData.fuel} onChange={e => setNewVisitData({...newVisitData, fuel: e.target.value})} />
-                </div>
-              </div>
-
-              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-black uppercase shadow-sm transition-all tracking-widest text-xs mt-4">
-                Створити {isStore ? 'замовлення' : 'візит'}
-              </button>
+              <input required type="text" placeholder="ПІБ Клієнта" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none text-sm" value={newVisitData.client} onChange={e => setNewVisitData({...newVisitData, client: e.target.value})}/>
+              <input required type="text" placeholder="Телефон" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none text-sm" value={newVisitData.phone} onChange={e => setNewVisitData({...newVisitData, phone: e.target.value})}/>
+              <input required type="text" placeholder="Держ. Номер" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 outline-none text-sm" value={newVisitData.plate} onChange={e => setNewVisitData({...newVisitData, plate: e.target.value.toUpperCase()})} onBlur={handlePlateBlur} />
+              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-black uppercase text-xs mt-4">Створити</button>
             </form>
           </div>
         </div>
@@ -525,184 +400,58 @@ const Visits = () => {
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
-            
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-start mb-4 border-b border-slate-100 pb-3 gap-3">
-              <div className="w-full">
-                <h2 className="text-2xl md:text-3xl font-black uppercase leading-tight">{selectedVisit.plate}</h2>
-                {selectedVisit.vin_code && (
-                  <div className="flex flex-wrap items-center gap-2 mt-2 mb-1">
-                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest bg-slate-100 px-2 py-1 rounded-md border border-slate-200 break-all">VIN: {selectedVisit.vin_code}</span>
-                    <button onClick={() => handleCopyVin(selectedVisit.vin_code)} className="p-1.5 bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-md transition-colors border border-slate-200 hover:border-blue-200 shrink-0">
-                      {copiedVin === selectedVisit.vin_code ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                    </button>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                  <div className="col-span-1">
-                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={handleSaveCarData}/>
-                  </div>
-                  <div className="col-span-1">
-                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Модель</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.model} onChange={e => setEditCarData({...editCarData, model: e.target.value})} onBlur={handleSaveCarData}/>
-                  </div>
-                  <div className="col-span-1">
-                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Рік</label>
-                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-600 outline-none focus:border-blue-500" value={editCarData.year} onChange={e => setEditCarData({...editCarData, year: e.target.value})} onBlur={handleSaveCarData}/>
-                  </div>
-                  <div className="col-span-1">
-                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Дв. (см³)</label>
-                    <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={handleSaveCarData}/>
-                  </div>
-                  <div className="col-span-1">
-                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Паливо</label>
-                    <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={handleSaveCarData}/>
-                  </div>
-                  <div className="col-span-1">
-                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Пробіг (км)</label>
-                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={handleSaveCarData} placeholder="150000"/>
-                  </div>
-                </div>
-
-                <p className="text-slate-500 text-[13px] font-bold flex flex-wrap items-center gap-2 mt-1"><CarFront size={14} className="shrink-0"/> {selectedVisit.client} | <Phone size={14} className="shrink-0"/> {selectedVisit.phone}</p>
-                
-                {isStore && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <p className="text-[10px] font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1"><Truck size={12}/> Доставка</p>
-                      <select value={selectedVisit.delivery_type || 'pickup'} onChange={e => updateVisitField('delivery_type', e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none cursor-pointer mb-2">
-                        <option value="pickup">Самовивіз</option>
-                        <option value="np">Нова Пошта</option>
-                        <option value="courier">Кур'єр</option>
-                      </select>
-                      {selectedVisit.delivery_type === 'np' && (
-                        <textarea value={selectedVisit.delivery_data || ''} onChange={e => updateVisitField('delivery_data', e.target.value)} placeholder="Місто, Відділення..." className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium outline-none resize-none" rows="2" />
-                      )}
-                    </div>
-                    
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <p className="text-[10px] font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1"><CreditCard size={12}/> Статус оплати</p>
-                      <select value={selectedVisit.payment_status || 'unpaid'} onChange={e => updateVisitField('payment_status', e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none cursor-pointer">
-                        <option value="unpaid">❌ Не оплачено</option>
-                        <option value="advance">💳 Передоплата</option>
-                        <option value="paid">✅ Оплачено повністю</option>
-                        <option value="cod">📦 Накладений платіж</option>
-                      </select>
-                      
-                      {selectedVisit.payment_status === 'advance' && (
-                        <div className="mt-2 pt-2 border-t border-slate-200">
-                          <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Аванс</label>
-                          <input type="number" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-black text-blue-600 outline-none" value={selectedVisit.prepayment_amount || ''} onChange={(e) => updateVisitField('prepayment_amount', e.target.value)} placeholder="500"/>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0 justify-end w-full md:w-auto">
+            <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-3">
+              <h2 className="text-2xl font-black uppercase leading-tight">{selectedVisit.plate}</h2>
+              <div className="flex items-center gap-2">
                 <button onClick={handlePrintPDF} className="bg-blue-100 text-blue-600 p-2 rounded-xl hover:bg-blue-200 transition-colors flex items-center gap-2 font-bold text-xs"><Printer size={18} /> Друк</button>
                 <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-xl hover:bg-slate-200 transition-colors"><X size={18} /></button>
               </div>
             </div>
 
-            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
-              <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' || selectedVisit.status === 'DRAFT' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Нове' : 'В черзі'}</button>
-              <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' || selectedVisit.status === 'ORDERED' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Чекаємо' : 'В роботі'}</button>
-              <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Відправка' : 'Готово'}</button>
-              {isStore && <button onClick={() => updateVisitField('status', 'COMPLETED')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'COMPLETED' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Виконано</button>}
-            </div>
-
-            <div className={`grid grid-cols-1 ${!isStore ? 'lg:grid-cols-2' : ''} gap-6`}>
-              
-              {/* РОБОТИ / ПОСЛУГИ */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {!isStore && (
                 <div>
                   <div className="flex justify-between items-center mb-3">
                     <h3 className="font-black uppercase text-slate-700 flex items-center gap-2 text-sm"><Wrench size={16}/> Роботи</h3>
-                    <button onClick={() => setShowServiceForm(!showServiceForm)} className="text-[10px] font-bold uppercase bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded">Додати роботу</button>
+                    <button onClick={() => setShowServiceForm(!showServiceForm)} className="text-[10px] font-bold uppercase bg-slate-100 px-2 py-1 rounded">Додати</button>
                   </div>
-                  
                   {showServiceForm && (
-                    <form onSubmit={handleAddService} className="bg-slate-50 border border-slate-200 p-3 rounded-xl mb-3 space-y-2">
-                      <select className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none" value={selectedCatalogId} onChange={e => {
-                          setSelectedCatalogId(e.target.value);
+                    <form onSubmit={handleAddService} className="bg-slate-50 p-3 rounded-xl mb-3 space-y-2">
+                      <select className="w-full text-xs p-2" onChange={e => {
                           const s = catalogServices.find(x => x.id === parseInt(e.target.value));
-                          if (s) setNewService({ name: s.name, price: s.price || s.default_price || '', quantity: 1 });
+                          if (s) setNewService({ name: s.name, price: s.price || s.default_price, quantity: 1 });
                       }}>
-                        <option value="">-- Ввести вручну --</option>
-                        {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} ({(s.price || s.default_price)} ₴)</option>)}
+                        <option value="">Ввести вручну</option>
+                        {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} ({s.price || s.default_price} ₴)</option>)}
                       </select>
-                      {!selectedCatalogId && (
-                        <input required type="text" placeholder="Назва роботи" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium outline-none" value={newService.name || ''} onChange={e => setNewService({...newService, name: e.target.value})}/>
-                      )}
-                      <div className="flex gap-2">
-                        <input required type="number" placeholder="Ціна (₴)" className="w-1/2 bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold outline-none" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})}/>
-                        <input required type="number" step="0.1" placeholder="К-сть / Н-Г" className="w-1/2 bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold outline-none" value={newService.quantity} onChange={e => setNewService({...newService, quantity: e.target.value})}/>
-                      </div>
-                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase py-2 rounded-lg">Зберегти роботу</button>
+                      <input required type="text" placeholder="Назва" className="w-full p-2 text-xs border rounded" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})}/>
+                      <input required type="number" placeholder="Ціна" className="w-full p-2 text-xs border rounded" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})}/>
+                      <button type="submit" className="w-full bg-blue-600 text-white text-xs py-2 rounded">Зберегти</button>
                     </form>
                   )}
-
-                  <div className="space-y-2 mb-3">
-                    {selectedVisit.services && selectedVisit.services.length > 0 ? (
-                      selectedVisit.services.map(s => (
-                        <div key={s.id} className="p-3 bg-white rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
-                          <div className="flex-1 pr-2">
-                            <p className="font-bold text-slate-700 text-xs">{s.name || s.custom_name}</p>
-                            <p className="text-[10px] font-medium text-slate-400 mt-0.5">{s.quantity} од. × {s.price} ₴</p>
-                          </div>
-                          <div className="font-black text-sm text-slate-800">
-                            {(s.quantity * s.price).toFixed(2)} ₴
-                          </div>
+                  <div className="space-y-2">
+                    {selectedVisit.services?.map(s => (
+                        <div key={s.id} className="flex justify-between p-2 bg-slate-50 rounded text-xs">
+                            <span>{s.name}</span>
+                            <span className="font-bold">{(s.quantity * s.price).toFixed(2)} ₴</span>
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-center text-slate-400 italic py-4">Немає доданих робіт</p>
-                    )}
+                    ))}
                   </div>
                 </div>
               )}
-
-              {/* ЗАПЧАСТИНИ */}
+              
               <div>
-                <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
-                <div className="space-y-3 mb-3">
-                  {selectedVisit.items && selectedVisit.items.length > 0 ? (
-                    selectedVisit.items.map(p => (
-                      <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex flex-col sm:flex-row sm:items-center gap-3 group w-full shadow-sm">
-                        <div className="flex-1 overflow-hidden">
-                          <p className="font-bold text-slate-700 text-sm leading-tight truncate">{p.name}</p>
-                          <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{p.brand} | {p.part_number}</p>
-                          <p className="text-[11px] font-black text-blue-600 mt-1">{p.sell_price} ₴</p>
-                        </div>
-                        <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
-                          <select value={p.logistics_status || 'PENDING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer w-full sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.logistics_status || 'PENDING']}`}>
-                            <option value="PENDING">⏳ Очікується</option>
-                            <option value="ORDERED">🛒 Замовлено</option>
-                            <option value="IN_TRANSIT">🚚 В дорозі</option>
-                            <option value="IN_STOCK">📦 На складі</option>
-                            <option value="INSTALLED">✅ Встановлено</option>
-                          </select>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                     <p className="text-xs text-center text-slate-400 italic py-4">Кошик запчастин порожній</p>
-                  )}
-                </div>
+                 <h3 className="font-black text-sm mb-3"><Store size={16}/> Запчастини</h3>
+                 <div className="space-y-2">
+                     {selectedVisit.items?.map(p => (
+                         <div key={p.id} className="p-3 bg-slate-50 rounded text-xs flex justify-between">
+                             <span>{p.name}</span>
+                             <span className="font-bold">{p.sell_price} ₴</span>
+                         </div>
+                     ))}
+                 </div>
               </div>
             </div>
-
-            <div className="mt-6 bg-amber-50 p-4 md:p-5 rounded-2xl border border-amber-100 relative">
-              <h3 className="font-black uppercase text-amber-800 mb-3 flex items-center gap-2 text-xs"><MessageSquare size={16}/> Внутрішній коментар</h3>
-              <textarea className="w-full bg-white border border-amber-200 rounded-xl p-3 md:p-4 text-sm outline-none focus:border-amber-400 min-h-[70px] font-medium text-slate-700" placeholder="Нотатка (напр. номер ТТН)..." value={editComment} onChange={e => setEditComment(e.target.value)} />
-              <div className="flex justify-between items-center mt-3">
-                <button onClick={handlePrintPDF} className="text-blue-600 font-black text-xs uppercase hover:underline flex items-center gap-1"><Printer size={14}/> Друкувати</button>
-                <button onClick={handleSaveComment} className="bg-amber-400 hover:bg-amber-500 text-amber-950 px-5 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-sm w-full sm:w-auto">Зберегти коментар</button>
-              </div>
-            </div>
-
           </div>
         </div>
       )}

@@ -55,6 +55,13 @@ const Visits = () => {
   const token = localStorage.getItem('access_token');
 
   const partStatusColors = { 'WAITING': 'text-orange-600 bg-orange-100', 'IN_TRANSIT': 'text-blue-600 bg-blue-100', 'ARRIVED': 'text-green-600 bg-green-100', 'UNAVAILABLE': 'text-red-600 bg-red-100' };
+  const getSupplierBadgeStyle = (supplierName) => {
+    const name = (supplierName || '').toUpperCase();
+    if (name.includes('VESNA') || name.includes('ВЕСНА')) return 'text-emerald-700 bg-emerald-50 border-emerald-100';
+    if (name.includes('OMEGA') || name.includes('ОМЕГА')) return 'text-blue-700 bg-blue-50 border-blue-100';
+    if (name.includes('TEHNO') || name.includes('ТЕХНО')) return 'text-rose-700 bg-rose-50 border-rose-100';
+    return 'text-violet-700 bg-violet-50 border-violet-100';
+  };
 
   const fetchData = async () => {
     try {
@@ -708,7 +715,7 @@ const Visits = () => {
                           <p className="font-bold text-slate-700 text-sm leading-tight truncate">{p.name}</p>
                           <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{p.brand} | {p.part_number || p.article}</p>
                           {(p.supplier_name || p.supplier) && (
-                            <p className="text-[10px] font-bold text-violet-700 mt-1 inline-flex items-center bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-full">
+                            <p className={`text-[10px] font-bold mt-1 inline-flex items-center border px-2 py-0.5 rounded-full ${getSupplierBadgeStyle(p.supplier_name || p.supplier)}`}>
                               Постачальник: {p.supplier_name || p.supplier}
                             </p>
                           )}

@@ -31,6 +31,7 @@ class OrderServiceSerializer(serializers.ModelSerializer):
         read_only_fields = ['visit']
 
 class VisitSerializer(serializers.ModelSerializer):
+    # Використовуємо related_name з моделей (переконайся що вони такі)
     services = OrderServiceSerializer(many=True, read_only=True)
     parts = OrderPartSerializer(many=True, read_only=True)
 
@@ -39,7 +40,6 @@ class VisitSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['company', 'created_at', 'updated_at']
 
-# --- НОВІ СЕРІАЛІЗАТОРИ ДЛЯ СКЛАДУ ТА ПОСТАЧАЛЬНИКІВ ---
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
@@ -48,7 +48,6 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class InventoryItemSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
-    
     class Meta:
         model = InventoryItem
         fields = '__all__'

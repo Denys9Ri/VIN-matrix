@@ -72,10 +72,6 @@ const Visits = () => {
       setCompanyInfo(settingsRes.data.company); 
       setPermissions(settingsRes.data.permissions || {}); 
       setCatalogServices(servicesRes.data || []);
-
-      if (searchParams.get('scan') === 'true') {
-        setIsCreatingVisit(true);
-      }
     } catch (error) { 
         if (error.response?.status === 401) navigate('/login');
         setRole('owner'); 
@@ -111,31 +107,28 @@ const Visits = () => {
       setEditComment(selectedVisit.comment || '');
       try {
         if (!isStore && selectedVisit.delivery_data && selectedVisit.delivery_data.startsWith('{')) {
-          const parsedData = JSON.parse(selectedVisit.delivery_data);
-          setEditCarData({ ...parsedData, mileage: parsedData.mileage || '' });
+          const parsed = JSON.parse(selectedVisit.delivery_data);
+          setEditCarData({ brand: parsed.brand || '', model: parsed.model || '', year: parsed.year || '', engine: parsed.engine || '', fuel: parsed.fuel || '', mileage: selectedVisit.mileage || '' });
         } else {
-          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: '' });
+          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: selectedVisit.mileage || '' });
         }
       } catch (e) {
-        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: '' });
+        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: selectedVisit.mileage || '' });
       }
     }
-  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore]);
+  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore, selectedVisit?.mileage]);
 
   const handleSaveCarData = async () => {
     if (!isStore) {
-      // ПРАВИЛЬНЕ ЗБЕРЕЖЕННЯ ПРОБІГУ В JSON
-      const carDataToSave = { ...editCarData };
-      const jsonString = JSON.stringify(carDataToSave);
-      if (jsonString !== selectedVisit.delivery_data) {
-        await updateVisitField('delivery_data', jsonString);
-      }
+        if (editCarData.mileage !== selectedVisit.mileage) await updateVisitField('mileage', editCarData.mileage);
+        const carDataToSave = { ...editCarData };
+        delete carDataToSave.mileage;
+        const jsonString = JSON.stringify(carDataToSave);
+        if (jsonString !== selectedVisit.delivery_data) await updateVisitField('delivery_data', jsonString);
     } else {
       const pureComment = selectedVisit.comment ? selectedVisit.comment.replace(/^\[Марка:.*?\|.*?\|.*?\|.*?\|.*?\]\s*/, '') : '';
       const newCommentStr = `[Марка: ${editCarData.brand} | Модель: ${editCarData.model} | Рік: ${editCarData.year} | Дв: ${editCarData.engine} | Паливо: ${editCarData.fuel}] ${pureComment}`.trim();
-      if (newCommentStr !== selectedVisit.comment) {
-        await updateVisitField('comment', newCommentStr);
-      }
+      if (newCommentStr !== selectedVisit.comment) await updateVisitField('comment', newCommentStr);
     }
   };
 
@@ -143,7 +136,6 @@ const Visits = () => {
     const file = e.target.files[0];
     if (!file) return;
     setIsScanning(true);
-
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
@@ -153,69 +145,33 @@ const Visits = () => {
         const canvas = document.createElement('canvas');
         const MAX_WIDTH = 1200; const MAX_HEIGHT = 1200;
         let width = img.width; let height = img.height;
-        if (width > height) {
-          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-        } else {
-          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
-        }
+        if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
+        else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-
         canvas.toBlob(async (blob) => {
           const formData = new FormData();
           formData.append('document', blob, 'scan.jpg');
           try {
-            const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, {
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
-            });
+            const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
             if (res.data.success) {
-              setNewVisitData(prev => ({
-                ...prev,
-                plate: prev.plate || res.data.plate || '',
-                vin_code: prev.vin_code || res.data.vin_code || '',
-                brand: prev.brand || res.data.brand || '',
-                model: prev.model || res.data.model || '',
-                year: prev.year || res.data.year || '', 
-                engine: prev.engine || res.data.engine || '',
-                fuel: prev.fuel || res.data.fuel || ''
-              }));
+              setNewVisitData(prev => ({ ...prev, ...res.data }));
             }
-          } catch (error) {
-            alert("Помилка сканування. Спробуйте інший ракурс.");
-          } finally {
-            setIsScanning(false);
-            if (cameraInputRef.current) cameraInputRef.current.value = '';
-            if (galleryInputRef.current) galleryInputRef.current.value = '';
-          }
+          } catch (error) { alert("Помилка сканування."); } finally { setIsScanning(false); }
         }, 'image/jpeg', 0.8);
       };
     };
   };
 
-  // ФІКС КОПІЮВАННЯ VIN (Безпечно)
   const handleCopyVin = (vin) => {
     if (!vin) return;
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(vin).then(() => {
-        setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
-      }).catch(() => fallbackCopy(vin));
+      navigator.clipboard.writeText(vin).then(() => { setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000); });
     } else {
-      fallbackCopy(vin);
+        const textArea = document.createElement("textarea"); textArea.value = vin; document.body.appendChild(textArea); textArea.select();
+        document.execCommand('copy'); document.body.removeChild(textArea);
+        setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
     }
-  };
-
-  const fallbackCopy = (text) => {
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.select();
-      try {
-        document.execCommand('copy');
-        setCopiedVin(text); setTimeout(() => setCopiedVin(null), 2000);
-      } catch (err) {
-        console.error('Fallback copy failed', err);
-      }
-      document.body.removeChild(textArea);
   };
 
   const changeDate = (days) => {
@@ -285,14 +241,11 @@ const Visits = () => {
     } catch (error) { alert("Помилка"); }
   };
 
-  // ФІКС 3: Оновлення статусу запчастини йде у вірну таблицю
   const updatePartStatus = async (id, newStatus) => {
     try {
         await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); 
         refreshSelectedVisit();
-    } catch (e) {
-        alert("Помилка оновлення статусу");
-    }
+    } catch (e) { alert("Помилка оновлення"); }
   };
 
   const handleAddService = async (e) => {
@@ -305,30 +258,24 @@ const Visits = () => {
             quantity: parseFloat(newService.quantity || 1)
         }, { headers: { Authorization: `Bearer ${token}` } });
         setNewService({ name: '', price: '', quantity: 1 }); setSelectedCatalogId(''); setShowServiceForm(false); refreshSelectedVisit();
-    } catch(err) {
-        alert("Помилка додавання послуги");
-    }
+    } catch(err) { alert("Помилка додавання послуги"); }
   };
 
   const handleDeleteService = async (id) => {
-    if (window.confirm("Видалити цю роботу?")) {
-        try {
-            await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
-            refreshSelectedVisit();
-        } catch(e) { alert("Помилка видалення роботи"); }
+    if (window.confirm("Видалити?")) {
+        try { await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit(); } 
+        catch(e) { alert("Помилка"); }
     }
   };
 
   const handleDeletePart = async (id) => {
-    if (window.confirm("Видалити цю запчастину?")) {
-        try {
-            await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
-            refreshSelectedVisit();
-        } catch(e) { alert("Помилка видалення запчастини"); }
+    if (window.confirm("Видалити?")) {
+        try { await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit(); } 
+        catch(e) { alert("Помилка"); }
     }
   };
 
-  const handlePrintPDF = () => {
+  const handlePrintPDF = async () => {
     window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
   };
 
@@ -347,10 +294,7 @@ const Visits = () => {
         {icon} {title} <span className="ml-auto bg-white px-2 py-1 rounded-lg shadow-sm text-slate-500">{items.length}</span>
       </h3>
       <div className="space-y-4 flex-1 pb-4">
-        {items.map(visit => (
-          <VisitCard key={visit.id} visit={visit} onClick={() => setSelectedVisit(visit)} isStore={isStore} />
-        ))}
-        {items.length === 0 && <div className="text-center text-slate-400 text-xs font-bold uppercase mt-10">Пусто</div>}
+        {items.map(visit => <VisitCard key={visit.id} visit={visit} onClick={() => setSelectedVisit(visit)} isStore={isStore} />)}
       </div>
     </div>
   );
@@ -363,8 +307,8 @@ const Visits = () => {
         .laser-line { position: absolute; left: 0; right: 0; height: 2px; background: #10b981; box-shadow: 0 0 15px 5px rgba(16, 185, 129, 0.4); animation: scan-laser 2s infinite linear; }
       `}</style>
 
-      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 no-print-area shrink-0 mt-4 md:mt-0">
-        <h1 className="text-2xl font-black uppercase italic w-full xl:w-auto">{isStore ? 'Замовлення' : 'Дошка Візитів'}</h1>
+      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4">
+        <h1 className="text-2xl font-black uppercase italic">{isStore ? 'Замовлення' : 'Дошка Візитів'}</h1>
         
         <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-1 xl:justify-center">
           <div className="relative w-full md:w-64">

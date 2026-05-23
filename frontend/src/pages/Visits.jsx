@@ -24,6 +24,7 @@ const Visits = () => {
   const [selectedVisit, setSelectedVisit] = useState(null);
   const [isCreatingVisit, setIsCreatingVisit] = useState(false); 
   const [showManualPartForm, setShowManualPartForm] = useState(false); 
+  const [showServiceForm, setShowServiceForm] = useState(false);
   
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -43,9 +44,9 @@ const Visits = () => {
     brand: '', model: '', year: '', engine: '', fuel: ''
   });
 
-  const [editCarData, setEditCarData] = useState({ brand: '', model: '', year: '', engine: '', fuel: '' });
+  const [editCarData, setEditCarData] = useState({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: '' });
   
-  const [newService, setNewService] = useState({ name: '', price: '' });
+  const [newService, setNewService] = useState({ custom_name: '', price: '', quantity: 1 });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
 
   const [copiedVin, setCopiedVin] = useState(null);
@@ -54,7 +55,6 @@ const Visits = () => {
   const token = localStorage.getItem('access_token');
 
   const partStatusColors = { 'WAITING': 'text-orange-600 bg-orange-100', 'IN_TRANSIT': 'text-blue-600 bg-blue-100', 'ARRIVED': 'text-green-600 bg-green-100', 'UNAVAILABLE': 'text-red-600 bg-red-100' };
-  const serviceStatusColors = { 'PENDING': 'text-slate-600 bg-slate-100', 'IN_PROGRESS': 'text-blue-600 bg-blue-100', 'DONE': 'text-green-600 bg-green-100' };
 
   const fetchData = async () => {
     try {
@@ -113,17 +113,24 @@ const Visits = () => {
         if (!isStore && selectedVisit.delivery_data && selectedVisit.delivery_data.startsWith('{')) {
           setEditCarData(JSON.parse(selectedVisit.delivery_data));
         } else {
-          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '' });
+          setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: selectedVisit.mileage || '' });
         }
       } catch (e) {
-        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '' });
+        setEditCarData({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: selectedVisit.mileage || '' });
       }
     }
-  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore]);
+  }, [selectedVisit?.id, selectedVisit?.delivery_data, isStore, selectedVisit?.mileage]);
 
   const handleSaveCarData = async () => {
     if (!isStore) {
-      const jsonString = JSON.stringify(editCarData);
+      // Зберігаємо mileage (пробіг) у базу через окреме поле, якщо воно є
+      if (editCarData.mileage !== selectedVisit.mileage) {
+        await updateVisitField('mileage', editCarData.mileage);
+      }
+      const carDataToSave = { ...editCarData };
+      delete carDataToSave.mileage; // mileage зберігається окремо
+      
+      const jsonString = JSON.stringify(carDataToSave);
       if (jsonString !== selectedVisit.delivery_data) {
         await updateVisitField('delivery_data', jsonString);
       }
@@ -166,14 +173,13 @@ const Visits = () => {
               headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
             });
             if (res.data.success) {
-              // ЗАХИСТ ВІД ПЕРЕЗАПИСУ: Беремо нове значення ТІЛЬКИ якщо старе пусте
               setNewVisitData(prev => ({
                 ...prev,
                 plate: prev.plate || res.data.plate || '',
                 vin_code: prev.vin_code || res.data.vin_code || '',
                 brand: prev.brand || res.data.brand || '',
                 model: prev.model || res.data.model || '',
-                year: prev.year || res.data.year || '', // Ніколи не зітре 2011!
+                year: prev.year || res.data.year || '', 
                 engine: prev.engine || res.data.engine || '',
                 fuel: prev.fuel || res.data.fuel || ''
               }));
@@ -246,23 +252,6 @@ const Visits = () => {
     } catch (error) { alert("Помилка створення"); }
   };
 
-  const handleDeleteVisit = async () => {
-    if (window.confirm("Ви дійсно хочете видалити НАЗАВЖДИ?")) {
-      try {
-        await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } });
-        setSelectedVisit(null); fetchData();
-      } catch (error) { alert("Помилка видалення"); }
-    }
-  };
-
-  const handleUpdateTime = async () => {
-    let scheduled_datetime = new Date(`${editTimeData.date}T${editTimeData.time}`).toISOString();
-    try {
-      await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`, { scheduled_datetime }, { headers: { Authorization: `Bearer ${token}` } });
-      setIsEditingTime(false); refreshSelectedVisit();
-    } catch (error) { alert("Помилка"); }
-  };
-
   const updateVisitField = async (field, value) => {
     try {
       await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`, { [field]: value }, { headers: { Authorization: `Bearer ${token}` } });
@@ -281,44 +270,51 @@ const Visits = () => {
     } catch (error) { alert("Помилка"); }
   };
 
-  const updateServiceStatus = async (id, newStatus) => {
-    await axios.patch(`${API_BASE}/api/order-services/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit();
-  };
-
   const updatePartStatus = async (id, newStatus) => {
-    await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit();
+    await axios.patch(`${API_BASE}/api/item/${id}/status/`, { logistics_status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit();
   };
 
   const handleAddService = async (e) => {
     e.preventDefault();
-    await axios.post(`${API_BASE}/api/order-services/`, { ...newService, visit: selectedVisit.id }, { headers: { Authorization: `Bearer ${token}` } });
-    setNewService({ name: '', price: '' }); setSelectedCatalogId(''); refreshSelectedVisit();
+    try {
+        await axios.post(`${API_BASE}/api/visits/add-service/`, { 
+            visit_id: selectedVisit.id, 
+            service_catalog_id: selectedCatalogId || null,
+            custom_name: newService.custom_name,
+            price: newService.price,
+            quantity: newService.quantity
+        }, { headers: { Authorization: `Bearer ${token}` } });
+        setNewService({ custom_name: '', price: '', quantity: 1 }); setSelectedCatalogId(''); setShowServiceForm(false); refreshSelectedVisit();
+    } catch(err) {
+        alert("Помилка додавання послуги");
+    }
   };
 
-  const handleAddPart = async (e) => {
-    e.preventDefault();
-    await axios.post(`${API_BASE}/api/order-parts/`, { ...newPart, visit: selectedVisit.id, supplier: newPart.supplier || 'Вручну' }, { headers: { Authorization: `Bearer ${token}` } });
-    setNewPart({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' }); setShowManualPartForm(false); refreshSelectedVisit();
-  };
-
-  const handleDeleteService = async (id) => {
-    if(window.confirm("Видалити?")) { await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit(); }
-  };
-
-  const handleDeletePart = async (id) => {
-    if(window.confirm("Видалити?")) { await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit(); }
+  const handlePrintPDF = async () => {
+    try {
+        const response = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, {
+            headers: { Authorization: `Bearer ${token}` },
+            responseType: 'text' // Отримуємо HTML код
+        });
+        
+        // Відкриваємо нове вікно для друку
+        const printWindow = window.open('', '_blank');
+        printWindow.document.open();
+        printWindow.document.write(response.data);
+        printWindow.document.close();
+        
+        // Вікно саме викличе window.print() завдяки onload у HTML
+    } catch (error) {
+        alert("Помилка генерації документа");
+    }
   };
 
   const refreshSelectedVisit = async () => {
     const res = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers: { Authorization: `Bearer ${token}` } }); setSelectedVisit(res.data); fetchData();
   };
 
-  const servicesTotal = selectedVisit?.services?.reduce((sum, s) => sum + parseFloat(s.price || 0), 0) || 0;
-  const partsTotal = selectedVisit?.parts?.reduce((sum, p) => sum + parseFloat(p.sell_price || 0), 0) || 0;
-  const grandTotal = servicesTotal + partsTotal;
-
-  const pending = visits.filter(v => v.status === 'PENDING' || v.status === 'SELECTION');
-  const inProgress = visits.filter(v => v.status === 'IN_PROGRESS');
+  const pending = visits.filter(v => v.status === 'PENDING' || v.status === 'SELECTION' || v.status === 'DRAFT');
+  const inProgress = visits.filter(v => v.status === 'IN_PROGRESS' || v.status === 'ORDERED');
   const done = visits.filter(v => v.status === 'DONE');
   const completed = visits.filter(v => v.status === 'COMPLETED'); 
 
@@ -376,7 +372,7 @@ const Visits = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 no-print-area">
           <Column title="В черзі / Підбір" icon={<Clock size={18}/>} items={pending} colorClass="text-slate-600" />
-          <Column title="В роботі" icon={<Wrench size={18}/>} items={inProgress} colorClass="text-blue-600" />
+          <Column title="В роботі / Замовлено" icon={<Wrench size={18}/>} items={inProgress} colorClass="text-blue-600" />
           <Column title="Готово" icon={<CheckCircle2 size={18}/>} items={done} colorClass="text-green-600" />
         </div>
       )}
@@ -513,6 +509,7 @@ const Visits = () => {
         </div>
       )}
 
+      {/* МОДАЛКА ВІДРЕДАГУВАННЯ / ПЕРЕГЛЯДУ ВІЗИТУ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
@@ -529,7 +526,7 @@ const Visits = () => {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mt-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Марка</label>
                     <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 uppercase" value={editCarData.brand} onChange={e => setEditCarData({...editCarData, brand: e.target.value})} onBlur={handleSaveCarData}/>
@@ -546,9 +543,14 @@ const Visits = () => {
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Дв. (см³)</label>
                     <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.engine} onChange={e => setEditCarData({...editCarData, engine: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
-                  <div className="col-span-2 sm:col-span-1">
+                  <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Паливо</label>
                     <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={handleSaveCarData}/>
+                  </div>
+                  {/* НОВЕ ПОЛЕ: ПРОБІГ */}
+                  <div className="col-span-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Пробіг (км)</label>
+                    <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={handleSaveCarData} placeholder="150000"/>
                   </div>
                 </div>
 
@@ -588,37 +590,96 @@ const Visits = () => {
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0 justify-end w-full md:w-auto">
+                {/* КНОПКА ДРУКУ PDF */}
+                <button onClick={handlePrintPDF} className="bg-blue-100 text-blue-600 p-2 rounded-xl hover:bg-blue-200 transition-colors flex items-center gap-2 font-bold text-xs"><Printer size={18} /> Друк</button>
                 <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-xl hover:bg-slate-200 transition-colors"><X size={18} /></button>
               </div>
             </div>
 
             <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl mb-4 overflow-x-auto">
-              <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Нове' : 'В черзі'}</button>
-              <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Чекаємо' : 'В роботі'}</button>
+              <button onClick={() => updateVisitField('status', 'PENDING')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'PENDING' || selectedVisit.status === 'DRAFT' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Нове' : 'В черзі'}</button>
+              <button onClick={() => updateVisitField('status', 'IN_PROGRESS')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'IN_PROGRESS' || selectedVisit.status === 'ORDERED' ? 'bg-blue-600 shadow shadow-blue-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Чекаємо' : 'В роботі'}</button>
               <button onClick={() => updateVisitField('status', 'DONE')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'DONE' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>{isStore ? 'Відправка' : 'Готово'}</button>
               {isStore && <button onClick={() => updateVisitField('status', 'COMPLETED')} className={`flex-1 min-w-[80px] py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase transition-all ${selectedVisit.status === 'COMPLETED' ? 'bg-green-500 shadow shadow-green-200 text-white' : 'text-slate-400 hover:bg-slate-200'}`}>Виконано</button>}
             </div>
 
-            <div className="grid grid-cols-1 gap-6">
+            <div className={`grid grid-cols-1 ${!isStore ? 'lg:grid-cols-2' : ''} gap-6`}>
+              
+              {/* НОВИЙ БЛОК: РОБОТИ / ПОСЛУГИ (Тільки для СТО) */}
+              {!isStore && (
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="font-black uppercase text-slate-700 flex items-center gap-2 text-sm"><Wrench size={16}/> Роботи</h3>
+                    <button onClick={() => setShowServiceForm(!showServiceForm)} className="text-[10px] font-bold uppercase bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded">Додати роботу</button>
+                  </div>
+                  
+                  {showServiceForm && (
+                    <form onSubmit={handleAddService} className="bg-slate-50 border border-slate-200 p-3 rounded-xl mb-3 space-y-2">
+                      <select className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none" value={selectedCatalogId} onChange={e => {
+                          setSelectedCatalogId(e.target.value);
+                          const s = catalogServices.find(x => x.id === parseInt(e.target.value));
+                          if (s) setNewService({ custom_name: s.name, price: s.default_price, quantity: 1 });
+                      }}>
+                        <option value="">-- Ввести вручну --</option>
+                        {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} ({s.default_price} ₴)</option>)}
+                      </select>
+                      {!selectedCatalogId && (
+                        <input required type="text" placeholder="Назва роботи" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium outline-none" value={newService.custom_name} onChange={e => setNewService({...newService, custom_name: e.target.value})}/>
+                      )}
+                      <div className="flex gap-2">
+                        <input required type="number" placeholder="Ціна (₴)" className="w-1/2 bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold outline-none" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})}/>
+                        <input required type="number" step="0.1" placeholder="К-сть / Н-Г" className="w-1/2 bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold outline-none" value={newService.quantity} onChange={e => setNewService({...newService, quantity: e.target.value})}/>
+                      </div>
+                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase py-2 rounded-lg">Зберегти роботу</button>
+                    </form>
+                  )}
+
+                  <div className="space-y-2 mb-3">
+                    {selectedVisit.services && selectedVisit.services.length > 0 ? (
+                      selectedVisit.services.map(s => (
+                        <div key={s.id} className="p-3 bg-white rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+                          <div className="flex-1 pr-2">
+                            <p className="font-bold text-slate-700 text-xs">{s.custom_name}</p>
+                            <p className="text-[10px] font-medium text-slate-400 mt-0.5">{s.quantity} од. × {s.price} ₴</p>
+                          </div>
+                          <div className="font-black text-sm text-slate-800">
+                            {(s.quantity * s.price).toFixed(2)} ₴
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-center text-slate-400 italic py-4">Немає доданих робіт</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* БЛОК ЗАПЧАСТИН */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
                 <div className="space-y-3 mb-3">
-                  {selectedVisit.parts?.map(p => (
-                    <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex flex-col sm:flex-row sm:items-center gap-3 group w-full shadow-sm">
-                      <div className="flex-1 overflow-hidden">
-                        <p className="font-bold text-slate-700 text-sm leading-tight truncate">{p.name}</p>
-                        <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{p.brand} | {p.article}</p>
+                  {selectedVisit.items && selectedVisit.items.length > 0 ? (
+                    selectedVisit.items.map(p => (
+                      <div key={p.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex flex-col sm:flex-row sm:items-center gap-3 group w-full shadow-sm">
+                        <div className="flex-1 overflow-hidden">
+                          <p className="font-bold text-slate-700 text-sm leading-tight truncate">{p.name}</p>
+                          <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{p.brand} | {p.part_number}</p>
+                          <p className="text-[11px] font-black text-blue-600 mt-1">{p.sell_price} ₴</p>
+                        </div>
+                        <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
+                          <select value={p.logistics_status || 'PENDING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer w-full sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.logistics_status || 'PENDING']}`}>
+                            <option value="PENDING">⏳ Очікується</option>
+                            <option value="ORDERED">🛒 Замовлено</option>
+                            <option value="IN_TRANSIT">🚚 В дорозі</option>
+                            <option value="IN_STOCK">📦 На складі</option>
+                            <option value="INSTALLED">✅ Встановлено</option>
+                          </select>
+                        </div>
                       </div>
-                      <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
-                        <select value={p.status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer w-full sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.status || 'WAITING']}`}>
-                          <option value="WAITING">⏳ Очікується</option>
-                          <option value="IN_TRANSIT">🚚 В дорозі</option>
-                          <option value="ARRIVED">✅ Приїхала</option>
-                          <option value="UNAVAILABLE">❌ Не буде</option>
-                        </select>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                     <p className="text-xs text-center text-slate-400 italic py-4">Кошик запчастин порожній</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -626,7 +687,8 @@ const Visits = () => {
             <div className="mt-6 bg-amber-50 p-4 md:p-5 rounded-2xl border border-amber-100 relative">
               <h3 className="font-black uppercase text-amber-800 mb-3 flex items-center gap-2 text-xs"><MessageSquare size={16}/> Внутрішній коментар</h3>
               <textarea className="w-full bg-white border border-amber-200 rounded-xl p-3 md:p-4 text-sm outline-none focus:border-amber-400 min-h-[70px] font-medium text-slate-700" placeholder="Нотатка (напр. номер ТТН)..." value={editComment} onChange={e => setEditComment(e.target.value)} />
-              <div className="flex justify-end mt-3">
+              <div className="flex justify-between items-center mt-3">
+                <button onClick={handlePrintPDF} className="text-blue-600 font-black text-xs uppercase hover:underline flex items-center gap-1"><Printer size={14}/> Друкувати</button>
                 <button onClick={handleSaveComment} className="bg-amber-400 hover:bg-amber-500 text-amber-950 px-5 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-sm w-full sm:w-auto">Зберегти коментар</button>
               </div>
             </div>

@@ -66,8 +66,8 @@ class VisitViewSet(viewsets.ModelViewSet):
         end_of_day = start_of_day + timedelta(days=1)
 
         queryset = queryset.filter(
-            Q(created_at__gte=start_of_day, created_at__lt=end_of_day) |
-            Q(scheduled_datetime__gte=start_of_day, scheduled_datetime__lt=end_of_day)
+            Q(scheduled_datetime__gte=start_of_day, scheduled_datetime__lt=end_of_day) |
+            Q(scheduled_datetime__isnull=True, created_at__gte=start_of_day, created_at__lt=end_of_day)
         ).distinct()
         
         return queryset.order_by('scheduled_datetime' if date_str else '-created_at')

@@ -195,11 +195,28 @@ const Visits = () => {
     };
   };
 
+  // ФІКС КОПІЮВАННЯ VIN: Милиця для роботи на HTTP
   const handleCopyVin = (vin) => {
     if (!vin) return;
-    navigator.clipboard.writeText(vin).then(() => {
-      setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
-    });
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(vin).then(() => {
+        setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
+      });
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = vin;
+      textArea.style.position = "absolute";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      }
+      document.body.removeChild(textArea);
+    }
   };
 
   const changeDate = (days) => {
@@ -273,12 +290,12 @@ const Visits = () => {
     await axios.patch(`${API_BASE}/api/item/${id}/status/`, { logistics_status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); refreshSelectedVisit();
   };
 
+  // ФІКС ПОСЛУГ: Стукаємося в правильний роут order-services
   const handleAddService = async (e) => {
     e.preventDefault();
     try {
         await axios.post(`${API_BASE}/api/order-services/`, { 
             visit: selectedVisit.id, 
-            service_catalog_id: selectedCatalogId || null,
             name: newService.name,
             price: newService.price,
             quantity: newService.quantity
@@ -302,7 +319,7 @@ const Visits = () => {
         printWindow.document.close();
         
     } catch (error) {
-        alert("Помилка генерації документа");
+        alert("Помилка генерації документа. Сервер не знайшов PDF. Переконайтеся, що ви перезавантажили бекенд!");
     }
   };
 
@@ -598,6 +615,7 @@ const Visits = () => {
 
             <div className={`grid grid-cols-1 ${!isStore ? 'lg:grid-cols-2' : ''} gap-6`}>
               
+              {/* РОБОТИ / ПОСЛУГИ */}
               {!isStore && (
                 <div>
                   <div className="flex justify-between items-center mb-3">
@@ -646,6 +664,7 @@ const Visits = () => {
                 </div>
               )}
 
+              {/* ЗАПЧАСТИНИ */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
                 <div className="space-y-3 mb-3">

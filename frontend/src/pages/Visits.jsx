@@ -292,6 +292,25 @@ const Visits = () => {
     } catch (error) { alert("Помилка"); }
   };
 
+
+  const handleEditVisitDateTime = () => {
+    if (!selectedVisit?.scheduled_datetime) return;
+    const dt = new Date(selectedVisit.scheduled_datetime);
+    if (Number.isNaN(dt.getTime())) return;
+    setEditTimeData({
+      date: dt.toISOString().slice(0, 10),
+      time: dt.toTimeString().slice(0, 5)
+    });
+    setIsEditingTime(true);
+  };
+
+  const handleSaveVisitDateTime = async () => {
+    if (!editTimeData.date || !editTimeData.time) return;
+    const nextISO = new Date(`${editTimeData.date}T${editTimeData.time}`).toISOString();
+    await updateVisitField('scheduled_datetime', nextISO);
+    setIsEditingTime(false);
+  };
+
   // ФІКС 3: Оновлення статусу запчастини йде у вірну таблицю
   const updatePartStatus = async (id, newStatus) => {
     try {
@@ -601,6 +620,29 @@ const Visits = () => {
                 </div>
 
                 <p className="text-slate-500 text-[13px] font-bold flex flex-wrap items-center gap-2 mt-1"><CarFront size={14} className="shrink-0"/> {selectedVisit.client} | <Phone size={14} className="shrink-0"/> {selectedVisit.phone}</p>
+
+                {!isStore && selectedVisit.scheduled_datetime && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-bold text-slate-600">
+                    <span className="inline-flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-lg px-2 py-1">
+                      <Clock size={13}/>
+                      {new Date(selectedVisit.scheduled_datetime).toLocaleDateString('uk-UA')}
+                      {' '}
+                      {new Date(selectedVisit.scheduled_datetime).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <button onClick={handleEditVisitDateTime} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors" title="Змінити дату/час">
+                      <Pencil size={13} />
+                    </button>
+                  </div>
+                )}
+
+                {isEditingTime && (
+                  <div className="mt-2 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2">
+                    <input type="date" className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold" value={editTimeData.date} onChange={e => setEditTimeData({ ...editTimeData, date: e.target.value })} />
+                    <input type="time" className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold" value={editTimeData.time} onChange={e => setEditTimeData({ ...editTimeData, time: e.target.value })} />
+                    <button onClick={handleSaveVisitDateTime} className="text-[10px] px-2 py-1 rounded-lg bg-blue-600 text-white font-black uppercase">Зберегти</button>
+                    <button onClick={() => setIsEditingTime(false)} className="text-[10px] px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black uppercase">Скасувати</button>
+                  </div>
+                )}
                 
                 {isStore && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
@@ -720,6 +762,7 @@ const Visits = () => {
                             </p>
                           )}
                           <p className="text-[11px] font-black text-blue-600 mt-1">{p.sell_price} ₴</p>
+                          <p className="text-[10px] font-semibold text-slate-500">Постачальника: {p.buy_price} ₴</p>
                         </div>
                         <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
                           <div className="flex items-center gap-2 w-full sm:w-auto">

@@ -52,6 +52,7 @@ TEMPLATES = [
 ]
 
 MIDDLEWARE = [
+    'apps.core.middleware.CorsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',

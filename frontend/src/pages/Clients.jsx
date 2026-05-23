@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, CarFront, Phone, CalendarDays, Wallet, History, X, Wrench, Store, MessageSquare, ChevronLeft, ChevronRight, Copy, Check, RefreshCcw } from 'lucide-react';
+import { Search, CarFront, Phone, CalendarDays, Wallet, History, X, Wrench, Store, MessageSquare, ChevronLeft, ChevronRight, Copy, Check, RefreshCcw, Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Clients = () => {
@@ -17,6 +17,8 @@ const Clients = () => {
 
   const [isRepeatingVisit, setIsRepeatingVisit] = useState(false);
   const [repeatVisitData, setRepeatVisitData] = useState({ date: '', time: '' });
+  const [editingVisitId, setEditingVisitId] = useState(null);
+  const [editingVisitData, setEditingVisitData] = useState({ date: '', time: '' });
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -119,6 +121,39 @@ const Clients = () => {
       setRepeatVisitData({ date: '', time: '' });
       navigate('/visits'); 
     } catch (error) { alert("Помилка створення візиту"); }
+  };
+
+  const handleStartVisitDateTimeEdit = (visit) => {
+    const baseDate = visit.scheduled_datetime ? new Date(visit.scheduled_datetime) : new Date(visit.created_at);
+    if (Number.isNaN(baseDate.getTime())) return;
+
+    const date = baseDate.toISOString().slice(0, 10);
+    const time = `${String(baseDate.getHours()).padStart(2, '0')}:${String(baseDate.getMinutes()).padStart(2, '0')}`;
+    setEditingVisitId(visit.id);
+    setEditingVisitData({ date, time });
+  };
+
+  const handleSaveVisitDateTime = async (visitId) => {
+    const parsedDate = new Date(`${editingVisitData.date}T${editingVisitData.time}`);
+    if (Number.isNaN(parsedDate.getTime())) {
+      alert('Некоректна дата або час');
+      return;
+    }
+
+    try {
+      await axios.patch(`${API_BASE}/api/visits/${visitId}/`, { scheduled_datetime: parsedDate.toISOString() }, { headers: { Authorization: `Bearer ${token}` } });
+      await fetchClients();
+      setSelectedClient(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          visits: prev.visits.map(v => v.id === visitId ? { ...v, scheduled_datetime: parsedDate.toISOString() } : v)
+        };
+      });
+      setEditingVisitId(null);
+    } catch (error) {
+      alert("Не вдалося оновити дату/час візиту");
+    }
   };
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -280,8 +315,25 @@ const Clients = () => {
                         ? new Date(visit.scheduled_datetime).toLocaleDateString() 
                         : new Date(visit.created_at).toLocaleDateString()
                       }
+                      {editingVisitId !== visit.id && (
+                        <button
+                          onClick={() => handleStartVisitDateTimeEdit(visit)}
+                          className="text-slate-400 hover:text-blue-600 bg-white border border-slate-200 hover:border-blue-300 rounded-lg p-1 transition-colors"
+                          title="Редагувати дату та час візиту"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
                       <span className="text-slate-400 text-[10px] md:text-xs font-medium ml-2">Візит #{selectedClient.visits.length - index}</span>
                     </div>
+                    {editingVisitId === visit.id && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input type="date" value={editingVisitData.date} onChange={e => setEditingVisitData(prev => ({ ...prev, date: e.target.value }))} className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-700" />
+                        <input type="time" value={editingVisitData.time} onChange={e => setEditingVisitData(prev => ({ ...prev, time: e.target.value }))} className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-700" />
+                        <button onClick={() => handleSaveVisitDateTime(visit.id)} className="bg-blue-600 text-white rounded-lg px-2 py-1 text-[10px] font-black uppercase">Зберегти</button>
+                        <button onClick={() => setEditingVisitId(null)} className="bg-slate-200 text-slate-700 rounded-lg px-2 py-1 text-[10px] font-black uppercase">Скасувати</button>
+                      </div>
+                    )}
                     <div className="font-black text-base md:text-lg">{visit.visitTotal.toLocaleString()} ₴</div>
                   </div>
 
@@ -306,7 +358,10 @@ const Clients = () => {
                         {visit.parts.map(p => (
                           <li key={p.id} className="flex flex-col sm:flex-row sm:justify-between text-xs md:text-sm font-medium text-slate-700 gap-1 sm:gap-2 mb-3 sm:mb-2 border-b sm:border-0 border-slate-100 pb-2 sm:pb-0">
                             <span className="truncate block w-full">{p.name} <span className="text-[9px] md:text-[10px] text-slate-400 ml-1">({p.brand})</span></span>
-                            <span className="font-bold shrink-0 sm:text-right block w-full sm:w-auto">{parseFloat(p.sell_price).toLocaleString()} ₴</span>
+                            <span className="shrink-0 sm:text-right block w-full sm:w-auto">
+                              <span className="font-bold block">{parseFloat(p.sell_price).toLocaleString()} ₴</span>
+                              <span className="text-[10px] text-slate-500 font-semibold block">Закупівля: {parseFloat(p.buy_price ?? p.purchase_price ?? 0).toLocaleString()} ₴</span>
+                            </span>
                           </li>
                         ))}
                       </ul>

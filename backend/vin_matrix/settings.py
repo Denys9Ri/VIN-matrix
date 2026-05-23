@@ -66,6 +66,12 @@ ROOT_URLCONF = 'vin_matrix.urls'
 WSGI_APPLICATION = 'vin_matrix.wsgi.application'
 
 # Налаштування CORS для React (кастомний middleware у apps.core.middleware)
+# Додаємо trusted origins для CSRF-перевірок браузерних запитів з frontend-доменів.
+CSRF_TRUSTED_ORIGINS = [
+    "http://*.95.217.211.207.sslip.io",
+    "https://*.95.217.211.207.sslip.io",
+]
+
 # Налаштування Бази Даних
 if os.getenv('USE_POSTGRES') == 'True':
     DATABASES = {
@@ -122,4 +128,3 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Сучасний часовий пояс для України
 TIME_ZONE = 'Europe/Kyiv'
 USE_TZ = True
-

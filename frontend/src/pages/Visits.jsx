@@ -276,7 +276,11 @@ const Visits = () => {
   };
 
   const handlePrintPDF = async () => {
-    window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
+    try {
+        window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
+    } catch (error) {
+        alert("Помилка генерації документа.");
+    }
   };
 
   const refreshSelectedVisit = async () => {

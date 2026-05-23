@@ -1,4 +1,5 @@
 import requests
+import urllib.parse
 import base64
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -683,6 +684,49 @@ class SupplierViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
 
+
+        if 'bm' in sup.name.lower() or 'bm.parts' in sup.name.lower():
+            try:
+                headers = {"Authorization": sup.api_key.strip(), "User-Agent": "VIN-matrix", "Accept-Language": "uk"}
+                resp = requests.get("https://api.bm.parts/search/products", params={"q": "111697", "products_as": "arr"}, headers=headers, timeout=10)
+                if resp.status_code != 200:
+                    return Response({"error": f"Помилка API ({resp.status_code}): {resp.text}"}, status=400)
+                data = resp.json()
+                products = data.get('products', []) if isinstance(data, dict) else []
+                if isinstance(products, dict):
+                    products = list(products.values())
+                warehouses_dict = {}
+                for item in products[:30]:
+                    for wh in item.get('in_stocks', []) or []:
+                        w_id = str(wh.get('uuid') or wh.get('name') or '').strip()
+                        w_name = str(wh.get('name') or 'Склад').strip()
+                        if w_id:
+                            warehouses_dict[w_id] = w_name
+                if not warehouses_dict:
+                    return Response({"error": "API BM Parts не повернуло складів. Додайте їх вручну."}, status=400)
+                existing_prefs = sup.warehouse_prefs if isinstance(sup.warehouse_prefs, list) else []
+                existing_map = {str(w.get('id')): w for w in existing_prefs if isinstance(w, dict) and w.get('id')}
+                new_prefs = []
+                for w_id, w_name in warehouses_dict.items():
+                    is_kyiv = 'київ' in w_name.lower() or 'kyiv' in w_name.lower()
+                    if w_id in existing_map:
+                        pref = existing_map[w_id]
+                        pref['name'] = w_name
+                        if is_kyiv and int(pref.get('priority', 99)) > 1:
+                            pref['priority'] = 1
+                        new_prefs.append(pref)
+                    else:
+                        new_prefs.append({"id": w_id, "name": w_name, "priority": 1 if is_kyiv else 99, "is_active": True})
+                new_ids = {p['id'] for p in new_prefs}
+                for p in existing_prefs:
+                    if str(p.get('id')) not in new_ids:
+                        new_prefs.append(p)
+                sup.warehouse_prefs = new_prefs
+                sup.save()
+                return Response({"message": f"Успішно завантажено {len(warehouses_dict)} складів BM Parts!", "warehouses": new_prefs})
+            except Exception as e:
+                return Response({"error": str(e)}, status=500)
+
         return Response({"error": "Автоматичне завантаження не підтримується для цього постачальника. Додайте склади вручну."}, status=400)
 
     @action(detail=True, methods=['get'], url_path='part_info')
@@ -922,6 +966,66 @@ class PartSearchView(APIView):
                                 "image_url": item.get('image') or item.get('picture') or '', "description": item.get('description') or ''
                             })
                 except Exception: pass
+
+            # === BM PARTS ===
+            elif sup.api_key and ('bm' in sup.name.lower() or 'bm.parts' in sup.name.lower()):
+                try:
+                    headers = {"Authorization": sup.api_key.strip(), "User-Agent": "VIN-matrix", "Accept-Language": "uk"}
+                    query_for_api = orig_brand and f"{query} {orig_brand}" or query
+
+                    def build_item(item):
+                        item_uuid = str(item.get('uuid', ''))
+                        if not item_uuid:
+                            return None
+                        if is_analog and item_uuid == sku_param:
+                            return None
+                        stocks = item.get('in_stocks', []) or []
+                        if not stocks:
+                            return None
+                        warehouses_list = []
+                        for wh in stocks:
+                            wh_id = str(wh.get('uuid', ''))
+                            wh_name = str(wh.get('name', 'Склад'))
+                            pref = prefs_map.get(wh_id) or prefs_map.get(wh_name.lower())
+                            if pref and not pref.get('is_active', True):
+                                continue
+                            qty_raw = str(wh.get('quantity', '0'))
+                            qty_num = ''.join(ch for ch in qty_raw if (ch.isdigit() or ch == '.'))
+                            qty_num = float(qty_num) if qty_num else 0
+                            warehouses_list.append({"name": wh_name, "quantity": wh.get('quantity', '0'), "priority": int(pref.get('priority', 99)) if pref else 99, "buy_price": float(item.get('price') or 0), "qty_num": qty_num})
+                        if not warehouses_list:
+                            return None
+                        warehouses_list.sort(key=lambda w: (0 if w['qty_num'] > 0 else 1, w['priority']))
+                        for w in warehouses_list: w.pop('qty_num', None)
+                        return {
+                            "id": f"bm_{sup.id}_{item_uuid}", "supplier_id": sup.id, "source": sup.name,
+                            "brand": item.get('brand', 'Unknown'), "article": item.get('article', query.upper()),
+                            "name": item.get('name', 'Деталь BM Parts'), "buy_price": float(item.get('price') or 0),
+                            "quantity": f"{warehouses_list[0]['quantity']} шт ({warehouses_list[0]['name']})",
+                            "is_local": False, "warehouses": warehouses_list, "sku": item_uuid, "min_qty": int(item.get('multiplicity') or 1),
+                            "image_url": item.get('default_image') or '', "description": item.get('nodes') or ''
+                        }
+
+                    if is_analog and sku_param:
+                        resp = requests.get(f"https://api.bm.parts/product/{urllib.parse.quote(sku_param)}/", params={"output_field": "analogs", "products_as": "arr"}, headers=headers, timeout=15)
+                        if resp.status_code == 200:
+                            p_data = resp.json().get('product', {})
+                            analogs = p_data.get('analogs', {}) if isinstance(p_data, dict) else {}
+                            analog_items = list(analogs.values()) if isinstance(analogs, dict) else (analogs if isinstance(analogs, list) else [])
+                            for it in analog_items:
+                                mapped = build_item(it)
+                                if mapped: results.append(mapped)
+                    else:
+                        resp = requests.get("https://api.bm.parts/search/products", params={"q": query_for_api, "products_as": "arr"}, headers=headers, timeout=15)
+                        if resp.status_code == 200:
+                            products = resp.json().get('products', [])
+                            if isinstance(products, dict):
+                                products = list(products.values())
+                            for it in products:
+                                mapped = build_item(it)
+                                if mapped: results.append(mapped)
+                except Exception:
+                    pass
 
             # === OMEGA ===
             elif sup.api_key and ('omega' in sup.name.lower() or 'омега' in sup.name.lower()):

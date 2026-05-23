@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Package, Truck, Search, Plus, Trash2, Tag, Key, FileSpreadsheet, X, Settings2, Download, Save } from 'lucide-react';
+import { Package, Truck, Search, Plus, Trash2, Tag, Key, FileSpreadsheet, X, Settings2, Download, Save, Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Inventory = () => {
@@ -26,6 +26,11 @@ const Inventory = () => {
   const [newCatName, setNewCatName] = useState('');
   const [newItem, setNewItem] = useState({ brand: '', article: '', name: '', quantity: 1, buy_price: '', category: '' });
   const [newSupplier, setNewSupplier] = useState({ name: '', type: 'api', api_key: '', file: null });
+
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState(null);
+  const [editingApiKey, setEditingApiKey] = useState('');
+
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
@@ -100,6 +105,23 @@ const Inventory = () => {
       await axios.delete(`${API_BASE}/api/suppliers/${id}/`, { headers: { Authorization: `Bearer ${token}` }});
       fetchData();
     }
+  };
+
+
+  const openApiKeyModal = (supplier) => {
+    setEditingSupplier(supplier);
+    setEditingApiKey(supplier.api_key || '');
+    setIsApiKeyModalOpen(true);
+  };
+
+  const handleSaveApiKey = async (e) => {
+    e.preventDefault();
+    if (!editingSupplier) return;
+    await axios.patch(`${API_BASE}/api/suppliers/${editingSupplier.id}/`, { api_key: editingApiKey }, { headers: { Authorization: `Bearer ${token}` }});
+    setIsApiKeyModalOpen(false);
+    setEditingSupplier(null);
+    setEditingApiKey('');
+    fetchData();
   };
 
   const openWarehouseModal = (supplier) => {
@@ -254,6 +276,7 @@ const Inventory = () => {
             {suppliers.map(s => (
               <div key={s.id} className="border border-slate-200 rounded-2xl p-4 md:p-5 flex flex-col relative group hover:border-blue-200 transition-colors bg-slate-50/30">
                 <div className="absolute top-4 right-4 flex gap-2 lg:opacity-0 group-hover:opacity-100 transition-all">
+                  <button onClick={() => openApiKeyModal(s)} className="text-slate-400 hover:text-amber-600 bg-white p-1.5 rounded-md shadow-sm border border-slate-100" title="API ключ"><Pencil size={16}/></button>
                   <button onClick={() => openWarehouseModal(s)} className="text-slate-400 hover:text-blue-600 bg-white p-1.5 rounded-md shadow-sm border border-slate-100" title="Налаштування складів"><Settings2 size={16}/></button>
                   <button onClick={() => handleDeleteSupplier(s.id)} className="text-slate-400 hover:text-red-500 bg-white p-1.5 rounded-md shadow-sm border border-slate-100" title="Видалити"><Trash2 size={16}/></button>
                 </div>
@@ -357,6 +380,20 @@ const Inventory = () => {
                 </div>
               )}
               <button type="submit" className="w-full bg-slate-800 text-white p-4 rounded-xl font-black uppercase tracking-widest text-xs md:text-sm mt-4 shadow-lg hover:bg-slate-900 transition-colors">Зберегти постачальника</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+
+      {isApiKeyModalOpen && editingSupplier && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 relative">
+            <button onClick={() => setIsApiKeyModalOpen(false)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <h2 className="text-lg font-black uppercase mb-4">API ключ: {editingSupplier.name}</h2>
+            <form onSubmit={handleSaveApiKey} className="space-y-4">
+              <input required type="text" value={editingApiKey} onChange={e => setEditingApiKey(e.target.value)} placeholder="Вставте ключ API" className="w-full bg-amber-50 border border-amber-200 rounded-xl p-3 outline-none focus:border-amber-500 font-mono text-xs md:text-sm" />
+              <button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-blue-700 transition-colors">Зберегти ключ</button>
             </form>
           </div>
         </div>

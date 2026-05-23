@@ -67,6 +67,16 @@ const Visits = () => {
         axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) 
       ]);
+      const fetchData = async () => {
+    try {
+      const [visitsRes, settingsRes, servicesRes] = await Promise.all([
+        axios.get(`${API_BASE}/api/visits/?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_BASE}/api/services/`, { headers: { Authorization: `Bearer ${token}` } }) 
+      ]);
+      
+      // ДОДАЙ ЦЕЙ ЛОГ:
+      console.log("Дані з сервера:", visitsRes.data);
       setVisits(visitsRes.data || []);
       setRole(settingsRes.data.role);
       setCompanyInfo(settingsRes.data.company); 

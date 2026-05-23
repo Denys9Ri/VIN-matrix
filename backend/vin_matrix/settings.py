@@ -52,8 +52,7 @@ TEMPLATES = [
 ]
 
 MIDDLEWARE = [
-    'apps.core.middleware.CorsMiddleware',  # Кастомний CORS middleware має бути першим
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # Тільки цей, він все робить сам
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

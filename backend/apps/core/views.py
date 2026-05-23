@@ -169,7 +169,7 @@ class VisitViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=500)
 
     # --- ГЕНЕРАЦІЯ PDF НА ПРЯМОМУ ШЛЯХУ ---
-   @action(detail=True, methods=['get'], url_path='pdf')
+    @action(detail=True, methods=['get'], url_path='pdf')
     def export_pdf(self, request, pk=None):
         visit = self.get_object()
         company = visit.company

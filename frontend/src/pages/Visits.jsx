@@ -46,7 +46,7 @@ const Visits = () => {
 
   const [editCarData, setEditCarData] = useState({ brand: '', model: '', year: '', engine: '', fuel: '', mileage: '' });
   
-  const [newService, setNewService] = useState({ custom_name: '', price: '', quantity: 1 });
+  const [newService, setNewService] = useState({ name: '', price: '', quantity: 1 });
   const [newPart, setNewPart] = useState({ name: '', brand: '', article: '', buy_price: '', sell_price: '', supplier: '' });
 
   const [copiedVin, setCopiedVin] = useState(null);
@@ -123,12 +123,11 @@ const Visits = () => {
 
   const handleSaveCarData = async () => {
     if (!isStore) {
-      // Зберігаємо mileage (пробіг) у базу через окреме поле, якщо воно є
       if (editCarData.mileage !== selectedVisit.mileage) {
         await updateVisitField('mileage', editCarData.mileage);
       }
       const carDataToSave = { ...editCarData };
-      delete carDataToSave.mileage; // mileage зберігається окремо
+      delete carDataToSave.mileage;
       
       const jsonString = JSON.stringify(carDataToSave);
       if (jsonString !== selectedVisit.delivery_data) {
@@ -277,14 +276,14 @@ const Visits = () => {
   const handleAddService = async (e) => {
     e.preventDefault();
     try {
-        await axios.post(`${API_BASE}/api/visits/add-service/`, { 
-            visit_id: selectedVisit.id, 
+        await axios.post(`${API_BASE}/api/order-services/`, { 
+            visit: selectedVisit.id, 
             service_catalog_id: selectedCatalogId || null,
-            custom_name: newService.custom_name,
+            name: newService.name,
             price: newService.price,
             quantity: newService.quantity
         }, { headers: { Authorization: `Bearer ${token}` } });
-        setNewService({ custom_name: '', price: '', quantity: 1 }); setSelectedCatalogId(''); setShowServiceForm(false); refreshSelectedVisit();
+        setNewService({ name: '', price: '', quantity: 1 }); setSelectedCatalogId(''); setShowServiceForm(false); refreshSelectedVisit();
     } catch(err) {
         alert("Помилка додавання послуги");
     }
@@ -294,16 +293,14 @@ const Visits = () => {
     try {
         const response = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, {
             headers: { Authorization: `Bearer ${token}` },
-            responseType: 'text' // Отримуємо HTML код
+            responseType: 'text' 
         });
         
-        // Відкриваємо нове вікно для друку
         const printWindow = window.open('', '_blank');
         printWindow.document.open();
         printWindow.document.write(response.data);
         printWindow.document.close();
         
-        // Вікно саме викличе window.print() завдяки onload у HTML
     } catch (error) {
         alert("Помилка генерації документа");
     }
@@ -377,7 +374,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* МОДАЛКА СТВОРЕННЯ КАРТКИ */}
       {isCreatingVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto no-print-area pt-10 pb-20">
           <div className="bg-white rounded-3xl w-full max-w-md p-5 md:p-6 shadow-2xl relative overflow-hidden">
@@ -509,7 +505,6 @@ const Visits = () => {
         </div>
       )}
 
-      {/* МОДАЛКА ВІДРЕДАГУВАННЯ / ПЕРЕГЛЯДУ ВІЗИТУ */}
       {selectedVisit && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto no-print-area">
           <div className="bg-white rounded-3xl w-full max-w-4xl p-4 md:p-6 shadow-2xl mt-4 sm:mt-8 mb-16 relative">
@@ -547,7 +542,6 @@ const Visits = () => {
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Паливо</label>
                     <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500" value={editCarData.fuel} onChange={e => setEditCarData({...editCarData, fuel: e.target.value})} onBlur={handleSaveCarData}/>
                   </div>
-                  {/* НОВЕ ПОЛЕ: ПРОБІГ */}
                   <div className="col-span-1">
                     <label className="text-[8px] font-bold text-slate-400 uppercase ml-1 block">Пробіг (км)</label>
                     <input type="number" className="w-full bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-amber-700 outline-none focus:border-amber-500" value={editCarData.mileage} onChange={e => setEditCarData({...editCarData, mileage: e.target.value})} onBlur={handleSaveCarData} placeholder="150000"/>
@@ -590,7 +584,6 @@ const Visits = () => {
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0 justify-end w-full md:w-auto">
-                {/* КНОПКА ДРУКУ PDF */}
                 <button onClick={handlePrintPDF} className="bg-blue-100 text-blue-600 p-2 rounded-xl hover:bg-blue-200 transition-colors flex items-center gap-2 font-bold text-xs"><Printer size={18} /> Друк</button>
                 <button onClick={() => setSelectedVisit(null)} className="bg-slate-100 p-2 rounded-xl hover:bg-slate-200 transition-colors"><X size={18} /></button>
               </div>
@@ -605,7 +598,6 @@ const Visits = () => {
 
             <div className={`grid grid-cols-1 ${!isStore ? 'lg:grid-cols-2' : ''} gap-6`}>
               
-              {/* НОВИЙ БЛОК: РОБОТИ / ПОСЛУГИ (Тільки для СТО) */}
               {!isStore && (
                 <div>
                   <div className="flex justify-between items-center mb-3">
@@ -618,13 +610,13 @@ const Visits = () => {
                       <select className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none" value={selectedCatalogId} onChange={e => {
                           setSelectedCatalogId(e.target.value);
                           const s = catalogServices.find(x => x.id === parseInt(e.target.value));
-                          if (s) setNewService({ custom_name: s.name, price: s.default_price, quantity: 1 });
+                          if (s) setNewService({ name: s.name, price: s.price || s.default_price || '', quantity: 1 });
                       }}>
                         <option value="">-- Ввести вручну --</option>
-                        {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} ({s.default_price} ₴)</option>)}
+                        {catalogServices.map(s => <option key={s.id} value={s.id}>{s.name} ({(s.price || s.default_price)} ₴)</option>)}
                       </select>
                       {!selectedCatalogId && (
-                        <input required type="text" placeholder="Назва роботи" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium outline-none" value={newService.custom_name} onChange={e => setNewService({...newService, custom_name: e.target.value})}/>
+                        <input required type="text" placeholder="Назва роботи" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium outline-none" value={newService.name || ''} onChange={e => setNewService({...newService, name: e.target.value})}/>
                       )}
                       <div className="flex gap-2">
                         <input required type="number" placeholder="Ціна (₴)" className="w-1/2 bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold outline-none" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})}/>
@@ -639,7 +631,7 @@ const Visits = () => {
                       selectedVisit.services.map(s => (
                         <div key={s.id} className="p-3 bg-white rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
                           <div className="flex-1 pr-2">
-                            <p className="font-bold text-slate-700 text-xs">{s.custom_name}</p>
+                            <p className="font-bold text-slate-700 text-xs">{s.name || s.custom_name}</p>
                             <p className="text-[10px] font-medium text-slate-400 mt-0.5">{s.quantity} од. × {s.price} ₴</p>
                           </div>
                           <div className="font-black text-sm text-slate-800">
@@ -654,7 +646,6 @@ const Visits = () => {
                 </div>
               )}
 
-              {/* БЛОК ЗАПЧАСТИН */}
               <div>
                 <h3 className="font-black uppercase text-slate-700 mb-3 flex items-center gap-2 text-sm"><Store size={16}/> Запчастини</h3>
                 <div className="space-y-3 mb-3">

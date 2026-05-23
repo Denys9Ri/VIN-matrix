@@ -328,8 +328,27 @@ const Visits = () => {
     }
   };
 
-  const handlePrintPDF = () => {
-    window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
+  const handlePrintPDF = async () => {
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+      alert('Браузер заблокував вікно друку. Дозвольте pop-up для цього сайту.');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'text',
+      });
+
+      printWindow.document.open();
+      printWindow.document.write(response.data);
+      printWindow.document.close();
+    } catch (error) {
+      printWindow.close();
+      alert('Не вдалося згенерувати документ для друку.');
+    }
   };
 
   const refreshSelectedVisit = async () => {

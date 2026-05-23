@@ -200,7 +200,7 @@ const Visits = () => {
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(vin).then(() => {
         setCopiedVin(vin); setTimeout(() => setCopiedVin(null), 2000);
-      }).catch(err => console.error(err));
+      });
     } else {
       const textArea = document.createElement("textarea");
       textArea.value = vin;
@@ -295,8 +295,8 @@ const Visits = () => {
         await axios.post(`${API_BASE}/api/order-services/`, { 
             visit: selectedVisit.id, 
             name: newService.name,
-            price: parseFloat(newService.price) || 0,
-            quantity: parseFloat(newService.quantity) || 1
+            price: parseFloat(newService.price || 0),
+            quantity: parseFloat(newService.quantity || 1)
         }, { headers: { Authorization: `Bearer ${token}` } });
         setNewService({ name: '', price: '', quantity: 1 }); setSelectedCatalogId(''); setShowServiceForm(false); refreshSelectedVisit();
     } catch(err) {
@@ -304,11 +304,42 @@ const Visits = () => {
     }
   };
 
+  const handleDeleteService = async (id) => {
+    if (window.confirm("Ви дійсно хочете видалити цю роботу?")) {
+        try {
+            await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
+            refreshSelectedVisit();
+        } catch(e) { alert("Помилка видалення роботи"); }
+    }
+  };
+
+  const handleDeletePart = async (id) => {
+    if (window.confirm("Ви дійсно хочете видалити цю запчастину?")) {
+        try {
+            await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
+            refreshSelectedVisit();
+        } catch(e) { alert("Помилка видалення запчастини"); }
+    }
+  };
+
   const handlePrintPDF = async () => {
     try {
-        window.open(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, '_blank');
+        // ВИПРАВЛЕНО: Беремо сторінку через axios з токеном, потім друкуємо
+        const response = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, {
+            headers: { Authorization: `Bearer ${token}` },
+            responseType: 'text' 
+        });
+        
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.open();
+            printWindow.document.write(response.data);
+            printWindow.document.close();
+        } else {
+            alert("Будь ласка, дозвольте спливаючі вікна для цього сайту, щоб роздрукувати наряд.");
+        }
     } catch (error) {
-        alert("Помилка генерації документа.");
+        alert("Помилка генерації документа. Сервер не зміг сформувати акт.");
     }
   };
 
@@ -641,8 +672,13 @@ const Visits = () => {
                             <p className="font-bold text-slate-700 text-xs">{s.name || s.custom_name}</p>
                             <p className="text-[10px] font-medium text-slate-400 mt-0.5">{s.quantity} од. × {s.price} ₴</p>
                           </div>
-                          <div className="font-black text-sm text-slate-800">
-                            {(parseFloat(s.quantity || 0) * parseFloat(s.price || 0)).toFixed(2)} ₴
+                          <div className="flex items-center gap-3">
+                            <div className="font-black text-sm text-slate-800">
+                              {(parseFloat(s.quantity || 0) * parseFloat(s.price || 0)).toFixed(2)} ₴
+                            </div>
+                            <button onClick={() => handleDeleteService(s.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-lg transition-colors" title="Видалити роботу">
+                                <Trash2 size={16} />
+                            </button>
                           </div>
                         </div>
                       ))
@@ -666,13 +702,18 @@ const Visits = () => {
                           <p className="text-[11px] font-black text-blue-600 mt-1">{p.sell_price} ₴</p>
                         </div>
                         <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
-                          <select value={p.logistics_status || p.status || 'PENDING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer w-full sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.logistics_status || p.status || 'PENDING']}`}>
-                            <option value="PENDING">⏳ Очікується</option>
-                            <option value="ORDERED">🛒 Замовлено</option>
-                            <option value="IN_TRANSIT">🚚 В дорозі</option>
-                            <option value="IN_STOCK">📦 На складі</option>
-                            <option value="INSTALLED">✅ Встановлено</option>
-                          </select>
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <select value={p.logistics_status || p.status || 'PENDING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer flex-1 sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.logistics_status || p.status || 'PENDING']}`}>
+                              <option value="PENDING">⏳ Очікується</option>
+                              <option value="ORDERED">🛒 Замовлено</option>
+                              <option value="IN_TRANSIT">🚚 В дорозі</option>
+                              <option value="IN_STOCK">📦 На складі</option>
+                              <option value="INSTALLED">✅ Встановлено</option>
+                            </select>
+                            <button onClick={() => handleDeletePart(p.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-1" title="Видалити запчастину">
+                                <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))

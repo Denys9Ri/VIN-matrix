@@ -52,7 +52,7 @@ TEMPLATES = [
 ]
 
 MIDDLEWARE = [
-    'apps.core.middleware.CorsMiddleware',
+    'apps.core.middleware.CorsMiddleware',  # Кастомний CORS middleware має бути першим
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',

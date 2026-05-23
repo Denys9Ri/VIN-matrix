@@ -13,6 +13,9 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
 from django.utils import timezone
 from datetime import datetime, timedelta, time as dt_time
+from django.http import HttpResponse
+from decimal import Decimal
+
 from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService, Category, InventoryItem, Supplier
 from .serializers import (
     VisitSerializer, UserSerializer, 
@@ -173,6 +176,140 @@ class VisitViewSet(viewsets.ModelViewSet):
                 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+    @action(detail=True, methods=['get'], url_path='pdf')
+    def export_pdf(self, request, pk=None):
+        visit = self.get_object()
+        
+        html_content = f"""
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Наряд-замовлення №{visit.id}</title>
+            <style>
+                body {{ font-family: 'Arial', sans-serif; margin: 30px; color: #222; font-size: 14px; }}
+                .header {{ text-align: center; margin-bottom: 25px; line-height: 1.5; }}
+                .info-table {{ width: 100%; margin-bottom: 25px; border-collapse: collapse; }}
+                .info-table td {{ padding: 8px; border: 1px solid #bbb; }}
+                .items-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
+                .items-table th, .items-table td {{ padding: 10px; border: 1px solid #999; text-align: left; }}
+                .items-table th {{ background-color: #f2f2f2; font-weight: bold; }}
+                .total {{ text-align: right; margin-top: 30px; font-size: 18px; font-weight: bold; color: #000; }}
+                .signatures {{ margin-top: 60px; width: 100%; }}
+                .signatures td {{ border: none; padding: 10px; }}
+            </style>
+        </head>
+        <body onload="window.print()">
+            <div class="header">
+                <h2>НАРЯД-ЗАМОВЛЕННЯ № {visit.id}</h2>
+                <p>Дата відкриття: {visit.created_at.strftime('%d.%m.%Y %H:%M')}</p>
+            </div>
+            
+            <table class="info-table">
+                <tr>
+                    <td><strong>Автомобіль:</strong> {getattr(visit, 'brand', '')} {getattr(visit, 'model', '')} ({getattr(visit, 'year', '-')})</td>
+                    <td><strong>Держ. номер:</strong> {visit.plate}</td>
+                </tr>
+                <tr>
+                    <td><strong>VIN-код:</strong> {getattr(visit, 'vin_code', '-')}</td>
+                    <td><strong>Пробіг:</strong> {getattr(visit, 'mileage', '-')} км</td>
+                </tr>
+                <tr>
+                    <td colspan="2"><strong>Власник (Клієнт):</strong> {getattr(visit, 'client', '-')} | Тел: {getattr(visit, 'phone', '-')}</td>
+                </tr>
+            </table>
+
+            <h3>1. Виконані роботи та послуги автосервісу</h3>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>Назва роботи (послуги)</th>
+                        <th>К-сть / Нормо-години</th>
+                        <th>Ціна за од. (UAH)</th>
+                        <th>Сума (UAH)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        
+        total_amount = Decimal('0.00')
+        
+        services = getattr(visit, 'services', getattr(visit, 'orderservice_set', None))
+        services_all = services.all() if services else []
+        
+        if services_all:
+            for s in services_all:
+                name = getattr(s, 'name', getattr(s, 'custom_name', 'Послуга'))
+                qty = Decimal(str(getattr(s, 'quantity', 1)))
+                price = Decimal(str(getattr(s, 'price', 0)))
+                subtotal = price * qty
+                total_amount += subtotal
+                html_content += f"""
+                    <tr>
+                        <td>{name}</td>
+                        <td>{qty}</td>
+                        <td>{price} UAH</td>
+                        <td>{subtotal} UAH</td>
+                    </tr>
+                """
+        else:
+            html_content += "<tr><td colspan='4' style='text-align:center; color:#777;'>Послуги відсутні</td></tr>"
+
+        html_content += """
+                </tbody>
+            </table>
+
+            <h3>2. Використані автозапчастини та розхідні матеріали</h3>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>Виробник (Бренд)</th>
+                        <th>Артикул деталі</th>
+                        <th>Найменування</th>
+                        <th>Сума (UAH)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        
+        parts = getattr(visit, 'parts', getattr(visit, 'items', getattr(visit, 'orderpart_set', None)))
+        parts_all = parts.all() if parts else []
+        
+        if parts_all:
+            for p in parts_all:
+                name = getattr(p, 'name', 'Запчастина')
+                brand = getattr(p, 'brand', '')
+                article = getattr(p, 'article', getattr(p, 'part_number', ''))
+                sell_price = Decimal(str(getattr(p, 'sell_price', getattr(p, 'price', 0))))
+                total_amount += sell_price
+                html_content += f"""
+                    <tr>
+                        <td>{brand}</td>
+                        <td>{article}</td>
+                        <td>{name}</td>
+                        <td>{sell_price} UAH</td>
+                    </tr>
+                """
+        else:
+            html_content += "<tr><td colspan='4' style='text-align:center; color:#777;'>Запчастини не додавалися</td></tr>"
+
+        html_content += f"""
+                </tbody>
+            </table>
+
+            <div class="total">Загальна вартість замовлення: {total_amount} UAH</div>
+            
+            <table class="signatures">
+                <tr>
+                    <td>Майстер-приймальник: _________________</td>
+                    <td style="text-align: right;">З об'ємом робіт згоден (Клієнт): _________________</td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        return HttpResponse(html_content, content_type='text/html; charset=utf-8')
+
 
 class OrderPartViewSet(viewsets.ModelViewSet):
     serializer_class = OrderPartSerializer

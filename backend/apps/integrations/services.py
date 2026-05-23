@@ -1,4 +1,4 @@
-import pandas as pd
+from openpyxl import load_workbook
 import math
 import requests
 from .models import PriceItem
@@ -11,37 +11,43 @@ def parse_supplier_excel(file_path, column_mapping, exchange_rate=1.0):
     exchange_rate: курс валют (за замовчуванням 1.0, якщо прайс у гривні)
     """
     try:
-        # Читаємо Excel файл
-        df = pd.read_excel(file_path, engine='openpyxl')
-        
-        # Перевертаємо словник для pandas: {"Код товару": "part_number", "Ціна": "price"}
-        rename_dict = {excel_col: db_col for db_col, excel_col in column_mapping.items() if excel_col in df.columns}
-        
-        # Перейменовуємо стовпці у наш стандартний вигляд
-        df = df.rename(columns=rename_dict)
-        
-        # Залишаємо тільки ті стовпці, які нам потрібні (щоб не тримати сміття в пам'яті)
-        standard_columns = list(rename_dict.values())
-        df = df[standard_columns]
-        
-        # Очищення даних: видаляємо рядки, де немає ціни або артикулу
-        if 'part_number' in df.columns and 'price' in df.columns:
-            df = df.dropna(subset=['part_number', 'price'])
-        
-        # Перетворюємо всі артикули в текст (щоб уникнути помилок типу 1234.0)
-        if 'part_number' in df.columns:
-            df['part_number'] = df['part_number'].astype(str).str.strip()
-            
-        # Приводимо ціну до числа і множимо на курс валют
-        if 'price' in df.columns:
-            df['price'] = pd.to_numeric(df['price'], errors='coerce') * float(exchange_rate)
-            # Округляємо до 2 знаків після коми
-            df['price'] = df['price'].round(2)
-            
-        # Конвертуємо таблицю у список словників для зручної роботи в Python
-        # [{ "part_number": "05P634", "price": 1250.50, ... }, { ... }]
-        records = df.to_dict(orient='records')
-        
+        wb = load_workbook(filename=file_path, read_only=True, data_only=True)
+        ws = wb.active
+
+        rows = ws.iter_rows(values_only=True)
+        headers = next(rows, None)
+        if not headers:
+            return {"status": "success", "total_items": 0, "data": []}
+
+        normalized_headers = [str(h).strip() if h is not None else "" for h in headers]
+
+        index_map = {}
+        for db_col, excel_col in column_mapping.items():
+            if excel_col in normalized_headers:
+                index_map[db_col] = normalized_headers.index(excel_col)
+
+        records = []
+        for row in rows:
+            record = {}
+            for db_col, idx in index_map.items():
+                value = row[idx] if idx < len(row) else None
+                record[db_col] = value
+
+            part_number = record.get('part_number')
+            price = record.get('price')
+            if part_number in (None, '') or price in (None, ''):
+                continue
+
+            record['part_number'] = str(part_number).strip()
+
+            try:
+                numeric_price = round(float(price) * float(exchange_rate), 2)
+            except (TypeError, ValueError):
+                continue
+
+            record['price'] = numeric_price
+            records.append(record)
+
         return {
             "status": "success",
             "total_items": len(records),

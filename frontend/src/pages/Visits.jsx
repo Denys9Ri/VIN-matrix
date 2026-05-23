@@ -714,7 +714,7 @@ const Visits = () => {
                             <select value={p.status || p.logistics_status || 'WAITING'} onChange={(e) => updatePartStatus(p.id, e.target.value)} className={`appearance-none block text-[11px] font-black uppercase tracking-widest rounded-xl px-3 py-2 outline-none cursor-pointer flex-1 sm:w-36 text-center shadow-sm border border-slate-200/50 mt-1 ${partStatusColors[p.status || p.logistics_status || 'WAITING'] || partStatusColors['WAITING']}`}>
                               <option value="WAITING">⏳ Очікується</option>
                               <option value="IN_TRANSIT">🚚 В дорозі</option>
-                              <option value="ARRIVED">📦 На складі</option>
+                              <option value="ARRIVED">📦 Доставлено</option>
                               <option value="UNAVAILABLE">❌ Відмова</option>
                             </select>
                             <button onClick={() => handleDeletePart(p.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-1" title="Видалити запчастину">

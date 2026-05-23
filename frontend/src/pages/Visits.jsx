@@ -707,9 +707,9 @@ const Visits = () => {
                         <div className="flex-1 overflow-hidden">
                           <p className="font-bold text-slate-700 text-sm leading-tight truncate">{p.name}</p>
                           <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{p.brand} | {p.part_number || p.article}</p>
-                          {p.supplier_name && (
+                          {(p.supplier_name || p.supplier) && (
                             <p className="text-[10px] font-bold text-violet-700 mt-1 inline-flex items-center bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-full">
-                              Постачальник: {p.supplier_name}
+                              Постачальник: {p.supplier_name || p.supplier}
                             </p>
                           )}
                           <p className="text-[11px] font-black text-blue-600 mt-1">{p.sell_price} ₴</p>

@@ -145,3 +145,4 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 TIME_ZONE = 'Europe/Kyiv'
 USE_TZ = True
 
+CORS_ALLOW_ALL_ORIGINS = True

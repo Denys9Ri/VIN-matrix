@@ -41,7 +41,7 @@ const ProtectedRoute = ({ children }) => {
       }
     };
     checkAccess();
-  }, [token]);
+  }, [token, location.pathname]);
 
   if (!token) return <Navigate to="/login" replace />;
 

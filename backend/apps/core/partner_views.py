@@ -51,6 +51,11 @@ def is_partner_user(user):
     return bool(emp and emp.role == 'partner')
 
 
+def is_mechanic_user(user):
+    emp = get_employee(user)
+    return bool(emp and emp.role == 'mechanic')
+
+
 def is_platform_admin(user):
     return is_main_admin(user)
 
@@ -58,8 +63,11 @@ def is_platform_admin(user):
 def detect_role(user):
     if is_platform_admin(user):
         return 'admin'
-    if is_partner_user(user):
+    emp = get_employee(user)
+    if emp and emp.role == 'partner':
         return 'partner'
+    if emp and emp.role == 'mechanic':
+        return 'mechanic'
     return 'client'
 
 
@@ -196,17 +204,21 @@ def repair_legacy_account(user):
         return
 
     if is_platform_admin(user):
+        # Platform admin is A6000 only. He must not accidentally become partner/client/mechanic.
         PlatformClient.objects.filter(user=user).delete()
-        emp = get_employee(user)
-        if emp and emp.role == 'partner':
-            emp.role = 'mechanic'
-            emp.partner_code = None
-            emp.save(update_fields=['role', 'partner_code'])
+        Employee.objects.filter(user=user).delete()
         return
 
-    if is_partner_user(user):
+    emp = get_employee(user)
+    if emp and emp.role == 'partner':
         ensure_user_company(user)
-        ensure_partner_code(get_employee(user))
+        ensure_partner_code(emp)
+        PlatformClient.objects.filter(user=user).delete()
+        return
+
+    if emp and emp.role == 'mechanic':
+        # Mechanic is a restricted staff account attached to the creator's company.
+        # Do not create Company or PlatformClient for mechanic accounts.
         PlatformClient.objects.filter(user=user).delete()
         return
 
@@ -269,13 +281,14 @@ class ProfileSettingsView(APIView):
             access_message = 'Немає доступу через відсутність оплати.'
 
         permissions = {
-            'can_create_visits': role in ['admin', 'partner', 'client'],
-            'can_view_finances': role in ['admin', 'partner', 'client'],
+            'can_create_visits': role in ['admin', 'partner', 'client'] or bool(emp and emp.can_create_visits),
+            'can_view_finances': role in ['admin', 'partner', 'client'] or bool(emp and emp.can_view_finances),
             'can_view_clients': role in ['admin', 'partner', 'client'],
             'can_view_analytics': role in ['admin', 'partner', 'client'],
             'can_manage_partners': role == 'admin',
             'can_manage_accounts': role in ['admin', 'partner'],
             'can_view_partner_clients': role == 'partner',
+            'can_manage_mechanics': role in ['admin', 'partner', 'client'],
         }
         company_data = CompanySerializer(company, context={'request': request}).data if company else {
             'name': '', 'logo': None, 'phone': '', 'address': '', 'document_footer': '', 'global_margin_percent': 20, 'business_type': 'sto'
@@ -401,15 +414,12 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         if is_main_admin(emp.user):
             return Response({'error': 'Головного адміна не можна перевести у клієнти.'}, status=400)
 
-        admin_user = get_default_assigned_owner(exclude_user=emp.user)
-        PlatformClient.objects.filter(assigned_owner=emp.user).update(assigned_owner=admin_user, referred_by=admin_user)
-        was_active = emp.user.is_active
-        emp.role = 'mechanic'
-        emp.partner_code = None
-        emp.can_create_visits = True
-        emp.can_view_finances = True
-        emp.save()
-        ensure_platform_client(emp.user, assigned_owner=admin_user, active=was_active)
+        target_user = emp.user
+        admin_user = get_default_assigned_owner(exclude_user=target_user)
+        PlatformClient.objects.filter(assigned_owner=target_user).update(assigned_owner=admin_user, referred_by=admin_user)
+        was_active = target_user.is_active
+        emp.delete()
+        ensure_platform_client(target_user, assigned_owner=admin_user, active=was_active)
         return Response({'message': 'Партнера переведено у звичайні клієнти.'})
 
     def partial_update(self, request, pk=None):

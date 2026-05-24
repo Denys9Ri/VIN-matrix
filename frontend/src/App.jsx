@@ -11,6 +11,7 @@ import Visits from './pages/Visits';
 import Analytics from './pages/Analytics';
 import Clients from './pages/Clients';
 import PartnerClients from './pages/PartnerClients';
+import Partners from './pages/Partners';
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('access_token');
@@ -34,6 +35,7 @@ function App() {
           <Route path="clients" element={<Clients />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="partner-clients" element={<PartnerClients />} />
+          <Route path="partners" element={<Partners />} />
         </Route>
       </Routes>
     </BrowserRouter>

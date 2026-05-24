@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -45,9 +46,8 @@ def is_platform_client_user(user):
 
 
 def is_platform_admin(user):
-    if is_partner_user(user) or is_platform_client_user(user):
-        return False
-    return bool(user.is_staff or user.is_superuser or get_company(user))
+    # Головний адмін повинен мати повний доступ навіть якщо через старий ремонт йому випадково створили PlatformClient.
+    return bool(user.is_staff or user.is_superuser or get_company(user)) and not is_partner_user(user)
 
 
 def get_user_company(user):
@@ -64,10 +64,10 @@ def detect_role(user):
     employee = get_employee(user)
     if employee and employee.role == 'partner':
         return 'partner'
-    if get_platform_client(user):
-        return 'platform_client'
     if user.is_staff or user.is_superuser or get_company(user):
         return 'owner'
+    if get_platform_client(user):
+        return 'platform_client'
     if employee:
         return employee.role or 'mechanic'
     return 'user'
@@ -127,6 +127,10 @@ def get_default_assigned_owner(user):
     employee = get_employee(user)
     if employee and employee.role == 'partner':
         return user
+
+    admin_user = User.objects.filter(Q(is_staff=True) | Q(is_superuser=True)).exclude(id=user.id).order_by('id').first()
+    if admin_user:
+        return admin_user
 
     first_partner = User.objects.filter(employee_profile__role='partner').exclude(id=user.id).order_by('id').first()
     if first_partner:
@@ -305,7 +309,7 @@ class PartnerManagementViewSet(viewsets.ViewSet):
 
         employee = Employee.objects.create(
             user=user,
-            company=request.user.company,
+            company=get_user_company(request.user) or company,
             role='partner',
             can_create_visits=True,
             can_view_finances=True,
@@ -349,7 +353,7 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         ensure_partner_company(user)
         employee, created = Employee.objects.get_or_create(
             user=user,
-            defaults={'company': request.user.company, 'role': 'partner', 'can_create_visits': True, 'can_view_finances': True, 'partner_code': generate_partner_code()}
+            defaults={'company': get_user_company(request.user) or get_company(user), 'role': 'partner', 'can_create_visits': True, 'can_view_finances': True, 'partner_code': generate_partner_code()}
         )
         if not created:
             employee.role = 'partner'
@@ -368,6 +372,16 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         repair_legacy_account(self.request.user)
         qs = PlatformClient.objects.select_related('user', 'assigned_owner', 'referred_by').order_by('-created_at')
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(
+                Q(client_code__icontains=search)
+                | Q(user__username__icontains=search)
+                | Q(user__first_name__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(assigned_owner__username__icontains=search)
+                | Q(assigned_owner__first_name__icontains=search)
+            )
         if is_platform_admin(self.request.user):
             return qs
         if is_partner_user(self.request.user):
@@ -384,13 +398,14 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
             payment_status = request.data.get('payment_status')
             if payment_status in [PlatformClient.PAYMENT_PENDING, PlatformClient.PAYMENT_ACTIVE, PlatformClient.PAYMENT_INACTIVE]:
                 instance.payment_status = payment_status
-            if 'assigned_owner' in request.data:
+            owner_id = request.data.get('assigned_owner') or request.data.get('assigned_owner_id') or request.data.get('partner_id')
+            if owner_id:
                 try:
-                    new_owner = User.objects.get(id=request.data.get('assigned_owner'), employee_profile__role='partner')
+                    new_owner = User.objects.get(Q(id=owner_id), Q(employee_profile__role='partner') | Q(is_staff=True) | Q(is_superuser=True) | Q(company__isnull=False))
                     instance.assigned_owner = new_owner
                     instance.referred_by = new_owner
                 except User.DoesNotExist:
-                    return Response({'error': 'Партнера не знайдено.'}, status=400)
+                    return Response({'error': 'Партнера/адміна не знайдено.'}, status=400)
         if 'is_access_enabled' in request.data:
             instance.is_access_enabled = bool(request.data.get('is_access_enabled'))
         if instance.payment_status != PlatformClient.PAYMENT_ACTIVE:

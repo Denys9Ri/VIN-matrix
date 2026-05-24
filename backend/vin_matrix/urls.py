@@ -8,14 +8,16 @@ from rest_framework.routers import DefaultRouter
 from apps.core.views import (
     LogoutView,
     ChangePasswordView,
-    PartSearchView,
 )
 from apps.core.safe_crm_views import (
     VisitViewSet,
     ServiceCatalogViewSet,
-    MechanicViewSet,
     OrderPartViewSet,
     OrderServiceViewSet,
+)
+from apps.core.paid_views import (
+    PartSearchView,
+    MechanicViewSet,
     CategoryViewSet,
     InventoryItemViewSet,
     SupplierViewSet,

@@ -5,23 +5,19 @@ from .models import Company, Employee, PlatformClient
 
 @admin.register(PlatformClient)
 class PlatformClientAdmin(admin.ModelAdmin):
-    """Операційна адмінка для керування клієнтами, оплатами та партнерами."""
+    list_display = ("client_code", "user", "referred_by", "payment_status", "is_access_enabled")
+    list_filter = ("referred_by", "payment_status", "is_access_enabled")
+    search_fields = ("client_code", "user__username")
+    list_editable = ("is_access_enabled",)
+    actions = ["enable_access", "disable_access"]
 
-    list_display = (
-        "user",
-        "client_code",
-        "assigned_owner",
-        "referred_by",
-        "payment_status",
-        "is_access_enabled",
-        "created_at",
-    )
-    list_filter = ("payment_status", "is_access_enabled", "referred_by", "assigned_owner")
-    search_fields = ("user__username", "user__email", "client_code")
-    autocomplete_fields = ("user", "assigned_owner", "referred_by")
-    list_editable = ("payment_status", "is_access_enabled")
-    ordering = ("-created_at",)
-    list_select_related = ("user", "assigned_owner", "referred_by")
+    @admin.action(description="Надати доступ вибраним")
+    def enable_access(self, request, queryset):
+        queryset.update(is_access_enabled=True)
+
+    @admin.action(description="Закрити доступ вибраним")
+    def disable_access(self, request, queryset):
+        queryset.update(is_access_enabled=False)
 
 
 @admin.register(Company)
@@ -33,14 +29,5 @@ class CompanyAdmin(admin.ModelAdmin):
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = (
-        "user",
-        "company",
-        "role",
-        "partner_code",
-        "can_create_visits",
-        "can_view_finances",
-    )
-    list_filter = ("role", "can_create_visits", "can_view_finances", "company")
-    search_fields = ("user__username", "partner_code", "company__name")
-    autocomplete_fields = ("user", "company")
+    list_display = ("user", "company", "role", "partner_code")
+    list_filter = ("role",)

@@ -11,7 +11,8 @@ class CarInline(admin.TabularInline):
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
     list_display = ("full_name", "phone_number", "company")
-    search_fields = ("full_name", "phone_number", "company__name")
+    list_display_links = ("full_name",)
+    search_fields = ("full_name", "phone_number")
     list_filter = ("company",)
     autocomplete_fields = ("company",)
     inlines = [CarInline]
@@ -37,9 +38,9 @@ class VisitServiceInline(admin.TabularInline):
 
 @admin.register(Visit)
 class VisitAdmin(admin.ModelAdmin):
-    list_display = ("car", "status", "mileage", "created_at", "updated_at")
-    list_filter = ("status", "car__client__company")
-    search_fields = ("car__plate_number", "car__client__full_name", "car__client__phone_number")
+    list_display = ("id", "car", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = ("car__plate_number",)
     autocomplete_fields = ("car",)
     inlines = [VisitItemInline, VisitServiceInline]
 

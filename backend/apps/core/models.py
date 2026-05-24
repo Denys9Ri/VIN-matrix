@@ -2,28 +2,24 @@ from django.db import models
 from django.contrib.auth.models import User
 
 class Company(models.Model):
-    name = models.CharField(max_length=255, verbose_name="Назва СТО")
+    name = models.CharField(max_length=255, verbose_name="Company name")
     owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company')
-    logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Логотип")
-    phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="Телефон СТО")
-    address = models.CharField(max_length=255, blank=True, null=True, verbose_name="Адреса СТО")
-    document_footer = models.TextField(blank=True, null=True, verbose_name="Текст для чека (Гарантія тощо)")
-    global_margin_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, verbose_name="Націнка на запчастини (%)")
-    euro_rate = models.DecimalField(max_digits=6, decimal_places=2, default=42.00, verbose_name="Курс Євро")
-    business_type = models.CharField(max_length=20, default='sto', verbose_name="Тип бізнесу")
-
+    logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Logo")
+    phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="Phone")
+    address = models.CharField(max_length=255, blank=True, null=True, verbose_name="Address")
+    document_footer = models.TextField(blank=True, null=True, verbose_name="Document footer")
+    global_margin_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20.00)
+    euro_rate = models.DecimalField(max_digits=6, decimal_places=2, default=42.00)
+    business_type = models.CharField(max_length=20, default='sto')
     def __str__(self): return self.name
 
 class Employee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employee_profile')
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='employees')
     role = models.CharField(max_length=20, default='mechanic')
-    
-    # НОВІ ПРАВА ДОСТУПУ ДЛЯ МАЙСТРА
     can_create_visits = models.BooleanField(default=False)
     can_view_finances = models.BooleanField(default=False)
     partner_code = models.CharField(max_length=20, unique=True, null=True, blank=True)
-
     def __str__(self): return f"{self.user.username} - {self.company.name}"
 
 class Visit(models.Model):
@@ -33,14 +29,10 @@ class Visit(models.Model):
     client = models.CharField(max_length=100)
     phone = models.CharField(max_length=20)
     status = models.CharField(max_length=50, default='SELECTION')
-    
     delivery_type = models.CharField(max_length=50, default='pickup', blank=True, null=True)
     delivery_data = models.TextField(blank=True, null=True)
     payment_status = models.CharField(max_length=50, default='unpaid', blank=True, null=True)
-    
-    # НОВЕ ПОЛЕ: ПЕРЕДОПЛАТА
     prepayment_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     scheduled_datetime = models.DateTimeField(null=True, blank=True)
@@ -48,7 +40,7 @@ class Visit(models.Model):
 
 class ServiceCatalog(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
-    name = models.CharField(max_length=255) 
+    name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
 class OrderPart(models.Model):
@@ -56,8 +48,8 @@ class OrderPart(models.Model):
     brand = models.CharField(max_length=100)
     article = models.CharField(max_length=100)
     name = models.CharField(max_length=255)
-    buy_price = models.DecimalField(max_digits=10, decimal_places=2) 
-    sell_price = models.DecimalField(max_digits=10, decimal_places=2) 
+    buy_price = models.DecimalField(max_digits=10, decimal_places=2)
+    sell_price = models.DecimalField(max_digits=10, decimal_places=2)
     supplier = models.CharField(max_length=100)
     status = models.CharField(max_length=20, default='WAITING')
 
@@ -88,17 +80,12 @@ class Supplier(models.Model):
     price_file = models.FileField(upload_to='supplier_prices/', null=True, blank=True)
     warehouse_prefs = models.JSONField(default=list, blank=True)
 
-
 class PlatformClient(models.Model):
     PAYMENT_PENDING = 'pending'
+    PAYMENT_TRIAL = 'trial'
     PAYMENT_ACTIVE = 'active'
     PAYMENT_INACTIVE = 'inactive'
-    PAYMENT_STATUS_CHOICES = [
-        (PAYMENT_PENDING, 'Очікує оплату'),
-        (PAYMENT_ACTIVE, 'Активний'),
-        (PAYMENT_INACTIVE, 'Неактивний'),
-    ]
-
+    PAYMENT_STATUS_CHOICES = [(PAYMENT_PENDING, 'Pending'), (PAYMENT_TRIAL, 'Trial'), (PAYMENT_ACTIVE, 'Active'), (PAYMENT_INACTIVE, 'Inactive')]
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='platform_client_profile')
     client_code = models.PositiveIntegerField(unique=True)
     phone = models.CharField(max_length=30, blank=True, null=True)
@@ -106,7 +93,9 @@ class PlatformClient(models.Model):
     referred_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='referred_platform_clients')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_PENDING)
     is_access_enabled = models.BooleanField(default=False)
+    trial_started_at = models.DateTimeField(null=True, blank=True)
+    trial_until = models.DateTimeField(null=True, blank=True)
+    subscription_started_at = models.DateTimeField(null=True, blank=True)
+    subscription_until = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.client_code} - {self.user.username}"
+    def __str__(self): return f"{self.client_code} - {self.user.username}"

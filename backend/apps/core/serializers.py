@@ -65,6 +65,7 @@ class PlatformClientSerializer(serializers.ModelSerializer):
     email = serializers.CharField(source='user.email', read_only=True)
     user_id = serializers.IntegerField(source='user.id', read_only=True)
     assigned_owner_id = serializers.IntegerField(read_only=True)
+    client_code_display = serializers.SerializerMethodField()
     assigned_to = serializers.SerializerMethodField()
     assigned_partner_code = serializers.SerializerMethodField()
     referred_by_name = serializers.SerializerMethodField()
@@ -72,10 +73,13 @@ class PlatformClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = PlatformClient
         fields = [
-            'id', 'user_id', 'client_code', 'full_name', 'username', 'email',
+            'id', 'user_id', 'client_code', 'client_code_display', 'full_name', 'username', 'email',
             'payment_status', 'is_access_enabled', 'assigned_owner_id',
             'assigned_to', 'assigned_partner_code', 'referred_by_name', 'created_at'
         ]
+
+    def get_client_code_display(self, obj):
+        return f'C{obj.client_code}' if obj.client_code else None
 
     def get_assigned_to(self, obj):
         if not obj.assigned_owner:
@@ -83,17 +87,17 @@ class PlatformClientSerializer(serializers.ModelSerializer):
         full_name = obj.assigned_owner.first_name.strip() if obj.assigned_owner.first_name else ''
         if full_name:
             return full_name
-        try:
-            if obj.assigned_owner.company:
-                return 'Адміністратор'
-        except Exception:
-            pass
         return obj.assigned_owner.username
 
     def get_assigned_partner_code(self, obj):
         try:
             return obj.assigned_owner.employee_profile.partner_code
         except Exception:
+            try:
+                if obj.assigned_owner.username == 'Denys9Ri':
+                    return 'A6000'
+            except Exception:
+                pass
             return None
 
     def get_referred_by_name(self, obj):

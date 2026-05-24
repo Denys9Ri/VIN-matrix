@@ -78,7 +78,7 @@ const PartnerClients = () => {
   const renewClient = async (client) => {
     if (!window.confirm(`Додати/оновити 30 днів для ${client.full_name || client.username}?`)) return;
     try {
-      await api.post(`/api/platform-clients/${client.id}/renew-30-days/`);
+      await api.post(`/api/platform-clients/${client.id}/renew-30/`);
       await loadData();
     } catch (error) {
       alert(`Не вдалося оновити підписку: ${getErrorMessage(error)}`);

@@ -15,8 +15,9 @@ const Sidebar = ({ isOpen, closeMenu }) => {
       try {
         const response = await api.get('/api/settings/');
         const data = response.data || {};
+        const effectiveRole = data.actual_role || data.account_role || data.role || 'client';
 
-        setRole(data.role || 'client');
+        setRole(effectiveRole);
         setBusinessType(data.company?.business_type || 'sto');
         setCanManagePartners(data.permissions?.can_manage_partners === true);
         setCanManageAccounts(data.permissions?.can_manage_accounts === true);

@@ -31,9 +31,9 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     
     # Наші модулі
-    'apps.core',
-    'apps.integrations',
-    'apps.crm',
+    'apps.core.apps.CoreConfig',
+    'apps.integrations.apps.IntegrationsConfig',
+    'apps.crm.apps.CrmConfig',
 ]
 
 TEMPLATES = [
@@ -57,6 +57,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -159,4 +160,12 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://ydy3swnvdledj1sdinrvvleo.95.217.211.207.sslip.io",
     "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io",
+]
+
+
+LANGUAGE_CODE = 'uk'
+USE_I18N = True
+
+LANGUAGES = [
+    ('uk', 'Українська'),
 ]

@@ -191,10 +191,11 @@ const Clients = () => {
                   onClick={() => setSelectedGroup(group)}
                   className="w-full text-left p-4 hover:bg-slate-50 transition-colors"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                     <p className="font-bold text-slate-800 uppercase">{group.plate}</p>
                     <p className="font-semibold text-slate-700 flex items-center gap-2"><User size={14} /> {group.client}</p>
                     <p className="font-semibold text-slate-600 flex items-center gap-2"><CarFront size={14} /> {group.car}</p>
+                    <p className="font-semibold text-slate-500">Візитів: {group.visits.length}</p>
                   </div>
                 </button>
               </section>
@@ -230,7 +231,19 @@ const Clients = () => {
                   <div className="text-sm text-slate-700 mb-3">
                     <p className="font-semibold">Запчастини:</p>
                     <ul className="list-disc pl-5">
-                      {(visit.parts || []).length === 0 ? <li>Немає</li> : (visit.parts || []).map((part, idx) => <li key={`part-${visit.id}-${idx}`}>{part.name || part.article || 'Запчастина'}</li>)}
+                      {(visit.parts || []).length === 0 ? (
+                        <li>Немає</li>
+                      ) : (visit.parts || []).map((part, idx) => {
+                        const brand = part.brand || part.manufacturer || '—';
+                        const article = part.article || part.sku || '—';
+                        const quantity = part.quantity ?? part.qty ?? part.count ?? '—';
+
+                        return (
+                          <li key={`part-${visit.id}-${idx}`}>
+                            Бренд: {brand}; Артикул: {article}; К-сть: {quantity}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
 

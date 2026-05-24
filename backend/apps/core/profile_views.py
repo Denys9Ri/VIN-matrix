@@ -11,6 +11,7 @@ from .partner_views import (
     repair_legacy_account,
 )
 from .serializers import CompanySerializer, UserSerializer
+from .subscriptions import subscription_payload
 
 
 class ProfileSettingsView(BaseProfileSettingsView):
@@ -31,6 +32,7 @@ class ProfileSettingsView(BaseProfileSettingsView):
         client_profile = get_platform_client(user)
         actual_role = detect_role(user)
         settings_role = 'mechanic' if actual_role == 'mechanic' else 'owner'
+        sub = subscription_payload(client_profile) if client_profile else {}
 
         access_allowed = True
         access_message = ''
@@ -80,6 +82,11 @@ class ProfileSettingsView(BaseProfileSettingsView):
             'client_code_display': f'C{client_profile.client_code}' if client_profile else None,
             'phone': client_profile.phone if client_profile else None,
             'subscription_status': client_profile.payment_status if client_profile else None,
+            'subscription_end_display': sub.get('subscription_end_display'),
+            'days_until_subscription_end': sub.get('days_until_subscription_end'),
+            'subscription_warning': sub.get('subscription_warning', False),
+            'subscription_expired': sub.get('subscription_expired', False),
+            'subscription_label': sub.get('subscription_label'),
             'is_access_enabled': client_profile.is_access_enabled if client_profile else None,
             'access_allowed': access_allowed,
             'access_message': access_message,

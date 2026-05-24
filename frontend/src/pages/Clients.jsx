@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Search, Phone, CarFront, User, CalendarDays, Wrench } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const normalize = (value) => String(value || '').toLowerCase().trim();
 
@@ -44,9 +45,11 @@ const extractCarData = (visit) => {
 };
 
 const Clients = () => {
+  const navigate = useNavigate();
   const [visits, setVisits] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
   const token = localStorage.getItem('access_token');
 
@@ -110,6 +113,42 @@ const Clients = () => {
       .sort((a, b) => b.visits.length - a.visits.length);
   }, [filteredVisits]);
 
+  const buildRepeatVisitPayload = (visit) => {
+    let parsedDeliveryData = {};
+    if (typeof visit.delivery_data === 'string' && visit.delivery_data.trim().startsWith('{')) {
+      try {
+        parsedDeliveryData = JSON.parse(visit.delivery_data);
+      } catch {
+        parsedDeliveryData = {};
+      }
+    }
+
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    return {
+      plate: visit.plate || '',
+      vin_code: visit.vin_code || '',
+      client: visit.client || '',
+      phone: visit.phone || '',
+      brand: visit.brand || parsedDeliveryData.brand || '',
+      model: visit.model || parsedDeliveryData.model || '',
+      year: parsedDeliveryData.year || '',
+      engine: parsedDeliveryData.engine || '',
+      fuel: parsedDeliveryData.fuel || '',
+      date: `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`,
+      time: '09:00',
+    };
+  };
+
+  const handleRepeatVisit = (visit) => {
+    navigate('/visits', {
+      state: {
+        repeatVisitData: buildRepeatVisitPayload(visit),
+      },
+    });
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen">
       <h1 className="text-2xl md:text-3xl font-black italic uppercase text-slate-800 mb-4">Історія візитів клієнтів</h1>
@@ -137,13 +176,22 @@ const Clients = () => {
             </div>
           ) : (
             groupedClients.map((group) => (
-              <section key={group.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <section
+                key={group.id}
+                className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+              >
                 <div className="p-4 border-b border-slate-100 bg-slate-50">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                     <p className="font-black text-slate-800 flex items-center gap-2"><User size={14} /> {group.client}</p>
                     <p className="font-semibold text-slate-600 flex items-center gap-2"><Phone size={14} /> {group.phone}</p>
                     <p className="font-semibold text-slate-600 flex items-center gap-2 uppercase"><CarFront size={14} /> {group.plate}</p>
-                    <p className="font-semibold text-slate-600">Авто: {group.car}</p>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedGroup(group)}
+                      className="font-semibold text-left text-blue-700 hover:text-blue-800 underline underline-offset-2"
+                    >
+                      Авто: {group.car} · Візитів: {group.visits.length}
+                    </button>
                   </div>
                 </div>
 
@@ -161,6 +209,47 @@ const Clients = () => {
               </section>
             ))
           )}
+        </div>
+      )}
+
+      {selectedGroup && (
+        <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl max-h-[85vh] overflow-hidden">
+            <div className="p-4 md:p-5 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black text-slate-800">{selectedGroup.client}</h2>
+                <p className="text-sm text-slate-500 font-semibold">Всього візитів: {selectedGroup.visits.length}</p>
+              </div>
+              <button type="button" onClick={() => setSelectedGroup(null)} className="px-3 py-1.5 rounded-lg border border-slate-200 font-semibold text-slate-600">Закрити</button>
+            </div>
+
+            <div className="p-4 md:p-5 overflow-y-auto max-h-[65vh] space-y-3">
+              {selectedGroup.visits.map((visit) => (
+                <div key={visit.id} className="border border-slate-200 rounded-xl p-4">
+                  <p className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2"><CalendarDays size={14} /> {formatVisitDate(visit)}</p>
+                  <p className="text-xs text-slate-500 mb-2">Статус: {visit.status || '—'}</p>
+
+                  <div className="text-sm text-slate-700 mb-2">
+                    <p className="font-semibold">Послуги:</p>
+                    <ul className="list-disc pl-5">
+                      {(visit.services || []).length === 0 ? <li>Немає</li> : (visit.services || []).map((service, idx) => <li key={`service-${visit.id}-${idx}`}>{service.name || service.service_name || 'Послуга'}</li>)}
+                    </ul>
+                  </div>
+
+                  <div className="text-sm text-slate-700 mb-3">
+                    <p className="font-semibold">Запчастини:</p>
+                    <ul className="list-disc pl-5">
+                      {(visit.parts || []).length === 0 ? <li>Немає</li> : (visit.parts || []).map((part, idx) => <li key={`part-${visit.id}-${idx}`}>{part.name || part.article || 'Запчастина'}</li>)}
+                    </ul>
+                  </div>
+
+                  <button type="button" onClick={() => handleRepeatVisit(visit)} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg">
+                    Повторити візит
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -73,7 +73,7 @@ class PlatformClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = PlatformClient
         fields = [
-            'id', 'user_id', 'client_code', 'client_code_display', 'full_name', 'username', 'email',
+            'id', 'user_id', 'client_code', 'client_code_display', 'full_name', 'username', 'email', 'phone',
             'payment_status', 'is_access_enabled', 'assigned_owner_id',
             'assigned_to', 'assigned_partner_code', 'referred_by_name', 'created_at'
         ]

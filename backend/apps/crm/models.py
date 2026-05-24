@@ -10,6 +10,10 @@ class Client(models.Model):
     def __str__(self):
         return f"{self.full_name} ({self.phone_number})"
 
+    class Meta:
+        verbose_name = "Клієнт"
+        verbose_name_plural = "Клієнти"
+
 
 class Car(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='cars')

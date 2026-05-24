@@ -74,7 +74,7 @@ const Partners = () => {
     const q = search.trim().toLowerCase();
     if (!q) return clients;
     return clients.filter((client) =>
-      [client.client_code_display, client.client_code, client.full_name, client.username, client.email, client.assigned_to, client.assigned_partner_code, client.user_id]
+      [client.client_code_display, client.client_code, client.full_name, client.username, client.phone, client.email, client.assigned_to, client.assigned_partner_code, client.user_id]
         .map((value) => String(value || '').toLowerCase())
         .some((value) => value.includes(q))
     );
@@ -178,7 +178,7 @@ const Partners = () => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Пошук по ПІБ, логіну, ID, коду або партнеру"
+            placeholder="Пошук по ПІБ, телефону, логіну, ID, коду або партнеру"
             className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 font-semibold text-sm outline-none focus:border-blue-500"
           />
         </div>
@@ -269,6 +269,7 @@ const Partners = () => {
                 <tr>
                   <th className="text-left px-4 py-3">Код</th>
                   <th className="text-left px-4 py-3">Клієнт</th>
+                  <th className="text-left px-4 py-3">Телефон</th>
                   <th className="text-left px-4 py-3">Прикріплений</th>
                   <th className="text-left px-4 py-3">Доступ</th>
                   <th className="text-left px-4 py-3">Підписка</th>
@@ -288,6 +289,7 @@ const Partners = () => {
                       <p className="text-xs text-slate-500">{client.username} · ID {client.user_id}</p>
                       {client.email && <p className="text-xs text-slate-400">{client.email}</p>}
                     </td>
+                    <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{client.phone || '—'}</td>
                     <td className="px-4 py-3 min-w-[220px]">
                       <p className="font-bold text-slate-700 mb-2">{client.assigned_partner_code || 'A6000'} · {client.assigned_to || 'Адмін'}</p>
                       <select
@@ -340,6 +342,7 @@ const Partners = () => {
               <p><span className="font-black text-slate-500">User ID:</span> {selectedClient.user_id}</p>
               <p><span className="font-black text-slate-500">Логін:</span> {selectedClient.username}</p>
               <p><span className="font-black text-slate-500">ПІБ:</span> {selectedClient.full_name || '—'}</p>
+              <p><span className="font-black text-slate-500">Телефон:</span> {selectedClient.phone || '—'}</p>
               <p><span className="font-black text-slate-500">Email:</span> {selectedClient.email || '—'}</p>
               <p><span className="font-black text-slate-500">Прикріплений:</span> {selectedClient.assigned_partner_code || 'A6000'} · {selectedClient.assigned_to || 'Адмін'}</p>
               <p><span className="font-black text-slate-500">Доступ:</span> {selectedClient.is_access_enabled ? 'Увімкнено' : 'Вимкнено'}</p>

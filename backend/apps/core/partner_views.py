@@ -14,30 +14,55 @@ from .models import Company, Employee, PlatformClient, Supplier
 from .serializers import CompanySerializer, PlatformClientSerializer, UserSerializer
 
 
+def get_employee(user):
+    try:
+        return user.employee_profile
+    except Exception:
+        return None
+
+
+def get_company(user):
+    try:
+        return user.company
+    except Exception:
+        return None
+
+
+def get_platform_client(user):
+    try:
+        return user.platform_client_profile
+    except Exception:
+        return None
+
+
 def is_partner_user(user):
-    return hasattr(user, 'employee_profile') and user.employee_profile.role == 'partner'
+    employee = get_employee(user)
+    return bool(employee and employee.role == 'partner')
 
 
 def is_platform_admin(user):
-    return hasattr(user, 'company') and not is_partner_user(user)
+    return bool(get_company(user) and not is_partner_user(user))
 
 
 def get_user_company(user):
-    if hasattr(user, 'company'):
-        return user.company
-    if hasattr(user, 'employee_profile'):
-        return user.employee_profile.company
+    own_company = get_company(user)
+    if own_company:
+        return own_company
+    employee = get_employee(user)
+    if employee:
+        return employee.company
     return None
 
 
 def detect_role(user):
-    if is_partner_user(user):
+    employee = get_employee(user)
+    if employee and employee.role == 'partner':
         return 'partner'
-    if hasattr(user, 'company'):
+    if get_company(user):
         return 'owner'
-    if hasattr(user, 'employee_profile'):
-        return user.employee_profile.role or 'mechanic'
-    if hasattr(user, 'platform_client_profile'):
+    if employee:
+        return employee.role or 'mechanic'
+    if get_platform_client(user):
         return 'platform_client'
     return 'user'
 
@@ -53,8 +78,9 @@ def generate_partner_code():
 
 
 def ensure_partner_company(user):
-    if hasattr(user, 'company'):
-        return user.company
+    existing_company = get_company(user)
+    if existing_company:
+        return existing_company
 
     title = user.first_name.strip() if user.first_name else user.username
     company = Company.objects.create(
@@ -75,29 +101,18 @@ class ProfileSettingsView(APIView):
     def get(self, request):
         user = request.user
         company = get_user_company(user)
+        employee = get_employee(user)
+        client_profile = get_platform_client(user)
         role = detect_role(user)
 
         permissions = {
-            'can_create_visits': role in ['owner', 'partner'] or getattr(getattr(user, 'employee_profile', None), 'can_create_visits', False),
-            'can_view_finances': role in ['owner', 'partner'] or getattr(getattr(user, 'employee_profile', None), 'can_view_finances', False),
+            'can_create_visits': role in ['owner', 'partner'] or bool(employee and employee.can_create_visits),
+            'can_view_finances': role in ['owner', 'partner'] or bool(employee and employee.can_view_finances),
             'can_view_clients': role in ['owner', 'partner', 'platform_client'],
             'can_view_analytics': role in ['owner', 'partner', 'platform_client'],
             'can_manage_partners': role == 'owner',
             'can_view_partner_clients': role in ['owner', 'partner'],
         }
-
-        partner_code = None
-        if hasattr(user, 'employee_profile'):
-            partner_code = user.employee_profile.partner_code
-
-        client_code = None
-        subscription_status = None
-        is_access_enabled = None
-        if hasattr(user, 'platform_client_profile'):
-            client_profile = user.platform_client_profile
-            client_code = client_profile.client_code
-            subscription_status = client_profile.payment_status
-            is_access_enabled = client_profile.is_access_enabled
 
         company_serializer = CompanySerializer(company, context={'request': request}) if company else None
         return Response({
@@ -105,10 +120,10 @@ class ProfileSettingsView(APIView):
             'company': company_serializer.data if company_serializer else None,
             'role': role,
             'permissions': permissions,
-            'partner_code': partner_code,
-            'client_code': client_code,
-            'subscription_status': subscription_status,
-            'is_access_enabled': is_access_enabled,
+            'partner_code': employee.partner_code if employee else None,
+            'client_code': client_profile.client_code if client_profile else None,
+            'subscription_status': client_profile.payment_status if client_profile else None,
+            'is_access_enabled': client_profile.is_access_enabled if client_profile else None,
         })
 
     def patch(self, request):
@@ -168,6 +183,7 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         data = []
         for partner in partners:
             clients_qs = PlatformClient.objects.filter(assigned_owner=partner.user)
+            partner_company = get_company(partner.user)
             data.append({
                 'id': partner.id,
                 'user_id': partner.user.id,
@@ -176,7 +192,7 @@ class PartnerManagementViewSet(viewsets.ViewSet):
                 'email': partner.user.email,
                 'partner_code': partner.partner_code,
                 'is_active': partner.user.is_active,
-                'company_id': getattr(partner.user, 'company', None).id if hasattr(partner.user, 'company') else None,
+                'company_id': partner_company.id if partner_company else None,
                 'clients_count': clients_qs.count(),
                 'active_clients_count': clients_qs.filter(payment_status=PlatformClient.PAYMENT_ACTIVE, is_access_enabled=True).count(),
                 'created_at': partner.user.date_joined,
@@ -201,10 +217,10 @@ class PartnerManagementViewSet(viewsets.ViewSet):
             return Response({'error': 'Такий логін вже зайнятий.'}, status=400)
 
         user = User.objects.create_user(username=username, password=password, first_name=full_name, email=email)
-        Company.objects.create(name=company_name, owner=user, business_type='sto')
-        Supplier.objects.create(company=user.company, name='Vesna-auto', api_key='')
-        Supplier.objects.create(company=user.company, name='Omega', api_key='')
-        Supplier.objects.create(company=user.company, name='Technomir', api_key='')
+        company = Company.objects.create(name=company_name, owner=user, business_type='sto')
+        Supplier.objects.create(company=company, name='Vesna-auto', api_key='')
+        Supplier.objects.create(company=company, name='Omega', api_key='')
+        Supplier.objects.create(company=company, name='Technomir', api_key='')
 
         employee = Employee.objects.create(
             user=user,
@@ -338,11 +354,11 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
             key = client.assigned_owner_id
             if key not in grouped:
                 owner_name = client.assigned_owner.first_name.strip() if client.assigned_owner.first_name else client.assigned_owner.username
-                partner_code = getattr(getattr(client.assigned_owner, 'employee_profile', None), 'partner_code', None)
+                employee = get_employee(client.assigned_owner)
                 grouped[key] = {
                     'partner_id': key,
                     'partner_name': owner_name,
-                    'partner_code': partner_code,
+                    'partner_code': employee.partner_code if employee else None,
                     'clients': []
                 }
             grouped[key]['clients'].append(self.get_serializer(client).data)
@@ -370,8 +386,9 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='me')
     def me(self, request):
-        if hasattr(request.user, 'platform_client_profile'):
-            return Response(self.get_serializer(request.user.platform_client_profile).data)
+        client_profile = get_platform_client(request.user)
+        if client_profile:
+            return Response(self.get_serializer(client_profile).data)
         return Response({})
 
     @action(detail=True, methods=['post'], url_path='activate-month')

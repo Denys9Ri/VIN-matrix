@@ -9,6 +9,7 @@ from apps.core.views import (
     RegisterView, VisitViewSet, ServiceCatalogViewSet, 
     ProfileSettingsView, LogoutView, ChangePasswordView, MechanicViewSet,
     OrderPartViewSet, OrderServiceViewSet,
+    PlatformClientViewSet,
     # === НОВІ ІМПОРТИ ДЛЯ СКЛАДУ ТА ПОСТАЧАЛЬНИКІВ ===
     CategoryViewSet, InventoryItemViewSet, SupplierViewSet,
     PartSearchView # <--- ДОДАЛИ ТІЛЬКИ ЦЕ
@@ -25,6 +26,7 @@ router.register(r'order-services', OrderServiceViewSet, basename='order-service'
 router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'inventory', InventoryItemViewSet, basename='inventory')
 router.register(r'suppliers', SupplierViewSet, basename='supplier')
+router.register(r'platform-clients', PlatformClientViewSet, basename='platform-client')
 
 def api_root(request):
     return JsonResponse({"message": "VIN-matrix API is running!", "status": "stable"})

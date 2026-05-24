@@ -17,12 +17,13 @@ from datetime import datetime, timedelta, time as dt_time
 from django.http import HttpResponse
 from decimal import Decimal
 
-from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService, Category, InventoryItem, Supplier
+from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService, Category, InventoryItem, Supplier, PlatformClient
 from .serializers import (
     VisitSerializer, UserSerializer, 
     CompanySerializer, ServiceCatalogSerializer,
     OrderPartSerializer, OrderServiceSerializer,
     CategorySerializer, InventoryItemSerializer, SupplierSerializer
+    , PlatformClientSerializer
 )
 
 def get_user_company(user):
@@ -470,18 +471,93 @@ class RegisterView(APIView):
         username = request.data.get('username')
         password = request.data.get('password')
         company_name = request.data.get('company_name')
-        if not username or not password or not company_name: return Response({"error": "Всі поля обов'язкові!"}, status=400)
+        representative_code = request.data.get('representative_code', '').strip().upper()
+        full_name = request.data.get('full_name', '').strip()
+        if not username or not password: return Response({"error": "Логін і пароль обов'язкові!"}, status=400)
         if User.objects.filter(username=username).exists(): return Response({"error": "Логін зайнятий!"}, status=400)
         try:
+            # Реєстрація СТО адміністратора (існуючий сценарій)
+            if company_name:
+                user = User.objects.create_user(username=username, password=password, first_name=full_name)
+                company = Company.objects.create(name=company_name, owner=user)
+                
+                Supplier.objects.create(company=company, name="Vesna-auto", api_key="")
+                Supplier.objects.create(company=company, name="Omega", api_key="")
+                Supplier.objects.create(company=company, name="Technomir", api_key="")
+                return Response({"message": "Успішно зареєстровано!"}, status=201)
+
+            # Реєстрація клієнта платформи
+            if not full_name:
+                return Response({"error": "Для клієнта вкажіть ПІБ (full_name)."}, status=400)
+
             user = User.objects.create_user(username=username, password=password)
-            company = Company.objects.create(name=company_name, owner=user)
-            
-            Supplier.objects.create(company=company, name="Vesna-auto", api_key="")
-            Supplier.objects.create(company=company, name="Omega", api_key="")
-            Supplier.objects.create(company=company, name="Technomir", api_key="")
-            
-            return Response({"message": "Успішно зареєстровано!"}, status=201)
+            user.first_name = full_name
+            user.save()
+
+            assigned_owner = None
+            if representative_code:
+                representative = Employee.objects.filter(partner_code=representative_code).select_related('user').first()
+                if representative:
+                    assigned_owner = representative.user
+            if assigned_owner is None:
+                assigned_owner = User.objects.filter(company__isnull=False).order_by('id').first()
+            if assigned_owner is None:
+                return Response({"error": "Немає доступного адміністратора для закріплення клієнта."}, status=400)
+
+            last_client = PlatformClient.objects.order_by('-client_code').first()
+            next_code = (last_client.client_code + 1) if last_client else 6001
+            PlatformClient.objects.create(
+                user=user,
+                client_code=next_code,
+                assigned_owner=assigned_owner,
+                payment_status=PlatformClient.PAYMENT_PENDING,
+                is_access_enabled=False
+            )
+
+            return Response({"message": "Клієнт зареєстрований. Очікує оплату."}, status=201)
         except Exception as e: return Response({"error": str(e)}, status=500)
+
+
+class PlatformClientViewSet(viewsets.ModelViewSet):
+    serializer_class = PlatformClientSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if hasattr(self.request.user, 'company'):
+            return PlatformClient.objects.all().select_related('user', 'assigned_owner')
+        if hasattr(self.request.user, 'employee_profile'):
+            return PlatformClient.objects.filter(assigned_owner=self.request.user).select_related('user', 'assigned_owner')
+        return PlatformClient.objects.filter(user=self.request.user).select_related('user', 'assigned_owner')
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not hasattr(request.user, 'company'):
+            return Response({"error": "Тільки адміністратор може змінювати оплату/доступ."}, status=403)
+        payment_status = request.data.get('payment_status')
+        if payment_status in [PlatformClient.PAYMENT_PENDING, PlatformClient.PAYMENT_ACTIVE, PlatformClient.PAYMENT_INACTIVE]:
+            instance.payment_status = payment_status
+        if 'is_access_enabled' in request.data:
+            instance.is_access_enabled = bool(request.data.get('is_access_enabled'))
+        if instance.payment_status != PlatformClient.PAYMENT_ACTIVE:
+            instance.is_access_enabled = False
+        instance.save()
+        return Response(self.get_serializer(instance).data)
+
+    @action(detail=False, methods=['get'], url_path='stats')
+    def stats(self, request):
+        if hasattr(request.user, 'company'):
+            reps = Employee.objects.filter(role='mechanic').select_related('user')
+            data = []
+            for rep in reps:
+                data.append({
+                    "representative": rep.user.first_name or rep.user.username,
+                    "clients_count": PlatformClient.objects.filter(assigned_owner=rep.user).count()
+                })
+            return Response(data)
+        if hasattr(request.user, 'employee_profile'):
+            count = PlatformClient.objects.filter(assigned_owner=request.user).count()
+            return Response({"my_clients": count})
+        return Response({"my_clients": 0})
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]

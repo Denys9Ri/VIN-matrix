@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService, Category, InventoryItem, Supplier
+from .models import Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService, Category, InventoryItem, Supplier, PlatformClient
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -58,3 +58,21 @@ class SupplierSerializer(serializers.ModelSerializer):
         model = Supplier
         fields = '__all__'
         read_only_fields = ['company']
+
+
+class PlatformClientSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(source='user.first_name', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    assigned_to = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PlatformClient
+        fields = ['id', 'client_code', 'full_name', 'username', 'payment_status', 'is_access_enabled', 'assigned_to', 'created_at']
+
+    def get_assigned_to(self, obj):
+        full_name = obj.assigned_owner.first_name.strip() if obj.assigned_owner.first_name else ''
+        if full_name:
+            return full_name
+        if hasattr(obj.assigned_owner, 'company'):
+            return 'Адміністратор'
+        return obj.assigned_owner.username

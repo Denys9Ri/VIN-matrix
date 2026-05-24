@@ -20,10 +20,8 @@ from apps.core.safe_crm_views import (
     InventoryItemViewSet,
     SupplierViewSet,
 )
-from apps.core.partner_views import (
-    RegisterView,
-    PartnerManagementViewSet,
-)
+from apps.core.partner_views import PartnerManagementViewSet
+from apps.core.platform_auth_views import RegisterView
 from apps.core.platform_client_views import SecurePlatformClientViewSet
 from apps.core.profile_views import ProfileSettingsView
 

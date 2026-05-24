@@ -1,4 +1,5 @@
 from datetime import timedelta
+import re
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
@@ -19,6 +20,9 @@ PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
 ADMIN_CODE = 'A6000'
 PARTNER_CODE_START = 6001
 CLIENT_CODE_START = 6002
+USERNAME_RE = re.compile(r'^(?=(?:.*[A-Za-z]){4,})(?=.*[A-Z])(?=.*\d)[A-Za-z\d]+$')
+PASSWORD_RE = re.compile(r'^(?=(?:.*[A-Za-z]){4,})(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$')
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 
 def is_main_admin(user):
@@ -176,13 +180,15 @@ def get_default_assigned_owner(exclude_user=None):
     return exclude_user
 
 
-def ensure_platform_client(user, assigned_owner=None, active=False):
+def ensure_platform_client(user, assigned_owner=None, active=False, phone=None):
     owner = assigned_owner or get_default_assigned_owner(exclude_user=user) or user
     client = get_platform_client(user)
     payment_status = PlatformClient.PAYMENT_ACTIVE if active else PlatformClient.PAYMENT_PENDING
     if client:
         client.assigned_owner = owner
         client.referred_by = owner
+        if phone is not None:
+            client.phone = phone
         if active:
             client.payment_status = PlatformClient.PAYMENT_ACTIVE
             client.is_access_enabled = True
@@ -191,11 +197,28 @@ def ensure_platform_client(user, assigned_owner=None, active=False):
     return PlatformClient.objects.create(
         user=user,
         client_code=generate_client_code(),
+        phone=phone or '',
         assigned_owner=owner,
         referred_by=owner,
         payment_status=payment_status,
         is_access_enabled=active,
     )
+
+
+def validate_registration(username, password, full_name, phone, email):
+    if not full_name:
+        return 'ПІБ обовʼязкове.'
+    if not phone:
+        return 'Номер телефону обовʼязковий.'
+    if not username or not password:
+        return 'Логін і пароль обовʼязкові.'
+    if not USERNAME_RE.match(username):
+        return 'Логін має містити мінімум 4 англійські букви, мінімум одну велику букву і мінімум одну цифру. Без пробілів і спецсимволів.'
+    if not PASSWORD_RE.match(password):
+        return 'Пароль має містити мінімум 8 символів, мінімум 4 англійські букви, одну велику букву, цифру і спецсимвол.'
+    if email and not EMAIL_RE.match(email):
+        return 'Email введено некоректно.'
+    return None
 
 
 @transaction.atomic
@@ -204,7 +227,6 @@ def repair_legacy_account(user):
         return
 
     if is_platform_admin(user):
-        # Platform admin is A6000 only. He must not accidentally become partner/client/mechanic.
         PlatformClient.objects.filter(user=user).delete()
         Employee.objects.filter(user=user).delete()
         return
@@ -217,8 +239,6 @@ def repair_legacy_account(user):
         return
 
     if emp and emp.role == 'mechanic':
-        # Mechanic is a restricted staff account attached to the creator's company.
-        # Do not create Company or PlatformClient for mechanic accounts.
         PlatformClient.objects.filter(user=user).delete()
         return
 
@@ -234,6 +254,8 @@ class RegisterView(APIView):
         username = (request.data.get('username') or '').strip()
         password = request.data.get('password') or ''
         full_name = (request.data.get('full_name') or '').strip()
+        phone = (request.data.get('phone') or '').strip()
+        email = (request.data.get('email') or '').strip()
         company_name = (request.data.get('company_name') or '').strip()
         partner_code = normalize_code(
             request.data.get('partner_code')
@@ -243,8 +265,9 @@ class RegisterView(APIView):
             or ''
         )
 
-        if not username or not password:
-            return Response({'error': 'Логін і пароль обовʼязкові.'}, status=400)
+        validation_error = validate_registration(username, password, full_name, phone, email)
+        if validation_error:
+            return Response({'error': validation_error}, status=400)
         if User.objects.filter(username=username).exists():
             return Response({'error': 'Логін зайнятий.'}, status=400)
 
@@ -255,10 +278,10 @@ class RegisterView(APIView):
                 return Response({'error': 'Код партнера не знайдено.'}, status=400)
 
         with transaction.atomic():
-            user = User.objects.create_user(username=username, password=password, first_name=full_name)
+            user = User.objects.create_user(username=username, password=password, first_name=full_name, email=email)
             ensure_user_company(user, company_name or full_name or username)
             owner = partner.user if partner else get_default_assigned_owner(exclude_user=user)
-            ensure_platform_client(user, assigned_owner=owner, active=False)
+            ensure_platform_client(user, assigned_owner=owner, active=False, phone=phone)
         return Response({'message': 'Акаунт створено. Очікує активації доступу.'}, status=201)
 
 
@@ -306,6 +329,7 @@ class ProfileSettingsView(APIView):
             'partner_code': partner_code,
             'client_code': client.client_code if client else None,
             'client_code_display': f'C{client.client_code}' if client else None,
+            'phone': client.phone if client else None,
             'subscription_status': client.payment_status if client else None,
             'is_access_enabled': client.is_access_enabled if client else None,
             'access_allowed': access_allowed,
@@ -451,7 +475,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
         search = self.request.query_params.get('search', '').strip()
         if search:
             qs = qs.filter(
-                Q(client_code__icontains=search) | Q(user__username__icontains=search) |
+                Q(client_code__icontains=search) | Q(phone__icontains=search) | Q(user__username__icontains=search) |
                 Q(user__first_name__icontains=search) | Q(user__email__icontains=search) |
                 Q(assigned_owner__username__icontains=search) | Q(assigned_owner__first_name__icontains=search)
             )

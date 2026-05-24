@@ -41,9 +41,10 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     { name: 'Налаштування', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  const menuItems = role === 'owner' 
-    ? allMenuItems 
-    : allMenuItems.filter(item => [visitsName, 'Налаштування'].includes(item.name));
+  const fullAccessRoles = ['owner', 'admin', 'partner', 'mechanic'];
+  const menuItems = fullAccessRoles.includes(role)
+    ? allMenuItems
+    : allMenuItems.filter((item) => [visitsName, 'Пошук запчастин', 'Клієнти', 'Налаштування'].includes(item.name));
 
   return (
     <>

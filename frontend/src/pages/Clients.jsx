@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Search, Phone, CarFront, User, CalendarDays, Wrench } from 'lucide-react';
+import { Search, CarFront, User, CalendarDays } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const normalize = (value) => String(value || '').toLowerCase().trim();
@@ -17,13 +17,6 @@ const formatVisitDate = (visit) => {
     hour: '2-digit',
     minute: '2-digit',
   });
-};
-
-const getWorksSummary = (visit) => {
-  const services = Array.isArray(visit.services) ? visit.services.length : 0;
-  const parts = Array.isArray(visit.parts) ? visit.parts.length : 0;
-  if (!services && !parts) return 'Без деталей/робіт';
-  return `Роботи: ${services}, Запчастини: ${parts}`;
 };
 
 const extractCarData = (visit) => {
@@ -50,6 +43,8 @@ const Clients = () => {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState(null);
+  const [repeatVisitTarget, setRepeatVisitTarget] = useState(null);
+  const [repeatForm, setRepeatForm] = useState({ date: '', time: '09:00', comment: '' });
   const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
   const token = localStorage.getItem('access_token');
 
@@ -113,7 +108,7 @@ const Clients = () => {
       .sort((a, b) => b.visits.length - a.visits.length);
   }, [filteredVisits]);
 
-  const buildRepeatVisitPayload = (visit) => {
+  const buildRepeatVisitPayload = (visit, overrides = {}) => {
     let parsedDeliveryData = {};
     if (typeof visit.delivery_data === 'string' && visit.delivery_data.trim().startsWith('{')) {
       try {
@@ -122,9 +117,6 @@ const Clients = () => {
         parsedDeliveryData = {};
       }
     }
-
-    const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + 1);
 
     return {
       plate: visit.plate || '',
@@ -136,17 +128,31 @@ const Clients = () => {
       year: parsedDeliveryData.year || '',
       engine: parsedDeliveryData.engine || '',
       fuel: parsedDeliveryData.fuel || '',
-      date: `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`,
-      time: '09:00',
+      date: overrides.date || '',
+      time: overrides.time || '09:00',
+      comment: overrides.comment || '',
     };
   };
 
-  const handleRepeatVisit = (visit) => {
+  const openRepeatVisitModal = (visit) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const date = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+
+    setRepeatVisitTarget(visit);
+    setRepeatForm({ date, time: '09:00', comment: '' });
+  };
+
+  const submitRepeatVisit = () => {
+    if (!repeatVisitTarget || !repeatForm.date || !repeatForm.time) return;
+
     navigate('/visits', {
       state: {
-        repeatVisitData: buildRepeatVisitPayload(visit),
+        repeatVisitData: buildRepeatVisitPayload(repeatVisitTarget, repeatForm),
       },
     });
+
+    setRepeatVisitTarget(null);
   };
 
   return (
@@ -180,32 +186,17 @@ const Clients = () => {
                 key={group.id}
                 className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
               >
-                <div className="p-4 border-b border-slate-100 bg-slate-50">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-                    <p className="font-black text-slate-800 flex items-center gap-2"><User size={14} /> {group.client}</p>
-                    <p className="font-semibold text-slate-600 flex items-center gap-2"><Phone size={14} /> {group.phone}</p>
-                    <p className="font-semibold text-slate-600 flex items-center gap-2 uppercase"><CarFront size={14} /> {group.plate}</p>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedGroup(group)}
-                      className="font-semibold text-left text-blue-700 hover:text-blue-800 underline underline-offset-2"
-                    >
-                      Авто: {group.car} · Візитів: {group.visits.length}
-                    </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedGroup(group)}
+                  className="w-full text-left p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <p className="font-bold text-slate-800 uppercase">{group.plate}</p>
+                    <p className="font-semibold text-slate-700 flex items-center gap-2"><User size={14} /> {group.client}</p>
+                    <p className="font-semibold text-slate-600 flex items-center gap-2"><CarFront size={14} /> {group.car}</p>
                   </div>
-                </div>
-
-                <div className="divide-y divide-slate-100">
-                  {group.visits.map((visit) => (
-                    <div key={visit.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-bold text-slate-800 flex items-center gap-2"><CalendarDays size={14} /> {formatVisitDate(visit)}</p>
-                        <p className="text-xs text-slate-500 mt-1">Статус: {visit.status || '—'}</p>
-                      </div>
-                      <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Wrench size={14} /> {getWorksSummary(visit)}</p>
-                    </div>
-                  ))}
-                </div>
+                </button>
               </section>
             ))
           )}
@@ -243,11 +234,29 @@ const Clients = () => {
                     </ul>
                   </div>
 
-                  <button type="button" onClick={() => handleRepeatVisit(visit)} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg">
+                  <button type="button" onClick={() => openRepeatVisitModal(visit)} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg">
                     Повторити візит
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {repeatVisitTarget && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5">
+            <h3 className="text-lg font-black text-slate-800 mb-4">Повторити візит</h3>
+            <div className="space-y-3">
+              <input type="date" className="w-full border rounded-lg px-3 py-2" value={repeatForm.date} onChange={(e) => setRepeatForm((prev) => ({ ...prev, date: e.target.value }))} />
+              <input type="time" className="w-full border rounded-lg px-3 py-2" value={repeatForm.time} onChange={(e) => setRepeatForm((prev) => ({ ...prev, time: e.target.value }))} />
+              <textarea placeholder="Коментар" className="w-full border rounded-lg px-3 py-2" rows={3} value={repeatForm.comment} onChange={(e) => setRepeatForm((prev) => ({ ...prev, comment: e.target.value }))} />
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button type="button" onClick={() => setRepeatVisitTarget(null)} className="px-3 py-2 rounded-lg border">Скасувати</button>
+              <button type="button" onClick={submitRepeatVisit} className="px-3 py-2 rounded-lg bg-blue-600 text-white">Створити</button>
             </div>
           </div>
         </div>

@@ -78,6 +78,7 @@ class ProfileSettingsView(BaseProfileSettingsView):
             'partner_code': partner_code,
             'client_code': client_profile.client_code if client_profile else None,
             'client_code_display': f'C{client_profile.client_code}' if client_profile else None,
+            'phone': client_profile.phone if client_profile else None,
             'subscription_status': client_profile.payment_status if client_profile else None,
             'is_access_enabled': client_profile.is_access_enabled if client_profile else None,
             'access_allowed': access_allowed,

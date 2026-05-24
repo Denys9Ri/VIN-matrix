@@ -29,6 +29,11 @@ const copyText = async (value) => {
   }
 };
 
+const getErrorMessage = (error) => {
+  const data = error?.response?.data;
+  return data?.details || data?.error || data?.detail || error?.message || 'Невідома помилка';
+};
+
 const Partners = () => {
   const [partners, setPartners] = useState([]);
   const [clients, setClients] = useState([]);
@@ -78,43 +83,69 @@ const Partners = () => {
   const totalActiveClients = clients.filter((client) => client.is_access_enabled).length;
 
   const togglePartner = async (partner) => {
-    await api.patch(`/api/partners/${partner.id}/`, { is_active: !partner.is_active });
-    await loadData();
+    try {
+      await api.patch(`/api/partners/${partner.id}/`, { is_active: !partner.is_active });
+      await loadData();
+    } catch (error) {
+      alert(`Не вдалося змінити статус партнера: ${getErrorMessage(error)}`);
+    }
   };
 
   const makePartnerClient = async (partner) => {
     const ok = window.confirm(`Перевести партнера ${partner.full_name || partner.username} у звичайні клієнти? Його клієнти перейдуть до адміна.`);
     if (!ok) return;
-    await api.post(`/api/partners/${partner.id}/make-client/`);
-    await loadData();
+    try {
+      await api.post(`/api/partners/${partner.id}/make-client/`);
+      await loadData();
+    } catch (error) {
+      alert(`Не вдалося перевести партнера у клієнти: ${getErrorMessage(error)}`);
+    }
   };
 
   const promoteClient = async (client) => {
     const ok = window.confirm(`Зробити ${client.full_name || client.username} партнером?`);
     if (!ok) return;
-    await api.post('/api/partners/promote-user/', { user_id: client.user_id });
-    await loadData();
+    try {
+      await api.post('/api/partners/promote-user/', { user_id: client.user_id });
+      await loadData();
+    } catch (error) {
+      alert(`Не вдалося зробити партнером: ${getErrorMessage(error)}`);
+    }
   };
 
   const toggleClientAccess = async (client) => {
-    await api.patch(`/api/platform-clients/${client.id}/`, {
-      is_access_enabled: !client.is_access_enabled,
-      payment_status: !client.is_access_enabled ? 'active' : 'inactive',
-    });
-    await loadData();
+    try {
+      await api.patch(`/api/platform-clients/${client.id}/`, {
+        is_access_enabled: !client.is_access_enabled,
+        payment_status: !client.is_access_enabled ? 'active' : 'inactive',
+      });
+      await loadData();
+    } catch (error) {
+      alert(`Не вдалося змінити доступ: ${getErrorMessage(error)}`);
+    }
   };
 
   const assignClientOwner = async (client, ownerId) => {
     if (!ownerId) return;
-    await api.patch(`/api/platform-clients/${client.id}/`, { assigned_owner_id: ownerId });
-    await loadData();
+    try {
+      await api.patch(`/api/platform-clients/${client.id}/`, { assigned_owner_id: ownerId });
+      await loadData();
+    } catch (error) {
+      alert(`Не вдалося змінити партнера: ${getErrorMessage(error)}`);
+    }
   };
 
   const deleteClient = async (client) => {
     const ok = window.confirm(`Видалити акаунт ${client.full_name || client.username} повністю з сайту і бази?`);
     if (!ok) return;
-    await api.delete(`/api/platform-clients/${client.id}/`);
-    await loadData();
+    try {
+      await api.delete(`/api/platform-clients/${client.id}/`);
+      setClients((prev) => prev.filter((item) => item.id !== client.id));
+      await loadData();
+      alert('Акаунт видалено.');
+    } catch (error) {
+      alert(`Не вдалося видалити акаунт: ${getErrorMessage(error)}`);
+    }
   };
 
   return (

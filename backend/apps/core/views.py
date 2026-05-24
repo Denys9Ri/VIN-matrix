@@ -27,8 +27,10 @@ from .serializers import (
 )
 
 def get_user_company(user):
-    if hasattr(user, 'company'): return user.company
-    if hasattr(user, 'employee_profile'): return user.employee_profile.company
+    if hasattr(user, 'company'):
+        return user.company
+    if hasattr(user, 'employee_profile'):
+        return user.employee_profile.company
     return None
 
 class VisitViewSet(viewsets.ModelViewSet):
@@ -365,19 +367,24 @@ class ProfileSettingsView(APIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     def get(self, request):
         company = get_user_company(request.user)
-        role = 'owner' if hasattr(request.user, 'company') else 'mechanic'
-        
-        permissions = {"can_create_visits": True, "can_view_finances": True}
-        if role == 'mechanic':
+
+        if hasattr(request.user, 'company'):
+            role = 'owner'
+            permissions = {"can_create_visits": True, "can_view_finances": True}
+        elif hasattr(request.user, 'employee_profile'):
+            role = 'mechanic'
             emp = request.user.employee_profile
             permissions = {
                 "can_create_visits": emp.can_create_visits,
                 "can_view_finances": emp.can_view_finances
             }
-            
+        else:
+            role = 'platform_client'
+            permissions = {"can_create_visits": False, "can_view_finances": False}
+
         user_serializer = UserSerializer(request.user)
-        company_serializer = CompanySerializer(company, context={'request': request})
-        return Response({ "user": user_serializer.data, "company": company_serializer.data, "role": role, "permissions": permissions })
+        company_serializer = CompanySerializer(company, context={'request': request}) if company else None
+        return Response({"user": user_serializer.data, "company": company_serializer.data if company_serializer else None, "role": role, "permissions": permissions})
     
     def patch(self, request):
         if not hasattr(request.user, 'company'): return Response({"error": "Тільки власник"}, status=403)
@@ -954,6 +961,9 @@ class PartSearchView(APIView):
 
     def get(self, request):
         company = get_user_company(request.user)
+        if not company:
+            return Response({"error": "Акаунт не прив'язаний до СТО. Пошук недоступний."}, status=403)
+
         euro_rate = float(company.euro_rate) if company.euro_rate else 42.00
         
         query = request.query_params.get('q', '').strip()

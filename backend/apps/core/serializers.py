@@ -64,10 +64,11 @@ class PlatformClientSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(source='user.first_name', read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
     assigned_to = serializers.SerializerMethodField()
+    referred_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = PlatformClient
-        fields = ['id', 'client_code', 'full_name', 'username', 'payment_status', 'is_access_enabled', 'assigned_to', 'created_at']
+        fields = ['id', 'client_code', 'full_name', 'username', 'payment_status', 'is_access_enabled', 'assigned_to', 'referred_by_name', 'created_at']
 
     def get_assigned_to(self, obj):
         full_name = obj.assigned_owner.first_name.strip() if obj.assigned_owner.first_name else ''
@@ -76,3 +77,9 @@ class PlatformClientSerializer(serializers.ModelSerializer):
         if hasattr(obj.assigned_owner, 'company'):
             return 'Адміністратор'
         return obj.assigned_owner.username
+
+    def get_referred_by_name(self, obj):
+        if not obj.referred_by:
+            return None
+        full_name = obj.referred_by.first_name.strip() if obj.referred_by.first_name else ''
+        return full_name or obj.referred_by.username

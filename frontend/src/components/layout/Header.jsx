@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, Bell, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../api/axios';
 
 const Header = ({ toggleMenu }) => {
   const [query, setQuery] = useState('');
+  const [clientCode, setClientCode] = useState(null);
   const navigate = useNavigate();
 
   const handleQuickSearch = (e) => {
@@ -14,9 +16,24 @@ const Header = ({ toggleMenu }) => {
     }
   };
 
+  useEffect(() => {
+    const loadClientCode = async () => {
+      try {
+        const res = await api.get('/api/platform-clients/');
+        if (Array.isArray(res.data) && res.data.length === 1) {
+          setClientCode(res.data[0]?.client_code || null);
+        }
+      } catch (e) {}
+    };
+    loadClientCode();
+  }, []);
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 sticky top-0 z-30 shadow-sm w-full">
       <div className="flex items-center gap-2 md:gap-3 flex-1">
+        <div className="bg-slate-800 text-white px-3 py-1 rounded-lg text-xs md:text-sm font-bold shrink-0">
+          Код: {clientCode || 'N/A'}
+        </div>
         
         <button 
           onClick={toggleMenu} 

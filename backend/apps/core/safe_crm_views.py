@@ -48,6 +48,19 @@ def safe_ensure_company(user):
     return safe_get_company(user)
 
 
+def supplier_badge_class(supplier_name, is_local=False):
+    if is_local:
+        return 'bg-slate-800 text-white whitespace-nowrap'
+    name = str(supplier_name or '').upper()
+    if 'VESNA' in name or 'ВЕСНА' in name:
+        return 'bg-emerald-600 text-white shadow-md shadow-emerald-200 whitespace-nowrap'
+    if 'OMEGA' in name or 'ОМЕГА' in name:
+        return 'bg-blue-600 text-white shadow-md shadow-blue-200 whitespace-nowrap'
+    if 'TEHNO' in name or 'ТЕХНО' in name:
+        return 'bg-rose-600 text-white shadow-md shadow-rose-200 whitespace-nowrap'
+    return 'bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap'
+
+
 class VisitViewSet(BaseVisitViewSet):
     serializer_class = VisitSerializer
     permission_classes = [IsAuthenticated]
@@ -117,7 +130,9 @@ class OrderPartViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         company = safe_ensure_company(self.request.user)
         visit = Visit.objects.get(id=self.request.data.get('visit'), company=company)
-        serializer.save(visit=visit)
+        supplier = self.request.data.get('supplier') or ''
+        supplier_color = self.request.data.get('supplier_color') or supplier_badge_class(supplier, self.request.data.get('is_local') is True)
+        serializer.save(visit=visit, supplier_color=supplier_color)
 
 
 class OrderServiceViewSet(viewsets.ModelViewSet):

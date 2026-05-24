@@ -231,7 +231,19 @@ const Clients = () => {
                   <div className="text-sm text-slate-700 mb-3">
                     <p className="font-semibold">Запчастини:</p>
                     <ul className="list-disc pl-5">
-                      {(visit.parts || []).length === 0 ? <li>Немає</li> : (visit.parts || []).map((part, idx) => <li key={`part-${visit.id}-${idx}`}>{part.name || part.article || 'Запчастина'}</li>)}
+                      {(visit.parts || []).length === 0 ? (
+                        <li>Немає</li>
+                      ) : (visit.parts || []).map((part, idx) => {
+                        const brand = part.brand || part.manufacturer || '—';
+                        const article = part.article || part.sku || '—';
+                        const quantity = part.quantity ?? part.qty ?? part.count ?? '—';
+
+                        return (
+                          <li key={`part-${visit.id}-${idx}`}>
+                            Бренд: {brand}; Артикул: {article}; К-сть: {quantity}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
 

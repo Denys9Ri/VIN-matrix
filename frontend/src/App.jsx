@@ -32,7 +32,7 @@ const ProtectedRoute = ({ children }) => {
       try {
         const res = await api.get('/api/settings/');
         const data = res.data || {};
-        setRole(data.role || null);
+        setRole(data.actual_role || data.account_role || data.role || null);
         setAccessAllowed(data.access_allowed !== false);
       } catch (error) {
         setAccessAllowed(true);

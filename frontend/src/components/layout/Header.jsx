@@ -6,40 +6,35 @@ import api from '../../api/axios';
 
 const Header = ({ toggleMenu }) => {
   const [query, setQuery] = useState('');
-  const [clientCode, setClientCode] = useState(null);
+  const [userCode, setUserCode] = useState(null);
   const navigate = useNavigate();
 
   const handleQuickSearch = (e) => {
     if (e.key === 'Enter' && query.trim()) {
-      // Передаємо запит через параметр q
-      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
-      setQuery(''); // Очищаємо поле після переходу
+      const value = encodeURIComponent(query.trim());
+      navigate('/search?q=' + value);
+      setQuery('');
     }
   };
 
   useEffect(() => {
-    const loadClientCode = async () => {
+    const loadUserCode = async () => {
       try {
-        const res = await api.get('/api/platform-clients/');
-        if (Array.isArray(res.data) && res.data.length === 1) {
-          setClientCode(res.data[0]?.client_code || null);
-        }
+        const res = await api.get('/api/settings/');
+        const data = res.data || {};
+        setUserCode(data.user_code || data.client_code_display || null);
       } catch (e) {}
     };
-    loadClientCode();
+    loadUserCode();
   }, []);
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 sticky top-0 z-30 shadow-sm w-full">
       <div className="flex items-center gap-2 md:gap-3 flex-1">
-        <button 
-          onClick={toggleMenu} 
-          className="md:hidden p-1.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors shrink-0"
-        >
+        <button onClick={toggleMenu} className="md:hidden p-1.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors shrink-0">
           <Menu size={24} />
         </button>
 
-        {/* Компактний швидкий пошук */}
         <div className="relative w-full max-w-[160px] sm:max-w-[200px] md:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
           <input
@@ -54,8 +49,7 @@ const Header = ({ toggleMenu }) => {
       </div>
 
       <div className="flex items-center gap-3 md:gap-6 ml-2 shrink-0">
-        <ClientCodeBadge clientCode={clientCode} />
-
+        <ClientCodeBadge clientCode={userCode} />
         <div className="hidden lg:flex items-center gap-4 border-r pr-6 border-slate-200">
           <div className="text-right">
             <p className="text-[10px] uppercase text-slate-400 font-bold">Обіг сьогодні</p>

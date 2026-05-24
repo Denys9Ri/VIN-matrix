@@ -66,7 +66,7 @@ const PartnerClients = () => {
     const q = search.trim().toLowerCase();
     if (!q) return clients;
     return clients.filter((client) =>
-      [formatClientCode(client), client.client_code, client.full_name, client.username, client.payment_status, client.assigned_to]
+      [formatClientCode(client), client.client_code, client.full_name, client.username, client.phone, client.email, client.payment_status, client.assigned_to]
         .map((value) => String(value || '').toLowerCase())
         .some((value) => value.includes(q))
     );
@@ -130,7 +130,7 @@ const PartnerClients = () => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Пошук по коду, ПІБ або логіну"
+            placeholder="Пошук по коду, ПІБ, телефону або логіну"
             className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 font-semibold text-sm outline-none focus:border-blue-500"
           />
         </div>
@@ -151,6 +151,7 @@ const PartnerClients = () => {
                 <tr>
                   <th className="text-left px-4 py-3">Код</th>
                   <th className="text-left px-4 py-3">Клієнт</th>
+                  <th className="text-left px-4 py-3">Телефон</th>
                   <th className="text-left px-4 py-3">Логін</th>
                   <th className="text-left px-4 py-3">Підписка</th>
                   <th className="text-left px-4 py-3">Доступ</th>
@@ -167,7 +168,11 @@ const PartnerClients = () => {
                           {code} <Copy size={13} />
                         </button>
                       </td>
-                      <td className="px-4 py-3 font-bold text-slate-800">{client.full_name || '—'}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-slate-800">{client.full_name || '—'}</p>
+                        {client.email && <p className="text-xs text-slate-400">{client.email}</p>}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{client.phone || '—'}</td>
                       <td className="px-4 py-3 text-slate-600">{client.username || '—'}</td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs">

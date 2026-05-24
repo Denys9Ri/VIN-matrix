@@ -22,6 +22,7 @@ class Employee(models.Model):
     # НОВІ ПРАВА ДОСТУПУ ДЛЯ МАЙСТРА
     can_create_visits = models.BooleanField(default=False)
     can_view_finances = models.BooleanField(default=False)
+    partner_code = models.CharField(max_length=20, unique=True, null=True, blank=True)
 
     def __str__(self): return f"{self.user.username} - {self.company.name}"
 
@@ -86,3 +87,24 @@ class Supplier(models.Model):
     api_key = models.CharField(max_length=255, blank=True, null=True)
     price_file = models.FileField(upload_to='supplier_prices/', null=True, blank=True)
     warehouse_prefs = models.JSONField(default=list, blank=True)
+
+
+class PlatformClient(models.Model):
+    PAYMENT_PENDING = 'pending'
+    PAYMENT_ACTIVE = 'active'
+    PAYMENT_INACTIVE = 'inactive'
+    PAYMENT_STATUS_CHOICES = [
+        (PAYMENT_PENDING, 'Очікує оплату'),
+        (PAYMENT_ACTIVE, 'Активний'),
+        (PAYMENT_INACTIVE, 'Неактивний'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='platform_client_profile')
+    client_code = models.PositiveIntegerField(unique=True)
+    assigned_owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='managed_platform_clients')
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_PENDING)
+    is_access_enabled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.client_code} - {self.user.username}"

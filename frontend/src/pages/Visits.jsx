@@ -114,6 +114,17 @@ const Visits = () => {
   }, [location.state]);
 
   useEffect(() => {
+    if (location.state?.repeatVisitData) {
+      setNewVisitData((prev) => ({
+        ...prev,
+        ...location.state.repeatVisitData,
+      }));
+      setIsCreatingVisit(true);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
     if (selectedVisit) {
       setEditComment(selectedVisit.comment || '');
       try {

@@ -137,6 +137,7 @@ _ALTER_TABLES = [
     "ALTER TABLE core_visit ADD COLUMN IF NOT EXISTS prepayment_amount numeric(10, 2) DEFAULT 0;",
 
     "ALTER TABLE core_orderpart ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'WAITING';",
+    "ALTER TABLE core_orderpart ADD COLUMN IF NOT EXISTS supplier_color varchar(80) NULL;",
     "ALTER TABLE core_orderservice ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'PENDING';",
 
     "ALTER TABLE core_platformclient ADD COLUMN IF NOT EXISTS phone varchar(30) NULL;",

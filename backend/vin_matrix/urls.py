@@ -23,8 +23,8 @@ from apps.core.safe_crm_views import (
 from apps.core.partner_views import (
     RegisterView,
     PartnerManagementViewSet,
-    SecurePlatformClientViewSet,
 )
+from apps.core.platform_client_views import SecurePlatformClientViewSet
 from apps.core.profile_views import ProfileSettingsView
 
 router = DefaultRouter()

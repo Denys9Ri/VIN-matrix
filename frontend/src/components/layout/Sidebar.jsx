@@ -7,6 +7,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
   const [role, setRole] = useState('mechanic');
   const [businessType, setBusinessType] = useState('sto');
   const [canManagePartners, setCanManagePartners] = useState(false);
+  const [hasPartnerCode, setHasPartnerCode] = useState(false);
   const API_BASE = import.meta.env.VITE_API_URL || 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
 
   useEffect(() => {
@@ -17,9 +18,15 @@ const Sidebar = ({ isOpen, closeMenu }) => {
         const response = await axios.get(`${API_BASE}/api/settings/`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setRole(response.data.role);
-        setBusinessType(response.data.company?.business_type || 'sto');
-        setCanManagePartners(response.data.permissions?.can_manage_partners === true);
+        const data = response.data || {};
+        const username = data.user?.username;
+        const isMainAdmin = username === 'Denys9Ri';
+        const partnerCodeExists = Boolean(data.partner_code);
+
+        setRole(data.role || 'mechanic');
+        setBusinessType(data.company?.business_type || 'sto');
+        setCanManagePartners(isMainAdmin || data.permissions?.can_manage_partners === true);
+        setHasPartnerCode(partnerCodeExists || data.role === 'partner');
       } catch (error) {
         console.error('Помилка перевірки', error);
       }
@@ -37,7 +44,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     { name: 'Склад', icon: <Briefcase size={20} />, path: '/inventory' },
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
     { name: 'Клієнти', icon: <Users size={20} />, path: '/clients' },
-    ...(role === 'partner' ? [{ name: 'Мої підключені', icon: <UserCheck size={20} />, path: '/partner-clients' }] : []),
+    ...(hasPartnerCode && !canManagePartners ? [{ name: 'Мої підключені', icon: <UserCheck size={20} />, path: '/partner-clients' }] : []),
     ...(canManagePartners ? [{ name: 'Партнери', icon: <ShieldCheck size={20} />, path: '/partners' }] : []),
     { name: 'Налаштування', icon: <Settings size={20} />, path: '/settings' },
   ];

@@ -8,6 +8,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
   const [businessType, setBusinessType] = useState('sto');
   const [canManagePartners, setCanManagePartners] = useState(false);
   const [canManageAccounts, setCanManageAccounts] = useState(false);
+  const [accessAllowed, setAccessAllowed] = useState(true);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -19,6 +20,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
         setBusinessType(data.company?.business_type || 'sto');
         setCanManagePartners(data.permissions?.can_manage_partners === true);
         setCanManageAccounts(data.permissions?.can_manage_accounts === true);
+        setAccessAllowed(data.access_allowed !== false);
       } catch (error) {
         console.error('Помилка перевірки', error);
       }
@@ -29,15 +31,19 @@ const Sidebar = ({ isOpen, closeMenu }) => {
   const visitsName = businessType === 'store' ? 'Замовлення' : 'Візити';
   const visitsIcon = businessType === 'store' ? <Package size={20} /> : <CarFront size={20} />;
 
-  const menuItems = [
+  const paidMenuItems = [
     { name: 'Панель', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Пошук запчастин', icon: <Search size={20} />, path: '/search' },
-    { name: visitsName, icon: visitsIcon, path: '/visits' },
     { name: 'Склад', icon: <Briefcase size={20} />, path: '/inventory' },
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
     { name: 'Клієнти', icon: <Users size={20} />, path: '/clients' },
-    ...(role === 'partner' && canManageAccounts ? [{ name: 'Акаунти', icon: <UserCheck size={20} />, path: '/partner-clients' }] : []),
-    ...(canManagePartners ? [{ name: 'Партнери', icon: <ShieldCheck size={20} />, path: '/partners' }] : []),
+  ];
+
+  const menuItems = [
+    ...(accessAllowed ? paidMenuItems : []),
+    { name: visitsName, icon: visitsIcon, path: '/visits' },
+    ...(accessAllowed && role === 'partner' && canManageAccounts ? [{ name: 'Акаунти', icon: <UserCheck size={20} />, path: '/partner-clients' }] : []),
+    ...(accessAllowed && canManagePartners ? [{ name: 'Партнери', icon: <ShieldCheck size={20} />, path: '/partners' }] : []),
     { name: 'Налаштування', icon: <Settings size={20} />, path: '/settings' },
   ];
 
@@ -61,6 +67,11 @@ const Sidebar = ({ isOpen, closeMenu }) => {
               </li>
             ))}
           </ul>
+          {!accessAllowed && (
+            <div className="mx-1 mt-5 rounded-xl bg-rose-500/10 border border-rose-500/20 p-3 text-xs font-bold text-rose-200">
+              Немає доступу через відсутність оплати.
+            </div>
+          )}
         </nav>
       </div>
     </>

@@ -22,10 +22,10 @@ from apps.core.safe_crm_views import (
 )
 from apps.core.partner_views import (
     RegisterView,
-    ProfileSettingsView,
     PartnerManagementViewSet,
     SecurePlatformClientViewSet,
 )
+from apps.core.profile_views import ProfileSettingsView
 
 router = DefaultRouter()
 router.register(r'visits', VisitViewSet, basename='visit')

@@ -1,7 +1,7 @@
 # ==========================================
 # Етап 1: Збірка (Build Stage)
 # ==========================================
-FROM node:20-alpine as build
+FROM node:20-alpine AS build
 
 # Встановлюємо робочу директорію
 WORKDIR /app
@@ -10,7 +10,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Встановлюємо пакети
-RUN npm install
+RUN npm ci --no-audit --no-fund
 
 # Копіюємо весь код проекту
 COPY . .

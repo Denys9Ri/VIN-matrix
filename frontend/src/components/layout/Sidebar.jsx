@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck } from 'lucide-react';
+import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck, ShieldCheck } from 'lucide-react';
 import axios from 'axios';
 
 const Sidebar = ({ isOpen, closeMenu }) => {
@@ -38,6 +38,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
     { name: 'Клієнти', icon: <Users size={20} />, path: '/clients' },
     { name: 'Мої підключені', icon: <UserCheck size={20} />, path: '/partner-clients', roles: ['partner'] },
+    { name: 'Партнери', icon: <ShieldCheck size={20} />, path: '/partners', roles: ['owner', 'admin'] },
     { name: 'Налаштування', icon: <Settings size={20} />, path: '/settings' },
   ];
 

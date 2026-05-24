@@ -41,7 +41,7 @@ def is_partner_user(user):
 
 
 def is_platform_admin(user):
-    return bool(get_company(user) and not is_partner_user(user))
+    return bool((get_company(user) or user.is_superuser) and not is_partner_user(user))
 
 
 def get_user_company(user):
@@ -58,7 +58,7 @@ def detect_role(user):
     employee = get_employee(user)
     if employee and employee.role == 'partner':
         return 'partner'
-    if get_company(user):
+    if get_company(user) or user.is_superuser:
         return 'owner'
     if employee:
         return employee.role or 'mechanic'
@@ -77,9 +77,25 @@ def generate_partner_code():
     return code
 
 
-def ensure_partner_company(user):
+def generate_client_code():
+    last_client = PlatformClient.objects.order_by('-client_code').first()
+    next_code = (last_client.client_code + 1) if last_client else 6001
+    while PlatformClient.objects.filter(client_code=next_code).exists():
+        next_code += 1
+    return next_code
+
+
+def create_default_suppliers(company):
+    existing = set(Supplier.objects.filter(company=company).values_list('name', flat=True))
+    for name in ['Vesna-auto', 'Omega', 'Technomir']:
+        if name not in existing:
+            Supplier.objects.create(company=company, name=name, api_key='')
+
+
+def ensure_user_company(user):
     existing_company = get_company(user)
     if existing_company:
+        create_default_suppliers(existing_company)
         return existing_company
 
     title = user.first_name.strip() if user.first_name else user.username
@@ -88,10 +104,63 @@ def ensure_partner_company(user):
         owner=user,
         business_type='sto',
     )
-    Supplier.objects.create(company=company, name='Vesna-auto', api_key='')
-    Supplier.objects.create(company=company, name='Omega', api_key='')
-    Supplier.objects.create(company=company, name='Technomir', api_key='')
+    create_default_suppliers(company)
     return company
+
+
+def ensure_partner_company(user):
+    return ensure_user_company(user)
+
+
+def get_default_assigned_owner(user):
+    employee = get_employee(user)
+    if employee and employee.role == 'partner':
+        return user
+
+    first_partner = User.objects.filter(employee_profile__role='partner').order_by('id').first()
+    if first_partner:
+        return first_partner
+
+    first_company = Company.objects.exclude(owner=user).order_by('id').first()
+    if first_company:
+        return first_company.owner
+
+    own_company = get_company(user)
+    if own_company:
+        return user
+
+    any_company = Company.objects.order_by('id').first()
+    if any_company:
+        return any_company.owner
+
+    return user
+
+
+@transaction.atomic
+def repair_legacy_account(user):
+    if user.is_anonymous:
+        return
+
+    if get_employee(user) and get_employee(user).role == 'partner':
+        ensure_user_company(user)
+        return
+
+    if get_company(user) or user.is_superuser:
+        return
+
+    ensure_user_company(user)
+
+    client_profile = get_platform_client(user)
+    if not client_profile:
+        assigned_owner = get_default_assigned_owner(user)
+        PlatformClient.objects.create(
+            user=user,
+            client_code=generate_client_code(),
+            assigned_owner=assigned_owner,
+            referred_by=assigned_owner,
+            payment_status=PlatformClient.PAYMENT_PENDING,
+            is_access_enabled=False,
+        )
 
 
 class ProfileSettingsView(APIView):
@@ -99,6 +168,8 @@ class ProfileSettingsView(APIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def get(self, request):
+        repair_legacy_account(request.user)
+
         user = request.user
         company = get_user_company(user)
         employee = get_employee(user)
@@ -106,8 +177,8 @@ class ProfileSettingsView(APIView):
         role = detect_role(user)
 
         permissions = {
-            'can_create_visits': role in ['owner', 'partner'] or bool(employee and employee.can_create_visits),
-            'can_view_finances': role in ['owner', 'partner'] or bool(employee and employee.can_view_finances),
+            'can_create_visits': role in ['owner', 'partner', 'platform_client'] or bool(employee and employee.can_create_visits),
+            'can_view_finances': role in ['owner', 'partner', 'platform_client'] or bool(employee and employee.can_view_finances),
             'can_view_clients': role in ['owner', 'partner', 'platform_client'],
             'can_view_analytics': role in ['owner', 'partner', 'platform_client'],
             'can_manage_partners': role == 'owner',
@@ -127,6 +198,7 @@ class ProfileSettingsView(APIView):
         })
 
     def patch(self, request):
+        repair_legacy_account(request.user)
         company = get_user_company(request.user)
         if not company:
             return Response({'error': 'Немає компанії для редагування.'}, status=403)
@@ -218,9 +290,7 @@ class PartnerManagementViewSet(viewsets.ViewSet):
 
         user = User.objects.create_user(username=username, password=password, first_name=full_name, email=email)
         company = Company.objects.create(name=company_name, owner=user, business_type='sto')
-        Supplier.objects.create(company=company, name='Vesna-auto', api_key='')
-        Supplier.objects.create(company=company, name='Omega', api_key='')
-        Supplier.objects.create(company=company, name='Technomir', api_key='')
+        create_default_suppliers(company)
 
         employee = Employee.objects.create(
             user=user,
@@ -301,6 +371,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        repair_legacy_account(self.request.user)
         qs = PlatformClient.objects.select_related('user', 'assigned_owner', 'referred_by').order_by('-created_at')
         if is_platform_admin(self.request.user):
             return qs
@@ -309,6 +380,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
         return qs.filter(user=self.request.user)
 
     def partial_update(self, request, *args, **kwargs):
+        repair_legacy_account(request.user)
         instance = self.get_object()
         user = request.user
 
@@ -337,6 +409,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(instance).data)
 
     def destroy(self, request, *args, **kwargs):
+        repair_legacy_account(request.user)
         instance = self.get_object()
         if not (is_platform_admin(request.user) or (is_partner_user(request.user) and instance.assigned_owner_id == request.user.id)):
             return Response({'error': 'Немає прав видаляти цього клієнта.'}, status=403)
@@ -345,6 +418,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='hierarchy')
     def hierarchy(self, request):
+        repair_legacy_account(request.user)
         if not is_platform_admin(request.user):
             return Response({'error': 'Тільки головний адмін може переглядати ієрархію.'}, status=403)
 
@@ -366,6 +440,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='stats')
     def stats(self, request):
+        repair_legacy_account(request.user)
         if is_platform_admin(request.user):
             partners = Employee.objects.filter(role='partner').select_related('user')
             data = []
@@ -386,6 +461,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='me')
     def me(self, request):
+        repair_legacy_account(request.user)
         client_profile = get_platform_client(request.user)
         if client_profile:
             return Response(self.get_serializer(client_profile).data)
@@ -393,6 +469,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='activate-month')
     def activate_month(self, request, pk=None):
+        repair_legacy_account(request.user)
         if not is_platform_admin(request.user):
             return Response({'error': 'Тільки головний адмін може активувати підписку.'}, status=403)
         instance = self.get_object()

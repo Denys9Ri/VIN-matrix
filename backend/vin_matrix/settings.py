@@ -169,3 +169,16 @@ USE_I18N = True
 LANGUAGES = [
     ('uk', 'Українська'),
 ]
+
+JAZZMIN_SETTINGS = {
+    "site_title": "VIN-Matrix Admin",
+    "site_header": "VIN-Matrix",
+    "show_ui_builder": False,
+    "hide_models": [
+        "auth.Group",
+        "token_blacklist.OutstandingToken",
+        "token_blacklist.BlacklistedToken",
+        "sessions.Session",
+    ],
+    "order_with_respect_to": ["crm", "core"],
+}

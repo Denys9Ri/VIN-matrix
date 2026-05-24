@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import api from '../api/axios';
 
 const Register = () => {
-  const [formData, setFormData] = useState({ username: '', password: '', company_name: '', full_name: '', representative_code: '' });
+  const [formData, setFormData] = useState({ username: '', password: '', company_name: '', full_name: '', referral_code: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
@@ -43,8 +43,8 @@ const Register = () => {
         <label style={{ marginBottom: '5px', fontSize: '14px', color: '#aaa' }}>Назва вашого СТО (для адміна)</label>
         <input name="company_name" onChange={handleChange} placeholder="Наприклад: АвтоГараж Плюс" style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', border: '1px solid #333', background: '#2c2c2c', color: '#fff' }} />
 
-        <label style={{ marginBottom: '5px', fontSize: '14px', color: '#aaa' }}>Код представника / партнера (необов'язково)</label>
-        <input name="representative_code" onChange={handleChange} placeholder="Напр. PARTNER1001" style={{ marginBottom: '20px', padding: '12px', borderRadius: '6px', border: '1px solid #333', background: '#2c2c2c', color: '#fff' }} />
+        <label style={{ marginBottom: '5px', fontSize: '14px', color: '#aaa' }}>Referral code представника (необов'язково)</label>
+        <input name="referral_code" onChange={handleChange} placeholder="Напр. PARTNER1001" style={{ marginBottom: '20px', padding: '12px', borderRadius: '6px', border: '1px solid #333', background: '#2c2c2c', color: '#fff' }} />
 
         <label style={{ marginBottom: '5px', fontSize: '14px', color: '#aaa' }}>Логін адміністратора</label>
         <input name="username" onChange={handleChange} required placeholder="admin_auto" style={{ marginBottom: '20px', padding: '12px', borderRadius: '6px', border: '1px solid #333', background: '#2c2c2c', color: '#fff' }} />

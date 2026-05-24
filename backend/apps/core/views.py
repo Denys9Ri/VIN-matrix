@@ -471,7 +471,7 @@ class RegisterView(APIView):
         username = request.data.get('username')
         password = request.data.get('password')
         company_name = request.data.get('company_name')
-        representative_code = request.data.get('representative_code', '').strip().upper()
+        representative_code = (request.data.get('referral_code') or request.data.get('representative_code') or '').strip().upper()
         full_name = request.data.get('full_name', '').strip()
         if not username or not password: return Response({"error": "Логін і пароль обов'язкові!"}, status=400)
         if User.objects.filter(username=username).exists(): return Response({"error": "Логін зайнятий!"}, status=400)
@@ -551,7 +551,8 @@ class PlatformClientViewSet(viewsets.ModelViewSet):
             for rep in reps:
                 data.append({
                     "representative": rep.user.first_name or rep.user.username,
-                    "clients_count": PlatformClient.objects.filter(assigned_owner=rep.user).count()
+                    "clients_count": PlatformClient.objects.filter(assigned_owner=rep.user).count(),
+                    "registered_at": rep.user.date_joined
                 })
             return Response(data)
         if hasattr(request.user, 'employee_profile'):

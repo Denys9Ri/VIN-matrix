@@ -51,7 +51,6 @@ def is_partner_user(user):
 
 
 def is_platform_admin(user):
-    # Власна Company у клієнта або партнера не робить його адміном платформи.
     return is_main_admin(user)
 
 
@@ -190,13 +189,38 @@ def ensure_platform_client(user, assigned_owner=None, active=False):
     )
 
 
+def hard_delete_account(user):
+    if not user:
+        return
+    if is_main_admin(user):
+        raise ValueError('Головного адміна видаляти не можна.')
+
+    user_id = user.id
+    admin_user = get_default_assigned_owner(exclude_user=user)
+
+    if admin_user and admin_user.id != user_id:
+        PlatformClient.objects.filter(assigned_owner=user).update(assigned_owner=admin_user, referred_by=admin_user)
+        PlatformClient.objects.filter(referred_by=user).update(referred_by=admin_user)
+
+    PlatformClient.objects.filter(user=user).delete()
+    Employee.objects.filter(user=user).delete()
+
+    company = get_company(user)
+    if company:
+        company.delete()
+
+    user.delete()
+
+    if User.objects.filter(id=user_id).exists():
+        raise ValueError('Акаунт не вдалося видалити з бази.')
+
+
 @transaction.atomic
 def repair_legacy_account(user):
     if user.is_anonymous:
         return
 
     if is_platform_admin(user):
-        # Адмін завжди A6000. Він не має бути клієнтом або партнером у платформній ієрархії.
         PlatformClient.objects.filter(user=user).delete()
         emp = get_employee(user)
         if emp and emp.role == 'partner':
@@ -478,13 +502,18 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
         instance.save()
         return Response(self.get_serializer(instance).data)
 
+    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         repair_legacy_account(request.user)
         instance = self.get_object()
         if not (is_platform_admin(request.user) or (is_partner_user(request.user) and instance.assigned_owner_id == request.user.id)):
             return Response({'error': 'Немає прав видаляти цього клієнта.'}, status=403)
-        instance.user.delete()
-        return Response({'message': 'Акаунт видалено.'}, status=status.HTTP_204_NO_CONTENT)
+        target_user = instance.user
+        try:
+            hard_delete_account(target_user)
+        except Exception as exc:
+            return Response({'error': 'Не вдалося видалити акаунт.', 'details': str(exc)}, status=400)
+        return Response({'message': 'Акаунт повністю видалено.'}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='stats')
     def stats(self, request):

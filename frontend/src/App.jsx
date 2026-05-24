@@ -9,7 +9,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
 import Analytics from './pages/Analytics';
-import PlatformClientsAdmin from './pages/PlatformClientsAdmin';
+import Clients from './pages/Clients';
 
 // Захисник роутів: якщо немає токена, викидає на /login
 const ProtectedRoute = ({ children }) => {
@@ -36,7 +36,7 @@ function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<Visits />} /> 
-          <Route path="clients" element={<PlatformClientsAdmin />} />
+          <Route path="clients" element={<Clients />} />
           <Route path="analytics" element={<Analytics />} /> {/* <--- ЗАМІНИЛИ ЗАГЛУШКУ АНАЛІТИКИ */}
         </Route>
       </Routes>

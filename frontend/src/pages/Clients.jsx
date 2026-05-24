@@ -1,270 +1,143 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import {
-  Users,
-  UserCheck,
-  UserX,
-  Trash2,
-  ShieldCheck,
-  Briefcase,
-  Wallet,
-  Loader2,
-} from 'lucide-react';
+import { Search, Phone, CarFront, User, CalendarDays, Wrench } from 'lucide-react';
 
-const ROLE_META = {
-  admin: {
-    label: 'Адміністратор',
-    icon: ShieldCheck,
-    headerClassName: 'bg-slate-900 text-white',
-  },
-  partner: {
-    label: 'Партнер',
-    icon: Briefcase,
-    headerClassName: 'bg-blue-700 text-white',
-  },
+const normalize = (value) => String(value || '').toLowerCase().trim();
+
+const formatVisitDate = (visit) => {
+  const rawDate = visit.updated_at || visit.created_at || visit.scheduled_datetime;
+  if (!rawDate) return '—';
+  const date = new Date(rawDate);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('uk-UA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
-const defaultStats = {
-  totalClients: 0,
-  debtors: 0,
-  revenue: 0,
+const getWorksSummary = (visit) => {
+  const services = Array.isArray(visit.services) ? visit.services.length : 0;
+  const parts = Array.isArray(visit.parts) ? visit.parts.length : 0;
+  if (!services && !parts) return 'Без деталей/робіт';
+  return `Роботи: ${services}, Запчастини: ${parts}`;
 };
-
-const formatMoney = (value) =>
-  new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'UAH',
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
 
 const Clients = () => {
-  const [registrars, setRegistrars] = useState([]);
-  const [stats, setStats] = useState(defaultStats);
+  const [visits, setVisits] = useState([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [actionClientId, setActionClientId] = useState(null);
-
-  const loadRegistrars = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [registrarsResponse, statsResponse] = await Promise.all([
-        axios.get('/api/crm/registrars/'),
-        axios.get('/api/crm/kpi/'),
-      ]);
-
-      setRegistrars(Array.isArray(registrarsResponse.data) ? registrarsResponse.data : []);
-      setStats({
-        totalClients: statsResponse.data?.total_clients ?? 0,
-        debtors: statsResponse.data?.debtors ?? 0,
-        revenue: statsResponse.data?.revenue ?? 0,
-      });
-    } catch (error) {
-      alert('Не вдалося завантажити дані CRM.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    loadRegistrars();
-  }, [loadRegistrars]);
+    const fetchVisits = async () => {
+      setLoading(true);
+      try {
+        const response = await axios.get('/api/visits/?history=true');
+        setVisits(Array.isArray(response.data) ? response.data : []);
+      } catch (error) {
+        alert('Не вдалося завантажити історію візитів.');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const toggleAccess = async (clientId, isPaid) => {
-    setActionClientId(clientId);
-    try {
-      await axios.patch(`/api/clients/${clientId}/`, { is_paid: !isPaid });
-      setRegistrars((prev) =>
-        prev.map((registrar) => ({
-          ...registrar,
-          clients: (registrar.clients || []).map((client) =>
-            client.id === clientId ? { ...client, is_paid: !isPaid } : client
-          ),
-        }))
+    fetchVisits();
+  }, []);
+
+  const filteredVisits = useMemo(() => {
+    const query = normalize(search);
+    if (!query) return visits;
+
+    return visits.filter((visit) => {
+      const carText = `${visit.brand || ''} ${visit.model || ''}`;
+      return [visit.plate, visit.phone, carText, visit.client, visit.vin_code].some((field) =>
+        normalize(field).includes(query)
       );
-      setStats((prev) => ({
-        ...prev,
-        debtors: isPaid ? prev.debtors + 1 : Math.max(0, prev.debtors - 1),
-      }));
-    } catch (error) {
-      alert('Помилка при оновленні доступу.');
-    } finally {
-      setActionClientId(null);
-    }
-  };
+    });
+  }, [visits, search]);
 
-  const deleteAccount = async (clientId) => {
-    const isConfirmed = window.confirm('Ви впевнені, що хочете видалити акаунт клієнта?');
-    if (!isConfirmed) {
-      return;
-    }
+  const groupedClients = useMemo(() => {
+    const groups = new Map();
 
-    setActionClientId(clientId);
-    try {
-      await axios.delete(`/api/clients/${clientId}/`);
+    filteredVisits.forEach((visit) => {
+      const key = `${normalize(visit.phone)}|${normalize(visit.plate)}|${normalize(visit.client)}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.visits.push(visit);
+        return;
+      }
 
-      setRegistrars((prev) =>
-        prev.map((registrar) => ({
-          ...registrar,
-          clients: (registrar.clients || []).filter((client) => client.id !== clientId),
-        }))
-      );
-
-      const deletedClient = registrars
-        .flatMap((registrar) => registrar.clients || [])
-        .find((client) => client.id === clientId);
-
-      setStats((prev) => ({
-        totalClients: Math.max(0, prev.totalClients - 1),
-        debtors: deletedClient && !deletedClient.is_paid ? Math.max(0, prev.debtors - 1) : prev.debtors,
-        revenue: prev.revenue,
-      }));
-    } catch (error) {
-      alert('Помилка при видаленні акаунту.');
-    } finally {
-      setActionClientId(null);
-    }
-  };
-
-  const fullRegistrars = useMemo(() => {
-    const expectedOrder = [
-      { role: 'admin', fallbackName: 'Головний адміністратор' },
-      { role: 'partner', fallbackName: 'Партнер №1' },
-      { role: 'partner', fallbackName: 'Партнер №2' },
-    ];
-
-    const normalized = [...registrars];
-    while (normalized.length < 3) {
-      const expected = expectedOrder[normalized.length];
-      normalized.push({
-        id: `virtual-${normalized.length}`,
-        name: expected.fallbackName,
-        role: expected.role,
-        clients: [],
+      groups.set(key, {
+        id: key,
+        client: visit.client || 'Невідомий клієнт',
+        phone: visit.phone || '—',
+        plate: visit.plate || '—',
+        car: `${visit.brand || ''} ${visit.model || ''}`.trim() || '—',
+        visits: [visit],
       });
-    }
+    });
 
-    return normalized;
-  }, [registrars]);
+    return Array.from(groups.values())
+      .map((item) => ({
+        ...item,
+        visits: item.visits.sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)),
+      }))
+      .sort((a, b) => b.visits.length - a.visits.length);
+  }, [filteredVisits]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 text-slate-900">
-      <div className="mb-8 md:mb-10">
-        <h1 className="text-2xl md:text-3xl font-black">CRM: Управління клієнтами</h1>
-        <p className="text-slate-500 font-semibold mt-1">Контроль доступу, оплат та структури реєстраторів.</p>
-      </div>
+    <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen">
+      <h1 className="text-2xl md:text-3xl font-black italic uppercase text-slate-800 mb-4">Історія візитів клієнтів</h1>
+      <p className="text-slate-500 font-semibold mb-5">Пошук по держ. номеру, телефону або авто клієнта.</p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-slate-500 text-xs font-black uppercase tracking-wider">Всього клієнтів</p>
-              <h3 className="text-3xl font-black mt-1">{stats.totalClients}</h3>
-            </div>
-            <div className="bg-blue-100 text-blue-600 p-3 rounded-2xl"><Users size={22} /></div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-slate-500 text-xs font-black uppercase tracking-wider">Боржники</p>
-              <h3 className="text-3xl font-black mt-1">{stats.debtors}</h3>
-            </div>
-            <div className="bg-red-100 text-red-600 p-3 rounded-2xl"><UserX size={22} /></div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-slate-500 text-xs font-black uppercase tracking-wider">Прибуток</p>
-              <h3 className="text-3xl font-black mt-1">{formatMoney(stats.revenue)}</h3>
-            </div>
-            <div className="bg-emerald-100 text-emerald-600 p-3 rounded-2xl"><Wallet size={22} /></div>
-          </div>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-5">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Пошук: номер, телефон, авто, клієнт"
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 font-semibold text-sm outline-none focus:border-blue-500"
+          />
         </div>
       </div>
 
       {loading ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-10 flex items-center justify-center gap-3 text-slate-500 font-bold">
-          <Loader2 size={18} className="animate-spin" /> Завантаження даних CRM...
-        </div>
+        <p className="text-sm text-slate-500 font-semibold">Завантаження...</p>
       ) : (
-        <div className="space-y-8">
-          {fullRegistrars.map((registrar) => {
-            const roleMeta = ROLE_META[registrar.role] || ROLE_META.partner;
-            const RegistrarIcon = roleMeta.icon;
-            const clients = registrar.clients || [];
-
-            return (
-              <section key={registrar.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className={`p-4 flex items-center gap-3 ${roleMeta.headerClassName}`}>
-                  <RegistrarIcon size={18} />
-                  <h2 className="font-extrabold text-lg">{registrar.name || roleMeta.label}</h2>
-                  <span className="ml-auto bg-white/20 px-3 py-1 rounded-full text-xs font-bold">
-                    {clients.length} зареєстровано
-                  </span>
+        <div className="space-y-4">
+          {groupedClients.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-slate-500 font-semibold">
+              За запитом нічого не знайдено.
+            </div>
+          ) : (
+            groupedClients.map((group) => (
+              <section key={group.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-slate-50">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                    <p className="font-black text-slate-800 flex items-center gap-2"><User size={14} /> {group.client}</p>
+                    <p className="font-semibold text-slate-600 flex items-center gap-2"><Phone size={14} /> {group.phone}</p>
+                    <p className="font-semibold text-slate-600 flex items-center gap-2 uppercase"><CarFront size={14} /> {group.plate}</p>
+                    <p className="font-semibold text-slate-600">Авто: {group.car}</p>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-left">
-                    <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-black">
-                      <tr>
-                        <th className="px-6 py-4">Код клієнта</th>
-                        <th className="px-6 py-4">ПІБ клієнта</th>
-                        <th className="px-6 py-4">Статус оплати</th>
-                        <th className="px-6 py-4 text-right">Дії</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {clients.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="px-6 py-8 text-center text-slate-400 font-semibold">
-                            Немає клієнтів у цього реєстратора.
-                          </td>
-                        </tr>
-                      ) : (
-                        clients.map((client) => {
-                          const processing = actionClientId === client.id;
-                          return (
-                            <tr key={client.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="px-6 py-4 font-black text-blue-600 uppercase tracking-tight">{client.client_code || 'CLI-000'}</td>
-                              <td className="px-6 py-4 font-bold text-slate-700">{client.full_name || 'Без імені'}</td>
-                              <td className="px-6 py-4">
-                                <button
-                                  type="button"
-                                  disabled={processing}
-                                  onClick={() => toggleAccess(client.id, client.is_paid)}
-                                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50 ${
-                                    client.is_paid
-                                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                      : 'bg-red-100 text-red-700 hover:bg-red-200'
-                                  }`}
-                                >
-                                  {client.is_paid ? <UserCheck size={14} /> : <UserX size={14} />}
-                                  {client.is_paid ? 'Доступ надано' : 'Немає оплати'}
-                                </button>
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                <button
-                                  type="button"
-                                  disabled={processing}
-                                  onClick={() => deleteAccount(client.id)}
-                                  className="inline-flex items-center justify-center p-2 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                                  aria-label="Видалити акаунт"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
+                <div className="divide-y divide-slate-100">
+                  {group.visits.map((visit) => (
+                    <div key={visit.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800 flex items-center gap-2"><CalendarDays size={14} /> {formatVisitDate(visit)}</p>
+                        <p className="text-xs text-slate-500 mt-1">Статус: {visit.status || '—'}</p>
+                      </div>
+                      <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Wrench size={14} /> {getWorksSummary(visit)}</p>
+                    </div>
+                  ))}
                 </div>
               </section>
-            );
-          })}
+            ))
+          )}
         </div>
       )}
     </div>

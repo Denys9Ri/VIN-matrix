@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -40,8 +40,14 @@ def is_partner_user(user):
     return bool(employee and employee.role == 'partner')
 
 
+def is_platform_client_user(user):
+    return bool(get_platform_client(user))
+
+
 def is_platform_admin(user):
-    return bool((get_company(user) or user.is_superuser) and not is_partner_user(user))
+    if is_partner_user(user) or is_platform_client_user(user):
+        return False
+    return bool(user.is_staff or user.is_superuser or get_company(user))
 
 
 def get_user_company(user):
@@ -58,12 +64,12 @@ def detect_role(user):
     employee = get_employee(user)
     if employee and employee.role == 'partner':
         return 'partner'
-    if get_company(user) or user.is_superuser:
+    if get_platform_client(user):
+        return 'platform_client'
+    if user.is_staff or user.is_superuser or get_company(user):
         return 'owner'
     if employee:
         return employee.role or 'mechanic'
-    if get_platform_client(user):
-        return 'platform_client'
     return 'user'
 
 
@@ -86,6 +92,8 @@ def generate_client_code():
 
 
 def create_default_suppliers(company):
+    if not company:
+        return
     existing = set(Supplier.objects.filter(company=company).values_list('name', flat=True))
     for name in ['Vesna-auto', 'Omega', 'Technomir']:
         if name not in existing:
@@ -99,11 +107,14 @@ def ensure_user_company(user):
         return existing_company
 
     title = user.first_name.strip() if user.first_name else user.username
-    company = Company.objects.create(
-        name=f'{title} CRM',
-        owner=user,
-        business_type='sto',
-    )
+    try:
+        company = Company.objects.create(
+            name=f'{title} CRM',
+            owner=user,
+            business_type='sto',
+        )
+    except IntegrityError:
+        company = get_company(user)
     create_default_suppliers(company)
     return company
 
@@ -117,21 +128,13 @@ def get_default_assigned_owner(user):
     if employee and employee.role == 'partner':
         return user
 
-    first_partner = User.objects.filter(employee_profile__role='partner').order_by('id').first()
+    first_partner = User.objects.filter(employee_profile__role='partner').exclude(id=user.id).order_by('id').first()
     if first_partner:
         return first_partner
 
-    first_company = Company.objects.exclude(owner=user).order_by('id').first()
-    if first_company:
-        return first_company.owner
-
-    own_company = get_company(user)
-    if own_company:
-        return user
-
-    any_company = Company.objects.order_by('id').first()
-    if any_company:
-        return any_company.owner
+    admin_company = Company.objects.exclude(owner=user).order_by('id').first()
+    if admin_company:
+        return admin_company.owner
 
     return user
 
@@ -141,26 +144,31 @@ def repair_legacy_account(user):
     if user.is_anonymous:
         return
 
-    if get_employee(user) and get_employee(user).role == 'partner':
+    if user.is_staff or user.is_superuser:
+        return
+
+    employee = get_employee(user)
+    if employee and employee.role == 'partner':
         ensure_user_company(user)
         return
 
-    if get_company(user) or user.is_superuser:
+    company = ensure_user_company(user)
+    if not company:
         return
 
-    ensure_user_company(user)
-
-    client_profile = get_platform_client(user)
-    if not client_profile:
+    if not get_platform_client(user):
         assigned_owner = get_default_assigned_owner(user)
-        PlatformClient.objects.create(
-            user=user,
-            client_code=generate_client_code(),
-            assigned_owner=assigned_owner,
-            referred_by=assigned_owner,
-            payment_status=PlatformClient.PAYMENT_PENDING,
-            is_access_enabled=False,
-        )
+        try:
+            PlatformClient.objects.create(
+                user=user,
+                client_code=generate_client_code(),
+                assigned_owner=assigned_owner,
+                referred_by=assigned_owner,
+                payment_status=PlatformClient.PAYMENT_PENDING,
+                is_access_enabled=False,
+            )
+        except IntegrityError:
+            pass
 
 
 class ProfileSettingsView(APIView):
@@ -188,7 +196,10 @@ class ProfileSettingsView(APIView):
         company_serializer = CompanySerializer(company, context={'request': request}) if company else None
         return Response({
             'user': UserSerializer(user).data,
-            'company': company_serializer.data if company_serializer else None,
+            'company': company_serializer.data if company_serializer else {
+                'name': '', 'logo': None, 'phone': '', 'address': '', 'document_footer': '',
+                'global_margin_percent': 20, 'business_type': 'sto'
+            },
             'role': role,
             'permissions': permissions,
             'partner_code': employee.partner_code if employee else None,
@@ -300,23 +311,16 @@ class PartnerManagementViewSet(viewsets.ViewSet):
             can_view_finances=True,
             partner_code=generate_partner_code(),
         )
-        return Response({
-            'message': 'Партнера створено.',
-            'partner_id': employee.id,
-            'user_id': user.id,
-            'partner_code': employee.partner_code,
-        }, status=201)
+        return Response({'message': 'Партнера створено.', 'partner_id': employee.id, 'user_id': user.id, 'partner_code': employee.partner_code}, status=201)
 
     def partial_update(self, request, pk=None):
         denied = self._require_admin(request)
         if denied:
             return denied
-
         try:
             partner = Employee.objects.select_related('user').get(id=pk, role='partner')
         except Employee.DoesNotExist:
             return Response({'error': 'Партнера не знайдено.'}, status=404)
-
         if 'full_name' in request.data:
             partner.user.first_name = request.data.get('full_name') or ''
         if 'email' in request.data:
@@ -335,7 +339,6 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         denied = self._require_admin(request)
         if denied:
             return denied
-
         user_id = request.data.get('user_id')
         if not user_id:
             return Response({'error': 'Передайте user_id.'}, status=400)
@@ -343,17 +346,10 @@ class PartnerManagementViewSet(viewsets.ViewSet):
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response({'error': 'Користувача не знайдено.'}, status=404)
-
         ensure_partner_company(user)
         employee, created = Employee.objects.get_or_create(
             user=user,
-            defaults={
-                'company': request.user.company,
-                'role': 'partner',
-                'can_create_visits': True,
-                'can_view_finances': True,
-                'partner_code': generate_partner_code(),
-            }
+            defaults={'company': request.user.company, 'role': 'partner', 'can_create_visits': True, 'can_view_finances': True, 'partner_code': generate_partner_code()}
         )
         if not created:
             employee.role = 'partner'
@@ -362,7 +358,6 @@ class PartnerManagementViewSet(viewsets.ViewSet):
             if not employee.partner_code:
                 employee.partner_code = generate_partner_code()
             employee.save()
-
         return Response({'message': 'Користувача зроблено партнером.', 'partner_code': employee.partner_code})
 
 
@@ -383,10 +378,8 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
         repair_legacy_account(request.user)
         instance = self.get_object()
         user = request.user
-
         if not (is_platform_admin(user) or (is_partner_user(user) and instance.assigned_owner_id == user.id)):
             return Response({'error': 'Немає прав змінювати цього клієнта.'}, status=403)
-
         if is_platform_admin(user):
             payment_status = request.data.get('payment_status')
             if payment_status in [PlatformClient.PAYMENT_PENDING, PlatformClient.PAYMENT_ACTIVE, PlatformClient.PAYMENT_INACTIVE]:
@@ -398,13 +391,10 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
                     instance.referred_by = new_owner
                 except User.DoesNotExist:
                     return Response({'error': 'Партнера не знайдено.'}, status=400)
-
         if 'is_access_enabled' in request.data:
             instance.is_access_enabled = bool(request.data.get('is_access_enabled'))
-
         if instance.payment_status != PlatformClient.PAYMENT_ACTIVE:
             instance.is_access_enabled = False
-
         instance.save()
         return Response(self.get_serializer(instance).data)
 
@@ -421,7 +411,6 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
         repair_legacy_account(request.user)
         if not is_platform_admin(request.user):
             return Response({'error': 'Тільки головний адмін може переглядати ієрархію.'}, status=403)
-
         clients = self.get_queryset().order_by('assigned_owner__id', 'client_code')
         grouped = {}
         for client in clients:
@@ -429,12 +418,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
             if key not in grouped:
                 owner_name = client.assigned_owner.first_name.strip() if client.assigned_owner.first_name else client.assigned_owner.username
                 employee = get_employee(client.assigned_owner)
-                grouped[key] = {
-                    'partner_id': key,
-                    'partner_name': owner_name,
-                    'partner_code': employee.partner_code if employee else None,
-                    'clients': []
-                }
+                grouped[key] = {'partner_id': key, 'partner_name': owner_name, 'partner_code': employee.partner_code if employee else None, 'clients': []}
             grouped[key]['clients'].append(self.get_serializer(client).data)
         return Response(list(grouped.values()))
 
@@ -446,13 +430,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
             data = []
             for partner in partners:
                 clients = PlatformClient.objects.filter(assigned_owner=partner.user)
-                data.append({
-                    'representative': partner.user.first_name or partner.user.username,
-                    'partner_code': partner.partner_code,
-                    'clients_count': clients.count(),
-                    'active_clients_count': clients.filter(payment_status=PlatformClient.PAYMENT_ACTIVE, is_access_enabled=True).count(),
-                    'registered_at': partner.user.date_joined,
-                })
+                data.append({'representative': partner.user.first_name or partner.user.username, 'partner_code': partner.partner_code, 'clients_count': clients.count(), 'active_clients_count': clients.filter(payment_status=PlatformClient.PAYMENT_ACTIVE, is_access_enabled=True).count(), 'registered_at': partner.user.date_joined})
             return Response(data)
         if is_partner_user(request.user):
             clients = PlatformClient.objects.filter(assigned_owner=request.user)

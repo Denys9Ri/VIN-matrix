@@ -6,12 +6,20 @@ from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from apps.core.views import (
-    RegisterView, VisitViewSet, ServiceCatalogViewSet,
-    LogoutView, ChangePasswordView, MechanicViewSet,
-    OrderPartViewSet, OrderServiceViewSet,
-    # === НОВІ ІМПОРТИ ДЛЯ СКЛАДУ ТА ПОСТАЧАЛЬНИКІВ ===
-    CategoryViewSet, InventoryItemViewSet, SupplierViewSet,
-    PartSearchView
+    RegisterView,
+    LogoutView,
+    ChangePasswordView,
+    PartSearchView,
+)
+from apps.core.safe_crm_views import (
+    VisitViewSet,
+    ServiceCatalogViewSet,
+    MechanicViewSet,
+    OrderPartViewSet,
+    OrderServiceViewSet,
+    CategoryViewSet,
+    InventoryItemViewSet,
+    SupplierViewSet,
 )
 from apps.core.partner_views import (
     ProfileSettingsView,

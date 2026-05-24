@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .models import PlatformClient
@@ -12,9 +13,15 @@ from .partner_views import (
     is_platform_admin,
     repair_legacy_account,
 )
+from .subscriptions import get_alert_clients, renew_client_30_days, sync_queryset_subscriptions
 
 
 class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
+    def get_queryset(self):
+        qs = super().get_queryset()
+        sync_queryset_subscriptions(qs)
+        return qs
+
     @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         repair_legacy_account(request.user)
@@ -50,3 +57,26 @@ class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
             return Response({'error': 'Акаунт не видалено.', 'details': 'Користувач залишився у базі після видалення.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({'message': 'Акаунт повністю видалено.', 'deleted_user_id': target_user_id, 'username': target_username}, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    @action(detail=True, methods=['post'], url_path='renew-30-days')
+    def renew_30_days(self, request, pk=None):
+        repair_legacy_account(request.user)
+        instance = self.get_object()
+        allowed = is_platform_admin(request.user) or (
+            is_partner_user(request.user) and instance.assigned_owner_id == request.user.id
+        )
+        if not allowed:
+            return Response({'error': 'Немає прав продовжувати підписку цього клієнта.'}, status=403)
+        renew_client_30_days(instance)
+        return Response(self.get_serializer(instance).data)
+
+    @action(detail=False, methods=['get'], url_path='subscription-alerts')
+    def subscription_alerts(self, request):
+        repair_legacy_account(request.user)
+        qs = PlatformClient.objects.select_related('user', 'assigned_owner').order_by('subscription_until', 'trial_until')
+        if is_platform_admin(request.user):
+            return Response(get_alert_clients(qs))
+        if is_partner_user(request.user):
+            return Response(get_alert_clients(qs.filter(assigned_owner=request.user)))
+        return Response({'expiring_soon': [], 'expired': [], 'expiring_count': 0, 'expired_count': 0})

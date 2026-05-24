@@ -11,6 +11,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .account_delete import hard_delete_account
 from .models import Company, Employee, PlatformClient, Supplier
 from .serializers import CompanySerializer, PlatformClientSerializer, UserSerializer
 
@@ -187,32 +188,6 @@ def ensure_platform_client(user, assigned_owner=None, active=False):
         payment_status=payment_status,
         is_access_enabled=active,
     )
-
-
-def hard_delete_account(user):
-    if not user:
-        return
-    if is_main_admin(user):
-        raise ValueError('Головного адміна видаляти не можна.')
-
-    user_id = user.id
-    admin_user = get_default_assigned_owner(exclude_user=user)
-
-    if admin_user and admin_user.id != user_id:
-        PlatformClient.objects.filter(assigned_owner=user).update(assigned_owner=admin_user, referred_by=admin_user)
-        PlatformClient.objects.filter(referred_by=user).update(referred_by=admin_user)
-
-    PlatformClient.objects.filter(user=user).delete()
-    Employee.objects.filter(user=user).delete()
-
-    company = get_company(user)
-    if company:
-        company.delete()
-
-    user.delete()
-
-    if User.objects.filter(id=user_id).exists():
-        raise ValueError('Акаунт не вдалося видалити з бази.')
 
 
 @transaction.atomic
@@ -502,7 +477,6 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
         instance.save()
         return Response(self.get_serializer(instance).data)
 
-    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         repair_legacy_account(request.user)
         instance = self.get_object()
@@ -510,10 +484,10 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Немає прав видаляти цього клієнта.'}, status=403)
         target_user = instance.user
         try:
-            hard_delete_account(target_user)
+            result = hard_delete_account(target_user)
         except Exception as exc:
             return Response({'error': 'Не вдалося видалити акаунт.', 'details': str(exc)}, status=400)
-        return Response({'message': 'Акаунт повністю видалено.'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Акаунт повністю видалено.', 'result': result}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='stats')
     def stats(self, request):

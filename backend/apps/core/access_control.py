@@ -1,7 +1,7 @@
 from rest_framework.permissions import BasePermission
 
 PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
-NO_ACCESS_MESSAGE = 'Немає доступу через відсутність оплати.'
+NO_ACCESS_MESSAGE = 'Немає доступу через завершення підписки або відсутність оплати.'
 
 
 def get_employee(user):

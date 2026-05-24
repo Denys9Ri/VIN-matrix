@@ -370,17 +370,29 @@ class ProfileSettingsView(APIView):
 
         if hasattr(request.user, 'company'):
             role = 'owner'
-            permissions = {"can_create_visits": True, "can_view_finances": True}
+            permissions = {
+                "can_create_visits": True,
+                "can_view_finances": True,
+                "can_view_clients": True,
+                "can_view_analytics": True
+            }
         elif hasattr(request.user, 'employee_profile'):
             role = 'mechanic'
             emp = request.user.employee_profile
             permissions = {
                 "can_create_visits": emp.can_create_visits,
-                "can_view_finances": emp.can_view_finances
+                "can_view_finances": emp.can_view_finances,
+                "can_view_clients": True,
+                "can_view_analytics": True
             }
         else:
             role = 'platform_client'
-            permissions = {"can_create_visits": False, "can_view_finances": False}
+            permissions = {
+                "can_create_visits": False,
+                "can_view_finances": False,
+                "can_view_clients": True,
+                "can_view_analytics": True
+            }
 
         user_serializer = UserSerializer(request.user)
         company_serializer = CompanySerializer(company, context={'request': request}) if company else None

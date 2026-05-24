@@ -102,6 +102,7 @@ class PlatformClient(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='platform_client_profile')
     client_code = models.PositiveIntegerField(unique=True)
     assigned_owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='managed_platform_clients')
+    referred_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='referred_platform_clients')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_PENDING)
     is_access_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

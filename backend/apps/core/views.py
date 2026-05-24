@@ -510,6 +510,7 @@ class RegisterView(APIView):
                 user=user,
                 client_code=next_code,
                 assigned_owner=assigned_owner,
+                referred_by=assigned_owner,
                 payment_status=PlatformClient.PAYMENT_PENDING,
                 is_access_enabled=False
             )
@@ -542,6 +543,33 @@ class PlatformClientViewSet(viewsets.ModelViewSet):
             instance.is_access_enabled = False
         instance.save()
         return Response(self.get_serializer(instance).data)
+
+    def destroy(self, request, *args, **kwargs):
+        if not hasattr(request.user, 'company'):
+            return Response({"error": "Тільки адміністратор може видаляти акаунти."}, status=403)
+        instance = self.get_object()
+        instance.user.delete()
+        return Response({"message": "Акаунт успішно видалено"}, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'], url_path='hierarchy')
+    def hierarchy(self, request):
+        if not hasattr(request.user, 'company'):
+            return Response({"error": "Тільки адміністратор може переглядати ієрархію."}, status=403)
+
+        clients = PlatformClient.objects.select_related('user', 'assigned_owner', 'referred_by').all().order_by('assigned_owner__id', 'client_code')
+        grouped = {}
+        for client in clients:
+            key = client.assigned_owner_id
+            if key not in grouped:
+                owner_name = client.assigned_owner.first_name.strip() if client.assigned_owner.first_name else client.assigned_owner.username
+                grouped[key] = {
+                    "partner_id": key,
+                    "partner_name": owner_name,
+                    "clients": []
+                }
+            grouped[key]["clients"].append(self.get_serializer(client).data)
+
+        return Response(list(grouped.values()))
 
     @action(detail=False, methods=['get'], url_path='stats')
     def stats(self, request):

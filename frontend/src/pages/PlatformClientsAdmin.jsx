@@ -15,17 +15,20 @@ const PlatformClientsAdmin = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [representativeFilter, setRepresentativeFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('clients');
+  const [hierarchy, setHierarchy] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [clientsRes, repsRes] = await Promise.all([
+      const [clientsRes, repsRes, hierarchyRes] = await Promise.all([
         api.get('/api/platform-clients/'),
         api.get('/api/platform-clients/stats/'),
+        api.get('/api/platform-clients/hierarchy/').catch(() => ({ data: [] })),
       ]);
       setClients(clientsRes.data || []);
       setRepresentatives(Array.isArray(repsRes.data) ? repsRes.data : []);
+      setHierarchy(Array.isArray(hierarchyRes.data) ? hierarchyRes.data : []);
     } finally {
       setLoading(false);
     }
@@ -68,6 +71,12 @@ const PlatformClientsAdmin = () => {
     setClients((prev) => prev.map((item) => (item.id === client.id ? res.data : item)));
   };
 
+  const deleteClient = async (id) => {
+    if (!window.confirm('Видалити акаунт клієнта?')) return;
+    await api.delete(`/api/platform-clients/${id}/`);
+    await fetchData();
+  };
+
   const openRepresentativeClients = (name) => {
     setActiveTab('clients');
     setRepresentativeFilter(name);
@@ -98,6 +107,7 @@ const PlatformClientsAdmin = () => {
       <div className="flex items-center gap-2 mb-5">
         <button className={`px-4 py-2 rounded-xl font-bold text-sm ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 border border-slate-200'}`} onClick={() => setActiveTab('clients')}>Клієнти</button>
         <button className={`px-4 py-2 rounded-xl font-bold text-sm ${activeTab === 'representatives' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 border border-slate-200'}`} onClick={() => setActiveTab('representatives')}>Представники</button>
+        <button className={`px-4 py-2 rounded-xl font-bold text-sm ${activeTab === 'hierarchy' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 border border-slate-200'}`} onClick={() => setActiveTab('hierarchy')}>Ієрархія</button>
       </div>
 
       {activeTab === 'clients' && (
@@ -129,7 +139,7 @@ const PlatformClientsAdmin = () => {
                     <td className="p-4 font-bold text-slate-700">#CLI-{client.client_code}</td>
                     <td className="p-4"><div className="font-bold text-slate-900">{client.full_name || client.username}</div><div className="text-xs text-slate-500">{client.username}</div></td>
                     <td className="p-4"><span className="text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">{client.assigned_to} (Представник)</span></td>
-                    <td className="p-4"><button onClick={() => togglePaid(client)} className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider transition-all ${client.payment_status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{client.payment_status === 'active' ? 'Доступ надано' : 'Немає оплати'}</button></td>
+                    <td className="p-4 flex gap-2"><button onClick={() => togglePaid(client)} className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider transition-all ${client.payment_status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{client.payment_status === 'active' ? 'Доступ надано' : 'Немає оплати'}</button><button onClick={() => deleteClient(client.id)} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 text-xs font-bold">Видалити</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -155,6 +165,24 @@ const PlatformClientsAdmin = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {activeTab === 'hierarchy' && (
+        <div className="space-y-5">
+          {hierarchy.map((partner) => (
+            <div key={partner.partner_id} className="mb-8 border-l-4 border-blue-500 pl-4">
+              <h2 className="text-xl font-bold">{partner.partner_name} (Партнер)</h2>
+              <div className="grid gap-2 mt-2">
+                {partner.clients.map((client) => (
+                  <div key={client.id} className="flex justify-between items-center bg-white p-3 shadow-sm rounded">
+                    <span>{client.full_name || client.username} (#CLI-{client.client_code})</span>
+                    <button onClick={() => deleteClient(client.id)} className="text-red-500 hover:text-red-700 font-bold">Видалити</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

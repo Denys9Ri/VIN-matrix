@@ -14,6 +14,12 @@ from rest_framework.views import APIView
 from .models import Company, Employee, PlatformClient, Supplier
 from .serializers import CompanySerializer, PlatformClientSerializer, UserSerializer
 
+PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
+
+
+def is_main_admin_username(user):
+    return bool(user and user.is_authenticated and user.username in PLATFORM_ADMIN_USERNAMES)
+
 
 def get_employee(user):
     try:
@@ -41,12 +47,10 @@ def is_partner_user(user):
     return bool(employee and employee.role == 'partner')
 
 
-def is_platform_client_user(user):
-    return bool(get_platform_client(user))
-
-
 def is_platform_admin(user):
-    # Головний адмін повинен мати повний доступ навіть якщо через старий ремонт йому випадково створили PlatformClient.
+    # Denys9Ri — головний адмін завжди, навіть якщо випадково створився PlatformClient.
+    if is_main_admin_username(user):
+        return True
     return bool(user.is_staff or user.is_superuser or get_company(user)) and not is_partner_user(user)
 
 
@@ -62,10 +66,10 @@ def get_user_company(user):
 
 def detect_role(user):
     employee = get_employee(user)
+    if is_platform_admin(user):
+        return 'owner'
     if employee and employee.role == 'partner':
         return 'partner'
-    if user.is_staff or user.is_superuser or get_company(user):
-        return 'owner'
     if get_platform_client(user):
         return 'platform_client'
     if employee:
@@ -124,13 +128,13 @@ def ensure_partner_company(user):
 
 
 def get_default_assigned_owner(user):
-    employee = get_employee(user)
-    if employee and employee.role == 'partner':
-        return user
-
-    admin_user = User.objects.filter(Q(is_staff=True) | Q(is_superuser=True)).exclude(id=user.id).order_by('id').first()
+    admin_user = User.objects.filter(username__in=PLATFORM_ADMIN_USERNAMES).exclude(id=user.id).order_by('id').first()
     if admin_user:
         return admin_user
+
+    staff_user = User.objects.filter(Q(is_staff=True) | Q(is_superuser=True)).exclude(id=user.id).order_by('id').first()
+    if staff_user:
+        return staff_user
 
     first_partner = User.objects.filter(employee_profile__role='partner').exclude(id=user.id).order_by('id').first()
     if first_partner:
@@ -148,7 +152,9 @@ def repair_legacy_account(user):
     if user.is_anonymous:
         return
 
-    if user.is_staff or user.is_superuser:
+    # Головний адмін ніколи не стає клієнтом. Якщо такий запис випадково створився — прибираємо тільки PlatformClient.
+    if is_platform_admin(user):
+        PlatformClient.objects.filter(user=user).delete()
         return
 
     employee = get_employee(user)
@@ -265,7 +271,6 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         denied = self._require_admin(request)
         if denied:
             return denied
-
         partners = Employee.objects.filter(role='partner').select_related('user', 'company').order_by('user__first_name', 'user__username')
         data = []
         for partner in partners:
@@ -291,22 +296,18 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         denied = self._require_admin(request)
         if denied:
             return denied
-
         username = request.data.get('username')
         password = request.data.get('password')
         full_name = request.data.get('full_name') or request.data.get('first_name') or ''
         email = request.data.get('email') or ''
         company_name = request.data.get('company_name') or f'{full_name or username} CRM'
-
         if not username or not password:
             return Response({'error': 'Логін і пароль обовʼязкові.'}, status=400)
         if User.objects.filter(username=username).exists():
             return Response({'error': 'Такий логін вже зайнятий.'}, status=400)
-
         user = User.objects.create_user(username=username, password=password, first_name=full_name, email=email)
         company = Company.objects.create(name=company_name, owner=user, business_type='sto')
         create_default_suppliers(company)
-
         employee = Employee.objects.create(
             user=user,
             company=get_user_company(request.user) or company,
@@ -350,18 +351,20 @@ class PartnerManagementViewSet(viewsets.ViewSet):
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response({'error': 'Користувача не знайдено.'}, status=404)
+        if is_platform_admin(user):
+            return Response({'error': 'Головного адміна не можна зробити партнером.'}, status=400)
         ensure_partner_company(user)
         employee, created = Employee.objects.get_or_create(
             user=user,
             defaults={'company': get_user_company(request.user) or get_company(user), 'role': 'partner', 'can_create_visits': True, 'can_view_finances': True, 'partner_code': generate_partner_code()}
         )
-        if not created:
-            employee.role = 'partner'
-            employee.can_create_visits = True
-            employee.can_view_finances = True
-            if not employee.partner_code:
-                employee.partner_code = generate_partner_code()
-            employee.save()
+        employee.role = 'partner'
+        employee.can_create_visits = True
+        employee.can_view_finances = True
+        if not employee.partner_code:
+            employee.partner_code = generate_partner_code()
+        employee.save()
+        PlatformClient.objects.filter(user=user).delete()
         return Response({'message': 'Користувача зроблено партнером.', 'partner_code': employee.partner_code})
 
 
@@ -401,7 +404,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
             owner_id = request.data.get('assigned_owner') or request.data.get('assigned_owner_id') or request.data.get('partner_id')
             if owner_id:
                 try:
-                    new_owner = User.objects.get(Q(id=owner_id), Q(employee_profile__role='partner') | Q(is_staff=True) | Q(is_superuser=True) | Q(company__isnull=False))
+                    new_owner = User.objects.get(Q(id=owner_id), Q(employee_profile__role='partner') | Q(username__in=PLATFORM_ADMIN_USERNAMES) | Q(is_staff=True) | Q(is_superuser=True) | Q(company__isnull=False))
                     instance.assigned_owner = new_owner
                     instance.referred_by = new_owner
                 except User.DoesNotExist:

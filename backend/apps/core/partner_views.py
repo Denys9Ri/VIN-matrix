@@ -49,13 +49,8 @@ def is_partner_user(user):
 
 
 def is_platform_admin(user):
-    if is_main_admin(user):
-        return True
-    if is_partner_user(user):
-        return False
-    if get_platform_client(user):
-        return False
-    return bool(get_company(user))
+    # ВАЖЛИВО: тільки Denys9Ri / staff / superuser. Звичайний клієнт може мати Company для своєї CRM, але не є адміном платформи.
+    return is_main_admin(user)
 
 
 def detect_role(user):
@@ -68,7 +63,8 @@ def detect_role(user):
     emp = get_employee(user)
     if emp:
         return emp.role or 'mechanic'
-    return 'user'
+    # Будь-який новий звичайний акаунт без статусу партнера/адміна не має бачити сторінку Партнери.
+    return 'platform_client'
 
 
 def get_user_company(user):
@@ -138,9 +134,9 @@ def get_default_assigned_owner(exclude_user=None):
     staff = User.objects.filter(Q(is_staff=True) | Q(is_superuser=True)).exclude(id=getattr(exclude_user, 'id', None)).first()
     if staff:
         return staff
-    owner_company = Company.objects.exclude(owner=exclude_user).first() if exclude_user else Company.objects.first()
-    if owner_company:
-        return owner_company.owner
+    first_partner = User.objects.filter(employee_profile__role='partner').exclude(id=getattr(exclude_user, 'id', None)).first()
+    if first_partner:
+        return first_partner
     return exclude_user
 
 
@@ -148,13 +144,16 @@ def get_default_assigned_owner(exclude_user=None):
 def repair_legacy_account(user):
     if user.is_anonymous:
         return
-    if is_main_admin(user):
+    if is_platform_admin(user):
+        # Адмін не повинен бути клієнтом.
         PlatformClient.objects.filter(user=user).delete()
         return
     if is_partner_user(user):
+        # Партнер має свою CRM-компанію, але не має бути PlatformClient.
         ensure_user_company(user)
         PlatformClient.objects.filter(user=user).delete()
         return
+    # Звичайний акаунт = клієнт платформи + власна CRM-компанія.
     ensure_user_company(user)
     if not get_platform_client(user):
         owner = get_default_assigned_owner(exclude_user=user) or user
@@ -231,8 +230,8 @@ class ProfileSettingsView(APIView):
             'can_view_finances': role in ['owner', 'partner', 'platform_client'] or bool(emp and emp.can_view_finances),
             'can_view_clients': role in ['owner', 'partner', 'platform_client'],
             'can_view_analytics': role in ['owner', 'partner', 'platform_client'],
-            'can_manage_partners': role == 'owner',
-            'can_view_partner_clients': role == 'partner' or role == 'owner',
+            'can_manage_partners': is_platform_admin(user),
+            'can_view_partner_clients': role == 'partner' or is_platform_admin(user),
         }
         company_data = CompanySerializer(company, context={'request': request}).data if company else {
             'name': '', 'logo': None, 'phone': '', 'address': '', 'document_footer': '', 'global_margin_percent': 20, 'business_type': 'sto'
@@ -323,6 +322,7 @@ class PartnerManagementViewSet(viewsets.ViewSet):
             user=user, company=get_user_company(request.user) or company, role='partner',
             can_create_visits=True, can_view_finances=True, partner_code=generate_partner_code()
         )
+        PlatformClient.objects.filter(user=user).delete()
         return Response({'message': 'Партнера створено.', 'partner_code': emp.partner_code, 'user_id': user.id}, status=201)
 
     @transaction.atomic
@@ -333,7 +333,7 @@ class PartnerManagementViewSet(viewsets.ViewSet):
             return denied
         raw_user_id = str(request.data.get('user_id') or '').strip()
         if not raw_user_id.isdigit():
-            return Response({'error': 'Введіть ID користувача, а не партнерський код.'}, status=400)
+            return Response({'error': 'Введіть ID користувача. PART-001 — це код партнера для реєстрації клієнтів, а не ID.'}, status=400)
         try:
             user = User.objects.get(id=int(raw_user_id))
         except User.DoesNotExist:

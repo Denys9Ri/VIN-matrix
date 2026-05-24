@@ -25,17 +25,40 @@ const getWorksSummary = (visit) => {
   return `Роботи: ${services}, Запчастини: ${parts}`;
 };
 
+const extractCarData = (visit) => {
+  let parsed = {};
+
+  if (visit?.delivery_data && typeof visit.delivery_data === 'string' && visit.delivery_data.trim().startsWith('{')) {
+    try {
+      parsed = JSON.parse(visit.delivery_data);
+    } catch {
+      parsed = {};
+    }
+  }
+
+  return {
+    ...visit,
+    brand: visit.brand || parsed.brand || '',
+    model: visit.model || parsed.model || '',
+  };
+};
+
 const Clients = () => {
   const [visits, setVisits] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
+  const token = localStorage.getItem('access_token');
 
   useEffect(() => {
     const fetchVisits = async () => {
       setLoading(true);
       try {
-        const response = await axios.get('/api/visits/?history=true');
-        setVisits(Array.isArray(response.data) ? response.data : []);
+        const response = await axios.get(`${API_BASE}/api/visits/?history=true`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const rawVisits = Array.isArray(response.data) ? response.data : [];
+        setVisits(rawVisits.map(extractCarData));
       } catch (error) {
         alert('Не вдалося завантажити історію візитів.');
       } finally {
@@ -44,7 +67,7 @@ const Clients = () => {
     };
 
     fetchVisits();
-  }, []);
+  }, [token]);
 
   const filteredVisits = useMemo(() => {
     const query = normalize(search);

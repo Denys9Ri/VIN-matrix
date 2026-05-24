@@ -1,7 +1,5 @@
 from rest_framework.permissions import BasePermission
 
-from .models import PlatformClient
-
 PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
 NO_ACCESS_MESSAGE = 'Немає доступу через відсутність оплати.'
 
@@ -37,6 +35,11 @@ def is_blocked_client(user):
     client = get_platform_client(user)
     if not client:
         return False
+    try:
+        from .subscriptions import sync_client_subscription
+        sync_client_subscription(client)
+    except Exception:
+        pass
     return not bool(client.is_access_enabled)
 
 

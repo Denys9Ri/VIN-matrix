@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, time as dt_time
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -199,13 +200,40 @@ class SupplierViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(queryset, many=True)
             return Response(serializer.data)
         except Exception as exc:
-            return Response({'error': 'Помилка завантаження постачальників', 'details': str(exc), 'results': []}, status=200)
+            return Response([], status=200)
 
-    def perform_create(self, serializer):
-        company = safe_ensure_company(self.request.user)
+    def create(self, request, *args, **kwargs):
+        company = safe_ensure_company(request.user)
         if not company:
-            raise ValueError('Немає CRM-компанії для створення постачальника.')
-        serializer.save(company=company)
+            return Response({'error': 'Немає CRM-компанії для створення постачальника.'}, status=400)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        supplier = serializer.save(company=company)
+        return Response(self.get_serializer(supplier).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        try:
+            supplier = self.get_object()
+            serializer = self.get_serializer(supplier, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            supplier = serializer.save()
+            return Response(self.get_serializer(supplier).data)
+        except Exception as exc:
+            return Response({'error': 'Не вдалося оновити постачальника', 'details': str(exc)}, status=400)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            supplier = self.get_object()
+            supplier.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as exc:
+            return Response({'error': 'Не вдалося видалити постачальника', 'details': str(exc)}, status=400)
+
+    @action(detail=True, methods=['post'], url_path='fetch_warehouses')
+    def fetch_warehouses(self, request, pk=None):
+        # Тимчасово повертаємо пустий список, щоб кабінет клієнта/партнера не падав.
+        return Response({'message': 'Склади не завантажені автоматично для цього постачальника.', 'warehouses': []})
 
 
 class MechanicViewSet(viewsets.ViewSet):

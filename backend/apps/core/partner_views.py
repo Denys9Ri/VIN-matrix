@@ -51,7 +51,7 @@ def is_partner_user(user):
 
 
 def is_platform_admin(user):
-    # ВАЖЛИВО: власна Company у клієнта/партнера НЕ робить його адміном платформи.
+    # Власна Company у клієнта або партнера не робить його адміном платформи.
     return is_main_admin(user)
 
 
@@ -151,9 +151,6 @@ def find_partner_by_code(code):
     code = normalize_code(code)
     if not code:
         return None
-    if code.startswith('P'):
-        return Employee.objects.filter(role='partner', partner_code=code).select_related('user').first()
-    # тимчасова сумісність зі старими PART-001, якщо вони ще залишилися у базі
     return Employee.objects.filter(role='partner', partner_code=code).select_related('user').first()
 
 
@@ -171,13 +168,41 @@ def get_default_assigned_owner(exclude_user=None):
     return exclude_user
 
 
+def ensure_platform_client(user, assigned_owner=None, active=False):
+    owner = assigned_owner or get_default_assigned_owner(exclude_user=user) or user
+    client = get_platform_client(user)
+    payment_status = PlatformClient.PAYMENT_ACTIVE if active else PlatformClient.PAYMENT_PENDING
+    if client:
+        client.assigned_owner = owner
+        client.referred_by = owner
+        if active:
+            client.payment_status = PlatformClient.PAYMENT_ACTIVE
+            client.is_access_enabled = True
+        client.save()
+        return client
+    return PlatformClient.objects.create(
+        user=user,
+        client_code=generate_client_code(),
+        assigned_owner=owner,
+        referred_by=owner,
+        payment_status=payment_status,
+        is_access_enabled=active,
+    )
+
+
 @transaction.atomic
 def repair_legacy_account(user):
     if user.is_anonymous:
         return
 
     if is_platform_admin(user):
+        # Адмін завжди A6000. Він не має бути клієнтом або партнером у платформній ієрархії.
         PlatformClient.objects.filter(user=user).delete()
+        emp = get_employee(user)
+        if emp and emp.role == 'partner':
+            emp.role = 'mechanic'
+            emp.partner_code = None
+            emp.save(update_fields=['role', 'partner_code'])
         return
 
     if is_partner_user(user):
@@ -188,18 +213,7 @@ def repair_legacy_account(user):
 
     ensure_user_company(user)
     if not get_platform_client(user):
-        owner = get_default_assigned_owner(exclude_user=user) or user
-        try:
-            PlatformClient.objects.create(
-                user=user,
-                client_code=generate_client_code(),
-                assigned_owner=owner,
-                referred_by=owner,
-                payment_status=PlatformClient.PAYMENT_PENDING,
-                is_access_enabled=False,
-            )
-        except IntegrityError:
-            pass
+        ensure_platform_client(user, active=False)
 
 
 class RegisterView(APIView):
@@ -233,16 +247,7 @@ class RegisterView(APIView):
             user = User.objects.create_user(username=username, password=password, first_name=full_name)
             ensure_user_company(user, company_name or full_name or username)
             owner = partner.user if partner else get_default_assigned_owner(exclude_user=user)
-            if not owner:
-                owner = user
-            PlatformClient.objects.create(
-                user=user,
-                client_code=generate_client_code(),
-                assigned_owner=owner,
-                referred_by=owner,
-                payment_status=PlatformClient.PAYMENT_PENDING,
-                is_access_enabled=False,
-            )
+            ensure_platform_client(user, assigned_owner=owner, active=False)
         return Response({'message': 'Акаунт створено. Очікує активації доступу.'}, status=201)
 
 
@@ -333,8 +338,12 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         denied = self._require_admin(request)
         if denied:
             return denied
+        repair_legacy_account(request.user)
         data = []
-        for p in Employee.objects.filter(role='partner').select_related('user', 'company').order_by('user__username'):
+        partners = Employee.objects.filter(role='partner').exclude(user__username__in=PLATFORM_ADMIN_USERNAMES).select_related('user', 'company').order_by('user__username')
+        for p in partners:
+            if is_main_admin(p.user):
+                continue
             ensure_partner_code(p)
             clients = PlatformClient.objects.filter(assigned_owner=p.user)
             data.append({
@@ -353,29 +362,7 @@ class PartnerManagementViewSet(viewsets.ViewSet):
 
     @transaction.atomic
     def create(self, request):
-        denied = self._require_admin(request)
-        if denied:
-            return denied
-        username = (request.data.get('username') or '').strip()
-        password = request.data.get('password') or ''
-        full_name = request.data.get('full_name') or request.data.get('first_name') or ''
-        company_name = request.data.get('company_name') or f'{full_name or username} CRM'
-        if not username or not password:
-            return Response({'error': 'Логін і пароль обовʼязкові.'}, status=400)
-        if User.objects.filter(username=username).exists():
-            return Response({'error': 'Такий логін вже зайнятий.'}, status=400)
-        user = User.objects.create_user(username=username, password=password, first_name=full_name, email=request.data.get('email') or '')
-        company = ensure_user_company(user, company_name)
-        emp = Employee.objects.create(
-            user=user,
-            company=get_user_company(request.user) or company,
-            role='partner',
-            can_create_visits=True,
-            can_view_finances=True,
-            partner_code=generate_partner_code(),
-        )
-        PlatformClient.objects.filter(user=user).delete()
-        return Response({'message': 'Партнера створено.', 'partner_code': emp.partner_code, 'user_id': user.id}, status=201)
+        return Response({'error': 'Партнери створюються тільки через реєстрацію користувача і дію "Зробити партнером".'}, status=405)
 
     @transaction.atomic
     @action(detail=False, methods=['post'], url_path='promote-user')
@@ -402,6 +389,30 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         PlatformClient.objects.filter(user=user).delete()
         return Response({'message': 'Користувача зроблено партнером.', 'partner_code': emp.partner_code})
 
+    @transaction.atomic
+    @action(detail=True, methods=['post'], url_path='make-client')
+    def make_client(self, request, pk=None):
+        denied = self._require_admin(request)
+        if denied:
+            return denied
+        try:
+            emp = Employee.objects.select_related('user').get(id=pk, role='partner')
+        except Employee.DoesNotExist:
+            return Response({'error': 'Партнера не знайдено.'}, status=404)
+        if is_main_admin(emp.user):
+            return Response({'error': 'Головного адміна не можна перевести у клієнти.'}, status=400)
+
+        admin_user = get_default_assigned_owner(exclude_user=emp.user)
+        PlatformClient.objects.filter(assigned_owner=emp.user).update(assigned_owner=admin_user, referred_by=admin_user)
+        was_active = emp.user.is_active
+        emp.role = 'mechanic'
+        emp.partner_code = None
+        emp.can_create_visits = True
+        emp.can_view_finances = True
+        emp.save()
+        ensure_platform_client(emp.user, assigned_owner=admin_user, active=was_active)
+        return Response({'message': 'Партнера переведено у звичайні клієнти.'})
+
     def partial_update(self, request, pk=None):
         denied = self._require_admin(request)
         if denied:
@@ -410,6 +421,8 @@ class PartnerManagementViewSet(viewsets.ViewSet):
             emp = Employee.objects.get(id=pk, role='partner')
         except Employee.DoesNotExist:
             return Response({'error': 'Партнера не знайдено.'}, status=404)
+        if is_main_admin(emp.user):
+            return Response({'error': 'Головного адміна не можна змінювати як партнера.'}, status=400)
         if 'is_active' in request.data:
             emp.user.is_active = bool(request.data.get('is_active'))
             emp.user.save()
@@ -458,9 +471,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
                     return Response({'error': 'Партнера/адміна не знайдено.'}, status=400)
                 instance.assigned_owner = owner
                 instance.referred_by = owner
-        if is_partner_user(request.user) and 'is_access_enabled' in request.data:
-            instance.is_access_enabled = bool(request.data.get('is_access_enabled'))
-        if is_platform_admin(request.user) and 'is_access_enabled' in request.data:
+        if 'is_access_enabled' in request.data:
             instance.is_access_enabled = bool(request.data.get('is_access_enabled'))
         if instance.payment_status != PlatformClient.PAYMENT_ACTIVE:
             instance.is_access_enabled = False
@@ -484,7 +495,7 @@ class SecurePlatformClientViewSet(viewsets.ModelViewSet):
                 'partner_code': ensure_partner_code(p),
                 'clients_count': PlatformClient.objects.filter(assigned_owner=p.user).count(),
                 'active_clients_count': PlatformClient.objects.filter(assigned_owner=p.user, payment_status=PlatformClient.PAYMENT_ACTIVE, is_access_enabled=True).count(),
-            } for p in Employee.objects.filter(role='partner').select_related('user')])
+            } for p in Employee.objects.filter(role='partner').exclude(user__username__in=PLATFORM_ADMIN_USERNAMES).select_related('user')])
         if is_partner_user(request.user):
             clients = PlatformClient.objects.filter(assigned_owner=request.user)
             return Response({'my_clients': clients.count(), 'active_clients': clients.filter(payment_status=PlatformClient.PAYMENT_ACTIVE, is_access_enabled=True).count()})

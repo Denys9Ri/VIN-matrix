@@ -1,11 +1,9 @@
 import React from 'react';
 
 const ClientCodeBadge = ({ clientCode }) => {
-  const formattedCode = clientCode
-    ? String(clientCode).startsWith('CLI-')
-      ? String(clientCode)
-      : `CLI-${clientCode}`
-    : 'CLI-000';
+  if (!clientCode) return null;
+
+  const formattedCode = String(clientCode).toUpperCase();
 
   return (
     <div className="flex items-center gap-2 border-l pl-4 border-slate-200">

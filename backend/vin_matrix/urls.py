@@ -6,7 +6,6 @@ from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from apps.core.views import (
-    RegisterView,
     LogoutView,
     ChangePasswordView,
     PartSearchView,
@@ -22,6 +21,7 @@ from apps.core.safe_crm_views import (
     SupplierViewSet,
 )
 from apps.core.partner_views import (
+    RegisterView,
     ProfileSettingsView,
     PartnerManagementViewSet,
     SecurePlatformClientViewSet,

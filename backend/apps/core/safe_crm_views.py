@@ -6,7 +6,7 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Category, Company, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit
+from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit
 from .serializers import (
     CategorySerializer,
     InventoryItemSerializer,
@@ -16,7 +16,7 @@ from .serializers import (
     SupplierSerializer,
     VisitSerializer,
 )
-from .views import VisitViewSet as BaseVisitViewSet, SupplierViewSet as BaseSupplierViewSet
+from .views import VisitViewSet as BaseVisitViewSet
 
 
 def safe_get_company(user):
@@ -33,12 +33,26 @@ def safe_get_company(user):
     return None
 
 
+def safe_ensure_company(user):
+    company = safe_get_company(user)
+    if company:
+        return company
+
+    try:
+        from .partner_views import repair_legacy_account
+        repair_legacy_account(user)
+    except Exception:
+        pass
+
+    return safe_get_company(user)
+
+
 class VisitViewSet(BaseVisitViewSet):
     serializer_class = VisitSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         queryset = Visit.objects.filter(company=company) if company else Visit.objects.none()
         if self.action != 'list':
             return queryset
@@ -85,7 +99,7 @@ class VisitViewSet(BaseVisitViewSet):
         return queryset.order_by('scheduled_datetime' if date_str else '-created_at')
 
     def perform_create(self, serializer):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         if not company:
             raise ValueError('Немає CRM-компанії для створення візиту.')
         serializer.save(company=company)
@@ -96,11 +110,11 @@ class OrderPartViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         return OrderPart.objects.filter(visit__company=company) if company else OrderPart.objects.none()
 
     def perform_create(self, serializer):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         visit = Visit.objects.get(id=self.request.data.get('visit'), company=company)
         serializer.save(visit=visit)
 
@@ -110,11 +124,11 @@ class OrderServiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         return OrderService.objects.filter(visit__company=company) if company else OrderService.objects.none()
 
     def perform_create(self, serializer):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         visit = Visit.objects.get(id=self.request.data.get('visit'), company=company)
         serializer.save(visit=visit)
 
@@ -124,11 +138,11 @@ class ServiceCatalogViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         return ServiceCatalog.objects.filter(company=company) if company else ServiceCatalog.objects.none()
 
     def perform_create(self, serializer):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         if not company:
             raise ValueError('Немає CRM-компанії для створення послуги.')
         serializer.save(company=company)
@@ -139,11 +153,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         return Category.objects.filter(company=company) if company else Category.objects.none()
 
     def perform_create(self, serializer):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         if not company:
             raise ValueError('Немає CRM-компанії для створення категорії.')
         serializer.save(company=company)
@@ -154,7 +168,7 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         queryset = InventoryItem.objects.filter(company=company) if company else InventoryItem.objects.none()
         cat_id = self.request.query_params.get('category')
         search = self.request.query_params.get('search')
@@ -165,22 +179,30 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         if not company:
             raise ValueError('Немає CRM-компанії для створення товару.')
         serializer.save(company=company)
 
 
-class SupplierViewSet(BaseSupplierViewSet):
+class SupplierViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         return Supplier.objects.filter(company=company) if company else Supplier.objects.none()
 
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        except Exception as exc:
+            return Response({'error': 'Помилка завантаження постачальників', 'details': str(exc), 'results': []}, status=200)
+
     def perform_create(self, serializer):
-        company = safe_get_company(self.request.user)
+        company = safe_ensure_company(self.request.user)
         if not company:
             raise ValueError('Немає CRM-компанії для створення постачальника.')
         serializer.save(company=company)
@@ -190,7 +212,7 @@ class MechanicViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request):
-        company = safe_get_company(request.user)
+        company = safe_ensure_company(request.user)
         if not company:
             return Response([])
         mechanics = Employee.objects.filter(company=company, role='mechanic')
@@ -204,7 +226,7 @@ class MechanicViewSet(viewsets.ViewSet):
         return Response(data)
 
     def create(self, request):
-        company = safe_get_company(request.user)
+        company = safe_ensure_company(request.user)
         if not company:
             return Response({'error': 'Немає CRM-компанії.'}, status=403)
 
@@ -222,7 +244,7 @@ class MechanicViewSet(viewsets.ViewSet):
         return Response({'message': 'Створено'}, status=201)
 
     def partial_update(self, request, pk=None):
-        company = safe_get_company(request.user)
+        company = safe_ensure_company(request.user)
         if not company:
             return Response({'error': 'Немає CRM-компанії.'}, status=403)
         try:
@@ -243,7 +265,7 @@ class MechanicViewSet(viewsets.ViewSet):
             return Response(status=404)
 
     def destroy(self, request, pk=None):
-        company = safe_get_company(request.user)
+        company = safe_ensure_company(request.user)
         if not company:
             return Response({'error': 'Немає CRM-компанії.'}, status=403)
         try:

@@ -1,32 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck, ShieldCheck } from 'lucide-react';
-import axios from 'axios';
+import api from '../../api/axios';
 
 const Sidebar = ({ isOpen, closeMenu }) => {
-  const [role, setRole] = useState('mechanic');
+  const [role, setRole] = useState('client');
   const [businessType, setBusinessType] = useState('sto');
   const [canManagePartners, setCanManagePartners] = useState(false);
-  const [hasPartnerCode, setHasPartnerCode] = useState(false);
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
+  const [canManageAccounts, setCanManageAccounts] = useState(false);
 
   useEffect(() => {
     const fetchUserRole = async () => {
-      const token = localStorage.getItem('access_token');
-      if (!token) return;
       try {
-        const response = await axios.get(`${API_BASE}/api/settings/`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const response = await api.get('/api/settings/');
         const data = response.data || {};
-        const username = data.user?.username;
-        const isMainAdmin = username === 'Denys9Ri';
-        const partnerCodeExists = Boolean(data.partner_code);
 
-        setRole(data.role || 'mechanic');
+        setRole(data.role || 'client');
         setBusinessType(data.company?.business_type || 'sto');
-        setCanManagePartners(isMainAdmin || data.permissions?.can_manage_partners === true);
-        setHasPartnerCode(partnerCodeExists || data.role === 'partner');
+        setCanManagePartners(data.permissions?.can_manage_partners === true);
+        setCanManageAccounts(data.permissions?.can_manage_accounts === true);
       } catch (error) {
         console.error('Помилка перевірки', error);
       }
@@ -44,7 +36,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     { name: 'Склад', icon: <Briefcase size={20} />, path: '/inventory' },
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
     { name: 'Клієнти', icon: <Users size={20} />, path: '/clients' },
-    ...(hasPartnerCode && !canManagePartners ? [{ name: 'Мої підключені', icon: <UserCheck size={20} />, path: '/partner-clients' }] : []),
+    ...(role === 'partner' && canManageAccounts ? [{ name: 'Акаунти', icon: <UserCheck size={20} />, path: '/partner-clients' }] : []),
     ...(canManagePartners ? [{ name: 'Партнери', icon: <ShieldCheck size={20} />, path: '/partners' }] : []),
     { name: 'Налаштування', icon: <Settings size={20} />, path: '/settings' },
   ];

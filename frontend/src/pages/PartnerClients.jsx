@@ -8,6 +8,33 @@ const statusLabel = {
   inactive: 'Неактивний',
 };
 
+const formatClientCode = (client) => {
+  if (client?.client_code_display) return client.client_code_display;
+  if (client?.client_code) return `C${client.client_code}`;
+  return '—';
+};
+
+const copyToClipboard = async (value) => {
+  if (!value) return;
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+  } catch (error) {
+    console.error('Не вдалося скопіювати', error);
+  }
+};
+
 const PartnerClients = () => {
   const [clients, setClients] = useState([]);
   const [stats, setStats] = useState(null);
@@ -39,7 +66,7 @@ const PartnerClients = () => {
     const q = search.trim().toLowerCase();
     if (!q) return clients;
     return clients.filter((client) =>
-      [client.client_code, client.full_name, client.username, client.payment_status, client.assigned_to]
+      [formatClientCode(client), client.client_code, client.full_name, client.username, client.payment_status, client.assigned_to]
         .map((value) => String(value || '').toLowerCase())
         .some((value) => value.includes(q))
     );
@@ -60,8 +87,7 @@ const PartnerClients = () => {
   };
 
   const copyCode = async () => {
-    if (!settings?.partner_code) return;
-    await navigator.clipboard.writeText(settings.partner_code);
+    await copyToClipboard(settings?.partner_code);
   };
 
   return (
@@ -132,35 +158,42 @@ const PartnerClients = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredClients.map((client) => (
-                  <tr key={client.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-black text-blue-700">CLI-{client.client_code}</td>
-                    <td className="px-4 py-3 font-bold text-slate-800">{client.full_name || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{client.username || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs">
-                        {statusLabel[client.payment_status] || client.payment_status || '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {client.is_access_enabled ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold"><BadgeCheck size={16} /> Увімкнено</span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-rose-700 font-bold"><BadgeX size={16} /> Вимкнено</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => toggleAccess(client)} className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 inline-flex items-center gap-1">
-                          <Power size={15} /> {client.is_access_enabled ? 'Вимкнути' : 'Увімкнути'}
+                {filteredClients.map((client) => {
+                  const code = formatClientCode(client);
+                  return (
+                    <tr key={client.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <button onClick={() => copyToClipboard(code)} className="font-black text-blue-700 bg-blue-50 px-2 py-1 rounded-lg inline-flex items-center gap-1">
+                          {code} <Copy size={13} />
                         </button>
-                        <button onClick={() => deleteClient(client)} className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 font-bold text-rose-700 inline-flex items-center gap-1">
-                          <Trash2 size={15} /> Видалити
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-slate-800">{client.full_name || '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">{client.username || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs">
+                          {statusLabel[client.payment_status] || client.payment_status || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {client.is_access_enabled ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-700 font-bold"><BadgeCheck size={16} /> Увімкнено</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-rose-700 font-bold"><BadgeX size={16} /> Вимкнено</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => toggleAccess(client)} className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 inline-flex items-center gap-1">
+                            <Power size={15} /> {client.is_access_enabled ? 'Вимкнути' : 'Увімкнути'}
+                          </button>
+                          <button onClick={() => deleteClient(client)} className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 font-bold text-rose-700 inline-flex items-center gap-1">
+                            <Trash2 size={15} /> Видалити
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

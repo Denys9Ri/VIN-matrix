@@ -51,6 +51,7 @@ class OrderPart(models.Model):
     buy_price = models.DecimalField(max_digits=10, decimal_places=2)
     sell_price = models.DecimalField(max_digits=10, decimal_places=2)
     supplier = models.CharField(max_length=100)
+    supplier_color = models.CharField(max_length=80, blank=True, null=True)
     status = models.CharField(max_length=20, default='WAITING')
 
 class OrderService(models.Model):

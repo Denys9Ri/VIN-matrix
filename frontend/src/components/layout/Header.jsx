@@ -32,8 +32,6 @@ const Header = ({ toggleMenu }) => {
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 sticky top-0 z-30 shadow-sm w-full">
       <div className="flex items-center gap-2 md:gap-3 flex-1">
-        <ClientCodeBadge clientCode={clientCode || 'CLI-000'} />
-        
         <button 
           onClick={toggleMenu} 
           className="md:hidden p-1.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors shrink-0"
@@ -56,6 +54,8 @@ const Header = ({ toggleMenu }) => {
       </div>
 
       <div className="flex items-center gap-3 md:gap-6 ml-2 shrink-0">
+        <ClientCodeBadge clientCode={clientCode} />
+
         <div className="hidden lg:flex items-center gap-4 border-r pr-6 border-slate-200">
           <div className="text-right">
             <p className="text-[10px] uppercase text-slate-400 font-bold">Обіг сьогодні</p>

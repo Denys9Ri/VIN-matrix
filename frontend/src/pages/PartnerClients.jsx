@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Power, RefreshCw, Search, Trash2, Users, BadgeCheck, BadgeX, Copy } from 'lucide-react';
+import { AlertTriangle, Power, RefreshCw, Search, Trash2, Users, BadgeCheck, BadgeX } from 'lucide-react';
 import api from '../api/axios';
+import CopyButton from '../components/common/CopyButton';
 
 const statusLabel = {
   pending: 'Очікує оплату',
@@ -15,15 +16,6 @@ const subscriptionClass = (client) => {
   if (client.subscription_expired || !client.is_access_enabled) return 'bg-rose-50 text-rose-700';
   if (client.subscription_warning) return 'bg-orange-50 text-orange-700';
   return 'bg-emerald-50 text-emerald-700';
-};
-
-const copyToClipboard = async (value) => {
-  if (!value) return;
-  try {
-    if (navigator?.clipboard?.writeText) await navigator.clipboard.writeText(value);
-  } catch (error) {
-    console.error('Не вдалося скопіювати', error);
-  }
 };
 
 const getErrorMessage = (error) => {
@@ -96,10 +88,6 @@ const PartnerClients = () => {
     }
   };
 
-  const copyCode = async () => {
-    await copyToClipboard(settings?.partner_code);
-  };
-
   const alertList = [...(alerts.expiring_soon || []), ...(alerts.expired || [])].slice(0, 5);
 
   return (
@@ -115,9 +103,14 @@ const PartnerClients = () => {
             <p className="text-[10px] uppercase font-black text-slate-400">Партнерський код</p>
             <p className="text-lg font-black text-blue-700">{settings?.partner_code || '—'}</p>
           </div>
-          <button onClick={copyCode} className="p-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100" title="Скопіювати код">
-            <Copy size={18} />
-          </button>
+          <CopyButton
+            value={settings?.partner_code}
+            label="Копіювати"
+            copiedLabel="Скопійовано"
+            title="Скопіювати код"
+            showLabel={false}
+            className="p-2 rounded-xl"
+          />
         </div>
       </div>
 
@@ -143,7 +136,7 @@ const PartnerClients = () => {
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {loading ? <div className="p-6 text-slate-500 font-semibold">Завантаження...</div> : filteredClients.length === 0 ? <div className="p-8 text-center text-slate-500 font-semibold"><Users className="mx-auto mb-3 text-slate-300" size={36} />Клієнтів ще немає.</div> : (
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-500 uppercase text-xs font-black"><tr><th className="text-left px-4 py-3">Код</th><th className="text-left px-4 py-3">Клієнт</th><th className="text-left px-4 py-3">Телефон</th><th className="text-left px-4 py-3">Логін</th><th className="text-left px-4 py-3">Підписка</th><th className="text-left px-4 py-3">Доступ</th><th className="text-right px-4 py-3">Дії</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredClients.map((client) => { const code = formatClientCode(client); return <tr key={client.id} className="hover:bg-slate-50"><td className="px-4 py-3"><button onClick={() => copyToClipboard(code)} className="font-black text-blue-700 bg-blue-50 px-2 py-1 rounded-lg inline-flex items-center gap-1">{code} <Copy size={13} /></button></td><td className="px-4 py-3"><p className="font-bold text-slate-800">{client.full_name || '—'}</p>{client.email && <p className="text-xs text-slate-400">{client.email}</p>}</td><td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{client.phone || '—'}</td><td className="px-4 py-3 text-slate-600">{client.username || '—'}</td><td className="px-4 py-3"><span className={`px-2 py-1 rounded-lg font-bold text-xs ${subscriptionClass(client)}`}>{client.subscription_label || statusLabel[client.payment_status] || client.payment_status || '—'}{client.subscription_end_display ? ` · до ${client.subscription_end_display}` : ''}</span></td><td className="px-4 py-3">{client.is_access_enabled ? <span className="inline-flex items-center gap-1 text-emerald-700 font-bold"><BadgeCheck size={16} /> Увімкнено</span> : <span className="inline-flex items-center gap-1 text-rose-700 font-bold"><BadgeX size={16} /> Вимкнено</span>}</td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => renewClient(client)} className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 font-bold text-emerald-700 inline-flex items-center gap-1"><RefreshCw size={15} /> +30 днів</button><button onClick={() => toggleAccess(client)} className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 inline-flex items-center gap-1"><Power size={15} /> {client.is_access_enabled ? 'Вимкнути' : 'Увімкнути'}</button><button onClick={() => deleteClient(client)} className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 font-bold text-rose-700 inline-flex items-center gap-1"><Trash2 size={15} /> Видалити</button></div></td></tr>; })}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-500 uppercase text-xs font-black"><tr><th className="text-left px-4 py-3">Код</th><th className="text-left px-4 py-3">Клієнт</th><th className="text-left px-4 py-3">Телефон</th><th className="text-left px-4 py-3">Логін</th><th className="text-left px-4 py-3">Підписка</th><th className="text-left px-4 py-3">Доступ</th><th className="text-right px-4 py-3">Дії</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredClients.map((client) => { const code = formatClientCode(client); return <tr key={client.id} className="hover:bg-slate-50"><td className="px-4 py-3"><CopyButton value={code} label={code} compact /></td><td className="px-4 py-3"><p className="font-bold text-slate-800">{client.full_name || '—'}</p>{client.email && <p className="text-xs text-slate-400">{client.email}</p>}</td><td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{client.phone || '—'}</td><td className="px-4 py-3 text-slate-600">{client.username || '—'}</td><td className="px-4 py-3"><span className={`px-2 py-1 rounded-lg font-bold text-xs ${subscriptionClass(client)}`}>{client.subscription_label || statusLabel[client.payment_status] || client.payment_status || '—'}{client.subscription_end_display ? ` · до ${client.subscription_end_display}` : ''}</span></td><td className="px-4 py-3">{client.is_access_enabled ? <span className="inline-flex items-center gap-1 text-emerald-700 font-bold"><BadgeCheck size={16} /> Увімкнено</span> : <span className="inline-flex items-center gap-1 text-rose-700 font-bold"><BadgeX size={16} /> Вимкнено</span>}</td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => renewClient(client)} className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 font-bold text-emerald-700 inline-flex items-center gap-1"><RefreshCw size={15} /> +30 днів</button><button onClick={() => toggleAccess(client)} className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 inline-flex items-center gap-1"><Power size={15} /> {client.is_access_enabled ? 'Вимкнути' : 'Увімкнути'}</button><button onClick={() => deleteClient(client)} className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 font-bold text-rose-700 inline-flex items-center gap-1"><Trash2 size={15} /> Видалити</button></div></td></tr>; })}</tbody></table></div>
         )}
       </div>
     </div>

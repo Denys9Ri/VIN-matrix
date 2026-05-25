@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Search, CarFront, CalendarDays, History, Plus } from 'lucide-react';
+import { Search, CarFront, CalendarDays, History, Plus, Copy, Wrench, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const normalize = (value) => String(value || '').toLowerCase().trim();
@@ -25,6 +25,42 @@ const formatVisitDate = (visit) => {
     minute: '2-digit',
   });
 };
+
+const formatMoney = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return `${number.toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
+};
+
+const copyToClipboard = async (value) => {
+  if (!value) return;
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(String(value));
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = String(value);
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+  } catch (error) {
+    console.error('Не вдалося скопіювати', error);
+  }
+};
+
+const getPartArticle = (part) => part?.article || part?.sku || part?.part_number || part?.code || '';
+const getPartName = (part) => part?.name || part?.title || 'Запчастина';
+const getPartBrand = (part) => part?.brand || part?.manufacturer || '';
+const getPartSupplier = (part) => part?.supplier || part?.supplier_name || '';
+const getPartSellPrice = (part) => part?.sell_price ?? part?.price ?? part?.sale_price ?? part?.client_price ?? null;
+
+const getServiceName = (service) => service?.name || service?.service_name || 'Послуга';
+const getServicePrice = (service) => service?.price ?? service?.sell_price ?? null;
 
 const extractCarData = (visit) => {
   let parsed = {};
@@ -80,7 +116,10 @@ const Clients = () => {
 
     return visits.filter((visit) => {
       const carText = `${visit.brand || ''} ${visit.model || ''}`;
-      return [visit.plate, visit.phone, carText, visit.client, visit.vin_code].some((field) =>
+      const partText = (visit.parts || [])
+        .map((part) => `${getPartBrand(part)} ${getPartArticle(part)} ${getPartName(part)} ${getPartSupplier(part)}`)
+        .join(' ');
+      return [visit.plate, visit.phone, carText, visit.client, visit.vin_code, partText].some((field) =>
         normalize(field).includes(query)
       );
     });
@@ -162,6 +201,11 @@ const Clients = () => {
     setRepeatVisitTarget(null);
   };
 
+  const copyAllArticles = (visit) => {
+    const articles = (visit.parts || []).map(getPartArticle).filter(Boolean);
+    copyToClipboard(articles.join('\n'));
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 min-h-screen bg-slate-50">
       <div className="mb-8">
@@ -174,7 +218,7 @@ const Clients = () => {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Пошук по номеру, телефону, імені чи авто..."
+          placeholder="Пошук по номеру, телефону, імені, авто чи артикулу..."
           className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 shadow-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-medium text-lg"
         />
       </div>
@@ -215,40 +259,126 @@ const Clients = () => {
       {selectedGroup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
               <div>
-                <h2 className="text-2xl font-black text-slate-800">{selectedGroup.client}</h2>
-                <p className="text-sm font-bold text-blue-600">{selectedGroup.plate} • {selectedGroup.car}</p>
+                <h2 className="text-2xl font-black text-slate-800 leading-tight">{selectedGroup.client}</h2>
+                <p className="text-sm font-bold text-blue-600 mt-1">{selectedGroup.plate} • {selectedGroup.car}</p>
+                <p className="text-xs font-semibold text-slate-400 mt-1">Телефон: {selectedGroup.phone}</p>
               </div>
-              <button type="button" onClick={() => setSelectedGroup(null)} className="text-slate-400 hover:text-slate-600">Закрити</button>
+              <button type="button" onClick={() => setSelectedGroup(null)} className="text-slate-400 hover:text-slate-600 font-semibold">Закрити</button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-4">
-              {selectedGroup.visits.map((visit) => (
-                <div key={visit.id} className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
-                  <div className="flex justify-between items-start mb-3">
-                    <p className="font-black text-slate-700 flex items-center gap-2">
-                      <CalendarDays size={16} /> {formatVisitDate(visit)}
-                    </p>
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase border ${getStatusColor(visit.status)}`}>
-                      {visit.status || 'В обробці'}
-                    </span>
-                  </div>
+            <div className="p-4 md:p-6 overflow-y-auto space-y-4">
+              {selectedGroup.visits.map((visit) => {
+                const services = visit.services || [];
+                const parts = visit.parts || [];
+                const articleCount = parts.map(getPartArticle).filter(Boolean).length;
 
-                  <div className="text-sm text-slate-600 mb-4 grid grid-cols-2 gap-4">
-                    <div><span className="font-bold text-slate-400 block text-[10px] uppercase">Послуги:</span> {(visit.services || []).map((s) => s.name || s.service_name || 'Послуга').join(', ') || '—'}</div>
-                    <div><span className="font-bold text-slate-400 block text-[10px] uppercase">Запчастини:</span> {(visit.parts || []).map((p) => p.name || p.article || p.sku || 'Запчастина').join(', ') || '—'}</div>
-                  </div>
+                return (
+                  <div key={visit.id} className="bg-slate-50 rounded-2xl p-4 md:p-5 border border-slate-100">
+                    <div className="flex justify-between items-start mb-4 gap-3">
+                      <p className="font-black text-slate-700 flex items-center gap-2">
+                        <CalendarDays size={16} /> {formatVisitDate(visit)}
+                      </p>
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase border shrink-0 ${getStatusColor(visit.status)}`}>
+                        {visit.status || 'В обробці'}
+                      </span>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={() => openRepeatVisitModal(visit)}
-                    className="w-full flex items-center justify-center gap-2 bg-slate-800 text-white font-bold py-2.5 rounded-xl hover:bg-slate-900 transition-colors"
-                  >
-                    <History size={16} /> Повторити візит
-                  </button>
-                </div>
-              ))}
+                    <div className="space-y-4 mb-4">
+                      <div className="bg-white rounded-2xl border border-slate-100 p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="font-black text-slate-800 flex items-center gap-2">
+                            <Wrench size={16} className="text-blue-600" /> Послуги
+                          </h3>
+                          <span className="text-[10px] font-black uppercase text-slate-400">{services.length}</span>
+                        </div>
+                        {services.length === 0 ? (
+                          <p className="text-sm text-slate-400 font-semibold">Послуги не додані</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {services.map((service, index) => (
+                              <div key={service.id || index} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                                <p className="text-sm font-bold text-slate-700 leading-snug">{getServiceName(service)}</p>
+                                <p className="text-sm font-black text-slate-900 whitespace-nowrap">{formatMoney(getServicePrice(service))}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="bg-white rounded-2xl border border-slate-100 p-4">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <h3 className="font-black text-slate-800 flex items-center gap-2">
+                            <Package size={16} className="text-emerald-600" /> Запчастини
+                          </h3>
+                          {articleCount > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => copyAllArticles(visit)}
+                              className="text-[11px] font-black text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg px-2 py-1 inline-flex items-center gap-1"
+                            >
+                              <Copy size={12} /> Всі артикули
+                            </button>
+                          )}
+                        </div>
+
+                        {parts.length === 0 ? (
+                          <p className="text-sm text-slate-400 font-semibold">Запчастини не додані</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {parts.map((part, index) => {
+                              const article = getPartArticle(part);
+                              const brand = getPartBrand(part);
+                              const supplier = getPartSupplier(part);
+                              return (
+                                <div key={part.id || `${article}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                  <div className="flex items-start justify-between gap-3 mb-2">
+                                    <div className="min-w-0">
+                                      {brand && <p className="text-[11px] font-black uppercase tracking-wide text-emerald-700 mb-1">{brand}</p>}
+                                      <p className="text-sm font-black text-slate-800 leading-snug break-words">{getPartName(part)}</p>
+                                    </div>
+                                    <p className="text-sm font-black text-slate-900 whitespace-nowrap">{formatMoney(getPartSellPrice(part))}</p>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                                    {article ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => copyToClipboard(article)}
+                                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 text-blue-700 px-2 py-1 text-xs font-black hover:bg-blue-100"
+                                        title="Скопіювати артикул"
+                                      >
+                                        {article} <Copy size={12} />
+                                      </button>
+                                    ) : (
+                                      <span className="rounded-lg bg-slate-100 text-slate-400 px-2 py-1 text-xs font-bold">Артикул: —</span>
+                                    )}
+
+                                    {supplier && (
+                                      <span className="rounded-lg bg-white border border-slate-200 text-slate-500 px-2 py-1 text-xs font-bold">
+                                        {supplier}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => openRepeatVisitModal(visit)}
+                      className="w-full flex items-center justify-center gap-2 bg-slate-800 text-white font-bold py-2.5 rounded-xl hover:bg-slate-900 transition-colors"
+                    >
+                      <History size={16} /> Повторити візит
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

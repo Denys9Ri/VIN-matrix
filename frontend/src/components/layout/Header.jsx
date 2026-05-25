@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Copy, LogOut, Menu, Search, Settings, UserRound } from 'lucide-react';
+import { LogOut, Menu, Search, Settings, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import CopyButton from '../common/CopyButton';
 
 const roleLabel = {
   admin: 'Адміністратор',
@@ -17,28 +18,10 @@ const getInitials = (fullName, username) => {
   return String(username || 'U').slice(0, 2).toUpperCase();
 };
 
-const copyToClipboard = async (value) => {
-  if (!value) return;
-  if (navigator?.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
-};
-
 const Header = ({ toggleMenu }) => {
   const [query, setQuery] = useState('');
   const [profile, setProfile] = useState(null);
   const [partnerStats, setPartnerStats] = useState(null);
-  const [copied, setCopied] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const navigate = useNavigate();
@@ -85,12 +68,6 @@ const Header = ({ toggleMenu }) => {
     loadProfile();
   }, []);
 
-  const copyCode = async () => {
-    await copyToClipboard(userCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
   const logout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
@@ -123,11 +100,17 @@ const Header = ({ toggleMenu }) => {
 
         <div className="flex items-center gap-2 md:gap-4 ml-2 shrink-0 relative">
           {userCode && (
-            <button onClick={copyCode} className="hidden sm:flex items-center gap-2 border-l pl-4 border-slate-200 hover:opacity-80 transition-opacity" title="Скопіювати код">
+            <div className="hidden sm:flex items-center gap-2 border-l pl-4 border-slate-200">
               <span className="text-[10px] font-black uppercase text-slate-400">Ваш код:</span>
-              <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-bold shadow-sm shadow-blue-200">{userCode}</span>
-              {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} className="text-slate-400" />}
-            </button>
+              <CopyButton
+                value={userCode}
+                label={userCode}
+                copiedLabel="Скопійовано"
+                title="Скопіювати код"
+                tone="dark"
+                className="px-2 py-0.5 rounded text-xs shadow-sm shadow-blue-200"
+              />
+            </div>
           )}
 
           <span className={`hidden sm:inline-flex px-2.5 py-1 rounded-full text-[11px] font-black ${statusDanger ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>

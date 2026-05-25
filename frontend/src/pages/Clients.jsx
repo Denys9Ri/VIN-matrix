@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Search, CarFront, CalendarDays, History, Plus, Copy, Wrench, Package } from 'lucide-react';
+import { Search, CarFront, CalendarDays, History, Plus, Wrench, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import CopyButton from '../components/common/CopyButton';
 
 const normalize = (value) => String(value || '').toLowerCase().trim();
 
@@ -30,27 +31,6 @@ const formatMoney = (value) => {
   const number = Number(value);
   if (!Number.isFinite(number)) return '—';
   return `${number.toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
-};
-
-const copyToClipboard = async (value) => {
-  if (!value) return;
-  try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(String(value));
-    } else {
-      const textarea = document.createElement('textarea');
-      textarea.value = String(value);
-      textarea.setAttribute('readonly', '');
-      textarea.style.position = 'fixed';
-      textarea.style.left = '-9999px';
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    }
-  } catch (error) {
-    console.error('Не вдалося скопіювати', error);
-  }
 };
 
 const getPartArticle = (part) => part?.article || part?.sku || part?.part_number || part?.code || '';
@@ -201,10 +181,7 @@ const Clients = () => {
     setRepeatVisitTarget(null);
   };
 
-  const copyAllArticles = (visit) => {
-    const articles = (visit.parts || []).map(getPartArticle).filter(Boolean);
-    copyToClipboard(articles.join('\n'));
-  };
+  const getAllArticles = (visit) => (visit.parts || []).map(getPartArticle).filter(Boolean).join('\n');
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 min-h-screen bg-slate-50">
@@ -313,13 +290,12 @@ const Clients = () => {
                             <Package size={16} className="text-emerald-600" /> Запчастини
                           </h3>
                           {articleCount > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => copyAllArticles(visit)}
-                              className="text-[11px] font-black text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg px-2 py-1 inline-flex items-center gap-1"
-                            >
-                              <Copy size={12} /> Всі артикули
-                            </button>
+                            <CopyButton
+                              value={getAllArticles(visit)}
+                              label="Всі артикули"
+                              copiedLabel="Скопійовано"
+                              compact
+                            />
                           )}
                         </div>
 
@@ -343,14 +319,13 @@ const Clients = () => {
 
                                   <div className="flex flex-wrap items-center gap-2 mt-3">
                                     {article ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => copyToClipboard(article)}
-                                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 text-blue-700 px-2 py-1 text-xs font-black hover:bg-blue-100"
+                                      <CopyButton
+                                        value={article}
+                                        label={article}
+                                        copiedLabel="Скопійовано"
                                         title="Скопіювати артикул"
-                                      >
-                                        {article} <Copy size={12} />
-                                      </button>
+                                        compact
+                                      />
                                     ) : (
                                       <span className="rounded-lg bg-slate-100 text-slate-400 px-2 py-1 text-xs font-bold">Артикул: —</span>
                                     )}

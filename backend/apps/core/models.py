@@ -86,6 +86,7 @@ class OrderPart(models.Model):
     name = models.CharField(max_length=255)
     buy_price = models.DecimalField(max_digits=10, decimal_places=2)
     sell_price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.DecimalField(max_digits=8, decimal_places=2, default=1)
     supplier = models.CharField(max_length=100)
     supplier_color = models.CharField(max_length=80, blank=True, null=True)
     status = models.CharField(max_length=20, default='WAITING')
@@ -94,6 +95,7 @@ class OrderService(models.Model):
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, related_name='services')
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.DecimalField(max_digits=8, decimal_places=2, default=1)
     status = models.CharField(max_length=20, default='PENDING')
 
 class Category(models.Model):

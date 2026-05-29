@@ -49,7 +49,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
             ],
         },
-    },
+    }
 ]
 
 MIDDLEWARE = [
@@ -124,11 +124,13 @@ REST_FRAMEWORK = {
 }
 
 # Налаштування часу життя токенів
+# Важливо: refresh-токени не ротуються і не blacklist-яться після оновлення.
+# Це дозволяє одному акаунту стабільно працювати одночасно на телефоні, комп'ютері та ще одному пристрої.
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1), # Токен активний 1 день
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7), # Можна оновлювати вхід тиждень
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=14),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
 }
 
 # Статичні файли (CSS, JS)
@@ -158,7 +160,6 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 CSRF_TRUSTED_ORIGINS = [
-    "http://ydy3swnvdledj1sdinrvvleo.95.217.211.207.sslip.io",
     "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io",
 ]
 

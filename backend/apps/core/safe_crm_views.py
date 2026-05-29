@@ -58,6 +58,8 @@ def supplier_badge_class(supplier_name, is_local=False):
         return 'bg-blue-600 text-white shadow-md shadow-blue-200 whitespace-nowrap'
     if 'TEHNO' in name or 'ТЕХНО' in name:
         return 'bg-rose-600 text-white shadow-md shadow-rose-200 whitespace-nowrap'
+    if 'BM' in name or 'BM-PARTS' in name or 'BM PARTS' in name:
+        return 'bg-red-600 text-white shadow-md shadow-red-200 whitespace-nowrap'
     return 'bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap'
 
 
@@ -255,7 +257,7 @@ class MechanicViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request):
-        company = safe_ensure_company(request.user)
+        company = safe_ensure_company(self.request.user)
         if not company:
             return Response([])
         mechanics = Employee.objects.filter(company=company, role='mechanic')

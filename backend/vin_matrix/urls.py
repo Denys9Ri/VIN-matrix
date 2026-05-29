@@ -15,6 +15,7 @@ from apps.core.safe_crm_views import (
     OrderPartViewSet,
     OrderServiceViewSet,
 )
+from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.paid_views import (
     PartSearchView,
     MechanicViewSet,
@@ -30,6 +31,7 @@ from apps.core.profile_views import ProfileSettingsView
 router = DefaultRouter()
 router.register(r'visits', VisitViewSet, basename='visit')
 router.register(r'services', ServiceCatalogViewSet, basename='service')
+router.register(r'complexes', ServiceComplexViewSet, basename='complex')
 router.register(r'mechanics', MechanicViewSet, basename='mechanic')
 router.register(r'order-parts', OrderPartViewSet, basename='order-part')
 router.register(r'order-services', OrderServiceViewSet, basename='order-service')

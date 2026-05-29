@@ -12,6 +12,7 @@ import Analytics from './pages/Analytics';
 import Clients from './pages/Clients';
 import PartnerClients from './pages/PartnerClients';
 import Partners from './pages/Partners';
+import Complexes from './pages/Complexes';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -73,6 +74,7 @@ function App() {
           <Route path="visits" element={<Visits />} /> 
           <Route path="clients" element={<Clients />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="complexes" element={<Complexes />} />
           <Route path="partner-clients" element={<PartnerClients />} />
           <Route path="partners" element={<Partners />} />
         </Route>

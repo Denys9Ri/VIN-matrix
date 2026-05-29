@@ -12,18 +12,21 @@ const MainLayout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Передаємо стан і функцію закриття в Sidebar.
-        На десктопі він завжди відкритий, на мобільному керується станом.
-      */}
+    <div className="min-h-screen bg-slate-50 overflow-x-hidden">
+      {/* Sidebar fixed. На десктопі місце під нього резервуємо через padding, а не margin + w-full. */}
       <Sidebar isOpen={isMobileMenuOpen} closeMenu={() => setIsMobileMenuOpen(false)} />
-      
-      {/* Головний контейнер: на мобільному margin-0 (на весь екран), на десктопі margin-64 (під меню) */}
-      <div className="flex-1 md:ml-64 flex flex-col min-h-screen w-full transition-all duration-300">
+
+      {/*
+        ВАЖЛИВО:
+        Раніше тут було md:ml-64 + w-full. Це давало ширину 100% плюс margin зліва,
+        тому сторінки візуально їхали вправо на компʼютері.
+        Тепер основний контейнер займає реальну ширину екрана, а місце під меню
+        резервується через md:pl-64. Контент усередині сторінок центрується коректно.
+      */}
+      <div className="min-h-screen w-full md:pl-64 flex flex-col transition-all duration-300">
         <Header toggleMenu={toggleMobileMenu} />
-        
-        {/* Прибрали жорсткі відступи ml-16, тепер контент займає всю ширину */}
-        <main className="flex-1 w-full relative">
+
+        <main className="flex-1 w-full min-w-0 relative">
           <Outlet />
         </main>
       </div>

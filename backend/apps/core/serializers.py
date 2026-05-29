@@ -1,6 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService, Category, InventoryItem, Supplier, PlatformClient
+from .models import (
+    Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService,
+    Category, InventoryItem, Supplier, PlatformClient,
+    ServiceComplex, ComplexServiceItem, ComplexPartItem
+)
 from .subscriptions import subscription_payload
 
 class UserSerializer(serializers.ModelSerializer):
@@ -39,6 +43,71 @@ class VisitSerializer(serializers.ModelSerializer):
         model = Visit
         fields = '__all__'
         read_only_fields = ['company', 'created_at', 'updated_at']
+
+class ComplexServiceItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComplexServiceItem
+        fields = ['id', 'name', 'price', 'quantity']
+        read_only_fields = ['id']
+
+class ComplexPartItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComplexPartItem
+        fields = ['id', 'name', 'brand', 'article', 'buy_price', 'sell_price', 'quantity', 'supplier']
+        read_only_fields = ['id']
+
+class ServiceComplexSerializer(serializers.ModelSerializer):
+    services = ComplexServiceItemSerializer(many=True, required=False)
+    parts = ComplexPartItemSerializer(many=True, required=False)
+    services_count = serializers.SerializerMethodField()
+    parts_count = serializers.SerializerMethodField()
+    total_sum = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServiceComplex
+        fields = [
+            'id', 'name', 'description', 'is_active', 'services', 'parts',
+            'services_count', 'parts_count', 'total_sum', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_services_count(self, obj):
+        return obj.services.count()
+
+    def get_parts_count(self, obj):
+        return obj.parts.count()
+
+    def get_total_sum(self, obj):
+        services_total = sum(float(item.price or 0) * float(item.quantity or 1) for item in obj.services.all())
+        parts_total = sum(float(item.sell_price or 0) * float(item.quantity or 1) for item in obj.parts.all())
+        return round(services_total + parts_total, 2)
+
+    def create(self, validated_data):
+        services_data = validated_data.pop('services', [])
+        parts_data = validated_data.pop('parts', [])
+        complex_obj = ServiceComplex.objects.create(**validated_data)
+        self._replace_items(complex_obj, services_data, parts_data)
+        return complex_obj
+
+    def update(self, instance, validated_data):
+        services_data = validated_data.pop('services', None)
+        parts_data = validated_data.pop('parts', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if services_data is not None or parts_data is not None:
+            self._replace_items(instance, services_data or [], parts_data or [])
+        return instance
+
+    def _replace_items(self, complex_obj, services_data, parts_data):
+        complex_obj.services.all().delete()
+        complex_obj.parts.all().delete()
+        for item in services_data:
+            if item.get('name'):
+                ComplexServiceItem.objects.create(complex=complex_obj, **item)
+        for item in parts_data:
+            if item.get('name') or item.get('article'):
+                ComplexPartItem.objects.create(complex=complex_obj, **item)
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:

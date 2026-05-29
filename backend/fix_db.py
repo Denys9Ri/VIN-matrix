@@ -198,7 +198,9 @@ queries_alter = [
 
     # order tables
     "ALTER TABLE core_orderpart ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'WAITING';",
+    "ALTER TABLE core_orderpart ADD COLUMN IF NOT EXISTS quantity numeric(8, 2) NOT NULL DEFAULT 1;",
     "ALTER TABLE core_orderservice ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'PENDING';",
+    "ALTER TABLE core_orderservice ADD COLUMN IF NOT EXISTS quantity numeric(8, 2) NOT NULL DEFAULT 1;",
 
     # platform clients
     "ALTER TABLE core_platformclient ADD COLUMN IF NOT EXISTS referred_by_id integer NULL REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED;",
@@ -229,6 +231,8 @@ with connection.cursor() as cursor:
         "UPDATE core_servicecomplex SET is_active = true WHERE is_active IS NULL;",
         "UPDATE core_servicecomplex SET created_at = NOW() WHERE created_at IS NULL;",
         "UPDATE core_servicecomplex SET updated_at = NOW() WHERE updated_at IS NULL;",
+        "UPDATE core_orderpart SET quantity = 1 WHERE quantity IS NULL;",
+        "UPDATE core_orderservice SET quantity = 1 WHERE quantity IS NULL;",
         "UPDATE core_platformclient SET payment_status = 'pending' WHERE payment_status IS NULL;",
         "UPDATE core_platformclient SET is_access_enabled = false WHERE is_access_enabled IS NULL;",
         "UPDATE core_platformclient SET created_at = NOW() WHERE created_at IS NULL;",

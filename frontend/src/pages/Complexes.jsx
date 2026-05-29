@@ -10,6 +10,9 @@ const emptyForm = { name: '', description: '', is_active: true, services: [{ ...
 const money = (value) => `${Number(value || 0).toFixed(2)} ₴`;
 const itemTotal = (item, priceField = 'price') => Number(item?.[priceField] || 0) * Number(item?.quantity || 1);
 
+const inputClass = 'w-full min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all';
+const mutedInputClass = 'w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all';
+
 const Complexes = () => {
   const [searchParams] = useSearchParams();
   const visitIdFromUrl = searchParams.get('visit') || '';
@@ -303,62 +306,62 @@ const Complexes = () => {
       )}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto pt-10 pb-20">
-          <form onSubmit={submitComplex} className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50">
-              <div>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-3 sm:p-5 overflow-y-auto">
+          <form onSubmit={submitComplex} className="bg-white rounded-[28px] shadow-2xl w-full max-w-[1280px] my-4 sm:my-8 overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)]">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-start justify-between gap-3 bg-slate-50 shrink-0">
+              <div className="min-w-0">
                 <h2 className="text-xl font-black text-slate-900">{editing ? 'Редагувати комплекс' : 'Новий комплекс'}</h2>
                 <p className="text-sm text-slate-500 font-semibold">Додайте роботи та запчастини, які часто повторюються.</p>
               </div>
-              <button type="button" onClick={() => setModalOpen(false)} className="bg-white border border-slate-200 p-2 rounded-xl text-slate-500 hover:text-slate-900"><X size={18} /></button>
+              <button type="button" onClick={() => setModalOpen(false)} className="bg-white border border-slate-200 p-2 rounded-xl text-slate-500 hover:text-slate-900 shrink-0"><X size={18} /></button>
             </div>
 
-            <div className="p-5 space-y-5">
+            <div className="p-4 sm:p-5 space-y-5 overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва комплексу" className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none focus:border-blue-500" />
+                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва комплексу" className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none focus:border-blue-500 min-w-0" />
                 <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-600">
                   <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> Активний
                 </label>
               </div>
-              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Короткий опис" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 min-h-[80px]" />
+              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Короткий опис" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 min-h-[76px]" />
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-3">
+              <div className="grid grid-cols-1 2xl:grid-cols-[0.9fr_1.1fr] gap-5 items-start">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 min-w-0">
+                  <div className="flex items-center justify-between mb-3 gap-3">
                     <h3 className="font-black uppercase text-slate-700 flex items-center gap-2 text-sm"><Wrench size={16} /> Роботи</h3>
-                    <button type="button" onClick={() => addArrayItem('services', emptyService)} className="text-blue-600 font-black text-xs uppercase">+ Додати</button>
+                    <button type="button" onClick={() => addArrayItem('services', emptyService)} className="text-blue-600 font-black text-xs uppercase whitespace-nowrap">+ Додати</button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {form.services.map((item, index) => (
-                      <div key={`service-form-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_90px_80px_34px] gap-2">
-                        <input value={item.name} onChange={(e) => updateArrayItem('services', index, 'name', e.target.value)} placeholder="Назва роботи" className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                        <input type="number" value={item.price} onChange={(e) => updateArrayItem('services', index, 'price', e.target.value)} placeholder="Ціна" className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                        <input type="number" step="0.1" value={item.quantity} onChange={(e) => updateArrayItem('services', index, 'quantity', e.target.value)} placeholder="К-сть" className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                        <button type="button" onClick={() => removeArrayItem('services', index, emptyService)} className="text-rose-500 hover:bg-rose-50 rounded-lg flex items-center justify-center"><Trash2 size={15} /></button>
+                      <div key={`service-form-${index}`} className="bg-white border border-slate-200 rounded-2xl p-3 grid grid-cols-1 md:grid-cols-[minmax(220px,1fr)_120px_90px_40px] gap-2 items-center">
+                        <input value={item.name} onChange={(e) => updateArrayItem('services', index, 'name', e.target.value)} placeholder="Назва роботи" className={inputClass} />
+                        <input type="number" value={item.price} onChange={(e) => updateArrayItem('services', index, 'price', e.target.value)} placeholder="Ціна" className={inputClass} />
+                        <input type="number" step="0.1" value={item.quantity} onChange={(e) => updateArrayItem('services', index, 'quantity', e.target.value)} placeholder="К-сть" className={inputClass} />
+                        <button type="button" onClick={() => removeArrayItem('services', index, emptyService)} className="h-10 text-rose-500 hover:bg-rose-50 rounded-xl flex items-center justify-center"><Trash2 size={15} /></button>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 min-w-0">
+                  <div className="flex items-center justify-between mb-3 gap-3">
                     <h3 className="font-black uppercase text-slate-700 flex items-center gap-2 text-sm"><Package size={16} /> Запчастини</h3>
-                    <button type="button" onClick={() => addArrayItem('parts', emptyPart)} className="text-blue-600 font-black text-xs uppercase">+ Додати</button>
+                    <button type="button" onClick={() => addArrayItem('parts', emptyPart)} className="text-blue-600 font-black text-xs uppercase whitespace-nowrap">+ Додати</button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {form.parts.map((item, index) => (
-                      <div key={`part-form-${index}`} className="bg-white border border-slate-200 rounded-xl p-2 space-y-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <input value={item.name} onChange={(e) => updateArrayItem('parts', index, 'name', e.target.value)} placeholder="Назва" className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                          <input value={item.brand} onChange={(e) => updateArrayItem('parts', index, 'brand', e.target.value)} placeholder="Бренд" className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                          <input value={item.article} onChange={(e) => updateArrayItem('parts', index, 'article', e.target.value)} placeholder="Артикул" className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
+                      <div key={`part-form-${index}`} className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2 min-w-0">
+                        <div className="grid grid-cols-1 md:grid-cols-[minmax(220px,1.4fr)_140px_160px] gap-2">
+                          <input value={item.name} onChange={(e) => updateArrayItem('parts', index, 'name', e.target.value)} placeholder="Назва" className={mutedInputClass} />
+                          <input value={item.brand} onChange={(e) => updateArrayItem('parts', index, 'brand', e.target.value)} placeholder="Бренд" className={mutedInputClass} />
+                          <input value={item.article} onChange={(e) => updateArrayItem('parts', index, 'article', e.target.value)} placeholder="Артикул" className={mutedInputClass} />
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_80px_1fr_34px] gap-2">
-                          <input type="number" value={item.buy_price} onChange={(e) => updateArrayItem('parts', index, 'buy_price', e.target.value)} placeholder="Закуп." className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                          <input type="number" value={item.sell_price} onChange={(e) => updateArrayItem('parts', index, 'sell_price', e.target.value)} placeholder="Продаж" className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                          <input type="number" step="0.1" value={item.quantity} onChange={(e) => updateArrayItem('parts', index, 'quantity', e.target.value)} placeholder="К-сть" className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                          <input value={item.supplier} onChange={(e) => updateArrayItem('parts', index, 'supplier', e.target.value)} placeholder="Постачальник" className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
-                          <button type="button" onClick={() => removeArrayItem('parts', index, emptyPart)} className="text-rose-500 hover:bg-rose-50 rounded-lg flex items-center justify-center"><Trash2 size={15} /></button>
+                        <div className="grid grid-cols-2 md:grid-cols-[120px_120px_90px_minmax(180px,1fr)_40px] gap-2 items-center">
+                          <input type="number" value={item.buy_price} onChange={(e) => updateArrayItem('parts', index, 'buy_price', e.target.value)} placeholder="Закуп." className={mutedInputClass} />
+                          <input type="number" value={item.sell_price} onChange={(e) => updateArrayItem('parts', index, 'sell_price', e.target.value)} placeholder="Продаж" className={mutedInputClass} />
+                          <input type="number" step="0.1" value={item.quantity} onChange={(e) => updateArrayItem('parts', index, 'quantity', e.target.value)} placeholder="К-сть" className={mutedInputClass} />
+                          <input value={item.supplier} onChange={(e) => updateArrayItem('parts', index, 'supplier', e.target.value)} placeholder="Постачальник" className={`${mutedInputClass} col-span-2 md:col-span-1`} />
+                          <button type="button" onClick={() => removeArrayItem('parts', index, emptyPart)} className="h-10 text-rose-500 hover:bg-rose-50 rounded-xl flex items-center justify-center col-span-2 md:col-span-1"><Trash2 size={15} /></button>
                         </div>
                       </div>
                     ))}
@@ -367,11 +370,11 @@ const Complexes = () => {
               </div>
             </div>
 
-            <div className="p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <p className="text-sm font-black text-slate-700">Орієнтовна сума: <span className="text-blue-600">{money(formTotal)}</span></p>
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              <p className="text-sm font-black text-slate-700">Орієнтовна сума: <span className="text-blue-600 text-base">{money(formTotal)}</span></p>
               <div className="flex gap-2 w-full sm:w-auto">
-                <button type="button" onClick={() => setModalOpen(false)} className="flex-1 sm:flex-none px-5 py-3 rounded-xl bg-white border border-slate-200 font-black text-xs uppercase text-slate-600">Скасувати</button>
-                <button type="submit" className="flex-1 sm:flex-none px-5 py-3 rounded-xl bg-blue-600 font-black text-xs uppercase text-white hover:bg-blue-700">Зберегти</button>
+                <button type="button" onClick={() => setModalOpen(false)} className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-white border border-slate-200 font-black text-xs uppercase text-slate-600 hover:bg-slate-50">Скасувати</button>
+                <button type="submit" className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-blue-600 font-black text-xs uppercase text-white hover:bg-blue-700 shadow-lg shadow-blue-200">Зберегти</button>
               </div>
             </div>
           </form>

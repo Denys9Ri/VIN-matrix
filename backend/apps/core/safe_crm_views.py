@@ -20,6 +20,9 @@ from .serializers import (
 from .views import VisitViewSet as BaseVisitViewSet
 
 
+BM_PARTS_BADGE_CLASS = 'bg-[linear-gradient(90deg,#d71920_0_34%,#e5e7eb_34%_52%,#ffffff_52%_100%)] text-slate-900 border border-slate-300 shadow-md shadow-slate-200 whitespace-nowrap'
+
+
 def safe_get_company(user):
     try:
         return user.company
@@ -59,7 +62,7 @@ def supplier_badge_class(supplier_name, is_local=False):
     if 'TEHNO' in name or 'ТЕХНО' in name:
         return 'bg-rose-600 text-white shadow-md shadow-rose-200 whitespace-nowrap'
     if 'BM' in name or 'BM-PARTS' in name or 'BM PARTS' in name:
-        return 'bg-red-600 text-white shadow-md shadow-red-200 whitespace-nowrap'
+        return BM_PARTS_BADGE_CLASS
     return 'bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap'
 
 

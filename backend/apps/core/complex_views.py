@@ -50,6 +50,7 @@ class ServiceComplexViewSet(viewsets.ModelViewSet):
                 visit=visit,
                 name=item.name,
                 price=item.price,
+                quantity=item.quantity or 1,
                 status='PENDING',
             )
             added_services += 1
@@ -63,6 +64,7 @@ class ServiceComplexViewSet(viewsets.ModelViewSet):
                 name=item.name or item.article or 'Запчастина',
                 buy_price=item.buy_price or 0,
                 sell_price=item.sell_price or 0,
+                quantity=item.quantity or 1,
                 supplier=supplier,
                 supplier_color=supplier_badge_class(supplier),
                 status='WAITING',
@@ -101,7 +103,7 @@ class ServiceComplexViewSet(viewsets.ModelViewSet):
                 complex=complex_obj,
                 name=service.name,
                 price=service.price or 0,
-                quantity=1,
+                quantity=getattr(service, 'quantity', 1) or 1,
             )
 
         for part in visit.parts.all():
@@ -112,7 +114,7 @@ class ServiceComplexViewSet(viewsets.ModelViewSet):
                 article=part.article,
                 buy_price=part.buy_price or 0,
                 sell_price=part.sell_price or 0,
-                quantity=1,
+                quantity=getattr(part, 'quantity', 1) or 1,
                 supplier=part.supplier,
             )
 

@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -9,4 +20,29 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/*
+  Layout rule:
+  MainLayout already reserves desktop space for the sidebar with md:ml-64.
+  Older pages also had md:pl-72, which doubled the left offset and pushed content off-center.
+  Keep the normal md:p-8 left padding instead of the old extra sidebar padding.
+*/
+@media (min-width: 768px) {
+  .md\:pl-72 {
+    padding-left: 2rem !important;
+  }
+}
+
+/* Make wide tables and dense widgets scroll inside their cards instead of breaking the page width. */
+.overflow-x-auto,
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Keep modal forms usable on small screens and centered on desktop. */
+.fixed form,
+.fixed > div {
+  max-width: min(100%, var(--modal-max-width, 1280px));
 }

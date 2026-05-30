@@ -1,9 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.utils import timezone
 from .models import (
     Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService,
     Category, InventoryItem, Supplier, PlatformClient,
-    ServiceComplex, ComplexServiceItem, ComplexPartItem
+    ServiceComplex, ComplexServiceItem, ComplexPartItem, VehicleRecommendation
 )
 from .subscriptions import subscription_payload
 
@@ -108,6 +109,50 @@ class ServiceComplexSerializer(serializers.ModelSerializer):
         for item in parts_data:
             if item.get('name') or item.get('article'):
                 ComplexPartItem.objects.create(complex=complex_obj, **item)
+
+class VehicleRecommendationSerializer(serializers.ModelSerializer):
+    state = serializers.SerializerMethodField()
+    state_label = serializers.SerializerMethodField()
+    days_left = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VehicleRecommendation
+        fields = [
+            'id', 'visit', 'client', 'phone', 'plate', 'car', 'title', 'description',
+            'due_date', 'due_mileage', 'status', 'state', 'state_label', 'days_left',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def _days_left(self, obj):
+        if not obj.due_date:
+            return None
+        return (obj.due_date - timezone.localdate()).days
+
+    def get_days_left(self, obj):
+        return self._days_left(obj)
+
+    def get_state(self, obj):
+        if obj.status == VehicleRecommendation.STATUS_DONE:
+            return 'done'
+        if obj.status == VehicleRecommendation.STATUS_CANCELLED:
+            return 'cancelled'
+        days = self._days_left(obj)
+        if days is not None and days < 0:
+            return 'overdue'
+        if days is not None and days <= 7:
+            return 'soon'
+        return 'active'
+
+    def get_state_label(self, obj):
+        state = self.get_state(obj)
+        return {
+            'done': 'Виконано',
+            'cancelled': 'Скасовано',
+            'overdue': 'Прострочено',
+            'soon': 'Скоро',
+            'active': 'Активна',
+        }.get(state, 'Активна')
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:

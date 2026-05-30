@@ -2,12 +2,12 @@ from datetime import datetime, timedelta, time as dt_time
 
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation
+from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation, CRMTask
 from .serializers import (
     CategorySerializer,
     InventoryItemSerializer,
@@ -22,6 +22,46 @@ from .views import VisitViewSet as BaseVisitViewSet
 
 
 BM_PARTS_BADGE_CLASS = 'bg-[linear-gradient(90deg,#d71920_0_34%,#e5e7eb_34%_52%,#ffffff_52%_100%)] text-slate-900 border border-slate-300 shadow-md shadow-slate-200 whitespace-nowrap'
+
+
+class CRMTaskSerializer(serializers.ModelSerializer):
+    state = serializers.SerializerMethodField()
+    state_label = serializers.SerializerMethodField()
+    days_left = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CRMTask
+        fields = [
+            'id', 'visit', 'client', 'phone', 'plate', 'title', 'description', 'due_date',
+            'status', 'state', 'state_label', 'days_left', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def _days_left(self, obj):
+        if not obj.due_date:
+            return None
+        return (obj.due_date - timezone.localdate()).days
+
+    def get_days_left(self, obj):
+        return self._days_left(obj)
+
+    def get_state(self, obj):
+        if obj.status == CRMTask.STATUS_DONE:
+            return 'done'
+        if obj.status == CRMTask.STATUS_IN_PROGRESS:
+            return 'in_progress'
+        days = self._days_left(obj)
+        if days is not None and days < 0:
+            return 'overdue'
+        return obj.status or 'new'
+
+    def get_state_label(self, obj):
+        return {
+            'new': 'Нова',
+            'in_progress': 'В роботі',
+            'done': 'Виконана',
+            'overdue': 'Прострочена',
+        }.get(self.get_state(obj), 'Нова')
 
 
 def safe_get_company(user):
@@ -192,6 +232,56 @@ class VehicleRecommendationViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(rec).data)
 
 
+class CRMTaskViewSet(viewsets.ModelViewSet):
+    serializer_class = CRMTaskSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        company = safe_ensure_company(self.request.user)
+        queryset = CRMTask.objects.filter(company=company) if company else CRMTask.objects.none()
+        search = self.request.query_params.get('search', '').strip()
+        status_filter = self.request.query_params.get('status', '').strip()
+        visit_id = self.request.query_params.get('visit', '').strip()
+
+        if search:
+            queryset = queryset.filter(
+                Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search)
+                | Q(title__icontains=search) | Q(description__icontains=search)
+            )
+        if status_filter in ['new', 'in_progress', 'done', 'overdue']:
+            queryset = queryset.filter(status=status_filter)
+        if visit_id:
+            queryset = queryset.filter(visit_id=visit_id)
+        return queryset.order_by('status', 'due_date', '-created_at')
+
+    def perform_create(self, serializer):
+        company = safe_ensure_company(self.request.user)
+        if not company:
+            raise ValueError('Немає CRM-компанії для створення задачі.')
+        visit = None
+        visit_id = self.request.data.get('visit')
+        if visit_id:
+            try:
+                visit = Visit.objects.get(id=visit_id, company=company)
+            except Visit.DoesNotExist:
+                visit = None
+        defaults = {}
+        if visit:
+            defaults = {
+                'client': self.request.data.get('client') or visit.client,
+                'phone': self.request.data.get('phone') or visit.phone,
+                'plate': self.request.data.get('plate') or visit.plate,
+            }
+        serializer.save(company=company, created_by=self.request.user, **defaults)
+
+    @action(detail=True, methods=['post'], url_path='mark-done')
+    def mark_done(self, request, pk=None):
+        task = self.get_object()
+        task.status = CRMTask.STATUS_DONE
+        task.save(update_fields=['status', 'updated_at'])
+        return Response(self.get_serializer(task).data)
+
+
 class OrderPartViewSet(viewsets.ModelViewSet):
     serializer_class = OrderPartSerializer
     permission_classes = [IsAuthenticated]
@@ -258,14 +348,7 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         company = safe_ensure_company(self.request.user)
-        queryset = InventoryItem.objects.filter(company=company) if company else InventoryItem.objects.none()
-        cat_id = self.request.query_params.get('category')
-        search = self.request.query_params.get('search')
-        if cat_id:
-            queryset = queryset.filter(category_id=cat_id)
-        if search:
-            queryset = queryset.filter(Q(article__icontains=search) | Q(name__icontains=search) | Q(brand__icontains=search))
-        return queryset
+        return InventoryItem.objects.filter(company=company) if company else InventoryItem.objects.none()
 
     def perform_create(self, serializer):
         company = safe_ensure_company(self.request.user)
@@ -282,111 +365,8 @@ class SupplierViewSet(viewsets.ModelViewSet):
         company = safe_ensure_company(self.request.user)
         return Supplier.objects.filter(company=company) if company else Supplier.objects.none()
 
-    def list(self, request, *args, **kwargs):
-        try:
-            queryset = self.get_queryset()
-            serializer = self.get_serializer(queryset, many=True)
-            return Response(serializer.data)
-        except Exception as exc:
-            return Response([], status=200)
-
-    def create(self, request, *args, **kwargs):
-        company = safe_ensure_company(request.user)
-        if not company:
-            return Response({'error': 'Немає CRM-компанії для створення постачальника.'}, status=400)
-
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        supplier = serializer.save(company=company)
-        return Response(self.get_serializer(supplier).data, status=status.HTTP_201_CREATED)
-
-    def partial_update(self, request, *args, **kwargs):
-        try:
-            supplier = self.get_object()
-            serializer = self.get_serializer(supplier, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            supplier = serializer.save()
-            return Response(self.get_serializer(supplier).data)
-        except Exception as exc:
-            return Response({'error': 'Не вдалося оновити постачальника', 'details': str(exc)}, status=400)
-
-    def destroy(self, request, *args, **kwargs):
-        try:
-            supplier = self.get_object()
-            supplier.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Exception as exc:
-            return Response({'error': 'Не вдалося видалити постачальника', 'details': str(exc)}, status=400)
-
-    @action(detail=True, methods=['post'], url_path='fetch_warehouses')
-    def fetch_warehouses(self, request, pk=None):
-        # Тимчасово повертаємо пустий список, щоб кабінет клієнта/партнера не падав.
-        return Response({'message': 'Склади не завантажені автоматично для цього постачальника.', 'warehouses': []})
-
-
-class MechanicViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
-
-    def list(self, request):
+    def perform_create(self, serializer):
         company = safe_ensure_company(self.request.user)
         if not company:
-            return Response([])
-        mechanics = Employee.objects.filter(company=company, role='mechanic')
-        data = [{
-            'id': m.user.id,
-            'username': m.user.username,
-            'first_name': m.user.first_name,
-            'can_create_visits': m.can_create_visits,
-            'can_view_finances': m.can_view_finances,
-        } for m in mechanics]
-        return Response(data)
-
-    def create(self, request):
-        company = safe_ensure_company(request.user)
-        if not company:
-            return Response({'error': 'Немає CRM-компанії.'}, status=403)
-
-        username = request.data.get('username')
-        password = request.data.get('password')
-        first_name = request.data.get('first_name')
-        can_create = request.data.get('can_create_visits') is True
-        can_view = request.data.get('can_view_finances') is True
-
-        from django.contrib.auth.models import User
-        if User.objects.filter(username=username).exists():
-            return Response({'error': 'Логін зайнятий'}, status=400)
-        user = User.objects.create_user(username=username, password=password, first_name=first_name)
-        Employee.objects.create(user=user, company=company, role='mechanic', can_create_visits=can_create, can_view_finances=can_view)
-        return Response({'message': 'Створено'}, status=201)
-
-    def partial_update(self, request, pk=None):
-        company = safe_ensure_company(request.user)
-        if not company:
-            return Response({'error': 'Немає CRM-компанії.'}, status=403)
-        try:
-            user = Employee.objects.get(user_id=pk, company=company).user
-            emp = user.employee_profile
-            if request.data.get('first_name'):
-                user.first_name = request.data.get('first_name')
-            if request.data.get('new_password'):
-                user.set_password(request.data.get('new_password'))
-            user.save()
-            if 'can_create_visits' in request.data:
-                emp.can_create_visits = request.data.get('can_create_visits') is True
-            if 'can_view_finances' in request.data:
-                emp.can_view_finances = request.data.get('can_view_finances') is True
-            emp.save()
-            return Response({'message': 'Оновлено'})
-        except Employee.DoesNotExist:
-            return Response(status=404)
-
-    def destroy(self, request, pk=None):
-        company = safe_ensure_company(request.user)
-        if not company:
-            return Response({'error': 'Немає CRM-компанії.'}, status=403)
-        try:
-            employee = Employee.objects.get(user_id=pk, company=company)
-            employee.user.delete()
-            return Response({'message': 'Видалено'})
-        except Employee.DoesNotExist:
-            return Response(status=404)
+            raise ValueError('Немає CRM-компанії для створення постачальника.')
+        serializer.save(company=company)

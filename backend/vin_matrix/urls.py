@@ -17,7 +17,7 @@ from apps.core.safe_crm_views import (
     VehicleRecommendationViewSet,
     CRMTaskViewSet,
 )
-from apps.core.communication_views import CRMCommunicationViewSet
+from apps.core.communication_views import CRMCommunicationViewSet, CRMClientStatusViewSet
 from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.paid_views import (
     PartSearchView,
@@ -38,6 +38,7 @@ router.register(r'complexes', ServiceComplexViewSet, basename='complex')
 router.register(r'recommendations', VehicleRecommendationViewSet, basename='recommendation')
 router.register(r'crm-tasks', CRMTaskViewSet, basename='crm-task')
 router.register(r'crm-communications', CRMCommunicationViewSet, basename='crm-communication')
+router.register(r'crm-client-statuses', CRMClientStatusViewSet, basename='crm-client-status')
 router.register(r'mechanics', MechanicViewSet, basename='mechanic')
 router.register(r'order-parts', OrderPartViewSet, basename='order-part')
 router.register(r'order-services', OrderServiceViewSet, basename='order-service')

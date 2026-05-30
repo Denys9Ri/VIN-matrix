@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, time as dt_time
 
+from django.contrib.auth.models import User
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers, status, viewsets
@@ -370,3 +371,71 @@ class SupplierViewSet(viewsets.ModelViewSet):
         if not company:
             raise ValueError('Немає CRM-компанії для створення постачальника.')
         serializer.save(company=company)
+
+
+class MechanicViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        company = safe_ensure_company(request.user)
+        if not company or not hasattr(request.user, 'company'):
+            return Response(status=403)
+        mechanics = Employee.objects.filter(company=company, role='mechanic')
+        data = [{
+            'id': mechanic.user.id,
+            'username': mechanic.user.username,
+            'first_name': mechanic.user.first_name,
+            'can_create_visits': mechanic.can_create_visits,
+            'can_view_finances': mechanic.can_view_finances,
+        } for mechanic in mechanics]
+        return Response(data)
+
+    def create(self, request):
+        company = safe_ensure_company(request.user)
+        if not company or not hasattr(request.user, 'company'):
+            return Response(status=403)
+        username = request.data.get('username')
+        password = request.data.get('password')
+        first_name = request.data.get('first_name')
+        can_create = request.data.get('can_create_visits') is True
+        can_view = request.data.get('can_view_finances') is True
+        if User.objects.filter(username=username).exists():
+            return Response({'error': 'Логін зайнятий'}, status=400)
+        try:
+            user = User.objects.create_user(username=username, password=password, first_name=first_name)
+            Employee.objects.create(user=user, company=company, role='mechanic', can_create_visits=can_create, can_view_finances=can_view)
+            return Response({'message': 'Створено'}, status=201)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=500)
+
+    def partial_update(self, request, pk=None):
+        company = safe_ensure_company(request.user)
+        if not company or not hasattr(request.user, 'company'):
+            return Response(status=403)
+        try:
+            user = User.objects.get(id=pk, employee_profile__company=company)
+            employee = user.employee_profile
+            if request.data.get('first_name'):
+                user.first_name = request.data.get('first_name')
+            if request.data.get('new_password'):
+                user.set_password(request.data.get('new_password'))
+            user.save()
+            if 'can_create_visits' in request.data:
+                employee.can_create_visits = request.data.get('can_create_visits') is True
+            if 'can_view_finances' in request.data:
+                employee.can_view_finances = request.data.get('can_view_finances') is True
+            employee.save()
+            return Response({'message': 'Оновлено'})
+        except User.DoesNotExist:
+            return Response(status=404)
+
+    def destroy(self, request, pk=None):
+        company = safe_ensure_company(request.user)
+        if not company or not hasattr(request.user, 'company'):
+            return Response(status=403)
+        try:
+            user = User.objects.get(id=pk, employee_profile__company=company)
+            user.delete()
+            return Response({'message': 'Видалено'})
+        except User.DoesNotExist:
+            return Response(status=404)

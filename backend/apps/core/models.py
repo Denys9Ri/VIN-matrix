@@ -204,6 +204,49 @@ class CRMClientStatus(models.Model):
     def __str__(self):
         return f"{self.client or self.phone or self.plate or 'Клієнт'} — {self.status}"
 
+class CRMServiceReminder(models.Model):
+    TYPE_OIL = 'oil'
+    TYPE_FILTERS = 'filters'
+    TYPE_BRAKES = 'brakes'
+    TYPE_TIRES = 'tires'
+    TYPE_MAINTENANCE = 'maintenance'
+    TYPE_CHOICES = [
+        (TYPE_OIL, 'Заміна масла'),
+        (TYPE_FILTERS, 'Фільтри'),
+        (TYPE_BRAKES, 'Гальма'),
+        (TYPE_TIRES, 'Сезонна заміна шин'),
+        (TYPE_MAINTENANCE, 'ТО'),
+    ]
+    STATUS_ACTIVE = 'active'
+    STATUS_DONE = 'done'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, 'Активне'),
+        (STATUS_DONE, 'Виконано'),
+        (STATUS_CANCELLED, 'Скасовано'),
+    ]
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='crm_service_reminders')
+    visit = models.ForeignKey(Visit, on_delete=models.SET_NULL, null=True, blank=True, related_name='crm_service_reminders')
+    client = models.CharField(max_length=100, blank=True, null=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    plate = models.CharField(max_length=20, blank=True, null=True)
+    reminder_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_MAINTENANCE)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    due_date = models.DateField(null=True, blank=True)
+    due_mileage = models.PositiveIntegerField(null=True, blank=True)
+    note = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_crm_service_reminders')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['status', 'due_date', 'due_mileage', '-created_at']
+        indexes = [models.Index(fields=['company', 'phone', 'plate', 'status'])]
+
+    def __str__(self):
+        return f"{self.client or self.phone or self.plate or 'Клієнт'} — {self.title or self.reminder_type}"
+
 class Category(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)

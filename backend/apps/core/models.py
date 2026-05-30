@@ -129,6 +129,37 @@ class VehicleRecommendation(models.Model):
     def __str__(self):
         return f"{self.plate or 'Авто'} — {self.title}"
 
+class CRMTask(models.Model):
+    STATUS_NEW = 'new'
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_DONE = 'done'
+    STATUS_OVERDUE = 'overdue'
+    STATUS_CHOICES = [
+        (STATUS_NEW, 'Нова'),
+        (STATUS_IN_PROGRESS, 'В роботі'),
+        (STATUS_DONE, 'Виконана'),
+        (STATUS_OVERDUE, 'Прострочена'),
+    ]
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='crm_tasks')
+    visit = models.ForeignKey(Visit, on_delete=models.SET_NULL, null=True, blank=True, related_name='crm_tasks')
+    client = models.CharField(max_length=100, blank=True, null=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    plate = models.CharField(max_length=20, blank=True, null=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_crm_tasks')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['status', 'due_date', '-created_at']
+
+    def __str__(self):
+        return self.title
+
 class Category(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)

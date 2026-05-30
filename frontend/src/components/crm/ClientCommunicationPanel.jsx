@@ -23,39 +23,57 @@ const statusClass = {
 
 const statusLabel = (value) => statuses.find((item) => item[0] === value)?.[1] || 'Контакт';
 const today = () => new Date().toISOString().slice(0, 10);
-const storageKey = (group) => `crm_communication_${group?.id || group?.phone || group?.plate || 'unknown'}`;
 
 export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onRepeat, onAddRecommendation, onTaskCreated, compact = false }) {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ status: 'called', comment: '' });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
-  const key = useMemo(() => storageKey(selectedGroup), [selectedGroup]);
 
-  useEffect(() => {
+  const query = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedGroup?.phone && selectedGroup.phone !== '—') params.set('phone', selectedGroup.phone);
+    if (selectedGroup?.plate && selectedGroup.plate !== '—') params.set('plate', selectedGroup.plate);
+    if (selectedGroup?.client) params.set('client', selectedGroup.client);
+    return params.toString();
+  }, [selectedGroup]);
+
+  const loadItems = async () => {
+    if (!selectedGroup || !query) return;
+    setLoading(true);
     try {
-      const saved = JSON.parse(window.localStorage.getItem(key) || '[]');
-      setItems(Array.isArray(saved) ? saved : []);
+      const response = await api.get(`/api/crm-communications/?${query}`);
+      setItems(Array.isArray(response.data) ? response.data : []);
     } catch {
       setItems([]);
+    } finally {
+      setLoading(false);
     }
-  }, [key]);
-
-  const saveItems = (next) => {
-    setItems(next);
-    window.localStorage.setItem(key, JSON.stringify(next));
   };
 
-  const addCommunication = (event) => {
+  useEffect(() => { loadItems(); }, [query]);
+
+  const addCommunication = async (event) => {
     event?.preventDefault();
-    const nextItem = {
-      id: Date.now(),
-      status: form.status,
-      status_label: statusLabel(form.status),
-      comment: form.comment.trim(),
-      created_at: new Date().toISOString(),
-    };
-    saveItems([nextItem, ...items]);
-    setForm({ status: 'called', comment: '' });
+    if (!selectedGroup || saving) return;
+    setSaving(true);
+    try {
+      await api.post('/api/crm-communications/', {
+        visit: lastVisit?.id || null,
+        client: selectedGroup.client || '',
+        phone: selectedGroup.phone || '',
+        plate: selectedGroup.plate || '',
+        status: form.status,
+        comment: form.comment.trim(),
+      });
+      setForm({ status: 'called', comment: '' });
+      await loadItems();
+    } catch {
+      alert('Не вдалося додати запис комунікації.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const createCallTask = async () => {
@@ -92,18 +110,10 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2 mb-4">
-        <button type="button" onClick={() => window.location.assign(`tel:${selectedGroup?.phone || ''}`)} className="bg-emerald-600 text-white rounded-2xl py-3 px-2 text-xs font-black uppercase flex items-center justify-center gap-2">
-          <PhoneCall size={15} /> Подзвонити
-        </button>
-        <button type="button" onClick={() => lastVisit && onRepeat?.(lastVisit)} disabled={!lastVisit} className="bg-slate-900 disabled:opacity-50 text-white rounded-2xl py-3 px-2 text-xs font-black uppercase flex items-center justify-center gap-2">
-          <Plus size={15} /> Створити візит
-        </button>
-        <button type="button" onClick={onAddRecommendation} className="bg-blue-50 text-blue-700 rounded-2xl py-3 px-2 text-xs font-black uppercase flex items-center justify-center gap-2">
-          <ClipboardList size={15} /> Рекомендація
-        </button>
-        <button type="button" onClick={createCallTask} disabled={savingTask} className="bg-indigo-50 text-indigo-700 rounded-2xl py-3 px-2 text-xs font-black uppercase flex items-center justify-center gap-2 disabled:opacity-50">
-          <ListChecks size={15} /> {savingTask ? 'Створюю' : 'Задача'}
-        </button>
+        <button type="button" onClick={() => window.location.assign(`tel:${selectedGroup?.phone || ''}`)} className="bg-emerald-600 text-white rounded-2xl py-3 px-2 text-xs font-black uppercase flex items-center justify-center gap-2"><PhoneCall size={15} /> Подзвонити</button>
+        <button type="button" onClick={() => lastVisit && onRepeat?.(lastVisit)} disabled={!lastVisit} className="bg-slate-900 disabled:opacity-50 text-white rounded-2xl py-3 px-2 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15} /> Створити візит</button>
+        <button type="button" onClick={onAddRecommendation} className="bg-blue-50 text-blue-700 rounded-2xl py-3 px-2 text-xs font-black uppercase flex items-center justify-center gap-2"><ClipboardList size={15} /> Рекомендація</button>
+        <button type="button" onClick={createCallTask} disabled={savingTask} className="bg-indigo-50 text-indigo-700 rounded-2xl py-3 px-2 text-xs font-black uppercase flex items-center justify-center gap-2 disabled:opacity-50"><ListChecks size={15} /> {savingTask ? 'Створюю' : 'Задача'}</button>
         <CopyButton value={selectedGroup?.phone || ''} label="Телефон" copiedLabel="Скопійовано" />
         <CopyButton value={selectedGroup?.vin || ''} label="VIN" copiedLabel="Скопійовано" />
         <CopyButton value={selectedGroup?.plate || ''} label="Номер" copiedLabel="Скопійовано" />
@@ -117,23 +127,13 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
             </select>
             <input value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} placeholder="Коментар менеджера" className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500" />
           </div>
-          <button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Додати запис комунікації</button>
+          <button disabled={saving} className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase disabled:opacity-50">{saving ? 'Зберігаю...' : 'Додати запис комунікації'}</button>
         </form>
       )}
 
-      {items.length === 0 ? (
-        <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Історії спілкування ще немає</div>
-      ) : (
+      {loading ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Завантаження комунікації...</div> : items.length === 0 ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Історії спілкування ще немає</div> : (
         <div className="space-y-2">
-          {shownItems.map((item) => (
-            <div key={item.id} className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span className={`self-start rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${statusClass[item.status] || statusClass.called}`}>{item.status_label || statusLabel(item.status)}</span>
-                <span className="text-[11px] font-bold text-slate-400">{new Date(item.created_at).toLocaleString('uk-UA')}</span>
-              </div>
-              {item.comment && <p className="text-sm font-semibold text-slate-600 mt-2 break-words">{item.comment}</p>}
-            </div>
-          ))}
+          {shownItems.map((item) => <div key={item.id} className="bg-slate-50 border border-slate-100 rounded-2xl p-3"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2"><span className={`self-start rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${statusClass[item.status] || statusClass.called}`}>{item.status_label || statusLabel(item.status)}</span><span className="text-[11px] font-bold text-slate-400">{new Date(item.created_at).toLocaleString('uk-UA')}</span></div>{item.comment && <p className="text-sm font-semibold text-slate-600 mt-2 break-words">{item.comment}</p>}</div>)}
           {compact && items.length > 2 && <p className="text-xs font-bold text-slate-400 text-center">Ще записів: {items.length - 2}</p>}
         </div>
       )}

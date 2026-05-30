@@ -98,6 +98,37 @@ class OrderService(models.Model):
     quantity = models.DecimalField(max_digits=8, decimal_places=2, default=1)
     status = models.CharField(max_length=20, default='PENDING')
 
+class VehicleRecommendation(models.Model):
+    STATUS_ACTIVE = 'active'
+    STATUS_DONE = 'done'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, 'Активна'),
+        (STATUS_DONE, 'Виконана'),
+        (STATUS_CANCELLED, 'Скасована'),
+    ]
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='recommendations')
+    visit = models.ForeignKey(Visit, on_delete=models.SET_NULL, null=True, blank=True, related_name='recommendations')
+    client = models.CharField(max_length=100, blank=True, null=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    plate = models.CharField(max_length=20, blank=True, null=True)
+    car = models.CharField(max_length=160, blank=True, null=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    due_date = models.DateField(null=True, blank=True)
+    due_mileage = models.PositiveIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_recommendations')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['status', 'due_date', '-created_at']
+
+    def __str__(self):
+        return f"{self.plate or 'Авто'} — {self.title}"
+
 class Category(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)

@@ -9,10 +9,10 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
 import Analytics from './pages/Analytics';
-import Clients from './pages/Clients';
 import PartnerClients from './pages/PartnerClients';
 import Partners from './pages/Partners';
 import Complexes from './pages/Complexes';
+import CRM from './pages/CRM';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -72,7 +72,9 @@ function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<Visits />} /> 
-          <Route path="clients" element={<Clients />} />
+          <Route path="clients" element={<Navigate to="/crm/clients" replace />} />
+          <Route path="crm" element={<Navigate to="/crm/clients" replace />} />
+          <Route path="crm/:tab" element={<CRM />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="complexes" element={<Complexes />} />
           <Route path="partner-clients" element={<PartnerClients />} />

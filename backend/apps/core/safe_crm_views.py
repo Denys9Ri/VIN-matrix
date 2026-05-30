@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit
+from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation
 from .serializers import (
     CategorySerializer,
     InventoryItemSerializer,
@@ -16,6 +16,7 @@ from .serializers import (
     ServiceCatalogSerializer,
     SupplierSerializer,
     VisitSerializer,
+    VehicleRecommendationSerializer,
 )
 from .views import VisitViewSet as BaseVisitViewSet
 
@@ -122,6 +123,73 @@ class VisitViewSet(BaseVisitViewSet):
         if not company:
             raise ValueError('Немає CRM-компанії для створення візиту.')
         serializer.save(company=company)
+
+
+class VehicleRecommendationViewSet(viewsets.ModelViewSet):
+    serializer_class = VehicleRecommendationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        company = safe_ensure_company(self.request.user)
+        queryset = VehicleRecommendation.objects.filter(company=company) if company else VehicleRecommendation.objects.none()
+        search = self.request.query_params.get('search', '').strip()
+        status_filter = self.request.query_params.get('status', '').strip()
+        visit_id = self.request.query_params.get('visit', '').strip()
+        plate = self.request.query_params.get('plate', '').strip()
+        phone = self.request.query_params.get('phone', '').strip()
+
+        if search:
+            queryset = queryset.filter(
+                Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search)
+                | Q(car__icontains=search) | Q(title__icontains=search) | Q(description__icontains=search)
+            )
+        if status_filter in ['active', 'done', 'cancelled']:
+            queryset = queryset.filter(status=status_filter)
+        if visit_id:
+            queryset = queryset.filter(visit_id=visit_id)
+        if plate:
+            queryset = queryset.filter(plate__iexact=plate)
+        if phone:
+            queryset = queryset.filter(phone__iexact=phone)
+        return queryset.order_by('status', 'due_date', '-created_at')
+
+    def perform_create(self, serializer):
+        company = safe_ensure_company(self.request.user)
+        if not company:
+            raise ValueError('Немає CRM-компанії для створення рекомендації.')
+
+        visit = None
+        visit_id = self.request.data.get('visit')
+        if visit_id:
+            try:
+                visit = Visit.objects.get(id=visit_id, company=company)
+            except Visit.DoesNotExist:
+                visit = None
+
+        defaults = {}
+        if visit:
+            car = ''
+            if visit.delivery_data and str(visit.delivery_data).strip().startswith('{'):
+                try:
+                    import json
+                    data = json.loads(visit.delivery_data)
+                    car = f"{data.get('brand', '')} {data.get('model', '')}".strip()
+                except Exception:
+                    car = ''
+            defaults = {
+                'client': self.request.data.get('client') or visit.client,
+                'phone': self.request.data.get('phone') or visit.phone,
+                'plate': self.request.data.get('plate') or visit.plate,
+                'car': self.request.data.get('car') or car,
+            }
+        serializer.save(company=company, created_by=self.request.user, **defaults)
+
+    @action(detail=True, methods=['post'], url_path='mark-done')
+    def mark_done(self, request, pk=None):
+        rec = self.get_object()
+        rec.status = VehicleRecommendation.STATUS_DONE
+        rec.save(update_fields=['status', 'updated_at'])
+        return Response(self.get_serializer(rec).data)
 
 
 class OrderPartViewSet(viewsets.ModelViewSet):

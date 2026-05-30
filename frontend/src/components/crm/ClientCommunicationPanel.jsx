@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, ListChecks, MessageSquareText, PhoneCall, Plus } from 'lucide-react';
+import { ClipboardList, ListChecks, MessageSquareText, PhoneCall, Plus, UserRound } from 'lucide-react';
 import CopyButton from '../common/CopyButton';
 import api from '../../api/axios';
 
@@ -12,6 +12,15 @@ const statuses = [
   ['agreed', 'Клієнт погодився'],
 ];
 
+const clientStatuses = [
+  ['new', 'Новий'],
+  ['active', 'Активний'],
+  ['regular', 'Постійний'],
+  ['sleeping', 'Сплячий'],
+  ['problem', 'Проблемний'],
+  ['vip', 'VIP'],
+];
+
 const statusClass = {
   called: 'bg-blue-50 text-blue-700 border-blue-100',
   no_answer: 'bg-slate-100 text-slate-600 border-slate-200',
@@ -21,7 +30,17 @@ const statusClass = {
   agreed: 'bg-emerald-50 text-emerald-700 border-emerald-100',
 };
 
+const clientStatusClass = {
+  new: 'bg-blue-50 text-blue-700 border-blue-100',
+  active: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  regular: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+  sleeping: 'bg-slate-100 text-slate-600 border-slate-200',
+  problem: 'bg-rose-50 text-rose-700 border-rose-100',
+  vip: 'bg-amber-50 text-amber-700 border-amber-100',
+};
+
 const statusLabel = (value) => statuses.find((item) => item[0] === value)?.[1] || 'Контакт';
+const clientStatusLabel = (value) => clientStatuses.find((item) => item[0] === value)?.[1] || 'Новий';
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onRepeat, onAddRecommendation, onTaskCreated, compact = false }) {
@@ -30,6 +49,9 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
+  const [clientStatus, setClientStatus] = useState(null);
+  const [statusForm, setStatusForm] = useState({ status: 'new', note: '' });
+  const [savingStatus, setSavingStatus] = useState(false);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -52,7 +74,23 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
     }
   };
 
-  useEffect(() => { loadItems(); }, [query]);
+  const loadClientStatus = async () => {
+    if (!selectedGroup || !query) return;
+    try {
+      const response = await api.get(`/api/crm-client-statuses/?${query}`);
+      const first = Array.isArray(response.data) && response.data.length ? response.data[0] : null;
+      setClientStatus(first);
+      setStatusForm({ status: first?.status || 'new', note: first?.note || '' });
+    } catch {
+      setClientStatus(null);
+      setStatusForm({ status: 'new', note: '' });
+    }
+  };
+
+  useEffect(() => {
+    loadItems();
+    loadClientStatus();
+  }, [query]);
 
   const addCommunication = async (event) => {
     event?.preventDefault();
@@ -73,6 +111,28 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
       alert('Не вдалося додати запис комунікації.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveClientStatus = async (event) => {
+    event?.preventDefault();
+    if (!selectedGroup || savingStatus) return;
+    setSavingStatus(true);
+    const payload = {
+      client: selectedGroup.client || '',
+      phone: selectedGroup.phone || '',
+      plate: selectedGroup.plate || '',
+      status: statusForm.status,
+      note: statusForm.note.trim(),
+    };
+    try {
+      if (clientStatus?.id) await api.patch(`/api/crm-client-statuses/${clientStatus.id}/`, payload);
+      else await api.post('/api/crm-client-statuses/', payload);
+      await loadClientStatus();
+    } catch {
+      alert('Не вдалося зберегти статус клієнта.');
+    } finally {
+      setSavingStatus(false);
     }
   };
 
@@ -106,7 +166,24 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
           <MessageSquareText size={18} className="text-blue-600" />
           <span className="break-words">Комунікація з клієнтом</span>
         </h3>
-        <span className="text-[10px] font-black uppercase text-slate-400">Записів: {items.length}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${clientStatusClass[statusForm.status] || clientStatusClass.new}`}>Статус: {clientStatus?.status_label || clientStatusLabel(statusForm.status)}</span>
+          <span className="text-[10px] font-black uppercase text-slate-400">Записів: {items.length}</span>
+        </div>
+      </div>
+
+      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 mb-4">
+        <div className="flex items-center gap-2 mb-3">
+          <UserRound size={16} className="text-slate-500" />
+          <p className="text-xs font-black uppercase text-slate-500">Ручний статус клієнта</p>
+        </div>
+        <form onSubmit={saveClientStatus} className="grid grid-cols-1 lg:grid-cols-[180px_1fr_auto] gap-2">
+          <select value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })} className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500">
+            {clientStatuses.map(([keyValue, label]) => <option key={keyValue} value={keyValue}>{label}</option>)}
+          </select>
+          <input value={statusForm.note} onChange={(event) => setStatusForm({ ...statusForm, note: event.target.value })} placeholder="Примітка до статусу, наприклад: VIP, бо обслуговує 3 авто" className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500" />
+          <button disabled={savingStatus} className="bg-slate-900 text-white rounded-xl px-4 py-3 text-xs font-black uppercase disabled:opacity-50">{savingStatus ? 'Зберігаю...' : 'Зберегти статус'}</button>
+        </form>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2 mb-4">

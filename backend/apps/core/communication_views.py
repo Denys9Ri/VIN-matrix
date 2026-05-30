@@ -2,7 +2,7 @@ from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
 
-from .models import CRMCommunication, CRMClientStatus, Visit
+from .models import CRMCommunication, CRMClientStatus, CRMServiceReminder, Visit
 from .safe_crm_views import safe_ensure_company
 
 
@@ -28,7 +28,6 @@ class CRMCommunicationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         company = safe_ensure_company(self.request.user)
         queryset = CRMCommunication.objects.filter(company=company) if company else CRMCommunication.objects.none()
-
         search = self.request.query_params.get('search', '').strip()
         visit_id = self.request.query_params.get('visit', '').strip()
         plate = self.request.query_params.get('plate', '').strip()
@@ -36,10 +35,7 @@ class CRMCommunicationViewSet(viewsets.ModelViewSet):
         client = self.request.query_params.get('client', '').strip()
 
         if search:
-            queryset = queryset.filter(
-                Q(client__icontains=search) | Q(phone__icontains=search) |
-                Q(plate__icontains=search) | Q(comment__icontains=search)
-            )
+            queryset = queryset.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(comment__icontains=search))
         if visit_id:
             queryset = queryset.filter(visit_id=visit_id)
         if plate:
@@ -48,14 +44,12 @@ class CRMCommunicationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(phone__iexact=phone)
         if client:
             queryset = queryset.filter(client__iexact=client)
-
         return queryset.order_by('-created_at', '-id')
 
     def perform_create(self, serializer):
         company = safe_ensure_company(self.request.user)
         if not company:
             raise ValueError('Немає CRM-компанії для створення комунікації.')
-
         visit = None
         visit_id = self.request.data.get('visit')
         if visit_id:
@@ -63,7 +57,6 @@ class CRMCommunicationViewSet(viewsets.ModelViewSet):
                 visit = Visit.objects.get(id=visit_id, company=company)
             except Visit.DoesNotExist:
                 visit = None
-
         defaults = {}
         if visit:
             defaults = {
@@ -71,7 +64,6 @@ class CRMCommunicationViewSet(viewsets.ModelViewSet):
                 'phone': self.request.data.get('phone') or visit.phone,
                 'plate': self.request.data.get('plate') or visit.plate,
             }
-
         serializer.save(company=company, visit=visit, created_by=self.request.user, **defaults)
 
 
@@ -80,10 +72,7 @@ class CRMClientStatusSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CRMClientStatus
-        fields = [
-            'id', 'client', 'phone', 'plate', 'status', 'status_label',
-            'note', 'created_at', 'updated_at'
-        ]
+        fields = ['id', 'client', 'phone', 'plate', 'status', 'status_label', 'note', 'created_at', 'updated_at']
         read_only_fields = ['id', 'status_label', 'created_at', 'updated_at']
 
     def get_status_label(self, obj):
@@ -97,24 +86,18 @@ class CRMClientStatusViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         company = safe_ensure_company(self.request.user)
         queryset = CRMClientStatus.objects.filter(company=company) if company else CRMClientStatus.objects.none()
-
         search = self.request.query_params.get('search', '').strip()
         plate = self.request.query_params.get('plate', '').strip()
         phone = self.request.query_params.get('phone', '').strip()
         client = self.request.query_params.get('client', '').strip()
-
         if search:
-            queryset = queryset.filter(
-                Q(client__icontains=search) | Q(phone__icontains=search) |
-                Q(plate__icontains=search) | Q(note__icontains=search)
-            )
+            queryset = queryset.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(note__icontains=search))
         if plate:
             queryset = queryset.filter(plate__iexact=plate)
         if phone:
             queryset = queryset.filter(phone__iexact=phone)
         if client:
             queryset = queryset.filter(client__iexact=client)
-
         return queryset.order_by('-updated_at', '-id')
 
     def perform_create(self, serializer):
@@ -125,3 +108,60 @@ class CRMClientStatusViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
+
+
+class CRMServiceReminderSerializer(serializers.ModelSerializer):
+    reminder_type_label = serializers.SerializerMethodField()
+    status_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CRMServiceReminder
+        fields = [
+            'id', 'visit', 'client', 'phone', 'plate', 'reminder_type', 'reminder_type_label',
+            'title', 'due_date', 'due_mileage', 'note', 'status', 'status_label', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'reminder_type_label', 'status_label', 'created_at', 'updated_at']
+
+    def get_reminder_type_label(self, obj):
+        return dict(CRMServiceReminder.TYPE_CHOICES).get(obj.reminder_type, 'ТО')
+
+    def get_status_label(self, obj):
+        return dict(CRMServiceReminder.STATUS_CHOICES).get(obj.status, 'Активне')
+
+
+class CRMServiceReminderViewSet(viewsets.ModelViewSet):
+    serializer_class = CRMServiceReminderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        company = safe_ensure_company(self.request.user)
+        queryset = CRMServiceReminder.objects.filter(company=company) if company else CRMServiceReminder.objects.none()
+        search = self.request.query_params.get('search', '').strip()
+        plate = self.request.query_params.get('plate', '').strip()
+        phone = self.request.query_params.get('phone', '').strip()
+        client = self.request.query_params.get('client', '').strip()
+        status = self.request.query_params.get('status', '').strip()
+        if search:
+            queryset = queryset.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(title__icontains=search) | Q(note__icontains=search))
+        if plate:
+            queryset = queryset.filter(plate__iexact=plate)
+        if phone:
+            queryset = queryset.filter(phone__iexact=phone)
+        if client:
+            queryset = queryset.filter(client__iexact=client)
+        if status:
+            queryset = queryset.filter(status=status)
+        return queryset.order_by('status', 'due_date', 'due_mileage', '-created_at')
+
+    def perform_create(self, serializer):
+        company = safe_ensure_company(self.request.user)
+        if not company:
+            raise ValueError('Немає CRM-компанії для створення нагадування.')
+        visit = None
+        visit_id = self.request.data.get('visit')
+        if visit_id:
+            try:
+                visit = Visit.objects.get(id=visit_id, company=company)
+            except Visit.DoesNotExist:
+                visit = None
+        serializer.save(company=company, visit=visit, created_by=self.request.user)

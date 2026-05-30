@@ -13,6 +13,7 @@ import PartnerClients from './pages/PartnerClients';
 import Partners from './pages/Partners';
 import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
+import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -59,6 +60,10 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+function VisitsWithCrm() {
+  return <><Visits /><VisitCrmBridge /></>;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -71,7 +76,7 @@ function App() {
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="visits" element={<Visits />} /> 
+          <Route path="visits" element={<VisitsWithCrm />} /> 
           <Route path="clients" element={<Navigate to="/crm/clients" replace />} />
           <Route path="crm" element={<Navigate to="/crm/clients" replace />} />
           <Route path="crm/:tab" element={<CRM />} />

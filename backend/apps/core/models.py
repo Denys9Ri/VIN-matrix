@@ -172,6 +172,38 @@ class CRMCommunication(models.Model):
         ordering = ['-created_at', '-id']
     def __str__(self): return f"{self.client or self.plate or 'Клієнт'} — {self.status}"
 
+class CRMClientStatus(models.Model):
+    STATUS_NEW = 'new'
+    STATUS_ACTIVE = 'active'
+    STATUS_REGULAR = 'regular'
+    STATUS_SLEEPING = 'sleeping'
+    STATUS_PROBLEM = 'problem'
+    STATUS_VIP = 'vip'
+    STATUS_CHOICES = [
+        (STATUS_NEW, 'Новий'),
+        (STATUS_ACTIVE, 'Активний'),
+        (STATUS_REGULAR, 'Постійний'),
+        (STATUS_SLEEPING, 'Сплячий'),
+        (STATUS_PROBLEM, 'Проблемний'),
+        (STATUS_VIP, 'VIP'),
+    ]
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='crm_client_statuses')
+    client = models.CharField(max_length=100, blank=True, null=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    plate = models.CharField(max_length=20, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
+    note = models.TextField(blank=True, null=True)
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_crm_client_statuses')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at', '-id']
+        indexes = [models.Index(fields=['company', 'phone', 'plate'])]
+
+    def __str__(self):
+        return f"{self.client or self.phone or self.plate or 'Клієнт'} — {self.status}"
+
 class Category(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)

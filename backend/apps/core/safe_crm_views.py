@@ -22,7 +22,18 @@ from .serializers import (
 from .views import VisitViewSet as BaseVisitViewSet
 
 
-BM_PARTS_BADGE_CLASS = 'bg-[linear-gradient(90deg,#d71920_0_34%,#e5e7eb_34%_52%,#ffffff_52%_100%)] text-slate-900 border border-slate-300 shadow-md shadow-slate-200 whitespace-nowrap'
+SUPPLIER_BADGE_KEYS = {
+    'supplier-local',
+    'supplier-vesna',
+    'supplier-omega',
+    'supplier-tehnomir',
+    'supplier-bm',
+    'supplier-default',
+}
+
+
+def safe_text(value, max_len=80):
+    return str(value or '').strip()[:max_len]
 
 
 class CRMTaskSerializer(serializers.ModelSerializer):
@@ -94,18 +105,33 @@ def safe_ensure_company(user):
 
 
 def supplier_badge_class(supplier_name, is_local=False):
+    """Return a short badge key, not a long Tailwind class.
+
+    OrderPart.supplier_color is varchar(80). Long arbitrary Tailwind classes
+    can crash PostgreSQL with StringDataRightTruncation, especially for BM-Parts.
+    The frontend maps these compact keys to real responsive badge styles.
+    """
     if is_local:
-        return 'bg-slate-800 text-white whitespace-nowrap'
+        return 'supplier-local'
     name = str(supplier_name or '').upper()
     if 'VESNA' in name or 'ВЕСНА' in name:
-        return 'bg-emerald-600 text-white shadow-md shadow-emerald-200 whitespace-nowrap'
+        return 'supplier-vesna'
     if 'OMEGA' in name or 'ОМЕГА' in name:
-        return 'bg-blue-600 text-white shadow-md shadow-blue-200 whitespace-nowrap'
+        return 'supplier-omega'
     if 'TEHNO' in name or 'ТЕХНО' in name:
-        return 'bg-rose-600 text-white shadow-md shadow-rose-200 whitespace-nowrap'
+        return 'supplier-tehnomir'
+    if 'ТЕХНО' in name or 'ТЕХНОМИР' in name:
+        return 'supplier-tehnomir'
     if 'BM' in name or 'BM-PARTS' in name or 'BM PARTS' in name:
-        return BM_PARTS_BADGE_CLASS
-    return 'bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap'
+        return 'supplier-bm'
+    return 'supplier-default'
+
+
+def normalize_supplier_badge_key(value, supplier_name='', is_local=False):
+    value = safe_text(value, 80)
+    if value in SUPPLIER_BADGE_KEYS:
+        return value
+    return supplier_badge_class(supplier_name, is_local)
 
 
 class VisitViewSet(BaseVisitViewSet):
@@ -295,7 +321,12 @@ class OrderPartViewSet(viewsets.ModelViewSet):
         company = safe_ensure_company(self.request.user)
         visit = Visit.objects.get(id=self.request.data.get('visit'), company=company)
         supplier = self.request.data.get('supplier') or ''
-        supplier_color = self.request.data.get('supplier_color') or supplier_badge_class(supplier, self.request.data.get('is_local') is True)
+        is_local = self.request.data.get('is_local') is True or str(self.request.data.get('is_local')).lower() == 'true'
+        supplier_color = normalize_supplier_badge_key(
+            self.request.data.get('supplier_color'),
+            supplier_name=supplier,
+            is_local=is_local,
+        )
         serializer.save(visit=visit, supplier_color=supplier_color)
 
 

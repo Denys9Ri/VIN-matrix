@@ -1,5 +1,5 @@
+import json
 from django.db import connection
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -52,7 +52,13 @@ def ensure_visit_workflow_tables():
 
 def row_to_dict(cursor, row):
     columns = [col[0] for col in cursor.description]
-    return dict(zip(columns, row)) if row else None
+    data = dict(zip(columns, row)) if row else None
+    if data and isinstance(data.get('checklist'), str):
+        try:
+            data['checklist'] = json.loads(data['checklist'])
+        except Exception:
+            data['checklist'] = {}
+    return data
 
 
 def get_visit_for_user(user, visit_id):
@@ -63,6 +69,13 @@ def get_visit_for_user(user, visit_id):
         return Visit.objects.get(id=visit_id, company=company), company
     except Visit.DoesNotExist:
         return None, company
+
+
+def to_int_or_none(value):
+    try:
+        return int(value) if value not in [None, ''] else None
+    except (TypeError, ValueError):
+        return None
 
 
 class VisitAcceptanceActView(APIView):
@@ -107,7 +120,7 @@ class VisitAcceptanceActView(APIView):
                 RETURNING *
             """, [
                 company.id, visit.id, payload.get('client') or visit.client, payload.get('phone') or visit.phone,
-                payload.get('plate') or visit.plate, payload.get('mileage') or None, payload.get('fuel_level') or '',
+                payload.get('plate') or visit.plate, to_int_or_none(payload.get('mileage')), payload.get('fuel_level') or '',
                 payload.get('exterior_note') or '', payload.get('interior_note') or '', payload.get('damages') or '',
                 payload.get('customer_complaint') or '', payload.get('note') or '', payload.get('status') or 'draft', request.user.id,
             ])
@@ -134,6 +147,8 @@ class VisitDiagnosticChecklistView(APIView):
         if not visit:
             return Response({'detail': 'Візит не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
         payload = request.data
+        checklist = payload.get('checklist') or {}
+        checklist_json = checklist if isinstance(checklist, str) else json.dumps(checklist, ensure_ascii=False)
         with connection.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO core_visitdiagnosticchecklist (
@@ -151,7 +166,7 @@ class VisitDiagnosticChecklistView(APIView):
                 RETURNING *
             """, [
                 company.id, visit.id, payload.get('client') or visit.client, payload.get('phone') or visit.phone,
-                payload.get('plate') or visit.plate, payload.get('checklist') or '{}',
+                payload.get('plate') or visit.plate, checklist_json,
                 payload.get('summary') or '', payload.get('status') or 'draft', request.user.id,
             ])
             data = row_to_dict(cursor, cursor.fetchone())

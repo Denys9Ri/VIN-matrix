@@ -41,8 +41,12 @@ def safe_text(value, max_len=80):
     return str(value or '').strip()[:max_len]
 
 
+def has_value(value):
+    return value not in [None, '', [], {}] and str(value).strip() not in ['', '—', 'None']
+
+
 def html_text(value, fallback='—'):
-    value = fallback if value in [None, ''] else value
+    value = fallback if not has_value(value) else value
     return escape(str(value))
 
 
@@ -282,9 +286,9 @@ class VisitViewSet(BaseVisitViewSet):
 
         services = list(getattr(visit, 'services', OrderService.objects.none()).all())
         parts = list(getattr(visit, 'parts', OrderPart.objects.none()).all())
-        recommendations = list(VehicleRecommendation.objects.filter(company=company).filter(
+        recommendations = list(VehicleRecommendation.objects.filter(company=company, status=VehicleRecommendation.STATUS_ACTIVE).filter(
             Q(visit=visit) | Q(plate__iexact=visit.plate) | Q(phone__iexact=visit.phone)
-        ).distinct().order_by('status', 'due_date', '-created_at')[:12]) if company else []
+        ).distinct().order_by('due_date', '-created_at')[:12]) if company else []
 
         services_total = sum((money_value(s.price) * money_value(s.quantity or 1) for s in services), Decimal('0.00'))
         parts_total = sum((money_value(p.sell_price) * money_value(p.quantity or 1) for p in parts), Decimal('0.00'))
@@ -308,25 +312,61 @@ class VisitViewSet(BaseVisitViewSet):
             'tires': 'Шини', 'lights': 'Світло', 'battery': 'АКБ', 'computer': 'Помилки/компʼютер'
         }
 
+        acceptance_rows = []
+        mileage = acceptance.get('mileage') or car_data.get('mileage')
+        if has_value(mileage):
+            acceptance_rows.append(f"<tr><th>Пробіг</th><td>{html_text(mileage)} км</td></tr>")
+        if has_value(acceptance.get('fuel_level')):
+            acceptance_rows.append(f"<tr><th>Рівень палива</th><td>{html_text(acceptance.get('fuel_level'))}</td></tr>")
+        if has_value(acceptance.get('customer_complaint')):
+            acceptance_rows.append(f"<tr><th>Скарга клієнта</th><td>{html_text(acceptance.get('customer_complaint'))}</td></tr>")
+        if has_value(acceptance.get('damages')):
+            acceptance_rows.append(f"<tr><th>Пошкодження</th><td>{html_text(acceptance.get('damages'))}</td></tr>")
+        if has_value(acceptance.get('interior_note')):
+            acceptance_rows.append(f"<tr><th>Салон / речі</th><td>{html_text(acceptance.get('interior_note'))}</td></tr>")
+        if has_value(acceptance.get('exterior_note')):
+            acceptance_rows.append(f"<tr><th>Зовнішній стан</th><td>{html_text(acceptance.get('exterior_note'))}</td></tr>")
+        if has_value(acceptance.get('note')):
+            acceptance_rows.append(f"<tr><th>Примітка</th><td>{html_text(acceptance.get('note'))}</td></tr>")
+        acceptance_section = f"<h3>Акт приймання авто</h3><table><tbody>{''.join(acceptance_rows)}</tbody></table>" if acceptance_rows else ''
+
+        diagnostic_rows = []
+        for key, label in diagnostic_labels.items():
+            item = checklist.get(key) or {}
+            note = item.get('note')
+            if has_value(note):
+                diagnostic_rows.append(f"<tr><td>{html_text(label)}</td><td>{html_text(note)}</td></tr>")
+        diagnostic_section = ''
+        if diagnostic_rows or has_value(diagnostic.get('summary')):
+            diagnostic_table = f"<table><thead><tr><th>Вузол</th><th>Результат / коментар</th></tr></thead><tbody>{''.join(diagnostic_rows)}</tbody></table>" if diagnostic_rows else ''
+            diagnostic_note = f"<div class='note' style='margin-top:10px;'><strong>Висновок діагностики:</strong><br>{html_text(diagnostic.get('summary'))}</div>" if has_value(diagnostic.get('summary')) else ''
+            diagnostic_section = f"<h3>Діагностика / чек-лист</h3>{diagnostic_table}{diagnostic_note}"
+
         services_rows = ''.join(
             f"<tr><td>{html_text(s.name)}</td><td class='center'>{qty_display(s.quantity)}</td><td class='right'>{money_display(s.price)}</td><td class='right'>{money_display(money_value(s.price) * money_value(s.quantity or 1))}</td></tr>"
             for s in services
-        ) or "<tr><td colspan='4' class='empty'>Роботи не додані</td></tr>"
+        )
+        services_section = f"<h3>Виконані роботи</h3><table><thead><tr><th>Назва роботи</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr></thead><tbody>{services_rows}</tbody></table>" if services_rows else ''
 
         parts_rows = ''.join(
-            f"<tr><td>{html_text(p.supplier)}</td><td>{html_text(p.brand)}</td><td>{html_text(p.article)}</td><td>{html_text(p.name)}</td><td class='center'>{qty_display(p.quantity)}</td><td class='right'>{money_display(p.sell_price)}</td><td class='right'>{money_display(money_value(p.sell_price) * money_value(p.quantity or 1))}</td><td>{html_text(status_label(p.status))}</td></tr>"
+            f"<tr><td>{html_text(p.brand)}</td><td>{html_text(p.article)}</td><td>{html_text(p.name)}</td><td class='center'>{qty_display(p.quantity)}</td><td class='right'>{money_display(p.sell_price)}</td><td class='right'>{money_display(money_value(p.sell_price) * money_value(p.quantity or 1))}</td></tr>"
             for p in parts
-        ) or "<tr><td colspan='8' class='empty'>Запчастини не додані</td></tr>"
-
-        diagnostic_rows = ''.join(
-            f"<tr><td>{html_text(label)}</td><td><span class='pill {html_text((checklist.get(key) or {}).get('status') or 'not_checked')}'>{html_text(status_label((checklist.get(key) or {}).get('status')))}</span></td><td>{html_text((checklist.get(key) or {}).get('note'))}</td></tr>"
-            for key, label in diagnostic_labels.items()
-        ) if checklist else "<tr><td colspan='3' class='empty'>Діагностика ще не заповнена</td></tr>"
+        )
+        parts_section = f"<h3>Запчастини та матеріали</h3><table><thead><tr><th>Бренд</th><th>Артикул</th><th>Найменування</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr></thead><tbody>{parts_rows}</tbody></table>" if parts_rows else ''
 
         recommendations_rows = ''.join(
-            f"<tr><td>{html_text(r.title)}</td><td>{html_text(r.description)}</td><td>{html_text(r.due_date.strftime('%d.%m.%Y') if r.due_date else '')}{' / ' + html_text(r.due_mileage) + ' км' if r.due_mileage else ''}</td><td>{html_text(status_label(r.status))}</td></tr>"
+            f"<tr><td>{html_text(r.title)}</td><td>{html_text(r.description)}</td><td>{html_text(r.due_date.strftime('%d.%m.%Y') if r.due_date else '')}{' / ' + html_text(r.due_mileage) + ' км' if r.due_mileage else ''}</td></tr>"
             for r in recommendations
-        ) or "<tr><td colspan='4' class='empty'>Рекомендації відсутні</td></tr>"
+        )
+        recommendations_section = f"<h3>Рекомендації</h3><table><thead><tr><th>Що зробити</th><th>Опис</th><th>Термін</th></tr></thead><tbody>{recommendations_rows}</tbody></table>" if recommendations_rows else ''
+
+        summary_section = f"""
+                <section class="summary">
+                    <div class="card"><div class="label">Роботи</div><div class="value">{money_display(services_total)}</div></div>
+                    <div class="card"><div class="label">Запчастини</div><div class="value">{money_display(parts_total)}</div></div>
+                    <div class="card total"><div class="label">Разом</div><div class="value">{money_display(grand_total)}</div></div>
+                </section>
+        """ if services or parts else ''
 
         html_content = f"""
         <!doctype html>
@@ -356,9 +396,7 @@ class VisitViewSet(BaseVisitViewSet):
                 tr {{ page-break-inside: avoid; page-break-after: auto; }}
                 th {{ background: #f1f5f9; color: #475569; text-transform: uppercase; font-size: 10px; letter-spacing: .07em; }}
                 th, td {{ border: 1px solid #e2e8f0; padding: 9px; vertical-align: top; }}
-                .right {{ text-align: right; }} .center {{ text-align: center; }} .empty {{ text-align: center; color: #94a3b8; font-weight: 700; }}
-                .pill {{ display: inline-block; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 900; text-transform: uppercase; }}
-                .ok {{ background: #dcfce7; color: #166534; }} .attention {{ background: #fef3c7; color: #92400e; }} .critical {{ background: #ffe4e6; color: #be123c; }} .not_checked {{ background: #e2e8f0; color: #475569; }}
+                .right {{ text-align: right; }} .center {{ text-align: center; }}
                 .summary {{ margin-top: 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }}
                 .summary .card {{ background: #eff6ff; border-color: #bfdbfe; }}
                 .total .value {{ font-size: 20px; color: #1d4ed8; }}
@@ -391,39 +429,15 @@ class VisitViewSet(BaseVisitViewSet):
                     <div class="card"><div class="label">Авто</div><div class="value">{html_text(car_data.get('brand'))} {html_text(car_data.get('model'))}</div></div>
                     <div class="card"><div class="label">Рік</div><div class="value">{html_text(car_data.get('year'))}</div></div>
                     <div class="card"><div class="label">Двигун</div><div class="value">{html_text(engine_text)}</div></div>
-                    <div class="card"><div class="label">Паливо / пробіг</div><div class="value">{html_text(car_data.get('fuel'))} / {html_text(acceptance.get('mileage') or car_data.get('mileage'))} км</div></div>
+                    <div class="card"><div class="label">Паливо / пробіг</div><div class="value">{html_text(car_data.get('fuel'))} / {html_text(mileage)} км</div></div>
                 </div>
 
-                <h3>Акт приймання авто</h3>
-                <table><tbody>
-                    <tr><th>Пробіг</th><td>{html_text(acceptance.get('mileage') or car_data.get('mileage'))} км</td><th>Паливо</th><td>{html_text(acceptance.get('fuel_level'))}</td></tr>
-                    <tr><th>Скарга клієнта</th><td colspan="3">{html_text(acceptance.get('customer_complaint'))}</td></tr>
-                    <tr><th>Пошкодження</th><td colspan="3">{html_text(acceptance.get('damages'))}</td></tr>
-                    <tr><th>Салон / речі</th><td>{html_text(acceptance.get('interior_note'))}</td><th>Зовнішній стан</th><td>{html_text(acceptance.get('exterior_note'))}</td></tr>
-                    <tr><th>Примітка</th><td colspan="3">{html_text(acceptance.get('note'))}</td></tr>
-                </tbody></table>
-
-                <h3>Діагностика / чек-лист</h3>
-                <table><thead><tr><th>Вузол</th><th>Статус</th><th>Коментар майстра</th></tr></thead><tbody>{diagnostic_rows}</tbody></table>
-                {f'<div class="note" style="margin-top:10px;"><strong>Висновок діагностики:</strong><br>{html_text(diagnostic.get("summary"))}</div>' if diagnostic.get('summary') else ''}
-
-                <h3>Виконані роботи</h3>
-                <table><thead><tr><th>Назва роботи</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr></thead><tbody>{services_rows}</tbody></table>
-
-                <h3>Запчастини та матеріали</h3>
-                <table><thead><tr><th>Постачальник</th><th>Бренд</th><th>Артикул</th><th>Найменування</th><th>К-сть</th><th>Ціна</th><th>Сума</th><th>Статус</th></tr></thead><tbody>{parts_rows}</tbody></table>
-
-                <h3>Рекомендації</h3>
-                <table><thead><tr><th>Що зробити</th><th>Опис</th><th>Термін</th><th>Статус</th></tr></thead><tbody>{recommendations_rows}</tbody></table>
-
-                <h3>Коментар майстра / менеджера</h3>
-                <div class="note">{html_text(visit.comment)}</div>
-
-                <section class="summary">
-                    <div class="card"><div class="label">Роботи</div><div class="value">{money_display(services_total)}</div></div>
-                    <div class="card"><div class="label">Запчастини</div><div class="value">{money_display(parts_total)}</div></div>
-                    <div class="card total"><div class="label">Разом</div><div class="value">{money_display(grand_total)}</div></div>
-                </section>
+                {acceptance_section}
+                {diagnostic_section}
+                {services_section}
+                {parts_section}
+                {recommendations_section}
+                {summary_section}
 
                 <section class="sign">
                     <div class="line">Представник сервісу</div>

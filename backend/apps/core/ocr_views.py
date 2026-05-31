@@ -25,6 +25,12 @@ PLATE_TRANSLATION = str.maketrans({
     'М': 'M', 'О': 'O', 'Р': 'P', 'Т': 'T', 'Х': 'X', 'У': 'Y',
 })
 
+MODEL_STOP_WORDS = [
+    'COMMERCIAL', 'DESCRIPTION', 'DESCRІPTION', 'MAKE', 'TYPE', 'VEHICLE', 'IDENTIFICATION',
+    'NUMBER', 'MAXIMUM', 'MASS', 'CATEGORY', 'BODY', 'CAPACITY', 'FUEL', 'COLOR', 'SPECIAL',
+    'ОПИС', 'КОМЕРЦІЙНИЙ', 'МАРКА', 'ТИП', 'ІДЕНТИФІКАЦІЙНИЙ', 'НОМЕР', 'КУЗОВ', 'КОЛІР',
+]
+
 
 def normalized_text(value):
     return re.sub(r'\s+', ' ', (value or '').upper().replace('\n', ' ').replace('\r', ' ')).strip()
@@ -51,9 +57,28 @@ def first_realistic_number(patterns, text, min_value, max_value):
     return ''
 
 
+def detect_document_side(text):
+    back_markers = len(re.findall(r'\b(?:D|E|F|G|J|P|R|S)[\.\,\s]*[1234]?\b', text, re.IGNORECASE))
+    back_words = len(re.findall(r'MAKE|TYPE|COMMERCIAL|VIN|CHASSIS|CAPACITY|POWER|FUEL|BODY|COLOR|МАРКА|ТИП|ОБ[\W_]*ЄМ|ПОТУЖНІСТЬ|ПАЛИВО', text, re.IGNORECASE))
+    front_markers = len(re.findall(r'\b(?:A|B|C)[\.\,\s]*[1234]?\b', text, re.IGNORECASE))
+    front_words = len(re.findall(r'REGISTRATION|CERTIFICATE|DATE OF FIRST|YEAR OF MANUFACTURE|SURNAME|GIVEN NAMES|ADDRESS|РЕЄСТРАЦ|СВІДОЦТВО|РІК ВИПУСКУ|ПРІЗВИЩЕ|АДРЕСА', text, re.IGNORECASE))
+
+    if back_markers + back_words >= front_markers + front_words + 2:
+        return 'back'
+    if front_markers + front_words >= back_markers + back_words + 2:
+        return 'front'
+    return 'unknown'
+
+
 def parse_vin(text):
     compact = compact_text(text)
     match = re.search(r'[A-HJ-NPR-Z0-9]{17}', compact)
+    return match.group(0) if match else ''
+
+
+def parse_vin_candidate(text):
+    compact = compact_text(text)
+    match = re.search(r'[A-HJ-NPR-Z0-9]{12,16}', compact)
     return match.group(0) if match else ''
 
 
@@ -70,44 +95,56 @@ def parse_brand(text):
     return ''
 
 
+def clean_model(value):
+    value = re.sub(r'\s+', ' ', (value or '').upper()).strip(' :-,.;')
+    if not value:
+        return ''
+    for stop_word in MODEL_STOP_WORDS:
+        index = value.find(stop_word)
+        if index > 0:
+            value = value[:index].strip(' :-,.;')
+    value = re.split(r'\s{2,}|\b[A-ZА-ЯІЇЄҐ][\.\,]?\d\b', value)[0].strip(' :-,.;')
+    tokens = value.split()
+    if len(tokens) > 3:
+        value = ' '.join(tokens[:3])
+    return value[:40]
+
+
 def parse_model(text):
     patterns = [
-        r'D[\.\,\s]*3\s*[:\-]?\s*([A-ZА-ЯІЇЄҐ0-9][A-ZА-ЯІЇЄҐ0-9\-\s]{1,35})',
-        r'(?:MODEL|МОДЕЛЬ)\s*[:\-]?\s*([A-ZА-ЯІЇЄҐ0-9][A-ZА-ЯІЇЄҐ0-9\-\s]{1,35})',
+        r'D[\.\,\s]*3\s*[:\-]?\s*([A-ZА-ЯІЇЄҐ0-9][A-ZА-ЯІЇЄҐ0-9\-\s]{1,45})',
+        r'(?:MODEL|МОДЕЛЬ)\s*[:\-]?\s*([A-ZА-ЯІЇЄҐ0-9][A-ZА-ЯІЇЄҐ0-9\-\s]{1,45})',
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            value = re.split(r'\s{2,}|\b[A-ZА-ЯІЇЄҐ][\.\,]?\d\b', match.group(1).strip())[0].strip(' :-,.;')
+            value = clean_model(match.group(1))
             if value and value not in ['E', 'Є']:
-                return value[:40]
+                return value
     return ''
 
 
 def parse_year(text):
-    focused = first_realistic_number([
-        r'(?:B[\.\,\s]*1|B[\.\,\s]*2|YEAR|РІК|ДАТА ВИПУСКУ)[^0-9]{0,16}(19\d{2}|20\d{2})',
-    ], text, 1980, 2035)
-    if focused:
-        return focused
-    for match in re.finditer(r'\b(19\d{2}|20\d{2})\b', text):
-        year = int(match.group(1))
-        if 1980 <= year <= 2035:
-            return str(year)
-    return ''
+    # Important: never take a random 19xx/20xx number as year.
+    # In Ukrainian registration certificates engine volume may be 1997/1998 and must not become the car year.
+    patterns = [
+        r'(?:B[\.\,\s]*2|YEAR\s+OF\s+MANUFACTURE|РІК\s+ВИПУСКУ)[^0-9]{0,20}(19\d{2}|20\d{2})',
+        r'(?:B[\.\,\s]*1|DATE\s+OF\s+FIRST\s+REGISTRATION|ДАТА\s+ПЕРШОЇ\s+РЕЄСТРАЦІЇ)[^0-9]{0,30}(?:\d{1,2}[\.\-/]\d{1,2}[\.\-/])?(19\d{2}|20\d{2})',
+    ]
+    return first_realistic_number(patterns, text, 1980, 2035)
 
 
 def parse_engine_volume(text):
     return first_realistic_number([
-        r'(?:P|Р)[\.\,\s]*1[^0-9]{0,18}(\d{3,4})\b',
-        r'(?:CM3|СМ3|CМ3|СM3|CUBIC|CAPACITY|ОБ[\W_]*ЄМ|ОБ[\W_]*ЕМ)[^0-9]{0,18}(\d{3,4})\b',
+        r'(?:P|Р)[\.\,\s]*1\b[^0-9]{0,18}(\d{3,4})\b',
+        r'(?:CM3|СМ3|CМ3|СM3|CUBIC|CAPACITY|ОБ[\W_]*ЄМ)[^0-9]{0,18}(\d{3,4})\b',
         r'(\d{3,4})\s*(?:CM3|СМ3|CМ3|СM3)\b',
     ], text, 500, 8000)
 
 
 def parse_engine_power(text):
     return first_realistic_number([
-        r'(?:P|Р)[\.\,\s]*2[^0-9]{0,18}(\d{2,4}(?:[\.,]\d)?)\b',
+        r'(?:P|Р)[\.\,\s]*2\b[^0-9]{0,18}(\d{2,4}(?:[\.,]\d)?)\b',
         r'(?:KW|КВТ|KWT|POWER|ПОТУЖНІСТЬ)[^0-9]{0,18}(\d{2,4}(?:[\.,]\d)?)\b',
         r'(\d{2,4}(?:[\.,]\d)?)\s*(?:KW|КВТ)\b',
     ], text, 20, 1000)
@@ -138,7 +175,7 @@ def parse_fuel(text):
     if re.search(r'ГІБРИД|HYBRID', text):
         return 'Гібрид'
 
-    match = re.search(r'(?:P|Р|F)[\.\,\s]*3[^A-ZА-ЯІЇЄҐ0-9]{0,10}([A-ZА-ЯІЇЄҐ0-9])\b', text, re.IGNORECASE)
+    match = re.search(r'(?:P|Р|F)[\.\,\s]*3\b[^A-ZА-ЯІЇЄҐ0-9]{0,10}([A-ZА-ЯІЇЄҐ0-9])\b', text, re.IGNORECASE)
     if not match:
         return ''
     char = match.group(1).upper()
@@ -155,9 +192,19 @@ def parse_fuel(text):
     return ''
 
 
+def field_source(document_side, field):
+    if field in ['plate', 'year']:
+        return 'front' if document_side in ['front', 'unknown'] else 'back_low_priority'
+    if field in ['vin_code', 'brand', 'model', 'engine_volume', 'engine_power', 'engine_code', 'fuel']:
+        return 'back' if document_side in ['back', 'unknown'] else 'front_low_priority'
+    return document_side
+
+
 def parse_document_text(raw_text):
     text = normalized_text(raw_text)
+    document_side = detect_document_side(text)
     vin_code = parse_vin(text)
+    vin_candidate = '' if vin_code else parse_vin_candidate(text)
     engine_volume = parse_engine_volume(text)
     engine_power = parse_engine_power(text)
     engine_code = parse_engine_code(text, vin_code)
@@ -167,10 +214,20 @@ def parse_document_text(raw_text):
     model = parse_model(text)
     year = parse_year(text)
 
+    warnings = []
+    if vin_candidate and not vin_code:
+        warnings.append('VIN схожий на неповний. Перевірте вручну.')
+    if document_side == 'back' and year:
+        warnings.append('Рік знайдено на другій стороні — перевірте, щоб це не був обʼєм двигуна.')
+    if document_side == 'front' and engine_volume:
+        warnings.append('Обʼєм двигуна знайдено на першій стороні — перевірте вручну.')
+
     return {
         'success': True,
+        'document_side': document_side,
         'plate': plate,
         'vin_code': vin_code,
+        'vin_candidate': vin_candidate,
         'brand': brand,
         'model': model,
         'year': year,
@@ -182,16 +239,28 @@ def parse_document_text(raw_text):
         'engine_review_status': 'needs_review',
         'quality': 'good' if len(text) > 180 and (vin_code or plate) else 'medium' if len(text) > 60 else 'low',
         'confidence': {
-            'plate': confidence(plate, 'high'),
-            'vin_code': confidence(vin_code, 'high'),
-            'brand': confidence(brand, 'medium'),
+            'plate': confidence(plate, 'high' if document_side != 'back' else 'medium'),
+            'vin_code': confidence(vin_code, 'high' if len(vin_code) == 17 else 'none'),
+            'brand': confidence(brand, 'high' if document_side != 'front' else 'medium'),
             'model': confidence(model, 'medium'),
-            'year': confidence(year, 'high'),
-            'engine_volume': confidence(engine_volume, 'low'),
-            'engine_power': confidence(engine_power, 'low'),
+            'year': confidence(year, 'high' if document_side != 'back' else 'low'),
+            'engine_volume': confidence(engine_volume, 'high' if document_side != 'front' else 'low'),
+            'engine_power': confidence(engine_power, 'high' if document_side != 'front' else 'low'),
             'engine_code': confidence(engine_code, 'low'),
-            'fuel': confidence(fuel, 'medium'),
+            'fuel': confidence(fuel, 'high' if document_side != 'front' else 'medium'),
         },
+        'sources': {
+            'plate': field_source(document_side, 'plate'),
+            'vin_code': field_source(document_side, 'vin_code'),
+            'brand': field_source(document_side, 'brand'),
+            'model': field_source(document_side, 'model'),
+            'year': field_source(document_side, 'year'),
+            'engine_volume': field_source(document_side, 'engine_volume'),
+            'engine_power': field_source(document_side, 'engine_power'),
+            'engine_code': field_source(document_side, 'engine_code'),
+            'fuel': field_source(document_side, 'fuel'),
+        },
+        'warnings': warnings,
         'raw_text': text,
     }
 

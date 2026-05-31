@@ -1,12 +1,36 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { AlertTriangle, Calculator, Camera, CarFront, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Clock, FileText, Hash, Info, Loader2, Package, Plus, Printer, ScanLine, Search, Trash2, Wrench, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Calculator,
+  Camera,
+  CarFront,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  ClipboardList,
+  Clock,
+  FileText,
+  Hash,
+  Info,
+  Loader2,
+  Package,
+  Plus,
+  Printer,
+  ScanLine,
+  Search,
+  Trash2,
+  Wrench,
+  X,
+} from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard';
 import VisitWorkflowPanel from '../components/crm/VisitWorkflowPanel';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
 const emptyCarData = { brand: '', model: '', year: '', engine: '', fuel: '', mileage: '', engine_volume: '', engine_power: '', engine_code: '', engine_review_status: 'manual' };
+const emptyManualPart = { name: '', brand: '', article: '', supplier: '', buy_price: '', sell_price: '', quantity: 1, status: 'WAITING' };
 const arr = (v) => (Array.isArray(v) ? v : []);
 const visitId = (v) => v?.id ?? v?.visit_id ?? v?.pk ?? '';
 const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
@@ -20,6 +44,15 @@ const humanDate = (value) => {
   if (!value) return 'Усі дати';
   const d = new Date(`${value}T12:00:00`);
   return Number.isNaN(d.getTime()) ? 'Усі дати' : d.toLocaleDateString('uk-UA', { weekday: 'short', day: '2-digit', month: 'long' });
+};
+const timeParts = (raw) => {
+  const d = raw ? new Date(raw) : new Date();
+  if (Number.isNaN(d.getTime())) return { date: dateISO(), time: '' };
+  return { date: dateISO(d), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` };
+};
+const cleanNumber = (value, fallback = 0) => {
+  const n = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(n) ? n : fallback;
 };
 
 const readCarData = (visit) => {
@@ -69,6 +102,21 @@ const visitDate = (visit) => {
   return Number.isNaN(d.getTime()) ? 'Без дати' : d.toLocaleString('uk-UA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
+const supplierBadge = (part = {}) => {
+  const key = part.supplier_color || '';
+  const supplier = String(part.supplier || '').toUpperCase();
+  const normalized = key || (supplier.includes('BM') ? 'supplier-bm' : supplier.includes('OMEGA') ? 'supplier-omega' : supplier.includes('VESNA') ? 'supplier-vesna' : supplier.includes('ТЕХНО') ? 'supplier-tehnomir' : 'supplier-default');
+  const styles = {
+    'supplier-bm': 'bg-slate-900 text-white border-slate-800',
+    'supplier-vesna': 'bg-emerald-600 text-white border-emerald-600',
+    'supplier-omega': 'bg-blue-600 text-white border-blue-600',
+    'supplier-tehnomir': 'bg-rose-600 text-white border-rose-600',
+    'supplier-local': 'bg-amber-100 text-amber-800 border-amber-200',
+    'supplier-default': 'bg-slate-100 text-slate-700 border-slate-200',
+  };
+  return styles[normalized] || styles['supplier-default'];
+};
+
 export default function Visits() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -91,6 +139,8 @@ export default function Visits() {
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [newService, setNewService] = useState({ name: '', price: '', quantity: 1 });
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
+  const [showManualPartForm, setShowManualPartForm] = useState(false);
+  const [manualPart, setManualPart] = useState({ ...emptyManualPart });
   const [foundExisting, setFoundExisting] = useState(false);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -115,8 +165,11 @@ export default function Visits() {
       if (searchParams.get('scan') === 'true') setIsCreatingVisit(true);
     } catch (e) {
       if (e.response?.status === 401) navigate('/login');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
+
   useEffect(() => { const t = setTimeout(fetchData, 300); return () => clearTimeout(t); }, [searchQuery, filterDate]);
   useEffect(() => {
     const data = location.state?.scannedData || location.state?.repeatVisitData;
@@ -128,7 +181,16 @@ export default function Visits() {
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
-  useEffect(() => { if (selectedVisit) { setVisitTab('overview'); setEditComment(selectedVisit.comment || ''); setEditCarData(readCarData(selectedVisit)); setPassportScanDraft(null); } }, [selectedVisit?.id]);
+  useEffect(() => {
+    if (selectedVisit) {
+      setVisitTab('overview');
+      setEditComment(selectedVisit.comment || '');
+      setEditCarData(readCarData(selectedVisit));
+      setPassportScanDraft(null);
+      setShowManualPartForm(false);
+      setManualPart({ ...emptyManualPart });
+    }
+  }, [selectedVisit?.id]);
 
   const changeBoardDate = (days) => {
     const base = filterDate ? new Date(`${filterDate}T12:00:00`) : new Date();
@@ -144,43 +206,179 @@ export default function Visits() {
     let { width, height } = img;
     if (width > height && width > max) { height *= max / width; width = max; }
     if (height >= width && height > max) { width *= max / height; height = max; }
-    canvas.width = width; canvas.height = height; canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
-    const formData = new FormData(); formData.append('document', blob, 'scan.jpg');
+    const formData = new FormData();
+    formData.append('document', blob, 'scan.jpg');
     const res = await axios.post(`${API_BASE}/api/visits/recognize_document/`, formData, { headers: { ...headers, 'Content-Type': 'multipart/form-data' } });
     if (!res.data?.success) throw new Error('scan_failed');
     return cleanScan(res.data);
   };
-  const scanNewVisit = async (e) => { const file = e.target.files?.[0]; if (!file) return; setIsScanning(true); try { const scan = await recognizeDocument(file); setScanDraft((prev) => mergeScanInto(prev || newVisitData, scan)); } catch { alert('Помилка сканування. Спробуйте інший ракурс.'); } finally { setIsScanning(false); if (cameraInputRef.current) cameraInputRef.current.value = ''; if (galleryInputRef.current) galleryInputRef.current.value = ''; } };
-  const scanExistingVisit = async (e) => { const file = e.target.files?.[0]; if (!file) return; setIsScanning(true); try { const scan = await recognizeDocument(file); setPassportScanDraft((prev) => mergeScanInto(prev || editCarData, scan)); setVisitTab('passport'); } catch { alert('Помилка сканування. Спробуйте інший ракурс.'); } finally { setIsScanning(false); if (passportScanInputRef.current) passportScanInputRef.current.value = ''; } };
+
+  const scanNewVisit = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsScanning(true);
+    try {
+      const scan = await recognizeDocument(file);
+      setScanDraft((prev) => mergeScanInto(prev || newVisitData, scan));
+    } catch {
+      alert('Помилка сканування. Спробуйте інший ракурс.');
+    } finally {
+      setIsScanning(false);
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
+    }
+  };
+
+  const scanExistingVisit = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsScanning(true);
+    try {
+      const scan = await recognizeDocument(file);
+      setPassportScanDraft((prev) => mergeScanInto(prev || editCarData, scan));
+      setVisitTab('passport');
+    } catch {
+      alert('Помилка сканування. Спробуйте інший ракурс.');
+    } finally {
+      setIsScanning(false);
+      if (passportScanInputRef.current) passportScanInputRef.current.value = '';
+    }
+  };
+
   const acceptNewScan = () => { if (!scanDraft) return; setNewVisitData((prev) => mergeScanInto(prev, scanDraft)); setScanDraft(null); };
   const acceptPassportScan = () => { if (!passportScanDraft) return; setEditCarData((prev) => mergeScanInto(prev, passportScanDraft)); if (passportScanDraft.plate) patchVisit('plate', passportScanDraft.plate.toUpperCase()); if (passportScanDraft.vin_code) patchVisit('vin_code', passportScanDraft.vin_code.toUpperCase()); setPassportScanDraft(null); };
-  const handlePlateBlur = async () => { if (!newVisitData.plate || newVisitData.plate.length < 3) return; try { const res = await axios.get(`${API_BASE}/api/visits/?search=${newVisitData.plate}`, { headers }); const existing = (res.data || []).find((v) => v.plate?.toUpperCase() === newVisitData.plate.toUpperCase()); if (existing) { setNewVisitData((p) => ({ ...p, client: existing.client, phone: existing.phone, vin_code: existing.vin_code || p.vin_code })); setFoundExisting(true); setTimeout(() => setFoundExisting(false), 3500); } } catch {} };
-  const createVisit = async (e) => { e.preventDefault(); const carPayload = { brand: newVisitData.brand, model: newVisitData.model, year: newVisitData.year, engine: newVisitData.engine || newVisitData.engine_volume, fuel: newVisitData.fuel, mileage: newVisitData.mileage || '', engine_volume: newVisitData.engine_volume || newVisitData.engine || '', engine_power: newVisitData.engine_power || '', engine_code: newVisitData.engine_code || '', engine_review_status: newVisitData.engine_review_status || 'manual' }; const payload = { plate: newVisitData.plate.toUpperCase(), vin_code: newVisitData.vin_code, client: newVisitData.client, phone: newVisitData.phone, scheduled_datetime: !isStore && newVisitData.date && newVisitData.time ? new Date(`${newVisitData.date}T${newVisitData.time}`).toISOString() : null, delivery_type: 'pickup', delivery_data: JSON.stringify(carPayload), payment_status: 'unpaid', prepayment_amount: 0 }; try { await axios.post(`${API_BASE}/api/visits/`, payload, { headers }); setIsCreatingVisit(false); setScanDraft(null); setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: dateISO(), time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', ...emptyCarData }); fetchData(); } catch { alert('Помилка створення'); } };
+
+  const handlePlateBlur = async () => {
+    if (!newVisitData.plate || newVisitData.plate.length < 3) return;
+    try {
+      const res = await axios.get(`${API_BASE}/api/visits/?search=${newVisitData.plate}`, { headers });
+      const existing = (res.data || []).find((v) => v.plate?.toUpperCase() === newVisitData.plate.toUpperCase());
+      if (existing) {
+        setNewVisitData((p) => ({ ...p, client: existing.client, phone: existing.phone, vin_code: existing.vin_code || p.vin_code }));
+        setFoundExisting(true);
+        setTimeout(() => setFoundExisting(false), 3500);
+      }
+    } catch {}
+  };
+
+  const createVisit = async (e) => {
+    e.preventDefault();
+    const carPayload = { brand: newVisitData.brand, model: newVisitData.model, year: newVisitData.year, engine: newVisitData.engine || newVisitData.engine_volume, fuel: newVisitData.fuel, mileage: newVisitData.mileage || '', engine_volume: newVisitData.engine_volume || newVisitData.engine || '', engine_power: newVisitData.engine_power || '', engine_code: newVisitData.engine_code || '', engine_review_status: newVisitData.engine_review_status || 'manual' };
+    const payload = { plate: newVisitData.plate.toUpperCase(), vin_code: newVisitData.vin_code, client: newVisitData.client, phone: newVisitData.phone, scheduled_datetime: !isStore && newVisitData.date && newVisitData.time ? new Date(`${newVisitData.date}T${newVisitData.time}`).toISOString() : null, delivery_type: 'pickup', delivery_data: JSON.stringify(carPayload), payment_status: 'unpaid', prepayment_amount: 0 };
+    try {
+      await axios.post(`${API_BASE}/api/visits/`, payload, { headers });
+      setIsCreatingVisit(false);
+      setScanDraft(null);
+      setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: dateISO(), time: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', ...emptyCarData });
+      fetchData();
+    } catch {
+      alert('Помилка створення');
+    }
+  };
+
   const patchVisit = async (field, value) => { await axios.patch(`${API_BASE}/api/visits/${selectedVisit.id}/`, { [field]: value }, { headers }); setSelectedVisit((p) => ({ ...p, [field]: value })); fetchData(); };
   const saveCarData = async () => { await patchVisit('delivery_data', JSON.stringify({ ...emptyCarData, ...editCarData, engine_volume: editCarData.engine_volume || editCarData.engine || '' })); };
   const refreshSelected = async () => { if (!selectedVisit?.id) return; const res = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers }); setSelectedVisit(res.data); fetchData(); };
-  const addService = async (e) => { e.preventDefault(); try { await axios.post(`${API_BASE}/api/order-services/`, { visit: selectedVisit.id, name: newService.name, price: Number(newService.price || 0), quantity: Number(newService.quantity || 1) }, { headers }); setNewService({ name: '', price: '', quantity: 1 }); setSelectedCatalogId(''); setShowServiceForm(false); refreshSelected(); } catch { alert('Помилка додавання роботи'); } };
+
+  const addService = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_BASE}/api/order-services/`, { visit: selectedVisit.id, name: newService.name, price: Number(newService.price || 0), quantity: Number(newService.quantity || 1) }, { headers });
+      setNewService({ name: '', price: '', quantity: 1 });
+      setSelectedCatalogId('');
+      setShowServiceForm(false);
+      refreshSelected();
+    } catch {
+      alert('Помилка додавання роботи');
+    }
+  };
+
+  const addManualPart = async (e) => {
+    e.preventDefault();
+    const payload = {
+      visit: selectedVisit.id,
+      name: manualPart.name.trim(),
+      brand: (manualPart.brand || 'Без бренду').trim(),
+      article: (manualPart.article || 'manual').trim(),
+      supplier: (manualPart.supplier || 'Ручне додавання').trim(),
+      supplier_color: 'supplier-local',
+      is_local: true,
+      buy_price: cleanNumber(manualPart.buy_price, 0),
+      sell_price: cleanNumber(manualPart.sell_price, 0),
+      quantity: cleanNumber(manualPart.quantity, 1),
+      status: manualPart.status || 'WAITING',
+    };
+    try {
+      await axios.post(`${API_BASE}/api/order-parts/`, payload, { headers });
+      setManualPart({ ...emptyManualPart });
+      setShowManualPartForm(false);
+      refreshSelected();
+    } catch (error) {
+      console.error(error.response?.data || error);
+      alert('Помилка додавання запчастини вручну. Перевірте поля.');
+    }
+  };
+
   const deleteService = async (id) => { if (window.confirm('Видалити роботу?')) { await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers }); refreshSelected(); } };
   const deletePart = async (id) => { if (window.confirm('Видалити запчастину?')) { await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers }); refreshSelected(); } };
   const updatePartStatus = async (id, status) => { await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { status }, { headers }); refreshSelected(); };
   const printPdf = async () => { const w = window.open('', '_blank'); if (!w) return; try { const r = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, { headers, responseType: 'text' }); w.document.write(r.data); w.document.close(); } catch { w.close(); alert('Не вдалося згенерувати документ'); } };
   const cancelVisit = async () => { if (!window.confirm('Скасувати запис?')) return; await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers }); setSelectedVisit(null); fetchData(); };
 
-  const grouped = { pending: visits.filter((v) => ['PENDING', 'SELECTION', 'DRAFT'].includes(v.status)), progress: visits.filter((v) => ['IN_PROGRESS', 'ORDERED'].includes(v.status)), done: visits.filter((v) => v.status === 'DONE'), completed: visits.filter((v) => v.status === 'COMPLETED') };
+  const grouped = {
+    pending: visits.filter((v) => ['PENDING', 'SELECTION', 'DRAFT'].includes(v.status)),
+    progress: visits.filter((v) => ['IN_PROGRESS', 'ORDERED'].includes(v.status)),
+    done: visits.filter((v) => v.status === 'DONE'),
+    completed: visits.filter((v) => v.status === 'COMPLETED'),
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
-  return <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen overflow-x-hidden"><div className="flex flex-col xl:flex-row gap-4 justify-between mb-6"><h1 className="text-3xl sm:text-2xl font-black uppercase italic tracking-wide">{isStore ? 'Замовлення' : 'Дошка Візитів'}</h1><div className="flex flex-col md:flex-row gap-3 flex-1 xl:justify-center"><div className="relative w-full md:w-72"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Пошук ID, номер, клієнт..." className="w-full bg-white border border-slate-200 rounded-2xl pl-9 pr-4 py-3 text-sm font-bold outline-none shadow-sm" /></div><DateNavigator value={filterDate} setValue={setFilterDate} onPrev={() => changeBoardDate(-1)} onNext={() => changeBoardDate(1)} /></div><button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-5 py-4 md:py-3 rounded-2xl font-black uppercase text-xs flex justify-center gap-2 shadow-lg shadow-blue-100"><Plus size={16} /> Новий візит</button></div><div className="grid grid-cols-1 md:grid-cols-3 gap-5"><Column variant="pending" title="В черзі / Підбір" items={grouped.pending} icon={<Clock size={18} />} onOpen={setSelectedVisit} isStore={isStore} /><Column variant="progress" title="В роботі" items={grouped.progress} icon={<Wrench size={18} />} onOpen={setSelectedVisit} isStore={isStore} /><Column variant="done" title="Готово" items={isStore ? [...grouped.done, ...grouped.completed] : grouped.done} icon={<CheckCircle2 size={18} />} onOpen={setSelectedVisit} isStore={isStore} /></div>{isCreatingVisit && <CreateVisitModal data={newVisitData} setData={setNewVisitData} onClose={() => { setIsCreatingVisit(false); setScanDraft(null); }} onSubmit={createVisit} onPlateBlur={handlePlateBlur} foundExisting={foundExisting} isScanning={isScanning} cameraRef={cameraInputRef} galleryRef={galleryInputRef} onScan={scanNewVisit} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={acceptNewScan} />}{selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} editComment={editComment} setEditComment={setEditComment} />}</div>;
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen overflow-x-hidden">
+      <div className="flex flex-col xl:flex-row gap-4 justify-between mb-6">
+        <h1 className="text-3xl sm:text-2xl font-black uppercase italic tracking-wide">{isStore ? 'Замовлення' : 'Дошка Візитів'}</h1>
+        <div className="flex flex-col md:flex-row gap-3 flex-1 xl:justify-center">
+          <div className="relative w-full md:w-72"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Пошук ID, номер, клієнт..." className="w-full bg-white border border-slate-200 rounded-2xl pl-9 pr-4 py-3 text-sm font-bold outline-none shadow-sm" /></div>
+          <DateNavigator value={filterDate} setValue={setFilterDate} onPrev={() => changeBoardDate(-1)} onNext={() => changeBoardDate(1)} />
+        </div>
+        <button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-5 py-3.5 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-100 leading-none"><Plus size={16} className="shrink-0" /> <span>Новий візит</span></button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <Column variant="pending" title="В черзі / Підбір" items={grouped.pending} icon={<Clock size={18} />} onOpen={setSelectedVisit} isStore={isStore} />
+        <Column variant="progress" title="В роботі" items={grouped.progress} icon={<Wrench size={18} />} onOpen={setSelectedVisit} isStore={isStore} />
+        <Column variant="done" title="Готово" items={isStore ? [...grouped.done, ...grouped.completed] : grouped.done} icon={<CheckCircle2 size={18} />} onOpen={setSelectedVisit} isStore={isStore} />
+      </div>
+      {isCreatingVisit && <CreateVisitModal data={newVisitData} setData={setNewVisitData} onClose={() => { setIsCreatingVisit(false); setScanDraft(null); }} onSubmit={createVisit} onPlateBlur={handlePlateBlur} foundExisting={foundExisting} isScanning={isScanning} cameraRef={cameraInputRef} galleryRef={galleryInputRef} onScan={scanNewVisit} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={acceptNewScan} />}
+      {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} />}
+    </div>
+  );
 }
 
 function DateNavigator({ value, setValue, onPrev, onNext }) { return <div className="bg-white border border-slate-200 rounded-2xl p-1 shadow-sm w-full md:w-auto"><div className="grid grid-cols-[44px_1fr_44px] items-center gap-1"><button type="button" onClick={onPrev} className="h-11 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center"><ChevronLeft size={18} /></button><label className="relative block min-w-0"><span className="block text-[9px] font-black uppercase text-slate-400 text-center leading-none pt-1">Дата дошки</span><input type="date" value={value} onChange={(e) => setValue(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" /><span className="block text-center text-sm font-black text-slate-800 truncate px-1 pb-1">{humanDate(value)}</span></label><button type="button" onClick={onNext} className="h-11 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center"><ChevronRight size={18} /></button></div></div>; }
 function Column({ title, icon, items, onOpen, isStore, variant = 'pending' }) { const styles = { pending: { box: 'from-amber-50 to-white border-amber-100', text: 'text-amber-700', badge: 'bg-amber-100' }, progress: { box: 'from-blue-50 to-white border-blue-100', text: 'text-blue-700', badge: 'bg-blue-100' }, done: { box: 'from-emerald-50 to-white border-emerald-100', text: 'text-emerald-700', badge: 'bg-emerald-100' } }; const s = styles[variant] || styles.pending; return <div className={`bg-gradient-to-br ${s.box} rounded-3xl p-4 border shadow-sm`}><h3 className={`font-black uppercase tracking-wider text-sm flex items-center gap-2 mb-4 ${s.text}`}>{icon} {title}<span className={`ml-auto px-3 py-1 rounded-xl shadow-sm text-slate-800 ${s.badge}`}>{items.length}</span></h3><div className="space-y-4">{items.map((v) => <VisitCard key={v.id} visit={v} onClick={() => onOpen(v)} isStore={isStore} />)}{items.length === 0 && <div className="text-center text-slate-400 text-xs font-black uppercase py-10 bg-white/60 rounded-2xl">Пусто</div>}</div></div>; }
 function CreateVisitModal({ data, setData, onClose, onSubmit, onPlateBlur, foundExisting, isScanning, cameraRef, galleryRef, onScan, scanDraft, setScanDraft, onAcceptScan }) { return <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 overflow-y-auto p-4"><div className="bg-white rounded-3xl w-full max-w-xl mx-auto my-6 p-5 md:p-6 relative shadow-2xl">{isScanning && <ScanOverlay />}<button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-xl"><X size={18} /></button><h2 className="text-2xl font-black uppercase mb-4">Новий візит</h2><form onSubmit={onSubmit} className="space-y-4"><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => cameraRef.current?.click()} className="bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Camera size={16} /> Камера</button><button type="button" onClick={() => galleryRef.current?.click()} className="bg-blue-50 text-blue-700 border border-blue-100 rounded-xl py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><ScanLine size={16} /> Фото</button><input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={onScan} className="hidden" /><input ref={galleryRef} type="file" accept="image/*" onChange={onScan} className="hidden" /></div>{scanDraft && <ScanReviewCard data={scanDraft} setData={setScanDraft} onApply={onAcceptScan} onCancel={() => setScanDraft(null)} />}<div className="grid grid-cols-2 gap-3"><LabeledInput label="Дата візиту" type="date" required value={data.date} onChange={(v) => setData({ ...data, date: v })} /><LabeledInput label="Час візиту" type="time" required value={data.time} onChange={(v) => setData({ ...data, time: v })} /></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><LabeledInput label="ПІБ клієнта" required value={data.client} onChange={(v) => setData({ ...data, client: v })} /><LabeledInput label="Телефон" required value={data.phone} onChange={(v) => setData({ ...data, phone: v })} /></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><LabeledInput label="Держ. номер" required value={data.plate} onBlur={onPlateBlur} onChange={(v) => setData({ ...data, plate: v.toUpperCase() })} hint={foundExisting ? '✓ Знайдено в базі' : ''} /><LabeledInput label="VIN" value={data.vin_code} onChange={(v) => setData({ ...data, vin_code: v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17) })} /></div><CarFields data={data} setData={setData} /><button className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-black uppercase text-xs">Створити візит</button></form></div></div>; }
-function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment }) { const tabs = [['overview','Огляд',Info],['passport','Техпаспорт',CarFront],['acceptance','Акт',FileText],['diagnostic','Діагностика',ClipboardCheck],['works','Роботи',Wrench],['parts','Запчастини',Package],['recommendations','Рекомендації',ClipboardList],['summary','Підсумок',Calculator]]; const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate }; return <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 overflow-hidden flex items-stretch sm:items-start justify-center sm:p-4"><div className="bg-white w-full sm:max-w-5xl sm:rounded-3xl shadow-2xl flex flex-col h-[100dvh] sm:max-h-[calc(100dvh-3rem)] relative">{isScanning && <ScanOverlay />}<div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50 shrink-0"><div className="flex justify-between gap-3"><div><div className="flex flex-wrap gap-2 mb-2"><span className="bg-blue-600 text-white rounded-xl px-3 py-1 text-xs font-black uppercase flex items-center gap-1"><Hash size={13}/> Візит №{visitId(visit)}</span><span className="bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-black uppercase text-slate-500">{visit.status || 'SELECTION'}</span></div><h2 className="text-2xl font-black uppercase">{visit.plate}</h2><p className="text-slate-500 text-sm font-bold">{visit.client} · {visit.phone}</p></div><div className="flex gap-2"><button onClick={onPrint} className="bg-blue-100 text-blue-700 p-2 rounded-xl"><Printer size={18}/></button><button onClick={onCancel} className="bg-red-100 text-red-600 p-2 rounded-xl"><Trash2 size={18}/></button><button onClick={() => setVisit(null)} className="bg-slate-100 p-2 rounded-xl"><X size={18}/></button></div></div><div className="mt-4 grid grid-cols-3 gap-2"><StatusBtn active={['PENDING','DRAFT','SELECTION'].includes(visit.status)} onClick={() => onPatch('status','PENDING')} label="В черзі"/><StatusBtn active={['IN_PROGRESS','ORDERED'].includes(visit.status)} onClick={() => onPatch('status','IN_PROGRESS')} label="В роботі"/><StatusBtn active={visit.status === 'DONE'} onClick={() => onPatch('status','DONE')} label="Готово"/></div></div><div className="px-4 md:px-6 pt-3 bg-white border-b border-slate-100 overflow-x-auto shrink-0"><div className="flex gap-2 min-w-max pb-3">{tabs.map(([key,label,Icon])=><button key={key} onClick={()=>setTab(key)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase whitespace-nowrap ${tab===key?'bg-blue-600 text-white':'bg-slate-50 text-slate-500'}`}><Icon size={15}/>{label}</button>)}</div></div><div className="p-4 md:p-6 overflow-y-auto flex-1">{tab==='overview'&&<Overview visit={visit} carData={carData}/>} {tab==='passport'&&<Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>} {tab==='acceptance'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>} {tab==='diagnostic'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>} {tab==='works'&&<Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService}/>} {tab==='parts'&&<Parts visit={visit} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>} {tab==='recommendations'&&<EmptyPanel text="Рекомендації у наступному етапі можна створювати прямо з діагностики."/>} {tab==='summary'&&<Summary visit={visit} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} />}</div></div></div>; }
+
+function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart }) {
+  const tabs = [['overview','Огляд',Info],['passport','Техпаспорт',CarFront],['acceptance','Акт',FileText],['diagnostic','Діагностика',ClipboardCheck],['works','Роботи',Wrench],['parts','Запчастини',Package],['recommendations','Рекомендації',ClipboardList],['summary','Підсумок',Calculator]];
+  const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate };
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [reschedule, setReschedule] = useState(timeParts(visit.scheduled_datetime));
+  const saveReschedule = async () => { if (!reschedule.date || !reschedule.time) return; await onPatch('scheduled_datetime', new Date(`${reschedule.date}T${reschedule.time}`).toISOString()); setRescheduleOpen(false); };
+  return <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 overflow-hidden flex items-stretch sm:items-start justify-center sm:p-4"><div className="bg-white w-full sm:max-w-5xl sm:rounded-3xl shadow-2xl flex flex-col h-[100dvh] sm:max-h-[calc(100dvh-3rem)] relative">{isScanning && <ScanOverlay />}<div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50 shrink-0"><div className="flex justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap gap-2 mb-2"><span className="bg-blue-600 text-white rounded-xl px-3 py-1 text-xs font-black uppercase flex items-center gap-1"><Hash size={13}/> Візит №{visitId(visit)}</span><span className="bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-black uppercase text-slate-500">{visit.status || 'SELECTION'}</span></div><h2 className="text-2xl font-black uppercase break-words">{visit.plate}</h2><p className="text-slate-500 text-sm font-bold break-words">{visit.client} · {visit.phone}</p></div><div className="flex gap-2 shrink-0"><MacAction title="Друк" color="bg-blue-400" onClick={onPrint}><Printer size={16}/></MacAction><MacAction title="Видалити" color="bg-red-400" onClick={onCancel}><Trash2 size={16}/></MacAction><MacAction title="Закрити" color="bg-slate-300" onClick={() => setVisit(null)}><X size={16}/></MacAction></div></div><div className="mt-4 grid grid-cols-3 gap-2"><StatusBtn active={['PENDING','DRAFT','SELECTION'].includes(visit.status)} onClick={() => onPatch('status','PENDING')} label="В черзі"/><StatusBtn active={['IN_PROGRESS','ORDERED'].includes(visit.status)} onClick={() => onPatch('status','IN_PROGRESS')} label="В роботі"/><StatusBtn active={visit.status === 'DONE'} onClick={() => onPatch('status','DONE')} label="Готово"/></div><div className="mt-3 bg-white border border-slate-200 rounded-2xl p-3"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2"><div><p className="text-[10px] font-black uppercase text-slate-400">Запис</p><p className="font-black text-slate-800 text-sm flex items-center gap-2"><Clock size={15} className="text-blue-600"/> {visitDate(visit)}</p></div><button type="button" onClick={() => setRescheduleOpen(!rescheduleOpen)} className="bg-blue-50 text-blue-700 border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-black uppercase">Змінити запис</button></div>{rescheduleOpen && <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2"><LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/><LabeledInput label="Новий час" type="time" value={reschedule.time} onChange={(v)=>setReschedule({...reschedule,time:v})}/><button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase self-end">Зберегти</button></div>}</div></div><div className="px-4 md:px-6 pt-3 bg-white border-b border-slate-100 overflow-x-auto shrink-0"><div className="flex gap-2 min-w-max pb-3">{tabs.map(([key,label,Icon])=><button key={key} onClick={()=>setTab(key)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase whitespace-nowrap ${tab===key?'bg-blue-600 text-white':'bg-slate-50 text-slate-500'}`}><Icon size={15}/>{label}</button>)}</div></div><div className="p-4 md:p-6 overflow-y-auto flex-1">{tab==='overview'&&<Overview visit={visit} carData={carData}/>} {tab==='passport'&&<Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>} {tab==='acceptance'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>} {tab==='diagnostic'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>} {tab==='works'&&<Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService}/>} {tab==='parts'&&<Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>} {tab==='recommendations'&&<EmptyPanel text="Рекомендації у наступному етапі можна створювати прямо з діагностики."/>} {tab==='summary'&&<Summary visit={visit} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} />}</div></div></div>;
+}
+
+function MacAction({ title, color, onClick, children }) { return <button type="button" title={title} aria-label={title} onClick={onClick} className={`w-10 h-10 rounded-full ${color} text-white flex items-center justify-center shadow-sm hover:scale-105 transition-transform`}>{children}</button>; }
 function StatusBtn({active,onClick,label}){return <button onClick={onClick} className={`py-2.5 rounded-xl text-[10px] font-black uppercase ${active?'bg-blue-600 text-white':'bg-white text-slate-500 border border-slate-200'}`}>{label}</button>}
 function Overview({visit,carData}){return <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><InfoCard label="ID" value={`№${visitId(visit)}`}/><InfoCard label="Дата" value={visitDate(visit)}/><InfoCard label="Сума" value={money(totalOf(visit))}/><InfoCard label="Клієнт" value={visit.client}/><InfoCard label="Телефон" value={visit.phone}/><InfoCard label="Авто" value={`${carData.brand || '—'} ${carData.model || ''} ${carData.year || ''}`}/><InfoCard label="VIN" value={visit.vin_code || '—'}/><InfoCard label="Двигун" value={`${carData.engine_volume || carData.engine || '—'} см³ ${carData.engine_power ? `· ${carData.engine_power} кВт` : ''}`}/><InfoCard label="Паливо" value={carData.fuel || '—'}/></div>}
-function Passport({carData,setCarData,onSave,scanRef,onScan,scanDraft,setScanDraft,onAcceptScan,visit}){return <div className="space-y-4"><div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 justify-between"><div><h3 className="font-black text-slate-800 flex gap-2"><ScanLine size={17}/> Скан техпаспорта</h3><p className="text-xs font-semibold text-slate-400">Дані з другого фото додаються до вже збережених, а не очищають їх.</p></div><button onClick={()=>scanRef.current?.click()} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase flex gap-2 justify-center"><Camera size={15}/> Сканувати</button><input ref={scanRef} type="file" accept="image/*" onChange={onScan} className="hidden"/></div>{scanDraft&&<ScanReviewCard data={scanDraft} setData={setScanDraft} onApply={onAcceptScan} onCancel={()=>setScanDraft(null)}/>}<CarFields data={carData} setData={setCarData}/><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><InfoCard label="Держ. номер" value={visit.plate}/><InfoCard label="VIN" value={visit.vin_code || '—'}/></div><button onClick={onSave} className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти техпаспорт</button></div>}
+function Passport({carData,setCarData,onSave,scanRef,onScan,scanDraft,setScanDraft,onAcceptScan,visit}){return <div className="space-y-4"><div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 justify-between"><h3 className="font-black text-slate-800 flex gap-2 items-center"><ScanLine size={17}/> Скан техпаспорта</h3><button onClick={()=>scanRef.current?.click()} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase flex gap-2 justify-center"><Camera size={15}/> Сканувати</button><input ref={scanRef} type="file" accept="image/*" onChange={onScan} className="hidden"/></div>{scanDraft&&<ScanReviewCard data={scanDraft} setData={setScanDraft} onApply={onAcceptScan} onCancel={()=>setScanDraft(null)}/>}<CarFields data={carData} setData={setCarData}/><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><InfoCard label="Держ. номер" value={visit.plate}/><InfoCard label="VIN" value={visit.vin_code || '—'}/></div><button onClick={onSave} className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти техпаспорт</button></div>}
 function Works({visit,catalogServices,selectedCatalogId,setSelectedCatalogId,showServiceForm,setShowServiceForm,newService,setNewService,onAddService,onDeleteService}){const ss=servicesOf(visit);return <div className="space-y-3"><div className="grid grid-cols-2 gap-3"><InfoCard label="Робіт" value={ss.length}/><InfoCard label="Сума" value={money(servicesTotal(visit))}/></div><button onClick={()=>setShowServiceForm(!showServiceForm)} className="bg-blue-50 text-blue-700 rounded-xl px-4 py-3 text-xs font-black uppercase flex gap-2"><Plus size={14}/> Додати роботу</button>{showServiceForm&&<form onSubmit={onAddService} className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2"><select value={selectedCatalogId} onChange={(e)=>{setSelectedCatalogId(e.target.value);const s=catalogServices.find(x=>x.id===Number(e.target.value)); if(s) setNewService({name:s.name,price:s.price||s.default_price||'',quantity:1})}} className="w-full bg-white border rounded-lg p-2 text-xs font-bold"><option value="">Ввести вручну</option>{catalogServices.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><input required placeholder="Назва роботи" value={newService.name} onChange={(e)=>setNewService({...newService,name:e.target.value})} className="w-full bg-white border rounded-lg p-2 text-xs font-bold"/><div className="grid grid-cols-2 gap-2"><input required type="number" placeholder="Ціна" value={newService.price} onChange={(e)=>setNewService({...newService,price:e.target.value})} className="bg-white border rounded-lg p-2 text-xs font-bold"/><input required type="number" placeholder="К-сть" value={newService.quantity} onChange={(e)=>setNewService({...newService,quantity:e.target.value})} className="bg-white border rounded-lg p-2 text-xs font-bold"/></div><button className="w-full bg-blue-600 text-white rounded-lg py-2 text-xs font-black uppercase">Зберегти</button></form>}{ss.map(s=><Row key={s.id} title={s.name||s.custom_name} sub={`${s.quantity||1} × ${money(s.price)}`} price={money(Number(s.price||0)*Number(s.quantity||1))} onDelete={()=>onDeleteService(s.id)}/>)}{!ss.length&&<EmptyPanel text="Роботи ще не додані"/>}</div>}
-function Parts({visit,onDelete,onStatus}){const ps=partsOf(visit);return <div className="space-y-3"><div className="grid grid-cols-2 gap-3"><InfoCard label="Позицій" value={ps.length}/><InfoCard label="Сума" value={money(partsTotal(visit))}/></div>{ps.map(p=><div key={p.id} className="p-3 bg-slate-50 rounded-xl border flex flex-col lg:flex-row lg:items-center gap-3"><div className="flex-1"><p className="font-black text-slate-800 text-sm">{p.name}</p><p className="text-xs uppercase font-bold text-slate-500">{p.brand} | {p.part_number||p.article}</p><p className="text-xs font-bold text-blue-600 mt-1">{money(p.sell_price||p.price)} · к-сть {p.quantity||1}</p></div><select value={p.status||p.logistics_status||'WAITING'} onChange={(e)=>onStatus(p.id,e.target.value)} className="border rounded-xl px-3 py-2 text-xs font-black"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select><button onClick={()=>onDelete(p.id)} className="text-red-500 p-2"><Trash2 size={16}/></button></div>)}{!ps.length&&<EmptyPanel text="Запчастини ще не додані"/>}</div>}
+function Parts({visit,showForm,setShowForm,form,setForm,onSubmit,onDelete,onStatus}){const ps=partsOf(visit);return <div className="space-y-3"><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><InfoCard label="Позицій" value={ps.length}/><InfoCard label="Сума" value={money(partsTotal(visit))}/><button type="button" onClick={()=>setShowForm(!showForm)} className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15}/> Додати вручну</button></div>{showForm&&<ManualPartForm form={form} setForm={setForm} onSubmit={onSubmit} onCancel={()=>setShowForm(false)}/>} {ps.map(p=><div key={p.id} className="p-3 bg-slate-50 rounded-xl border flex flex-col lg:flex-row lg:items-center gap-3"><div className="flex-1 min-w-0"><div className="flex flex-wrap items-center gap-2 mb-1"><span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${supplierBadge(p)}`}>{p.supplier || 'Постачальник'}</span><span className="text-[10px] font-black uppercase text-slate-400">к-сть {p.quantity||1}</span></div><p className="font-black text-slate-800 text-sm break-words">{p.name}</p><p className="text-xs uppercase font-bold text-slate-500 break-words">{p.brand} | {p.part_number||p.article}</p><p className="text-xs font-bold text-blue-600 mt-1">{money(p.sell_price||p.price)} · закупка {money(p.buy_price)}</p></div><select value={p.status||p.logistics_status||'WAITING'} onChange={(e)=>onStatus(p.id,e.target.value)} className="border rounded-xl px-3 py-2 text-xs font-black bg-white"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select><button onClick={()=>onDelete(p.id)} className="text-red-500 p-2 self-start lg:self-center"><Trash2 size={16}/></button></div>)}{!ps.length&&<EmptyPanel text="Запчастини ще не додані"/>}</div>}
+function ManualPartForm({ form, setForm, onSubmit, onCancel }) { return <form onSubmit={onSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"><div className="flex items-center justify-between gap-3"><h3 className="font-black text-slate-800 uppercase text-sm">Ручне додавання</h3><button type="button" onClick={onCancel} className="text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><LabeledInput label="Назва" required value={form.name} onChange={(v)=>setForm({...form,name:v})}/><LabeledInput label="Бренд" value={form.brand} onChange={(v)=>setForm({...form,brand:v})}/><LabeledInput label="Артикул" value={form.article} onChange={(v)=>setForm({...form,article:v})}/><LabeledInput label="Постачальник" value={form.supplier} onChange={(v)=>setForm({...form,supplier:v})}/><LabeledInput label="Закупка" type="number" required value={form.buy_price} onChange={(v)=>setForm({...form,buy_price:v})}/><LabeledInput label="Продаж" type="number" required value={form.sell_price} onChange={(v)=>setForm({...form,sell_price:v})}/><LabeledInput label="Кількість" type="number" required value={form.quantity} onChange={(v)=>setForm({...form,quantity:v})}/><label className="block md:col-span-2"><span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Статус</span><select value={form.status} onChange={(e)=>setForm({...form,status:e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select></label></div><button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти запчастину</button></form>}
 function Summary({visit,editComment,setEditComment,onSave}){return <div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><InfoCard label="Роботи" value={money(servicesTotal(visit))}/><InfoCard label="Запчастини" value={money(partsTotal(visit))}/><InfoCard label="Разом" value={money(totalOf(visit))}/></div><textarea value={editComment} onChange={(e)=>setEditComment(e.target.value)} className="w-full bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm font-bold min-h-[100px]" placeholder="Внутрішній коментар"/><button onClick={onSave} className="bg-amber-400 text-amber-950 rounded-xl px-5 py-3 text-xs font-black uppercase">Зберегти коментар</button></div>}
 function CarFields({data,setData}){return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4"><div className="flex justify-between items-center border-b pb-2 mb-3"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Дані автомобіля</p><span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg border ${data.engine_review_status==='needs_review'?'bg-amber-50 text-amber-700 border-amber-100':'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>{data.engine_review_status==='needs_review'?'Двигун перевірити':'Перевірено вручну'}</span></div><div className="grid grid-cols-2 gap-3"><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v,engine_review_status:'manual'})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v,engine_review_status:'manual'})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v,engine_review_status:'manual'})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v,engine_review_status:'manual'})}/></div></div></div>}
 function ScanReviewCard({data,setData,onApply,onCancel}){return <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 space-y-3"><div className="flex gap-2"><AlertTriangle size={18} className="text-amber-600 shrink-0"/><div><p className="font-black text-amber-800 text-sm">Результат скану потребує перевірки</p><p className="text-xs font-semibold text-amber-700">Це обʼєднаний результат: нове фото доповнює вже знайдені дані.</p></div></div><div className="grid grid-cols-2 gap-2"><LabeledInput label="Держ. номер" value={data.plate} onChange={(v)=>setData({...data,plate:v.toUpperCase()})}/><LabeledInput label="VIN" value={data.vin_code||data.vin_candidate} onChange={(v)=>setData({...data,vin_code:v.toUpperCase()})}/><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v})}/></div></div>{data.warnings?.length>0&&<div className="text-xs font-bold text-amber-700 space-y-1">{data.warnings.map((w,i)=><p key={i}>• {w}</p>)}</div>}<div className="flex flex-col sm:flex-row gap-2"><button type="button" onClick={onApply} className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Прийняти дані</button><button type="button" onClick={onCancel} className="flex-1 bg-white border border-amber-200 text-amber-700 rounded-xl py-3 text-xs font-black uppercase">Не використовувати</button></div></div>}

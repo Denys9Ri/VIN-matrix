@@ -19,6 +19,7 @@ from apps.core.safe_crm_views import (
 )
 from apps.core.communication_views import CRMCommunicationViewSet, CRMClientStatusViewSet, CRMServiceReminderViewSet
 from apps.core.visit_workflow_views import VisitAcceptanceActView, VisitDiagnosticChecklistView
+from apps.core.ocr_views import RecognizeDocumentView
 from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.paid_views import (
     PartSearchView,
@@ -63,6 +64,7 @@ urlpatterns = [
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/search-parts/', PartSearchView.as_view(), name='search-parts'),
+    path('api/visits/recognize_document/', RecognizeDocumentView.as_view(), name='recognize-document'),
     path('api/visit-acceptance-act/', VisitAcceptanceActView.as_view(), name='visit-acceptance-act'),
     path('api/visit-diagnostic-checklist/', VisitDiagnosticChecklistView.as_view(), name='visit-diagnostic-checklist'),
     path('api/', include(router.urls)),

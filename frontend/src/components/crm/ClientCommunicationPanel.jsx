@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, History, ListChecks, MessageSquareText, PhoneCall, Plus, Settings2, UserRound, Wrench } from 'lucide-react';
+import { ClipboardCheck, ClipboardList, History, ListChecks, MessageSquareText, PhoneCall, Plus, Settings2, UserRound, Wrench } from 'lucide-react';
 import CopyButton from '../common/CopyButton';
 import NextServicePanel from './NextServicePanel';
+import VisitWorkflowPanel from './VisitWorkflowPanel';
 import api from '../../api/axios';
 
 const statuses = [
@@ -192,23 +193,14 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
   const shownItems = compact ? items.slice(0, 2) : items;
   const currentStatusLabel = clientStatus?.status_label || clientStatusLabel(statusForm.status);
   const currentStatusClass = clientStatusClass[statusForm.status] || clientStatusClass.new;
-
   const actionButtonClass = 'rounded-2xl py-3 px-3 text-xs font-black uppercase flex items-center justify-center gap-2 min-h-[44px] transition-all disabled:opacity-50 disabled:cursor-not-allowed';
 
   const contactActions = (
     <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
-      <button type="button" onClick={() => window.location.assign(`tel:${selectedGroup?.phone || ''}`)} className={`${actionButtonClass} bg-emerald-600 text-white hover:bg-emerald-700`}>
-        <PhoneCall size={15} /> Подзвонити
-      </button>
-      <button type="button" onClick={() => lastVisit && onRepeat?.(lastVisit)} disabled={!lastVisit} className={`${actionButtonClass} bg-slate-900 text-white hover:bg-slate-800`}>
-        <Plus size={15} /> Візит
-      </button>
-      <button type="button" onClick={onAddRecommendation} className={`${actionButtonClass} bg-blue-50 text-blue-700 hover:bg-blue-100`}>
-        <ClipboardList size={15} /> Рекомендація
-      </button>
-      <button type="button" onClick={createCallTask} disabled={savingTask} className={`${actionButtonClass} bg-indigo-50 text-indigo-700 hover:bg-indigo-100`}>
-        <ListChecks size={15} /> {savingTask ? 'Створюю' : 'Задача'}
-      </button>
+      <button type="button" onClick={() => window.location.assign(`tel:${selectedGroup?.phone || ''}`)} className={`${actionButtonClass} bg-emerald-600 text-white hover:bg-emerald-700`}><PhoneCall size={15} /> Подзвонити</button>
+      <button type="button" onClick={() => lastVisit && onRepeat?.(lastVisit)} disabled={!lastVisit} className={`${actionButtonClass} bg-slate-900 text-white hover:bg-slate-800`}><Plus size={15} /> Візит</button>
+      <button type="button" onClick={onAddRecommendation} className={`${actionButtonClass} bg-blue-50 text-blue-700 hover:bg-blue-100`}><ClipboardList size={15} /> Рекомендація</button>
+      <button type="button" onClick={createCallTask} disabled={savingTask} className={`${actionButtonClass} bg-indigo-50 text-indigo-700 hover:bg-indigo-100`}><ListChecks size={15} /> {savingTask ? 'Створюю' : 'Задача'}</button>
       <CopyButton value={selectedGroup?.phone || ''} label="Телефон" copiedLabel="Скопійовано" />
       <CopyButton value={selectedGroup?.vin || ''} label="VIN" copiedLabel="Скопійовано" />
       <CopyButton value={selectedGroup?.plate || ''} label="Номер" copiedLabel="Скопійовано" />
@@ -218,24 +210,14 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
   if (compact) {
     return (
       <div className="bg-white rounded-3xl sm:rounded-2xl border border-slate-200 p-5 sm:p-4 shadow-sm min-w-0">
-        <SectionTitle
-          icon={<MessageSquareText size={18} className="text-blue-600" />}
-          title="Комунікація"
-          subtitle="Швидкий огляд контакту"
-          right={<span className={`self-start rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${currentStatusClass}`}>{currentStatusLabel}</span>}
-        />
+        <SectionTitle icon={<MessageSquareText size={18} className="text-blue-600" />} title="Комунікація" subtitle="Швидкий огляд контакту" right={<span className={`self-start rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${currentStatusClass}`}>{currentStatusLabel}</span>} />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
           <button type="button" onClick={() => window.location.assign(`tel:${selectedGroup?.phone || ''}`)} className={`${actionButtonClass} bg-emerald-600 text-white hover:bg-emerald-700`}><PhoneCall size={15} /> Подзвонити</button>
           <button type="button" onClick={() => lastVisit && onRepeat?.(lastVisit)} disabled={!lastVisit} className={`${actionButtonClass} bg-slate-900 text-white hover:bg-slate-800`}><Plus size={15} /> Візит</button>
           <CopyButton value={selectedGroup?.phone || ''} label="Телефон" copiedLabel="Скопійовано" />
           <CopyButton value={selectedGroup?.plate || ''} label="Номер" copiedLabel="Скопійовано" />
         </div>
-        {loading ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 text-sm font-semibold text-slate-400 text-center">Завантаження...</div> : items.length === 0 ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 text-sm font-semibold text-slate-400 text-center">Історії спілкування ще немає</div> : (
-          <div className="space-y-2">
-            {shownItems.map((item) => <CommunicationRow key={item.id} item={item} />)}
-            {items.length > 2 && <p className="text-xs font-bold text-slate-400 text-center">Ще записів: {items.length - 2}</p>}
-          </div>
-        )}
+        {loading ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 text-sm font-semibold text-slate-400 text-center">Завантаження...</div> : items.length === 0 ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 text-sm font-semibold text-slate-400 text-center">Історії спілкування ще немає</div> : <div className="space-y-2">{shownItems.map((item) => <CommunicationRow key={item.id} item={item} />)}{items.length > 2 && <p className="text-xs font-bold text-slate-400 text-center">Ще записів: {items.length - 2}</p>}</div>}
       </div>
     );
   }
@@ -243,6 +225,7 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
   const sections = [
     ['contact', 'Контакт', PhoneCall],
     ['status', 'Статус', UserRound],
+    ['workflow', 'Акт / Діагностика', ClipboardCheck],
     ['service', 'Обслуговування', Wrench],
     ['history', 'Історія', History],
   ];
@@ -250,90 +233,23 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
   return (
     <div className="space-y-4 min-w-0">
       <div className="bg-white rounded-3xl sm:rounded-2xl border border-slate-200 p-5 sm:p-4 shadow-sm min-w-0">
-        <SectionTitle
-          icon={<MessageSquareText size={18} className="text-blue-600" />}
-          title="Комунікація з клієнтом"
-          subtitle="Розділено на контакт, статус, обслуговування та історію"
-          right={(
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${currentStatusClass}`}>Статус: {currentStatusLabel}</span>
-              <span className="text-[10px] font-black uppercase text-slate-400">Записів: {items.length}</span>
-            </div>
-          )}
-        />
+        <SectionTitle icon={<MessageSquareText size={18} className="text-blue-600" />} title="Комунікація з клієнтом" subtitle="Контакт, статус, акт приймання, діагностика, обслуговування та історія" right={<div className="flex flex-wrap items-center gap-2"><span className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${currentStatusClass}`}>Статус: {currentStatusLabel}</span><span className="text-[10px] font-black uppercase text-slate-400">Записів: {items.length}</span></div>} />
 
-        <div className="overflow-x-auto -mx-1 px-1 mb-4">
-          <div className="flex gap-2 min-w-max pb-1">
-            {sections.map(([key, label, Icon]) => (
-              <button key={key} type="button" onClick={() => setActiveSection(key)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase border whitespace-nowrap transition-all ${activeSection === key ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100'}`}>
-                <Icon size={15} /> {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <div className="overflow-x-auto -mx-1 px-1 mb-4"><div className="flex gap-2 min-w-max pb-1">{sections.map(([key, label, Icon]) => <button key={key} type="button" onClick={() => setActiveSection(key)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase border whitespace-nowrap transition-all ${activeSection === key ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100'}`}><Icon size={15} /> {label}</button>)}</div></div>
 
-        {activeSection === 'contact' && (
-          <div className="space-y-4">
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
-              <div className="flex items-center gap-2 mb-3">
-                <Settings2 size={16} className="text-slate-500" />
-                <p className="text-xs font-black uppercase text-slate-500">Швидкі дії</p>
-              </div>
-              {contactActions}
-            </div>
-          </div>
-        )}
+        {activeSection === 'contact' && <div className="space-y-4"><div className="bg-slate-50 border border-slate-100 rounded-2xl p-3"><div className="flex items-center gap-2 mb-3"><Settings2 size={16} className="text-slate-500" /><p className="text-xs font-black uppercase text-slate-500">Швидкі дії</p></div>{contactActions}</div></div>}
 
-        {activeSection === 'status' && (
-          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
-            <div className="flex items-center gap-2 mb-3">
-              <UserRound size={16} className="text-slate-500" />
-              <p className="text-xs font-black uppercase text-slate-500">Ручний статус клієнта</p>
-            </div>
-            <form onSubmit={saveClientStatus} className="grid grid-cols-1 lg:grid-cols-[180px_1fr_auto] gap-2">
-              <select value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })} className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0">
-                {clientStatuses.map(([keyValue, label]) => <option key={keyValue} value={keyValue}>{label}</option>)}
-              </select>
-              <input value={statusForm.note} onChange={(event) => setStatusForm({ ...statusForm, note: event.target.value })} placeholder="Примітка до статусу, наприклад: VIP, бо обслуговує 3 авто" className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0" />
-              <button disabled={savingStatus} className="bg-slate-900 text-white rounded-xl px-4 py-3 text-xs font-black uppercase disabled:opacity-50 min-h-[44px]">{savingStatus ? 'Зберігаю...' : 'Зберегти статус'}</button>
-            </form>
-          </div>
-        )}
+        {activeSection === 'status' && <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3"><div className="flex items-center gap-2 mb-3"><UserRound size={16} className="text-slate-500" /><p className="text-xs font-black uppercase text-slate-500">Ручний статус клієнта</p></div><form onSubmit={saveClientStatus} className="grid grid-cols-1 lg:grid-cols-[180px_1fr_auto] gap-2"><select value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })} className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0">{clientStatuses.map(([keyValue, label]) => <option key={keyValue} value={keyValue}>{label}</option>)}</select><input value={statusForm.note} onChange={(event) => setStatusForm({ ...statusForm, note: event.target.value })} placeholder="Примітка до статусу, наприклад: VIP, бо обслуговує 3 авто" className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0" /><button disabled={savingStatus} className="bg-slate-900 text-white rounded-xl px-4 py-3 text-xs font-black uppercase disabled:opacity-50 min-h-[44px]">{savingStatus ? 'Зберігаю...' : 'Зберегти статус'}</button></form></div>}
 
-        {activeSection === 'history' && (
-          <div className="space-y-4">
-            <form onSubmit={addCommunication} className="bg-slate-50 border border-slate-100 rounded-2xl p-3 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-[230px_1fr] gap-2">
-                <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0">
-                  {statuses.map(([keyValue, label]) => <option key={keyValue} value={keyValue}>{label}</option>)}
-                </select>
-                <input value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} placeholder="Коментар менеджера" className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0" />
-              </div>
-              <button disabled={saving} className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase disabled:opacity-50 min-h-[44px]">{saving ? 'Зберігаю...' : 'Додати запис комунікації'}</button>
-            </form>
-
-            {loading ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Завантаження комунікації...</div> : items.length === 0 ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Історії спілкування ще немає</div> : (
-              <div className="space-y-2">
-                {shownItems.map((item) => <CommunicationRow key={item.id} item={item} />)}
-              </div>
-            )}
-          </div>
-        )}
+        {activeSection === 'history' && <div className="space-y-4"><form onSubmit={addCommunication} className="bg-slate-50 border border-slate-100 rounded-2xl p-3 space-y-3"><div className="grid grid-cols-1 sm:grid-cols-[230px_1fr] gap-2"><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0">{statuses.map(([keyValue, label]) => <option key={keyValue} value={keyValue}>{label}</option>)}</select><input value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} placeholder="Коментар менеджера" className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0" /></div><button disabled={saving} className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase disabled:opacity-50 min-h-[44px]">{saving ? 'Зберігаю...' : 'Додати запис комунікації'}</button></form>{loading ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Завантаження комунікації...</div> : items.length === 0 ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Історії спілкування ще немає</div> : <div className="space-y-2">{shownItems.map((item) => <CommunicationRow key={item.id} item={item} />)}</div>}</div>}
       </div>
 
+      {activeSection === 'workflow' && <VisitWorkflowPanel selectedGroup={selectedGroup} lastVisit={lastVisit} />}
       {activeSection === 'service' && <NextServicePanel selectedGroup={selectedGroup} lastVisit={lastVisit} lastMileage={parseMileageFromVisit(lastVisit)} />}
     </div>
   );
 }
 
 function CommunicationRow({ item }) {
-  return (
-    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <span className={`self-start rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${statusClass[item.status] || statusClass.called}`}>{item.status_label || statusLabel(item.status)}</span>
-        <span className="text-[11px] font-bold text-slate-400">{new Date(item.created_at).toLocaleString('uk-UA')}</span>
-      </div>
-      {item.comment && <p className="text-sm font-semibold text-slate-600 mt-2 break-words">{item.comment}</p>}
-    </div>
-  );
+  return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 min-w-0"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2"><span className={`self-start rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${statusClass[item.status] || statusClass.called}`}>{item.status_label || statusLabel(item.status)}</span><span className="text-[11px] font-bold text-slate-400">{new Date(item.created_at).toLocaleString('uk-UA')}</span></div>{item.comment && <p className="text-sm font-semibold text-slate-600 mt-2 break-words">{item.comment}</p>}</div>;
 }

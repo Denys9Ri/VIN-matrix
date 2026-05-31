@@ -70,16 +70,46 @@ body {
     overflow-x: visible !important;
   }
 
-  /* New visit modal: native date/time controls are too wide on phones, so stack them vertically. */
-  .fixed form .grid.grid-cols-2:has(input[type="date"]),
-  .fixed form .grid.grid-cols-2:has(input[type="time"]) {
+  /* Mobile modal hardening: prevent native date/time inputs and 2-column grids from overflowing. */
+  .fixed.overflow-y-auto {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    overflow-x: hidden !important;
+  }
+
+  .fixed.overflow-y-auto > .bg-white,
+  .fixed .bg-white.rounded-3xl {
+    width: 100% !important;
+    max-width: calc(100vw - 1.5rem) !important;
+    overflow-x: hidden !important;
+  }
+
+  .fixed form,
+  .fixed form *,
+  .fixed form label,
+  .fixed form .grid,
+  .fixed form .grid > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .fixed form .grid.grid-cols-2 {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .fixed input,
+  .fixed select,
+  .fixed textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
   }
 
   .fixed input[type="date"],
   .fixed input[type="time"] {
-    width: 100% !important;
-    min-width: 0 !important;
+    display: block !important;
+    -webkit-appearance: none;
+    appearance: none;
     font-size: 16px !important;
   }
 }

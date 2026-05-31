@@ -69,4 +69,17 @@ body {
   .fixed .overflow-x-auto {
     overflow-x: visible !important;
   }
+
+  /* New visit modal: native date/time controls are too wide on phones, so stack them vertically. */
+  .fixed form .grid.grid-cols-2:has(input[type="date"]),
+  .fixed form .grid.grid-cols-2:has(input[type="time"]) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .fixed input[type="date"],
+  .fixed input[type="time"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    font-size: 16px !important;
+  }
 }

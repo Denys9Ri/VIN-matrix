@@ -37,7 +37,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     { name: 'Пошук запчастин', icon: <Search size={20} />, path: '/search' },
     { name: 'Склад', icon: <Briefcase size={20} />, path: '/inventory' },
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
-    { name: 'CRM', icon: <Users size={20} />, path: '/crm/clients' },
+    { name: 'CRM', icon: <Users size={20} />, path: '/crm/supplier-orders' },
     { name: 'Комплекси', icon: <Boxes size={20} />, path: '/complexes' },
   ];
 

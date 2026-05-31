@@ -30,6 +30,24 @@ const safeArray = (value) => (Array.isArray(value) ? value : []);
 const safeNumber = (value) => { const number = Number(value); return Number.isFinite(number) ? number : 0; };
 const isNotDone = (item) => !['done', 'cancelled', 'canceled'].includes(String(item?.status || item?.state || '').toLowerCase());
 
+const statusLabels = {
+  new: 'Новий',
+  active: 'Активний',
+  regular: 'Постійний',
+  sleeping: 'Сплячий',
+  problem: 'Проблемний',
+  vip: 'VIP',
+};
+
+const statusBadge = {
+  new: 'bg-blue-50 text-blue-700 border-blue-100',
+  active: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  regular: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+  sleeping: 'bg-slate-100 text-slate-600 border-slate-200',
+  problem: 'bg-rose-50 text-rose-700 border-rose-100',
+  vip: 'bg-amber-50 text-amber-700 border-amber-100',
+};
+
 const recBadge = {
   active: 'bg-blue-50 text-blue-700 border-blue-100',
   soon: 'bg-amber-50 text-amber-700 border-amber-100',
@@ -56,13 +74,22 @@ const formatVisitDate = (visit) => {
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString('uk-UA', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
+
 const formatDueDate = (value) => {
   if (!value) return 'Без дати';
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short', year: 'numeric' });
 };
-const formatMoney = (value) => { const number = Number(value); return Number.isFinite(number) ? `${number.toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴` : '—'; };
-const formatMileage = (value) => { const number = Number(value); return Number.isFinite(number) && number > 0 ? `${number.toLocaleString('uk-UA')} км` : '—'; };
+
+const formatMoney = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴` : '—';
+};
+
+const formatMileage = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? `${number.toLocaleString('uk-UA')} км` : '—';
+};
 
 const getPartArticle = (part) => part?.article || part?.sku || part?.part_number || part?.code || '';
 const getPartName = (part) => part?.name || part?.title || 'Запчастина';
@@ -99,12 +126,33 @@ const clientTabs = [
   { key: 'tasks', label: 'Задачі', icon: ListChecks },
 ];
 
+const clientMatches = (item, group) => {
+  if (!item || !group) return false;
+  const itemPlate = normalize(item.plate);
+  const itemPhone = normalize(item.phone);
+  const itemClient = normalize(item.client);
+  return (itemPlate && itemPlate === normalize(group.plate)) || (itemPhone && itemPhone === normalize(group.phone)) || (itemClient && itemClient === normalize(group.client));
+};
+
+const isOlderThanDays = (visit, days) => {
+  const raw = visit?.scheduled_datetime || visit?.updated_at || visit?.created_at || visit?.date;
+  if (!raw) return false;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return false;
+  const limit = new Date();
+  limit.setDate(limit.getDate() - days);
+  return date < limit;
+};
+
 const Clients = ({ embedded = false }) => {
   const navigate = useNavigate();
   const [visits, setVisits] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [clientStatuses, setClientStatuses] = useState([]);
+  const [serviceReminders, setServiceReminders] = useState([]);
   const [search, setSearch] = useState('');
+  const [clientFilter, setClientFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [detailTab, setDetailTab] = useState('overview');
@@ -117,17 +165,25 @@ const Clients = ({ embedded = false }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [visitsResponse, recResponse, taskResponse] = await Promise.all([
+      const [visitsResponse, recResponse, taskResponse, statusResponse, serviceResponse] = await Promise.all([
         api.get('/api/visits/?history=true'),
         api.get('/api/recommendations/').catch(() => ({ data: [] })),
         api.get('/api/crm-tasks/').catch(() => ({ data: [] })),
+        api.get('/api/crm-client-statuses/').catch(() => ({ data: [] })),
+        api.get('/api/crm-service-reminders/?status=active').catch(() => ({ data: [] })),
       ]);
       setVisits((Array.isArray(visitsResponse.data) ? visitsResponse.data : []).map(extractCarData));
       setRecommendations(Array.isArray(recResponse.data) ? recResponse.data : []);
       setTasks(Array.isArray(taskResponse.data) ? taskResponse.data : []);
-    } catch { alert('Не вдалося завантажити історію клієнтів.'); }
-    finally { setLoading(false); }
+      setClientStatuses(Array.isArray(statusResponse.data) ? statusResponse.data : []);
+      setServiceReminders(Array.isArray(serviceResponse.data) ? serviceResponse.data : []);
+    } catch {
+      alert('Не вдалося завантажити історію клієнтів.');
+    } finally {
+      setLoading(false);
+    }
   };
+
   useEffect(() => { loadData(); }, []);
 
   const filteredVisits = useMemo(() => {
@@ -144,22 +200,88 @@ const Clients = ({ embedded = false }) => {
     const groups = new Map();
     filteredVisits.forEach((visit) => {
       const key = `${normalize(visit.phone)}|${normalize(visit.plate)}|${normalize(visit.client)}`;
-      if (groups.has(key)) { groups.get(key).visits.push(visit); return; }
-      groups.set(key, { id: key, client: visit.client || 'Невідомий клієнт', phone: visit.phone || '—', plate: visit.plate || '—', vin: visit.vin_code || '—', car: `${visit.brand || ''} ${visit.model || ''}`.trim() || '—', visits: [visit] });
+      if (groups.has(key)) {
+        groups.get(key).visits.push(visit);
+        return;
+      }
+      groups.set(key, {
+        id: key,
+        client: visit.client || 'Невідомий клієнт',
+        phone: visit.phone || '—',
+        plate: visit.plate || '—',
+        vin: visit.vin_code || '—',
+        car: `${visit.brand || ''} ${visit.model || ''}`.trim() || '—',
+        visits: [visit],
+      });
     });
-    return Array.from(groups.values()).map((group) => ({ ...group, visits: group.visits.sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)) })).sort((a, b) => b.visits.length - a.visits.length);
-  }, [filteredVisits]);
+
+    return Array.from(groups.values()).map((group) => {
+      const sortedVisits = group.visits.sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
+      const statusRecord = clientStatuses.find((status) => clientMatches(status, group));
+      const activeRecs = recommendations.filter((rec) => clientMatches(rec, group) && isNotDone(rec));
+      const activeTasks = tasks.filter((task) => clientMatches(task, group) && isNotDone(task));
+      const activeServiceReminders = serviceReminders.filter((reminder) => clientMatches(reminder, group) && isNotDone(reminder));
+      const total = sortedVisits.reduce((sum, visit) => sum + getVisitTotal(visit), 0);
+      return {
+        ...group,
+        visits: sortedVisits,
+        status: statusRecord?.status || 'new',
+        statusLabel: statusRecord?.status_label || statusLabels[statusRecord?.status] || 'Новий',
+        activeRecs: activeRecs.length,
+        activeTasks: activeTasks.length,
+        activeServiceReminders: activeServiceReminders.length,
+        total,
+        lastVisit: sortedVisits[0],
+      };
+    }).sort((a, b) => b.visits.length - a.visits.length);
+  }, [filteredVisits, clientStatuses, recommendations, tasks, serviceReminders]);
+
+  const filterStats = useMemo(() => {
+    const stats = {
+      all: groupedClients.length,
+      'status-new': groupedClients.filter((group) => group.status === 'new').length,
+      'status-active': groupedClients.filter((group) => group.status === 'active').length,
+      'status-regular': groupedClients.filter((group) => group.status === 'regular').length,
+      'status-sleeping': groupedClients.filter((group) => group.status === 'sleeping').length,
+      'status-problem': groupedClients.filter((group) => group.status === 'problem').length,
+      'status-vip': groupedClients.filter((group) => group.status === 'vip').length,
+      recommendations: groupedClients.filter((group) => group.activeRecs > 0).length,
+      tasks: groupedClients.filter((group) => group.activeTasks > 0).length,
+      service: groupedClients.filter((group) => group.activeServiceReminders > 0).length,
+      inactive90: groupedClients.filter((group) => isOlderThanDays(group.lastVisit, 90)).length,
+      topRevenue: groupedClients.length,
+    };
+    return stats;
+  }, [groupedClients]);
+
+  const visibleClients = useMemo(() => {
+    let result = [...groupedClients];
+    if (clientFilter.startsWith('status-')) {
+      const status = clientFilter.replace('status-', '');
+      result = result.filter((group) => group.status === status);
+    } else if (clientFilter === 'recommendations') {
+      result = result.filter((group) => group.activeRecs > 0);
+    } else if (clientFilter === 'tasks') {
+      result = result.filter((group) => group.activeTasks > 0);
+    } else if (clientFilter === 'service') {
+      result = result.filter((group) => group.activeServiceReminders > 0);
+    } else if (clientFilter === 'inactive90') {
+      result = result.filter((group) => isOlderThanDays(group.lastVisit, 90));
+    }
+    if (clientFilter === 'topRevenue') {
+      result.sort((a, b) => b.total - a.total);
+    }
+    return result;
+  }, [groupedClients, clientFilter]);
 
   const selectedRecommendations = useMemo(() => {
     if (!selectedGroup) return [];
-    const plate = normalize(selectedGroup.plate), phone = normalize(selectedGroup.phone), client = normalize(selectedGroup.client);
-    return recommendations.filter((rec) => normalize(rec.plate) === plate || normalize(rec.phone) === phone || (client && normalize(rec.client) === client)).sort((a, b) => ({ overdue: 0, soon: 1, active: 2, new: 2, done: 3, cancelled: 4, canceled: 4 }[a.state] ?? 9) - ({ overdue: 0, soon: 1, active: 2, new: 2, done: 3, cancelled: 4, canceled: 4 }[b.state] ?? 9));
+    return recommendations.filter((rec) => clientMatches(rec, selectedGroup)).sort((a, b) => ({ overdue: 0, soon: 1, active: 2, new: 2, done: 3, cancelled: 4, canceled: 4 }[a.state] ?? 9) - ({ overdue: 0, soon: 1, active: 2, new: 2, done: 3, cancelled: 4, canceled: 4 }[b.state] ?? 9));
   }, [recommendations, selectedGroup]);
 
   const selectedTasks = useMemo(() => {
     if (!selectedGroup) return [];
-    const plate = normalize(selectedGroup.plate), phone = normalize(selectedGroup.phone), client = normalize(selectedGroup.client);
-    return tasks.filter((task) => normalize(task.plate) === plate || normalize(task.phone) === phone || (client && normalize(task.client) === client)).sort((a, b) => ({ overdue: 0, new: 1, in_progress: 2, done: 3 }[a.state] ?? 9) - ({ overdue: 0, new: 1, in_progress: 2, done: 3 }[b.state] ?? 9));
+    return tasks.filter((task) => clientMatches(task, selectedGroup)).sort((a, b) => ({ overdue: 0, new: 1, in_progress: 2, done: 3 }[a.state] ?? 9) - ({ overdue: 0, new: 1, in_progress: 2, done: 3 }[b.state] ?? 9));
   }, [tasks, selectedGroup]);
 
   const selectedSummary = useMemo(() => {
@@ -169,7 +291,19 @@ const Clients = ({ embedded = false }) => {
     const activeRecommendations = selectedRecommendations.filter(isNotDone);
     const activeTasks = selectedTasks.filter(isNotDone);
     const lastVisit = selectedGroup.visits[0];
-    return { visits: selectedGroup.visits.length, services: allServices.length, parts: allParts.length, activeRecs: activeRecommendations.length, activeTasks: activeTasks.length, lastVisit, lastMileage: selectedGroup.visits.map(getVisitMileage).find((value) => Number(value) > 0) || null, lastVisitTotal: lastVisit ? getVisitTotal(lastVisit) : 0, total: selectedGroup.visits.reduce((sum, visit) => sum + getVisitTotal(visit), 0), activeRecommendations, activeTasks };
+    return {
+      visits: selectedGroup.visits.length,
+      services: allServices.length,
+      parts: allParts.length,
+      activeRecs: activeRecommendations.length,
+      activeTasks: activeTasks.length,
+      lastVisit,
+      lastMileage: selectedGroup.visits.map(getVisitMileage).find((value) => Number(value) > 0) || null,
+      lastVisitTotal: lastVisit ? getVisitTotal(lastVisit) : 0,
+      total: selectedGroup.visits.reduce((sum, visit) => sum + getVisitTotal(visit), 0),
+      activeRecommendations,
+      activeTasks,
+    };
   }, [selectedGroup, selectedRecommendations, selectedTasks]);
 
   const buildCleanRepeatPayload = (visit, overrides = {}) => {
@@ -204,13 +338,33 @@ const Clients = ({ embedded = false }) => {
 
   return <div className={embedded ? 'w-full max-w-full overflow-x-hidden' : 'w-full max-w-6xl mx-auto px-3 sm:px-4 md:px-8 py-4 md:py-8 min-h-screen bg-slate-50 overflow-x-hidden'}>
     {!embedded && <div className="mb-8"><h1 className="text-3xl font-black text-slate-900 tracking-tight">Історія клієнтів</h1><p className="text-slate-500 font-medium">Керування візитами та історією обслуговування</p></div>}
-    <div className="relative mb-6 bg-white rounded-3xl border border-slate-200 shadow-sm p-2 max-w-full"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Пошук по номеру, телефону, імені, авто чи артикулу..." className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-medium text-sm md:text-base" /></div>
-    {loading ? <div className="text-center py-20 text-slate-400 font-bold">Завантаження даних...</div> : <div className="grid gap-4 max-w-full">{groupedClients.length === 0 ? <div className="bg-white rounded-2xl border border-slate-200 p-6 text-slate-500 font-semibold">За запитом нічого не знайдено.</div> : groupedClients.map((group) => <button type="button" key={group.id} onClick={() => openClient(group)} className="bg-white p-4 md:p-5 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 transition-all text-left flex flex-col sm:flex-row sm:items-center justify-between gap-4 group w-full max-w-full min-w-0"><div className="flex items-center gap-3 md:gap-4 min-w-0 w-full sm:w-auto"><div className="bg-slate-100 p-3 rounded-xl text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0"><CarFront size={24} /></div><div className="min-w-0 flex-1"><h3 className="font-black text-lg text-slate-800 break-words">{group.plate}</h3><p className="text-sm text-slate-500 font-semibold break-words">{group.client} • {group.car}</p><p className="text-xs text-slate-400 font-bold mt-1 break-words">{group.phone}</p></div></div><div className="flex items-center gap-3 shrink-0"><span className="text-xs font-black uppercase text-slate-400 tracking-wider">Візитів:</span><span className="bg-slate-800 text-white font-black px-3 py-1 rounded-lg text-sm">{group.visits.length}</span></div></button>)}</div>}
+    <div className="relative mb-4 bg-white rounded-3xl border border-slate-200 shadow-sm p-2 max-w-full"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Пошук по номеру, телефону, імені, авто чи артикулу..." className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-medium text-sm md:text-base" /></div>
+    <ClientFilters active={clientFilter} setActive={setClientFilter} stats={filterStats} />
+    {loading ? <div className="text-center py-20 text-slate-400 font-bold">Завантаження даних...</div> : <div className="grid gap-4 max-w-full">{visibleClients.length === 0 ? <div className="bg-white rounded-2xl border border-slate-200 p-6 text-slate-500 font-semibold">За цим фільтром нічого не знайдено.</div> : visibleClients.map((group) => <button type="button" key={group.id} onClick={() => openClient(group)} className="bg-white p-4 md:p-5 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 transition-all text-left flex flex-col sm:flex-row sm:items-center justify-between gap-4 group w-full max-w-full min-w-0"><div className="flex items-center gap-3 md:gap-4 min-w-0 w-full sm:w-auto"><div className="bg-slate-100 p-3 rounded-xl text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0"><CarFront size={24} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 mb-1"><h3 className="font-black text-lg text-slate-800 break-words">{group.plate}</h3><span className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${statusBadge[group.status] || statusBadge.new}`}>{group.statusLabel}</span></div><p className="text-sm text-slate-500 font-semibold break-words">{group.client} • {group.car}</p><p className="text-xs text-slate-400 font-bold mt-1 break-words">{group.phone}</p><div className="flex flex-wrap gap-2 mt-2 text-[10px] font-black uppercase"><span className="bg-slate-50 border border-slate-100 text-slate-500 rounded-lg px-2 py-1">Рек: {group.activeRecs}</span><span className="bg-slate-50 border border-slate-100 text-slate-500 rounded-lg px-2 py-1">Задач: {group.activeTasks}</span><span className="bg-slate-50 border border-slate-100 text-slate-500 rounded-lg px-2 py-1">ТО: {group.activeServiceReminders}</span></div></div></div><div className="flex flex-row sm:flex-col items-start sm:items-end gap-2 shrink-0"><span className="bg-slate-800 text-white font-black px-3 py-1 rounded-lg text-sm">{group.visits.length} віз.</span><span className="text-xs font-black text-slate-500">{formatMoney(group.total)}</span></div></button>)}</div>}
     {selectedGroup && <ClientDetailsModal selectedGroup={selectedGroup} selectedSummary={selectedSummary} selectedRecommendations={selectedRecommendations} selectedTasks={selectedTasks} detailTab={detailTab} setDetailTab={setDetailTab} setSelectedGroup={setSelectedGroup} openRecommendationModal={openRecommendationModal} openRepeatVisitModal={openRepeatVisitModal} markRecommendationDone={markRecommendationDone} markTaskDone={markTaskDone} reloadTasks={reloadTasks} getAllArticles={getAllArticles} />}
     {recommendationFormOpen && <RecommendationModal recommendationForm={recommendationForm} setRecommendationForm={setRecommendationForm} submitRecommendation={submitRecommendation} onClose={() => setRecommendationFormOpen(false)} />}
     {repeatVisitTarget && <RepeatVisitModal repeatVisitTarget={repeatVisitTarget} repeatForm={repeatForm} setRepeatForm={setRepeatForm} submitRepeatVisit={submitRepeatVisit} onClose={() => setRepeatVisitTarget(null)} isSaving={creatingRepeatVisit} />}
   </div>;
 };
+
+function ClientFilters({ active, setActive, stats }) {
+  const filters = [
+    ['all', 'Всі', stats.all],
+    ['status-new', 'Нові', stats['status-new']],
+    ['status-active', 'Активні', stats['status-active']],
+    ['status-regular', 'Постійні', stats['status-regular']],
+    ['status-sleeping', 'Сплячі', stats['status-sleeping']],
+    ['status-problem', 'Проблемні', stats['status-problem']],
+    ['status-vip', 'VIP', stats['status-vip']],
+    ['recommendations', 'З рекомендаціями', stats.recommendations],
+    ['tasks', 'З задачами', stats.tasks],
+    ['service', 'Обслуговування', stats.service],
+    ['inactive90', 'Без візиту 3 міс.', stats.inactive90],
+    ['topRevenue', 'Найбільш прибуткові', stats.topRevenue],
+  ];
+
+  return <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-3 mb-5 overflow-x-auto max-w-full"><div className="flex gap-2 min-w-max pb-1">{filters.map(([key, label, count]) => <button key={key} type="button" onClick={() => setActive(key)} className={`px-3 py-2 rounded-2xl text-xs font-black uppercase whitespace-nowrap border transition-all ${active === key ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100'}`}>{label}: {count || 0}</button>)}</div></div>;
+}
 
 function ClientDetailsModal({ selectedGroup, selectedSummary, selectedRecommendations, selectedTasks, detailTab, setDetailTab, setSelectedGroup, openRecommendationModal, openRepeatVisitModal, markRecommendationDone, markTaskDone, reloadTasks, getAllArticles }) {
   const activeRecs = safeArray(selectedSummary?.activeRecommendations);

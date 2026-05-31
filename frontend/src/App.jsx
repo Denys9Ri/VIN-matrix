@@ -13,6 +13,7 @@ import PartnerClients from './pages/PartnerClients';
 import Partners from './pages/Partners';
 import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
+import SupplierOrders from './pages/SupplierOrders';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import api from './api/axios';
 
@@ -78,7 +79,8 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
           <Route path="clients" element={<Navigate to="/crm/clients" replace />} />
-          <Route path="crm" element={<Navigate to="/crm/clients" replace />} />
+          <Route path="crm" element={<Navigate to="/crm/supplier-orders" replace />} />
+          <Route path="crm/supplier-orders" element={<SupplierOrders />} />
           <Route path="crm/:tab" element={<CRM />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="complexes" element={<Complexes />} />

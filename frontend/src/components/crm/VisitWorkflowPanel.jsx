@@ -43,9 +43,9 @@ const parseMileage = (visit) => {
   return '';
 };
 
-export default function VisitWorkflowPanel({ selectedGroup, lastVisit }) {
+export default function VisitWorkflowPanel({ selectedGroup, lastVisit, initialActive = 'acceptance', standalone = false }) {
   const visitId = getVisitId(lastVisit);
-  const [active, setActive] = useState('acceptance');
+  const [active, setActive] = useState(initialActive || 'acceptance');
   const [acceptance, setAcceptance] = useState({
     mileage: '', fuel_level: '1/2', exterior_note: '', interior_note: '', damages: '', customer_complaint: '', note: '', status: 'draft',
   });
@@ -58,6 +58,10 @@ export default function VisitWorkflowPanel({ selectedGroup, lastVisit }) {
     ['acceptance', 'Акт приймання', FileText],
     ['diagnostic', 'Діагностика', ClipboardCheck],
   ], []);
+
+  useEffect(() => {
+    setActive(initialActive || 'acceptance');
+  }, [initialActive, visitId]);
 
   const loadData = async () => {
     if (!visitId) return;
@@ -98,9 +102,9 @@ export default function VisitWorkflowPanel({ selectedGroup, lastVisit }) {
     try {
       const response = await api.post('/api/visit-acceptance-act/', {
         visit: visitId,
-        client: selectedGroup?.client || '',
-        phone: selectedGroup?.phone || '',
-        plate: selectedGroup?.plate || '',
+        client: selectedGroup?.client || lastVisit?.client || '',
+        phone: selectedGroup?.phone || lastVisit?.phone || '',
+        plate: selectedGroup?.plate || lastVisit?.plate || '',
         ...acceptance,
         status: finalStatus,
       });
@@ -119,9 +123,9 @@ export default function VisitWorkflowPanel({ selectedGroup, lastVisit }) {
     try {
       const response = await api.post('/api/visit-diagnostic-checklist/', {
         visit: visitId,
-        client: selectedGroup?.client || '',
-        phone: selectedGroup?.phone || '',
-        plate: selectedGroup?.plate || '',
+        client: selectedGroup?.client || lastVisit?.client || '',
+        phone: selectedGroup?.phone || lastVisit?.phone || '',
+        plate: selectedGroup?.plate || lastVisit?.plate || '',
         checklist: diagnostic.checklist,
         summary: diagnostic.summary,
         status: finalStatus,
@@ -146,7 +150,7 @@ export default function VisitWorkflowPanel({ selectedGroup, lastVisit }) {
   }
 
   return (
-    <div className="bg-white rounded-3xl sm:rounded-2xl border border-slate-200 p-5 sm:p-4 shadow-sm min-w-0">
+    <div className={standalone ? 'bg-white rounded-3xl sm:rounded-2xl border border-slate-200 p-5 sm:p-4 shadow-sm min-w-0' : 'bg-white rounded-3xl sm:rounded-2xl border border-slate-200 p-5 sm:p-4 shadow-sm min-w-0'}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h3 className="text-base sm:text-sm font-black text-slate-800 flex items-center gap-2"><ClipboardCheck size={18} className="text-blue-600" /> Акт і діагностика</h3>
@@ -164,7 +168,7 @@ export default function VisitWorkflowPanel({ selectedGroup, lastVisit }) {
       {active === 'acceptance' && (
         <form onSubmit={(event) => saveAcceptance(event)} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <SmallInfo icon={<CarFront size={15} />} label="Авто" value={`${selectedGroup?.plate || '—'} · ${selectedGroup?.car || '—'}`} />
+            <SmallInfo icon={<CarFront size={15} />} label="Авто" value={`${selectedGroup?.plate || lastVisit?.plate || '—'} · ${selectedGroup?.car || ''}`} />
             <SmallInfo icon={<Gauge size={15} />} label="Пробіг" value={acceptance.mileage ? `${Number(acceptance.mileage).toLocaleString('uk-UA')} км` : '—'} />
             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 min-w-0">
               <label className="text-[10px] font-black uppercase text-slate-400">Пробіг</label>

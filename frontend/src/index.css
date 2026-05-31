@@ -46,3 +46,27 @@ body {
 .fixed > div {
   max-width: min(100%, var(--modal-max-width, 1280px));
 }
+
+/* Mobile CRM / visit modal tabs: show buttons immediately instead of hiding them in a narrow horizontal strip. */
+@media (max-width: 640px) {
+  .fixed .overflow-x-auto > .flex.min-w-max {
+    min-width: 100% !important;
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .fixed .overflow-x-auto > .flex.min-w-max > button {
+    width: 100%;
+    justify-content: center;
+    padding: 0.75rem 0.55rem;
+    font-size: 0.68rem;
+    line-height: 1rem;
+  }
+
+  .fixed .overflow-x-auto {
+    overflow-x: visible !important;
+  }
+}

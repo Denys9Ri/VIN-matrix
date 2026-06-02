@@ -15,7 +15,6 @@ import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
-import './utils/visitStockActionsDom.js';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];

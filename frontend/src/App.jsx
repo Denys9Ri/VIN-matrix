@@ -15,6 +15,7 @@ import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
+import './utils/visitStockActionsDom.js';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -78,14 +79,12 @@ function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
-          <Route path="clients" element={<Navigate to="/crm/clients" replace />} />
-          <Route path="crm" element={<Navigate to="/crm/supplier-orders" replace />} />
-          <Route path="crm/supplier-orders" element={<SupplierOrders />} />
-          <Route path="crm/:tab" element={<CRM />} />
           <Route path="analytics" element={<Analytics />} />
-          <Route path="complexes" element={<Complexes />} />
           <Route path="partner-clients" element={<PartnerClients />} />
           <Route path="partners" element={<Partners />} />
+          <Route path="complexes" element={<Complexes />} />
+          <Route path="crm" element={<CRM />} />
+          <Route path="supplier-orders" element={<SupplierOrders />} />
         </Route>
       </Routes>
     </BrowserRouter>

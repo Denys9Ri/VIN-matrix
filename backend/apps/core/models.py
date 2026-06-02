@@ -252,21 +252,56 @@ class Category(models.Model):
     name = models.CharField(max_length=255)
     def __str__(self): return self.name
 
-class InventoryItem(models.Model):
-    company = models.ForeignKey(Company, on_delete=models.CASCADE)
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
-    brand = models.CharField(max_length=100)
-    article = models.CharField(max_length=100)
-    name = models.TextField()
-    quantity = models.IntegerField(default=0)
-    buy_price = models.DecimalField(max_digits=10, decimal_places=2)
-
 class Supplier(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     api_key = models.CharField(max_length=255, blank=True, null=True)
     price_file = models.FileField(upload_to='supplier_prices/', null=True, blank=True)
     warehouse_prefs = models.JSONField(default=list, blank=True)
+
+class InventoryItem(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_items')
+    brand = models.CharField(max_length=100)
+    article = models.CharField(max_length=100)
+    name = models.TextField()
+    quantity = models.IntegerField(default=0)
+    buy_price = models.DecimalField(max_digits=10, decimal_places=2)
+    sell_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['company', 'brand', 'article'])]
+
+    def __str__(self):
+        return f"{self.brand} {self.article}"
+
+class StockMovement(models.Model):
+    TYPE_RECEIPT = 'receipt'
+    TYPE_ADJUSTMENT = 'adjustment'
+    TYPE_CHOICES = [(TYPE_RECEIPT, 'Прихід'), (TYPE_ADJUSTMENT, 'Корекція')]
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='stock_movements')
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name='movements')
+    movement_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_RECEIPT)
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    source_order_part = models.ForeignKey(OrderPart, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    brand = models.CharField(max_length=100)
+    article = models.CharField(max_length=100)
+    name = models.TextField()
+    quantity = models.IntegerField(default=1)
+    buy_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    sell_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_stock_movements')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [models.Index(fields=['company', 'created_at'])]
+
+    def __str__(self):
+        return f"{self.brand} {self.article} +{self.quantity}"
 
 class PlatformClient(models.Model):
     PAYMENT_PENDING = 'pending'

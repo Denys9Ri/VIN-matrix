@@ -203,6 +203,23 @@ class PlatformClientSerializer(serializers.ModelSerializer):
         if not hasattr(obj, '_subscription_payload'): obj._subscription_payload = subscription_payload(obj)
         return obj._subscription_payload
     def get_client_code_display(self, obj): return f'C{obj.client_code}' if obj.client_code else None
+    def get_assigned_to(self, obj):
+        user = getattr(obj, 'assigned_owner', None)
+        if not user: return None
+        return user.first_name or user.username
+    def get_assigned_partner_code(self, obj):
+        user = getattr(obj, 'assigned_owner', None)
+        if not user: return None
+        if user.username == 'Denys9Ri' or user.is_staff or user.is_superuser: return 'A6000'
+        try:
+            emp = user.employee_profile
+            return emp.partner_code if emp and emp.role == 'partner' else None
+        except Exception:
+            return None
+    def get_referred_by_name(self, obj):
+        user = getattr(obj, 'referred_by', None)
+        if not user: return None
+        return user.first_name or user.username
     def get_subscription_end_display(self, obj): return self._subscription(obj).get('subscription_end_display')
     def get_days_until_subscription_end(self, obj): return self._subscription(obj).get('days_until_subscription_end')
     def get_subscription_warning(self, obj): return self._subscription(obj).get('subscription_warning')

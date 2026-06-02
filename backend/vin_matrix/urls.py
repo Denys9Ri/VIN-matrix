@@ -22,6 +22,7 @@ from apps.core.visit_workflow_views import VisitAcceptanceActView, VisitDiagnost
 from apps.core.ocr_views import RecognizeDocumentView
 from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
+from apps.core.stock_actions import StockMinQuantityView, StockReserveView, StockReleaseView, StockWriteOffVisitView
 from apps.core.paid_views import (
     PartSearchView,
     MechanicViewSet,
@@ -70,6 +71,10 @@ urlpatterns = [
     path('api/visit-acceptance-act/', VisitAcceptanceActView.as_view(), name='visit-acceptance-act'),
     path('api/visit-diagnostic-checklist/', VisitDiagnosticChecklistView.as_view(), name='visit-diagnostic-checklist'),
     path('api/stock/receive/', StockReceiveViewSet.as_view({'post': 'receive'}), name='stock-receive'),
+    path('api/stock/set-min/', StockMinQuantityView.as_view(), name='stock-set-min'),
+    path('api/stock/reserve/', StockReserveView.as_view(), name='stock-reserve'),
+    path('api/stock/release/', StockReleaseView.as_view(), name='stock-release'),
+    path('api/stock/write-off-visit/', StockWriteOffVisitView.as_view(), name='stock-write-off-visit'),
     path('api/', include(router.urls)),
 ]
 

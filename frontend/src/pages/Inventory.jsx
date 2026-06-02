@@ -7,7 +7,11 @@ const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
 const emptyReceipt = { brand: '', article: '', name: '', quantity: 1, buy_price: '', sell_price: '', supplier: '', supplier_name: '', category: '', note: '', order_part_id: '' };
 const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
 const list = (data) => Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
-const mask = (value) => { const s = String(value || ''); if (!s) return 'ключ не додано'; return s.length > 8 ? `${s.slice(0, 4)}••••••${s.slice(-4)}` : '••••••'; };
+const mask = (value) => {
+  const s = String(value || '');
+  if (!s) return 'ключ не додано';
+  return s.length > 8 ? `${s.slice(0, 4)}••••••${s.slice(-4)}` : '••••••';
+};
 
 export default function Inventory() {
   const navigate = useNavigate();
@@ -33,7 +37,18 @@ export default function Inventory() {
     const draft = location.state?.receiptDraft;
     if (!draft) return;
     setTab('receipts');
-    setReceipt({ ...emptyReceipt, brand: draft.brand || '', article: draft.article || '', name: draft.name || '', quantity: draft.quantity || 1, buy_price: draft.buy_price || '', sell_price: draft.sell_price || draft.price || '', supplier_name: draft.supplier || '', order_part_id: draft.id || '', note: draft.visit_id ? `З замовлення постачальнику, візит №${draft.visit_id}` : '' });
+    setReceipt({
+      ...emptyReceipt,
+      brand: draft.brand || '',
+      article: draft.article || '',
+      name: draft.name || '',
+      quantity: draft.quantity || 1,
+      buy_price: draft.buy_price || '',
+      sell_price: draft.sell_price || draft.price || '',
+      supplier_name: draft.supplier || '',
+      order_part_id: draft.id || '',
+      note: draft.visit_id ? `З замовлення постачальнику, візит №${draft.visit_id}` : '',
+    });
     setModal('receipt');
     window.history.replaceState({}, document.title);
   }, [location.state]);
@@ -46,13 +61,20 @@ export default function Inventory() {
       axios.get(`${API_BASE}/api/stock-movements/`, { headers }).catch(() => ({ data: [] })),
     ]);
     if (c.error?.response?.status === 401 || i.error?.response?.status === 401 || s.error?.response?.status === 401) navigate('/login');
-    setCategories(list(c.data)); setItems(list(i.data)); setSuppliers(list(s.data)); setMovements(list(m.data));
+    setCategories(list(c.data));
+    setItems(list(i.data));
+    setSuppliers(list(s.data));
+    setMovements(list(m.data));
     if (c.error || i.error || s.error) setMsg('Частину складу не вдалося завантажити.');
   };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return items.filter(x => (!cat || String(x.category || '') === String(cat)) && (!q || [x.brand, x.article, x.name, x.category_name, x.supplier_name].filter(Boolean).join(' ').toLowerCase().includes(q)));
+    return items.filter((x) => {
+      const byCat = !cat || String(x.category || '') === String(cat);
+      const text = [x.brand, x.article, x.name, x.category_name, x.supplier_name].filter(Boolean).join(' ').toLowerCase();
+      return byCat && (!q || text.includes(q));
+    });
   }, [items, cat, search]);
   const total = items.reduce((s, x) => s + Number(x.buy_price || 0) * Number(x.quantity || 0), 0);
 
@@ -63,12 +85,41 @@ export default function Inventory() {
   const openSupplier = (s = null) => { setSupplierForm({ id: s?.id || '', name: s?.name || '', api_key: '', price_file: null, current: s?.api_key || '' }); setModal('supplier'); };
   const saveSupplier = async (e) => {
     e.preventDefault();
-    const fd = new FormData(); fd.append('name', supplierForm.name); if (supplierForm.api_key) fd.append('api_key', supplierForm.api_key); if (supplierForm.price_file) fd.append('price_file', supplierForm.price_file);
-    if (supplierForm.id) await axios.patch(`${API_BASE}/api/suppliers/${supplierForm.id}/`, fd, { headers }); else await axios.post(`${API_BASE}/api/suppliers/`, fd, { headers });
-    setModal(null); setSupplierForm({ id: '', name: '', api_key: '', price_file: null, current: '' }); load();
+    const fd = new FormData();
+    fd.append('name', supplierForm.name);
+    if (supplierForm.api_key) fd.append('api_key', supplierForm.api_key);
+    if (supplierForm.price_file) fd.append('price_file', supplierForm.price_file);
+    if (supplierForm.id) await axios.patch(`${API_BASE}/api/suppliers/${supplierForm.id}/`, fd, { headers });
+    else await axios.post(`${API_BASE}/api/suppliers/`, fd, { headers });
+    setModal(null);
+    setSupplierForm({ id: '', name: '', api_key: '', price_file: null, current: '' });
+    setMsg('Постачальника збережено.');
+    load();
+  };
+  const checkSupplier = () => {
+    if (!supplierForm.current && !supplierForm.api_key) {
+      setMsg('Спочатку додайте API ключ.');
+      return;
+    }
+    setMsg('Ключ присутній. Повний ключ не показується; для заміни вставте новий і натисніть “Зберегти зміни”.');
   };
   const receive = async (e) => { e.preventDefault(); try { await axios.post(`${API_BASE}/api/stock/receive/`, receipt, { headers }); setReceipt({ ...emptyReceipt }); setModal(null); setMsg('Прихід збережено.'); load(); } catch (error) { setMsg(error.response?.data?.error || 'Не вдалося провести прихід.'); } };
-  const importExcel = async (e) => { e.preventDefault(); if (!importData.file) return setMsg('Додайте Excel-файл.'); const fd = new FormData(); fd.append('file', importData.file); if (importData.supplier_name) fd.append('supplier_name', importData.supplier_name); try { const r = await axios.post(`${API_BASE}/api/stock/receive/import-file/`, fd, { headers: { ...headers, 'Content-Type': 'multipart/form-data' } }); setMsg(`Імпорт: створено ${r.data.created || 0}, оновлено ${r.data.updated || 0}, пропущено ${r.data.skipped || 0}.`); setModal(null); setImportData({ file: null, supplier_name: '' }); load(); } catch (error) { setMsg(error.response?.data?.error || 'Не вдалося імпортувати Excel.'); } };
+  const importExcel = async (e) => {
+    e.preventDefault();
+    if (!importData.file) return setMsg('Додайте Excel-файл.');
+    const fd = new FormData();
+    fd.append('file', importData.file);
+    if (importData.supplier_name) fd.append('supplier_name', importData.supplier_name);
+    try {
+      const r = await axios.post(`${API_BASE}/api/stock/receive/import-file/`, fd, { headers: { ...headers, 'Content-Type': 'multipart/form-data' } });
+      setMsg(`Імпорт: створено ${r.data.created || 0}, оновлено ${r.data.updated || 0}, пропущено ${r.data.skipped || 0}.`);
+      setModal(null);
+      setImportData({ file: null, supplier_name: '' });
+      load();
+    } catch (error) {
+      setMsg(error.response?.data?.error || 'Не вдалося імпортувати Excel.');
+    }
+  };
 
   return <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen overflow-x-hidden">
     <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-5"><div><h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-900 flex items-center gap-3"><Package className="text-blue-600"/> Склад</h1><p className="text-slate-500 font-semibold text-sm mt-1">Залишки, прихід, історія руху та постачальники.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><button onClick={() => setModal('import')} className="bg-white border border-blue-100 text-blue-700 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Upload size={16}/> Імпорт Excel</button><button onClick={() => setModal('receipt')} className="bg-blue-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-100"><Plus size={16}/> Новий прихід</button></div></div>
@@ -77,16 +128,16 @@ export default function Inventory() {
     {tab === 'stock' && <Stock items={filtered} all={items} categories={categories} cat={cat} setCat={setCat} search={search} setSearch={setSearch} total={total} suppliers={suppliers} onAddCat={()=>setModal('category')} onDelCat={delCategory} onDelItem={delItem} onReceipt={()=>setModal('receipt')}/>} 
     {tab === 'receipts' && <Panel><div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5"><h2 className="text-xl font-black uppercase text-slate-900">Прихід</h2><div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><button onClick={()=>setModal('import')} className="bg-white border border-blue-100 text-blue-700 rounded-xl px-5 py-3 text-xs font-black uppercase flex justify-center gap-2"><FileSpreadsheet size={15}/> Завантажити файл</button><button onClick={()=>setModal('receipt')} className="bg-blue-600 text-white rounded-xl px-5 py-3 text-xs font-black uppercase flex justify-center gap-2"><Plus size={15}/> Новий прихід</button></div></div><ReceiptForm receipt={receipt} setReceipt={setReceipt} suppliers={suppliers} categories={categories} onSubmit={receive}/></Panel>}
     {tab === 'history' && <Panel><h2 className="text-xl font-black uppercase text-slate-900 mb-4">Історія приходу</h2><div className="space-y-3">{movements.map(m => <Movement key={m.id} m={m}/>)}{!movements.length && <Empty text="Приходів ще немає"/>}</div></Panel>}
-    {tab === 'suppliers' && <Panel><div className="flex flex-col md:flex-row justify-between gap-3 mb-5"><div><h2 className="text-xl font-black uppercase text-slate-900">Постачальники</h2><p className="text-xs font-bold text-slate-400 mt-1">Ключ видно з зірочками. Натисни картку, щоб змінити ключ.</p></div><button onClick={()=>openSupplier()} className="bg-blue-600 text-white rounded-xl px-5 py-3 text-xs font-black uppercase flex justify-center gap-2"><Plus size={15}/> Додати постачальника</button></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{suppliers.map(s => <Supplier key={s.id} s={s} onOpen={()=>openSupplier(s)} onDelete={()=>delSupplier(s.id)}/>)}{!suppliers.length && <Empty text="Постачальників ще немає"/>}</div></Panel>}
+    {tab === 'suppliers' && <Panel><div className="flex flex-col md:flex-row justify-between gap-3 mb-5"><div><h2 className="text-xl font-black uppercase text-slate-900">Постачальники</h2><p className="text-xs font-bold text-slate-400 mt-1">Повний ключ не показуємо. Тут можна замінити ключ або перевірити, що він доданий.</p></div><button onClick={()=>openSupplier()} className="bg-blue-600 text-white rounded-xl px-5 py-3 text-xs font-black uppercase flex justify-center gap-2"><Plus size={15}/> Додати постачальника</button></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{suppliers.map(s => <Supplier key={s.id} s={s} onOpen={()=>openSupplier(s)} onDelete={()=>delSupplier(s.id)}/>)}{!suppliers.length && <Empty text="Постачальників ще немає"/>}</div></Panel>}
     {modal === 'category' && <Modal title="Нова категорія" onClose={()=>setModal(null)}><form onSubmit={addCategory} className="space-y-3"><Input required placeholder="Назва категорії" value={newCat} onChange={setNewCat}/><Submit>Зберегти</Submit></form></Modal>}
-    {modal === 'supplier' && <Modal title={supplierForm.id ? 'Картка постачальника' : 'Новий постачальник'} onClose={()=>setModal(null)}><form onSubmit={saveSupplier} className="space-y-3"><Input required placeholder="Назва постачальника" value={supplierForm.name} onChange={(v)=>setSupplierForm({...supplierForm,name:v})}/>{supplierForm.id && <p className="text-xs font-black text-slate-500 bg-slate-50 rounded-xl p-3 flex items-center gap-2"><KeyRound size={14}/> Поточний ключ: {mask(supplierForm.current)}</p>}<Input placeholder={supplierForm.id ? 'Новий API ключ, якщо треба замінити' : 'API ключ, якщо є'} value={supplierForm.api_key} onChange={(v)=>setSupplierForm({...supplierForm,api_key:v})}/><input type="file" accept=".xls,.xlsx" onChange={(e)=>setSupplierForm({...supplierForm,price_file:e.target.files?.[0] || null})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold"/><Submit>{supplierForm.id ? 'Зберегти зміни' : 'Додати'}</Submit></form></Modal>}
+    {modal === 'supplier' && <Modal title={supplierForm.id ? 'Картка постачальника' : 'Новий постачальник'} onClose={()=>setModal(null)}><form onSubmit={saveSupplier} className="space-y-3"><Input required placeholder="Назва постачальника" value={supplierForm.name} onChange={(v)=>setSupplierForm({...supplierForm,name:v})}/>{supplierForm.id && <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100"><p className="text-[10px] font-black uppercase text-slate-400 mb-1">Поточний ключ</p><p className="text-sm font-black text-slate-700 flex items-center gap-2"><KeyRound size={15} className="text-blue-600"/> {mask(supplierForm.current)}</p></div>}<Input placeholder={supplierForm.id ? 'Новий API ключ, якщо треба замінити' : 'API ключ, якщо є'} value={supplierForm.api_key} onChange={(v)=>setSupplierForm({...supplierForm,api_key:v})}/><input type="file" accept=".xls,.xlsx" onChange={(e)=>setSupplierForm({...supplierForm,price_file:e.target.files?.[0] || null})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold"/><div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><button type="button" onClick={checkSupplier} className="w-full bg-white border border-blue-100 text-blue-700 rounded-xl p-3 font-black uppercase text-xs">Перевірити ключ</button><Submit>{supplierForm.id ? 'Зберегти зміни' : 'Додати'}</Submit></div></form></Modal>}
     {modal === 'receipt' && <Modal title="Новий прихід" onClose={()=>setModal(null)} wide><ReceiptForm receipt={receipt} setReceipt={setReceipt} suppliers={suppliers} categories={categories} onSubmit={receive}/></Modal>}
     {modal === 'import' && <Modal title="Імпорт Excel" onClose={()=>setModal(null)}><form onSubmit={importExcel} className="space-y-3"><p className="text-sm font-bold text-slate-500">Колонки: бренд, артикул, назва, кількість, закупка, продаж, постачальник, категорія.</p><input type="file" accept=".xlsx,.xls" onChange={(e)=>setImportData({...importData,file:e.target.files?.[0] || null})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold"/><Input placeholder="Постачальник для файлу, якщо його немає в Excel" value={importData.supplier_name} onChange={(v)=>setImportData({...importData,supplier_name:v})}/><Submit>Імпортувати</Submit></form></Modal>}
   </div>;
 }
 
 function Stock({ items, all, categories, cat, setCat, search, setSearch, total, suppliers, onAddCat, onDelCat, onDelItem, onReceipt }) { return <><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"><Stat label="Товарів" value={all.length}/><Stat label="На суму" value={money(total)}/><Stat label="Мало залишку" value={all.filter(i=>Number(i.quantity||0)<=1).length}/><Stat label="Постачальників" value={suppliers.length}/></div><div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5"><aside className="bg-white border border-slate-200 rounded-3xl p-4 shadow-sm h-fit"><div className="flex justify-between items-center mb-3"><h3 className="font-black uppercase text-xs text-slate-500 flex gap-2"><Tag size={15}/> Категорії</h3><button onClick={onAddCat} className="bg-blue-50 text-blue-600 rounded-xl p-2"><Plus size={15}/></button></div><div className="flex lg:flex-col gap-2 overflow-x-auto pb-1"><Category active={!cat} onClick={()=>setCat('')} label="Усі товари"/>{categories.map(c=><div key={c.id} className="flex items-center gap-1 shrink-0 lg:shrink"><Category active={String(cat)===String(c.id)} onClick={()=>setCat(c.id)} label={c.name}/><button onClick={()=>onDelCat(c.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={14}/></button></div>)}</div></aside><Panel><div className="flex flex-col md:flex-row gap-3 justify-between mb-4"><div className="relative w-full md:w-96"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Пошук по артикулу, бренду, назві..." className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-3 text-sm font-bold outline-none"/></div><button onClick={onReceipt} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15}/> Прихід</button></div><div className="space-y-3">{items.map(i=><Item key={i.id} item={i} onDelete={()=>onDelItem(i.id)}/>)}{!items.length&&<Empty text="Товарів не знайдено"/>}</div></Panel></div></>; }
-function Supplier({ s, onOpen, onDelete }) { return <button onClick={onOpen} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left hover:border-blue-200"><div className="flex justify-between gap-3"><div><h3 className="font-black text-slate-800 break-words">{s.name}</h3><p className="text-xs font-bold text-slate-400 mt-2">{s.api_key ? 'Підключення по API' : s.price_file ? 'Файл прайсу' : 'Ручний постачальник'}</p></div><span onClick={(e)=>{e.stopPropagation(); onDelete();}} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></span></div><div className="mt-4 bg-white border border-slate-100 rounded-xl px-3 py-2 flex items-center gap-2"><KeyRound size={14} className="text-blue-600"/><span className="text-xs font-black text-slate-700 truncate">{mask(s.api_key)}</span></div><p className="text-[10px] font-black uppercase text-blue-600 mt-3">Відкрити / змінити ключ</p></button>; }
+function Supplier({ s, onOpen, onDelete }) { return <button onClick={onOpen} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left hover:border-blue-200"><div className="flex justify-between gap-3"><div><h3 className="font-black text-slate-800 break-words">{s.name}</h3><p className="text-xs font-bold text-slate-400 mt-2">{s.api_key ? 'Підключення по API' : s.price_file ? 'Файл прайсу' : 'Ручний постачальник'}</p></div><span onClick={(e)=>{e.stopPropagation(); onDelete();}} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></span></div><div className="mt-4 bg-white border border-slate-100 rounded-xl px-3 py-2 flex items-center gap-2"><KeyRound size={14} className="text-blue-600"/><span className="text-xs font-black text-slate-700 truncate">{mask(s.api_key)}</span></div><p className="text-[10px] font-black uppercase text-blue-600 mt-3">Налаштувати / замінити ключ</p></button>; }
 function Item({ item, onDelete }) { return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4"><div className="flex justify-between gap-3"><div><p className="font-black text-slate-900">{item.article}</p><p className="text-[10px] font-black uppercase text-blue-600">{item.brand}</p></div><button onClick={onDelete} className="text-red-400"><Trash2 size={16}/></button></div><p className="text-sm font-bold text-slate-700 mt-2">{item.name}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{item.category_name || 'Без категорії'} {item.supplier_name ? `· ${item.supplier_name}` : ''}</p><div className="grid grid-cols-3 gap-2 mt-3"><Small label="К-сть" value={`${item.quantity} шт`}/><Small label="Закупка" value={money(item.buy_price)}/><Small label="Продаж" value={money(item.sell_price)}/></div></div>; }
 function ReceiptForm({ receipt, setReceipt, suppliers, categories, onSubmit }) { return <form onSubmit={onSubmit} className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><Select label="Постачальник" value={receipt.supplier} onChange={(v)=>setReceipt({...receipt,supplier:v,supplier_name:''})}><option value="">Ручний / новий</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</Select>{!receipt.supplier&&<Label text="Назва постачальника"><Input placeholder="Напр. місцевий магазин" value={receipt.supplier_name} onChange={(v)=>setReceipt({...receipt,supplier_name:v})}/></Label>}<Select label="Категорія" value={receipt.category} onChange={(v)=>setReceipt({...receipt,category:v})}><option value="">Без категорії</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select><Label text="Бренд"><Input required value={receipt.brand} onChange={(v)=>setReceipt({...receipt,brand:v.toUpperCase()})}/></Label><Label text="Артикул"><Input required value={receipt.article} onChange={(v)=>setReceipt({...receipt,article:v.toUpperCase()})}/></Label><Label text="Кількість"><Input required type="number" min="1" value={receipt.quantity} onChange={(v)=>setReceipt({...receipt,quantity:v})}/></Label><Label text="Назва" span><Input required value={receipt.name} onChange={(v)=>setReceipt({...receipt,name:v})}/></Label><Label text="Закупка"><Input required type="number" step="0.01" value={receipt.buy_price} onChange={(v)=>setReceipt({...receipt,buy_price:v})}/></Label><Label text="Продаж"><Input type="number" step="0.01" value={receipt.sell_price} onChange={(v)=>setReceipt({...receipt,sell_price:v})}/></Label><label className="block md:col-span-3"><span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Примітка</span><textarea value={receipt.note || ''} onChange={(e)=>setReceipt({...receipt,note:e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none min-h-[80px]"/></label></div><Submit>Провести прихід</Submit></form>; }
 function Movement({ m }) { return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4"><p className="font-black text-slate-900">{m.brand} {m.article}</p><p className="text-sm font-bold text-slate-600">{m.name}</p><p className="text-[10px] font-black uppercase text-slate-400 mt-1">{m.supplier_name || 'Без постачальника'}</p><div className="grid grid-cols-3 gap-2 mt-3"><Small label="К-сть" value={`${m.quantity} шт`}/><Small label="Закупка" value={money(m.buy_price)}/><Small label="Сума" value={money(m.total_sum)}/></div>{m.note&&<p className="text-xs font-semibold text-slate-500 mt-2">{m.note}</p>}</div>; }

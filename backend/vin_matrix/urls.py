@@ -21,6 +21,7 @@ from apps.core.communication_views import CRMCommunicationViewSet, CRMClientStat
 from apps.core.visit_workflow_views import VisitAcceptanceActView, VisitDiagnosticChecklistView
 from apps.core.ocr_views import RecognizeDocumentView
 from apps.core.complex_views import ServiceComplexViewSet
+from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
 from apps.core.paid_views import (
     PartSearchView,
     MechanicViewSet,
@@ -48,6 +49,7 @@ router.register(r'order-services', OrderServiceViewSet, basename='order-service'
 router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'inventory', InventoryItemViewSet, basename='inventory')
 router.register(r'suppliers', SupplierViewSet, basename='supplier')
+router.register(r'stock-movements', StockMovementViewSet, basename='stock-movement')
 router.register(r'platform-clients', SecurePlatformClientViewSet, basename='platform-client')
 router.register(r'partners', PartnerManagementViewSet, basename='partner')
 
@@ -67,6 +69,7 @@ urlpatterns = [
     path('api/visits/recognize_document/', RecognizeDocumentView.as_view(), name='recognize-document'),
     path('api/visit-acceptance-act/', VisitAcceptanceActView.as_view(), name='visit-acceptance-act'),
     path('api/visit-diagnostic-checklist/', VisitDiagnosticChecklistView.as_view(), name='visit-diagnostic-checklist'),
+    path('api/stock/receive/', StockReceiveViewSet.as_view({'post': 'receive'}), name='stock-receive'),
     path('api/', include(router.urls)),
 ]
 

@@ -83,6 +83,8 @@ function App() {
           <Route path="partners" element={<Partners />} />
           <Route path="complexes" element={<Complexes />} />
           <Route path="crm" element={<CRM />} />
+          <Route path="crm/:tab" element={<CRM />} />
+          <Route path="crm/supplier-orders" element={<SupplierOrders />} />
           <Route path="supplier-orders" element={<SupplierOrders />} />
         </Route>
       </Routes>

@@ -1,10 +1,11 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db import connection
 from .models import (
     Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService,
     Category, InventoryItem, Supplier, PlatformClient,
-    ServiceComplex, ComplexServiceItem, ComplexPartItem, VehicleRecommendation
+    ServiceComplex, ComplexServiceItem, ComplexPartItem, VehicleRecommendation, StockMovement
 )
 from .subscriptions import subscription_payload
 
@@ -25,10 +26,22 @@ class ServiceCatalogSerializer(serializers.ModelSerializer):
         read_only_fields = ['company']
 
 class OrderPartSerializer(serializers.ModelSerializer):
+    stock_status = serializers.SerializerMethodField()
+    inventory_item = serializers.SerializerMethodField()
     class Meta:
         model = OrderPart
         fields = '__all__'
-        read_only_fields = ['visit']
+        read_only_fields = ['visit', 'stock_status', 'inventory_item']
+    def _extra(self, obj):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT stock_status, inventory_item_id FROM core_orderpart WHERE id=%s', [obj.id])
+                row = cursor.fetchone()
+            return row or ('none', None)
+        except Exception:
+            return ('none', None)
+    def get_stock_status(self, obj): return self._extra(obj)[0] or 'none'
+    def get_inventory_item(self, obj): return self._extra(obj)[1]
 
 class OrderServiceSerializer(serializers.ModelSerializer):
     class Meta:
@@ -66,18 +79,11 @@ class ServiceComplexSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ServiceComplex
-        fields = [
-            'id', 'name', 'description', 'is_active', 'services', 'parts',
-            'services_count', 'parts_count', 'total_sum', 'created_at', 'updated_at'
-        ]
+        fields = ['id', 'name', 'description', 'is_active', 'services', 'parts', 'services_count', 'parts_count', 'total_sum', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
-    def get_services_count(self, obj):
-        return obj.services.count()
-
-    def get_parts_count(self, obj):
-        return obj.parts.count()
-
+    def get_services_count(self, obj): return obj.services.count()
+    def get_parts_count(self, obj): return obj.parts.count()
     def get_total_sum(self, obj):
         services_total = sum(float(item.price or 0) * float(item.quantity or 1) for item in obj.services.all())
         parts_total = sum(float(item.sell_price or 0) * float(item.quantity or 1) for item in obj.parts.all())
@@ -93,77 +99,38 @@ class ServiceComplexSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         services_data = validated_data.pop('services', None)
         parts_data = validated_data.pop('parts', None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+        for attr, value in validated_data.items(): setattr(instance, attr, value)
         instance.save()
-        if services_data is not None or parts_data is not None:
-            self._replace_items(instance, services_data or [], parts_data or [])
+        if services_data is not None or parts_data is not None: self._replace_items(instance, services_data or [], parts_data or [])
         return instance
 
     def _replace_items(self, complex_obj, services_data, parts_data):
-        complex_obj.services.all().delete()
-        complex_obj.parts.all().delete()
+        complex_obj.services.all().delete(); complex_obj.parts.all().delete()
         for item in services_data:
-            if item.get('name'):
-                ComplexServiceItem.objects.create(complex=complex_obj, **item)
+            if item.get('name'): ComplexServiceItem.objects.create(complex=complex_obj, **item)
         for item in parts_data:
-            if item.get('name') or item.get('article'):
-                ComplexPartItem.objects.create(complex=complex_obj, **item)
+            if item.get('name') or item.get('article'): ComplexPartItem.objects.create(complex=complex_obj, **item)
 
 class VehicleRecommendationSerializer(serializers.ModelSerializer):
-    state = serializers.SerializerMethodField()
-    state_label = serializers.SerializerMethodField()
-    days_left = serializers.SerializerMethodField()
-
+    state = serializers.SerializerMethodField(); state_label = serializers.SerializerMethodField(); days_left = serializers.SerializerMethodField()
     class Meta:
         model = VehicleRecommendation
-        fields = [
-            'id', 'visit', 'client', 'phone', 'plate', 'car', 'title', 'description',
-            'due_date', 'due_mileage', 'status', 'state', 'state_label', 'days_left',
-            'created_at', 'updated_at'
-        ]
+        fields = ['id', 'visit', 'client', 'phone', 'plate', 'car', 'title', 'description', 'due_date', 'due_mileage', 'status', 'state', 'state_label', 'days_left', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def _days_left(self, obj):
-        if not obj.due_date:
-            return None
-        return (obj.due_date - timezone.localdate()).days
-
-    def get_days_left(self, obj):
-        return self._days_left(obj)
-
+    def _days_left(self, obj): return None if not obj.due_date else (obj.due_date - timezone.localdate()).days
+    def get_days_left(self, obj): return self._days_left(obj)
     def get_state(self, obj):
-        if obj.status == VehicleRecommendation.STATUS_DONE:
-            return 'done'
-        if obj.status == VehicleRecommendation.STATUS_CANCELLED:
-            return 'cancelled'
+        if obj.status == VehicleRecommendation.STATUS_DONE: return 'done'
+        if obj.status == VehicleRecommendation.STATUS_CANCELLED: return 'cancelled'
         days = self._days_left(obj)
-        if days is not None and days < 0:
-            return 'overdue'
-        if days is not None and days <= 7:
-            return 'soon'
+        if days is not None and days < 0: return 'overdue'
+        if days is not None and days <= 7: return 'soon'
         return 'active'
-
-    def get_state_label(self, obj):
-        state = self.get_state(obj)
-        return {
-            'done': 'Виконано',
-            'cancelled': 'Скасовано',
-            'overdue': 'Прострочено',
-            'soon': 'Скоро',
-            'active': 'Активна',
-        }.get(state, 'Активна')
+    def get_state_label(self, obj): return {'done':'Виконано','cancelled':'Скасовано','overdue':'Прострочено','soon':'Скоро','active':'Активна'}.get(self.get_state(obj), 'Активна')
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = '__all__'
-        read_only_fields = ['company']
-
-class InventoryItemSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    class Meta:
-        model = InventoryItem
         fields = '__all__'
         read_only_fields = ['company']
 
@@ -173,6 +140,46 @@ class SupplierSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['company']
 
+class InventoryItemSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    reserved_quantity = serializers.SerializerMethodField()
+    min_quantity = serializers.SerializerMethodField()
+    available_quantity = serializers.SerializerMethodField()
+    needs_restock = serializers.SerializerMethodField()
+    total_buy_value = serializers.SerializerMethodField()
+    class Meta:
+        model = InventoryItem
+        fields = '__all__'
+        read_only_fields = ['company', 'updated_at', 'reserved_quantity', 'min_quantity', 'available_quantity', 'needs_restock', 'total_buy_value']
+    def _extra(self, obj):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT reserved_quantity, min_quantity FROM core_inventoryitem WHERE id=%s', [obj.id])
+                row = cursor.fetchone()
+            return row or (0, 0)
+        except Exception:
+            return (0, 0)
+    def get_reserved_quantity(self, obj): return int(self._extra(obj)[0] or 0)
+    def get_min_quantity(self, obj): return int(self._extra(obj)[1] or 0)
+    def get_available_quantity(self, obj): return max(int(obj.quantity or 0) - self.get_reserved_quantity(obj), 0)
+    def get_needs_restock(self, obj): return self.get_available_quantity(obj) <= self.get_min_quantity(obj)
+    def get_total_buy_value(self, obj):
+        try: return round(float(obj.buy_price or 0) * float(obj.quantity or 0), 2)
+        except Exception: return 0
+
+class StockMovementSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    category_name = serializers.CharField(source='inventory_item.category.name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.first_name', read_only=True)
+    total_sum = serializers.SerializerMethodField()
+    class Meta:
+        model = StockMovement
+        fields = '__all__'
+        read_only_fields = ['company', 'inventory_item', 'created_by', 'created_at', 'total_sum']
+    def get_total_sum(self, obj):
+        try: return round(float(obj.buy_price or 0) * float(obj.quantity or 0), 2)
+        except Exception: return 0
 
 class PlatformClientSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(source='user.first_name', read_only=True)
@@ -189,61 +196,15 @@ class PlatformClientSerializer(serializers.ModelSerializer):
     subscription_warning = serializers.SerializerMethodField()
     subscription_expired = serializers.SerializerMethodField()
     subscription_label = serializers.SerializerMethodField()
-
     class Meta:
         model = PlatformClient
-        fields = [
-            'id', 'user_id', 'client_code', 'client_code_display', 'full_name', 'username', 'email', 'phone',
-            'payment_status', 'is_access_enabled', 'assigned_owner_id',
-            'assigned_to', 'assigned_partner_code', 'referred_by_name',
-            'trial_until', 'subscription_until', 'subscription_end_display', 'days_until_subscription_end',
-            'subscription_warning', 'subscription_expired', 'subscription_label', 'created_at'
-        ]
-
+        fields = ['id', 'user_id', 'client_code', 'client_code_display', 'full_name', 'username', 'email', 'phone', 'payment_status', 'is_access_enabled', 'assigned_owner_id', 'assigned_to', 'assigned_partner_code', 'referred_by_name', 'trial_until', 'subscription_until', 'subscription_end_display', 'days_until_subscription_end', 'subscription_warning', 'subscription_expired', 'subscription_label', 'created_at']
     def _subscription(self, obj):
-        if not hasattr(obj, '_subscription_payload'):
-            obj._subscription_payload = subscription_payload(obj)
+        if not hasattr(obj, '_subscription_payload'): obj._subscription_payload = subscription_payload(obj)
         return obj._subscription_payload
-
-    def get_client_code_display(self, obj):
-        return f'C{obj.client_code}' if obj.client_code else None
-
-    def get_subscription_end_display(self, obj):
-        return self._subscription(obj).get('subscription_end_display')
-
-    def get_days_until_subscription_end(self, obj):
-        return self._subscription(obj).get('days_until_subscription_end')
-
-    def get_subscription_warning(self, obj):
-        return self._subscription(obj).get('subscription_warning')
-
-    def get_subscription_expired(self, obj):
-        return self._subscription(obj).get('subscription_expired')
-
-    def get_subscription_label(self, obj):
-        return self._subscription(obj).get('subscription_label')
-
-    def get_assigned_to(self, obj):
-        if not obj.assigned_owner:
-            return None
-        full_name = obj.assigned_owner.first_name.strip() if obj.assigned_owner.first_name else ''
-        if full_name:
-            return full_name
-        return obj.assigned_owner.username
-
-    def get_assigned_partner_code(self, obj):
-        try:
-            return obj.assigned_owner.employee_profile.partner_code
-        except Exception:
-            try:
-                if obj.assigned_owner.username == 'Denys9Ri':
-                    return 'A6000'
-            except Exception:
-                pass
-            return None
-
-    def get_referred_by_name(self, obj):
-        if not obj.referred_by:
-            return None
-        full_name = obj.referred_by.first_name.strip() if obj.referred_by.first_name else ''
-        return full_name or obj.referred_by.username
+    def get_client_code_display(self, obj): return f'C{obj.client_code}' if obj.client_code else None
+    def get_subscription_end_display(self, obj): return self._subscription(obj).get('subscription_end_display')
+    def get_days_until_subscription_end(self, obj): return self._subscription(obj).get('days_until_subscription_end')
+    def get_subscription_warning(self, obj): return self._subscription(obj).get('subscription_warning')
+    def get_subscription_expired(self, obj): return self._subscription(obj).get('subscription_expired')
+    def get_subscription_label(self, obj): return self._subscription(obj).get('subscription_label')

@@ -1,6 +1,5 @@
 from decimal import Decimal
 from django.db import connection, transaction
-from django.db.models import F
 
 
 RESERVED = 'reserved'
@@ -19,6 +18,56 @@ def _int_qty(value):
 
 def _norm(value):
     return ''.join(ch for ch in str(value or '').upper().strip() if ch.isalnum())
+
+
+def _stock_extra(inventory_id):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT quantity, reserved_quantity FROM core_inventoryitem WHERE id=%s', [inventory_id])
+            row = cursor.fetchone()
+        if not row:
+            return 0, 0
+        return int(row[0] or 0), int(row[1] or 0)
+    except Exception as exc:
+        print(f'STOCK SYNC: cannot read stock extra for item={inventory_id}: {exc}')
+        return 0, 0
+
+
+def _change_stock_reserved(inventory_id, delta):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE core_inventoryitem SET reserved_quantity = GREATEST(COALESCE(reserved_quantity, 0) + %s, 0) WHERE id=%s',
+                [int(delta or 0), inventory_id]
+            )
+        return True
+    except Exception as exc:
+        print(f'STOCK SYNC: cannot update stock reserve item={inventory_id}: {exc}')
+        return False
+
+
+def _sell_stock(inventory_id, qty, reserved_to_remove=0):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                UPDATE core_inventoryitem
+                SET quantity = quantity - %s,
+                    reserved_quantity = GREATEST(COALESCE(reserved_quantity, 0) - %s, 0)
+                WHERE id = %s AND quantity >= %s
+                RETURNING quantity, reserved_quantity
+                ''',
+                [int(qty or 0), int(reserved_to_remove or 0), inventory_id, int(qty or 0)]
+            )
+            row = cursor.fetchone()
+        if not row:
+            print(f'STOCK SYNC: sell SQL did not update stock={inventory_id}; requested={qty}')
+            return False
+        print(f'STOCK SYNC: stock item={inventory_id} new_quantity={row[0]} new_reserved={row[1]}')
+        return True
+    except Exception as exc:
+        print(f'STOCK SYNC: cannot sell stock item={inventory_id}: {exc}')
+        return False
 
 
 def _get_extra(part_id):
@@ -103,29 +152,30 @@ def reserve_order_part(part, inventory_item=None):
             return True
 
         if existing_status == RESERVED and existing_inventory_id:
-            InventoryItem.objects.filter(id=existing_inventory_id).update(reserved_quantity=F('reserved_quantity') - existing_reserved)
+            _change_stock_reserved(existing_inventory_id, -existing_reserved)
 
-        available = max(int(inventory.quantity or 0) - int(getattr(inventory, 'reserved_quantity', 0) or 0), 0)
+        stock_qty, stock_reserved = _stock_extra(inventory.id)
+        available = max(stock_qty - stock_reserved, 0)
         if available < qty:
             print(f'STOCK SYNC: cannot reserve part={part.id}; stock={inventory.id}; available={available}; requested={qty}')
             _set_part_extra(part.id, inventory.id, NONE, 0)
             return False
 
-        InventoryItem.objects.filter(id=inventory.id).update(reserved_quantity=F('reserved_quantity') + qty)
+        if not _change_stock_reserved(inventory.id, qty):
+            return False
         _set_part_extra(part.id, inventory.id, RESERVED, qty)
         print(f'STOCK SYNC: reserved part={part.id}; stock={inventory.id}; qty={qty}')
         return True
 
 
 def release_order_part(part):
-    from .models import InventoryItem
     if not part:
         return False
     inventory_id, status, reserved_qty = _get_extra(part.id)
     if status != RESERVED or not inventory_id or reserved_qty <= 0:
         return False
     with transaction.atomic():
-        InventoryItem.objects.filter(id=inventory_id).update(reserved_quantity=F('reserved_quantity') - reserved_qty)
+        _change_stock_reserved(inventory_id, -reserved_qty)
         _set_part_extra(part.id, inventory_id, RELEASED, 0)
     print(f'STOCK SYNC: released reserve part={part.id}; stock={inventory_id}; qty={reserved_qty}')
     return True
@@ -156,13 +206,13 @@ def sell_order_part(part):
 
     with transaction.atomic():
         inventory = InventoryItem.objects.select_for_update().get(id=inventory.id)
-        current_qty = int(inventory.quantity or 0)
-        if current_qty < qty:
-            print(f'STOCK SYNC: cannot sell part={part.id}; stock={inventory.id}; current={current_qty}; requested={qty}')
+        stock_qty, _stock_reserved = _stock_extra(inventory.id)
+        if stock_qty < qty:
+            print(f'STOCK SYNC: cannot sell part={part.id}; stock={inventory.id}; current={stock_qty}; requested={qty}')
             _set_part_extra(part.id, inventory.id, NONE, 0)
             return False
-        new_reserved = max(int(getattr(inventory, 'reserved_quantity', 0) or 0) - int(reserved_qty or 0), 0)
-        InventoryItem.objects.filter(id=inventory.id).update(quantity=F('quantity') - qty, reserved_quantity=new_reserved)
+        if not _sell_stock(inventory.id, qty, reserved_qty):
+            return False
         _set_part_extra(part.id, inventory.id, SOLD, 0)
         try:
             StockMovement.objects.create(

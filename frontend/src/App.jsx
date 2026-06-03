@@ -90,6 +90,32 @@ function VisitsWithCrm() {
   return <><Visits /><VisitDeepLinkBridge /><VisitCrmBridge /></>;
 }
 
+function CRMByBusinessType() {
+  const [businessType, setBusinessType] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/api/settings/')
+      .then((res) => {
+        if (!cancelled) setBusinessType(res.data?.company?.business_type || 'sto');
+      })
+      .catch(() => {
+        if (!cancelled) setBusinessType('sto');
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!businessType) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження CRM...</div>;
+  }
+
+  if (businessType === 'store') {
+    return <ClientsCRM />;
+  }
+
+  return <CRM />;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -108,8 +134,9 @@ function App() {
           <Route path="partner-clients" element={<PartnerClients />} />
           <Route path="partners" element={<Partners />} />
           <Route path="complexes" element={<Complexes />} />
-          <Route path="crm" element={<CRM />} />
-          <Route path="crm/:tab" element={<CRM />} />
+          <Route path="crm" element={<CRMByBusinessType />} />
+          <Route path="crm/clients" element={<CRMByBusinessType />} />
+          <Route path="crm/:tab" element={<CRMByBusinessType />} />
           <Route path="crm/supplier-orders" element={<SupplierOrders />} />
           <Route path="supplier-orders" element={<SupplierOrders />} />
         </Route>

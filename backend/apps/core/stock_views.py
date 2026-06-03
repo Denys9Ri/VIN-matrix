@@ -1,4 +1,5 @@
 from decimal import Decimal
+import re
 
 from django.db.models import Q
 from rest_framework import serializers, viewsets, status
@@ -28,9 +29,38 @@ def norm(value):
     return str(value or '').strip().lower().replace(' ', '').replace('_', '')
 
 
+def movement_display(obj):
+    note = str(obj.note or '').lower()
+    qty = int(obj.quantity or 0)
+    if 'резерв' in note and qty == 0:
+        return 'Резерв'
+    if 'зняття резерв' in note or 'резерв знято' in note:
+        return 'Зняття резерву'
+    if 'повернення' in note and qty > 0:
+        return 'Повернення на склад'
+    if 'брак' in note:
+        return 'Брак / списання'
+    if qty < 0:
+        return 'Списання / продаж'
+    if obj.movement_type == 'receipt' or qty > 0:
+        return 'Прихід'
+    return 'Ручне коригування'
+
+
+def movement_order_id(obj):
+    if obj.source_order_part_id:
+        return obj.source_order_part.visit_id if obj.source_order_part else None
+    match = re.search(r'№\s*(\d+)', str(obj.note or ''))
+    return match.group(1) if match else None
+
+
 class StockMovementSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     total_sum = serializers.SerializerMethodField()
+    movement_label = serializers.SerializerMethodField()
+    quantity_display = serializers.SerializerMethodField()
+    order_id = serializers.SerializerMethodField()
+    reason_display = serializers.SerializerMethodField()
 
     class Meta:
         model = StockMovement
@@ -38,7 +68,27 @@ class StockMovementSerializer(serializers.ModelSerializer):
         read_only_fields = ['company', 'inventory_item', 'created_by', 'created_at']
 
     def get_total_sum(self, obj):
-        return round(float(obj.buy_price or 0) * float(obj.quantity or 0), 2)
+        return round(float(obj.buy_price or 0) * abs(float(obj.quantity or 0)), 2)
+
+    def get_movement_label(self, obj):
+        return movement_display(obj)
+
+    def get_quantity_display(self, obj):
+        qty = int(obj.quantity or 0)
+        if qty > 0:
+            return f'+{qty}'
+        if qty < 0:
+            return str(qty)
+        return '0'
+
+    def get_order_id(self, obj):
+        return movement_order_id(obj)
+
+    def get_reason_display(self, obj):
+        note = str(obj.note or '').strip()
+        if not note:
+            return ''
+        return note
 
 
 class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
@@ -50,8 +100,8 @@ class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
         qs = StockMovement.objects.filter(company=company) if company else StockMovement.objects.none()
         search = self.request.query_params.get('search', '').strip()
         if search:
-            qs = qs.filter(Q(brand__icontains=search) | Q(article__icontains=search) | Q(name__icontains=search) | Q(supplier__name__icontains=search))
-        return qs.select_related('supplier', 'inventory_item', 'created_by')
+            qs = qs.filter(Q(brand__icontains=search) | Q(article__icontains=search) | Q(name__icontains=search) | Q(supplier__name__icontains=search) | Q(note__icontains=search))
+        return qs.select_related('supplier', 'inventory_item', 'created_by', 'source_order_part', 'source_order_part__visit')
 
 
 class StockReceiveViewSet(viewsets.ViewSet):
@@ -91,7 +141,7 @@ class StockReceiveViewSet(viewsets.ViewSet):
         else:
             created = True
             item = InventoryItem.objects.create(company=company, category=category, supplier=supplier, brand=brand, article=article, name=name, quantity=quantity, buy_price=buy_price, sell_price=sell_price)
-        movement = StockMovement.objects.create(company=company, inventory_item=item, supplier=supplier, source_order_part=order_part, brand=brand, article=article, name=name, quantity=quantity, buy_price=buy_price, sell_price=sell_price, note=data.get('note') or '', created_by=request.user)
+        movement = StockMovement.objects.create(company=company, inventory_item=item, supplier=supplier, source_order_part=order_part, brand=brand, article=article, name=name, quantity=quantity, buy_price=buy_price, sell_price=sell_price, note=data.get('note') or 'Прихід товару', created_by=request.user)
         if order_part:
             order_part.status = 'ARRIVED'
             order_part.save(update_fields=['status'])
@@ -147,17 +197,7 @@ class StockReceiveViewSet(viewsets.ViewSet):
             def cell(key, default=''):
                 pos = idx.get(key)
                 return row[pos] if pos is not None and pos < len(row) else default
-            data = {
-                'brand': cell('brand'),
-                'article': cell('article'),
-                'name': cell('name'),
-                'quantity': cell('quantity', 1),
-                'buy_price': cell('buy_price', 0),
-                'sell_price': cell('sell_price', 0),
-                'supplier_name': cell('supplier_name', request.data.get('supplier_name') or ''),
-                'category_name': cell('category_name', ''),
-                'note': 'Імпорт з Excel',
-            }
+            data = {'brand': cell('brand'), 'article': cell('article'), 'name': cell('name'), 'quantity': cell('quantity', 1), 'buy_price': cell('buy_price', 0), 'sell_price': cell('sell_price', 0), 'supplier_name': cell('supplier_name', request.data.get('supplier_name') or ''), 'category_name': cell('category_name', ''), 'note': 'Імпорт з Excel'}
             if not str(data['brand'] or '').strip() or not str(data['article'] or '').strip() or not str(data['name'] or '').strip():
                 skipped += 1
                 continue

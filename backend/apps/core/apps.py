@@ -24,3 +24,9 @@ class CoreConfig(AppConfig):
             repair_crm_legacy_schema()
         except Exception as exc:
             print(f"CRM legacy schema check error: {exc}")
+
+        try:
+            from .stock_reservations import attach_stock_workflow
+            attach_stock_workflow()
+        except Exception as exc:
+            print(f"Stock reservation workflow startup error: {exc}")

@@ -1,1 +1,1 @@
-export { default } from './StoreOrdersModernPay.jsx';
+export { default } from './StoreOrdersModernPrepay.jsx';

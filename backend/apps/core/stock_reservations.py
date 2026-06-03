@@ -17,6 +17,10 @@ def _int_qty(value):
     return max(qty, 0)
 
 
+def _norm(value):
+    return ''.join(ch for ch in str(value or '').upper().strip() if ch.isalnum())
+
+
 def _get_extra(part_id):
     try:
         with connection.cursor() as cursor:
@@ -25,16 +29,20 @@ def _get_extra(part_id):
         if not row:
             return None, NONE, 0
         return row[0], row[1] or NONE, int(row[2] or 0)
-    except Exception:
+    except Exception as exc:
+        print(f'STOCK SYNC: cannot read extra fields for part={part_id}: {exc}')
         return None, NONE, 0
 
 
 def _set_part_extra(part_id, inventory_item_id=None, stock_status=NONE, reserved_quantity=0):
-    with connection.cursor() as cursor:
-        cursor.execute(
-            'UPDATE core_orderpart SET inventory_item_id=%s, stock_status=%s, reserved_quantity=%s WHERE id=%s',
-            [inventory_item_id, stock_status, int(reserved_quantity or 0), part_id]
-        )
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE core_orderpart SET inventory_item_id=%s, stock_status=%s, reserved_quantity=%s WHERE id=%s',
+                [inventory_item_id, stock_status, int(reserved_quantity or 0), part_id]
+            )
+    except Exception as exc:
+        print(f'STOCK SYNC: cannot write extra fields for part={part_id}: {exc}')
 
 
 def _find_inventory_item(part):
@@ -44,11 +52,33 @@ def _find_inventory_item(part):
     brand = (part.brand or '').strip()
     article = (part.article or '').strip()
     if not article:
+        print(f'STOCK SYNC: inventory not found because article is empty for part={getattr(part, "id", None)}')
         return None
-    qs = InventoryItem.objects.filter(company=part.visit.company, article__iexact=article)
+
+    exact = InventoryItem.objects.filter(company=part.visit.company, article__iexact=article)
     if brand:
-        qs = qs.filter(brand__iexact=brand)
-    return qs.order_by('-quantity', 'id').first()
+        exact_brand = exact.filter(brand__iexact=brand).order_by('-quantity', 'id').first()
+        if exact_brand:
+            print(f'STOCK SYNC: found exact stock item id={exact_brand.id} for brand={brand} article={article}')
+            return exact_brand
+
+    article_matches = list(exact.order_by('-quantity', 'id')[:3])
+    if len(article_matches) == 1:
+        print(f'STOCK SYNC: found stock by article only id={article_matches[0].id} for part_brand={brand} article={article}')
+        return article_matches[0]
+
+    if len(article_matches) > 1:
+        part_brand_norm = _norm(brand)
+        for item in article_matches:
+            item_brand_norm = _norm(item.brand)
+            if item_brand_norm and part_brand_norm and (item_brand_norm in part_brand_norm or part_brand_norm in item_brand_norm):
+                print(f'STOCK SYNC: found stock by fuzzy brand id={item.id} stock_brand={item.brand} part_brand={brand} article={article}')
+                return item
+        print(f'STOCK SYNC: multiple stock items for article={article}; manual selection needed')
+        return None
+
+    print(f'STOCK SYNC: inventory not found for part brand={brand} article={article}')
+    return None
 
 
 def reserve_order_part(part, inventory_item=None):
@@ -73,17 +103,17 @@ def reserve_order_part(part, inventory_item=None):
             return True
 
         if existing_status == RESERVED and existing_inventory_id:
-            InventoryItem.objects.filter(id=existing_inventory_id).update(
-                reserved_quantity=F('reserved_quantity') - existing_reserved
-            )
+            InventoryItem.objects.filter(id=existing_inventory_id).update(reserved_quantity=F('reserved_quantity') - existing_reserved)
 
         available = max(int(inventory.quantity or 0) - int(getattr(inventory, 'reserved_quantity', 0) or 0), 0)
         if available < qty:
+            print(f'STOCK SYNC: cannot reserve part={part.id}; stock={inventory.id}; available={available}; requested={qty}')
             _set_part_extra(part.id, inventory.id, NONE, 0)
             return False
 
         InventoryItem.objects.filter(id=inventory.id).update(reserved_quantity=F('reserved_quantity') + qty)
         _set_part_extra(part.id, inventory.id, RESERVED, qty)
+        print(f'STOCK SYNC: reserved part={part.id}; stock={inventory.id}; qty={qty}')
         return True
 
 
@@ -97,6 +127,7 @@ def release_order_part(part):
     with transaction.atomic():
         InventoryItem.objects.filter(id=inventory_id).update(reserved_quantity=F('reserved_quantity') - reserved_qty)
         _set_part_extra(part.id, inventory_id, RELEASED, 0)
+    print(f'STOCK SYNC: released reserve part={part.id}; stock={inventory_id}; qty={reserved_qty}')
     return True
 
 
@@ -106,7 +137,9 @@ def sell_order_part(part):
         return False
     qty = _int_qty(getattr(part, 'quantity', 1)) or 1
     inventory_id, status, reserved_qty = _get_extra(part.id)
+    print(f'STOCK SYNC: sell request part={part.id}; brand={part.brand}; article={part.article}; visit={part.visit_id}; status={getattr(part.visit, "status", None)}')
     if status == SOLD:
+        print(f'STOCK SYNC: part={part.id} already sold')
         return True
 
     inventory = None
@@ -118,12 +151,15 @@ def sell_order_part(part):
     if not inventory:
         inventory = _find_inventory_item(part)
     if not inventory:
+        _set_part_extra(part.id, None, NONE, 0)
         return False
 
     with transaction.atomic():
         inventory = InventoryItem.objects.select_for_update().get(id=inventory.id)
         current_qty = int(inventory.quantity or 0)
         if current_qty < qty:
+            print(f'STOCK SYNC: cannot sell part={part.id}; stock={inventory.id}; current={current_qty}; requested={qty}')
+            _set_part_extra(part.id, inventory.id, NONE, 0)
             return False
         new_reserved = max(int(getattr(inventory, 'reserved_quantity', 0) or 0) - int(reserved_qty or 0), 0)
         InventoryItem.objects.filter(id=inventory.id).update(quantity=F('quantity') - qty, reserved_quantity=new_reserved)
@@ -143,8 +179,9 @@ def sell_order_part(part):
                 note=f'Списання при виконанні замовлення №{part.visit_id}',
                 created_by=None,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f'STOCK SYNC: movement create failed for part={part.id}: {exc}')
+    print(f'STOCK SYNC: sold part={part.id}; stock={inventory.id}; qty={qty}')
     return True
 
 
@@ -152,18 +189,15 @@ def reserve_visit_parts(visit):
     reserved = 0
     failed = 0
     for part in visit.parts.all():
-        if reserve_order_part(part):
-            reserved += 1
-        else:
-            failed += 1
+        if reserve_order_part(part): reserved += 1
+        else: failed += 1
     return reserved, failed
 
 
 def release_visit_parts(visit):
     released = 0
     for part in visit.parts.all():
-        if release_order_part(part):
-            released += 1
+        if release_order_part(part): released += 1
     return released
 
 
@@ -171,29 +205,25 @@ def sell_visit_parts(visit):
     sold = 0
     failed = 0
     for part in visit.parts.all():
-        inventory_id, status, _reserved_qty = _get_extra(part.id)
+        _inventory_id, status, _reserved_qty = _get_extra(part.id)
         if status == SOLD:
             continue
-        if sell_order_part(part):
-            sold += 1
-        elif inventory_id:
-            failed += 1
+        if sell_order_part(part): sold += 1
+        else: failed += 1
+    print(f'STOCK SYNC: visit={visit.id}; sold={sold}; failed={failed}')
     return sold, failed
 
 
 def sync_visit_stock_for_status(visit):
     status = getattr(visit, 'status', '')
-    if status == 'COMPLETED':
-        return sell_visit_parts(visit)
-    if status == 'CANCELLED':
-        return release_visit_parts(visit), 0
+    if status == 'COMPLETED': return sell_visit_parts(visit)
+    if status == 'CANCELLED': return release_visit_parts(visit), 0
     return reserve_visit_parts(visit)
 
 
 def sync_order_part_after_create(part):
     visit_status = getattr(getattr(part, 'visit', None), 'status', '')
-    if visit_status == 'COMPLETED':
-        return sell_order_part(part)
+    if visit_status == 'COMPLETED': return sell_order_part(part)
     if visit_status == 'CANCELLED':
         _set_part_extra(part.id, None, RELEASED, 0)
         return False
@@ -205,20 +235,15 @@ def attach_stock_workflow():
     from .models import OrderPart, Visit
 
     def order_part_post_save(sender, instance, created=False, **kwargs):
-        if not created:
-            return
-        try:
-            sync_order_part_after_create(instance)
-        except Exception as exc:
-            print(f'Stock sync after order part save failed: {exc}')
+        if not created: return
+        try: sync_order_part_after_create(instance)
+        except Exception as exc: print(f'Stock sync after order part save failed: {exc}')
 
     def visit_post_save(sender, instance, created=False, **kwargs):
-        if created:
-            return
-        try:
-            sync_visit_stock_for_status(instance)
-        except Exception as exc:
-            print(f'Stock sync after visit save failed: {exc}')
+        if created: return
+        try: sync_visit_stock_for_status(instance)
+        except Exception as exc: print(f'Stock sync after visit save failed: {exc}')
 
     post_save.connect(order_part_post_save, sender=OrderPart, dispatch_uid='vin_matrix_order_part_stock_sync')
     post_save.connect(visit_post_save, sender=Visit, dispatch_uid='vin_matrix_visit_stock_sync')
+    print('STOCK SYNC: signals attached')

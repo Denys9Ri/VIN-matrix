@@ -34,6 +34,16 @@ const normalizeRequestUrl = (url = '') => {
   return original;
 };
 
+const rewriteNumericVisitSearch = (config) => {
+  if ((config.method || 'get').toLowerCase() !== 'get') return config;
+  const url = String(config.url || '');
+  const match = url.match(/^(.*\/api\/visits\/?)\?search=(\d+)$/);
+  if (!match) return config;
+  config.url = `${match[1].replace(/\/$/, '')}/${match[2]}/`;
+  config.__singleVisitSearch = true;
+  return config;
+};
+
 const attachAuthAndNormalize = (config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
@@ -41,17 +51,26 @@ const attachAuthAndNormalize = (config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   config.url = normalizeRequestUrl(config.url);
-  return config;
+  return rewriteNumericVisitSearch(config);
+};
+
+const normalizeSingleVisitSearchResponse = (response) => {
+  if (response.config?.__singleVisitSearch && response.data && !Array.isArray(response.data)) {
+    response.data = [response.data];
+  }
+  return response;
 };
 
 // Global fallback for legacy pages that still import axios directly.
 axios.defaults.baseURL = API_ORIGIN;
 axios.interceptors.request.use(attachAuthAndNormalize);
+axios.interceptors.response.use(normalizeSingleVisitSearchResponse);
 
 const api = axios.create({
   baseURL: API_ORIGIN,
 });
 
 api.interceptors.request.use(attachAuthAndNormalize);
+api.interceptors.response.use(normalizeSingleVisitSearchResponse);
 
 export default api;

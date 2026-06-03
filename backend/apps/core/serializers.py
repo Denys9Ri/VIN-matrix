@@ -28,10 +28,12 @@ class ServiceCatalogSerializer(serializers.ModelSerializer):
 class OrderPartSerializer(serializers.ModelSerializer):
     stock_status = serializers.SerializerMethodField()
     inventory_item = serializers.SerializerMethodField()
+    inventory_item_label = serializers.SerializerMethodField()
+    source_label = serializers.SerializerMethodField()
     class Meta:
         model = OrderPart
         fields = '__all__'
-        read_only_fields = ['visit', 'stock_status', 'inventory_item']
+        read_only_fields = ['visit', 'stock_status', 'inventory_item', 'inventory_item_label', 'source_label']
     def _extra(self, obj):
         try:
             with connection.cursor() as cursor:
@@ -42,6 +44,22 @@ class OrderPartSerializer(serializers.ModelSerializer):
             return ('none', None)
     def get_stock_status(self, obj): return self._extra(obj)[0] or 'none'
     def get_inventory_item(self, obj): return self._extra(obj)[1]
+    def get_inventory_item_label(self, obj):
+        inventory_id = self._extra(obj)[1]
+        if not inventory_id: return None
+        try:
+            item = InventoryItem.objects.filter(id=inventory_id).first()
+            return f'{item.brand} {item.article}' if item else None
+        except Exception:
+            return None
+    def get_source_label(self, obj):
+        status, inventory_id = self._extra(obj)
+        if inventory_id:
+            if status == 'sold': return 'Мій склад — списано'
+            if status == 'reserved': return 'Мій склад — резерв'
+            if status == 'released': return 'Мій склад — резерв знято'
+            return 'Мій склад'
+        return obj.supplier or 'Постачальник не вказаний'
 
 class OrderServiceSerializer(serializers.ModelSerializer):
     class Meta:

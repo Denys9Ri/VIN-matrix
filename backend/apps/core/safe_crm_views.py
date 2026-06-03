@@ -8,29 +8,16 @@ from django.db import connection
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
-from rest_framework import serializers, status, viewsets
+from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation, CRMTask
-from .serializers import (
-    CategorySerializer,
-    InventoryItemSerializer,
-    OrderPartSerializer,
-    OrderServiceSerializer,
-    ServiceCatalogSerializer,
-    SupplierSerializer,
-    VisitSerializer,
-    VehicleRecommendationSerializer,
-)
+from .serializers import CategorySerializer, InventoryItemSerializer, OrderPartSerializer, OrderServiceSerializer, ServiceCatalogSerializer, SupplierSerializer, VisitSerializer, VehicleRecommendationSerializer
 from .views import VisitViewSet as BaseVisitViewSet
 
-
-SUPPLIER_BADGE_KEYS = {
-    'supplier-local', 'supplier-vesna', 'supplier-omega', 'supplier-tehnomir', 'supplier-bm', 'supplier-default',
-}
-
+SUPPLIER_BADGE_KEYS = {'supplier-local','supplier-vesna','supplier-omega','supplier-tehnomir','supplier-bm','supplier-default'}
 
 def safe_text(value, max_len=80): return str(value or '').strip()[:max_len]
 def has_value(value): return value not in [None, '', [], {}] and str(value).strip() not in ['', '—', 'None']
@@ -46,38 +33,6 @@ def qty_display(value):
         qty = Decimal(str(value or 0))
         return str(qty.normalize()) if qty == qty.to_integral() else str(qty)
     except Exception: return str(value or '1')
-def status_label(value):
-    return {'WAITING':'Очікується','IN_TRANSIT':'В дорозі','ARRIVED':'Доставлено','UNAVAILABLE':'Відмова','PENDING':'Очікується','IN_PROGRESS':'В роботі','ORDERED':'Замовлено','DONE':'Готово','COMPLETED':'Завершено','SELECTION':'Підбір','DRAFT':'Чернетка','active':'Активна','done':'Виконана','cancelled':'Скасована','draft':'Чернетка','completed':'Готово','ok':'ОК','attention':'Увага','critical':'Критично','not_checked':'Не перевірено'}.get(str(value or ''), str(value or '—'))
-
-def workflow_row(table_name, company_id, visit_id):
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(f"SELECT * FROM {table_name} WHERE company_id = %s AND visit_id = %s LIMIT 1", [company_id, visit_id])
-            row = cursor.fetchone()
-            if not row: return {}
-            columns = [col[0] for col in cursor.description]
-            data = dict(zip(columns, row))
-            if isinstance(data.get('checklist'), str):
-                try: data['checklist'] = json.loads(data['checklist'])
-                except Exception: data['checklist'] = {}
-            return data
-    except Exception: return {}
-
-class CRMTaskSerializer(serializers.ModelSerializer):
-    state = serializers.SerializerMethodField(); state_label = serializers.SerializerMethodField(); days_left = serializers.SerializerMethodField()
-    class Meta:
-        model = CRMTask
-        fields = ['id','visit','client','phone','plate','title','description','due_date','status','state','state_label','days_left','created_at','updated_at']
-        read_only_fields = ['id','created_at','updated_at']
-    def _days_left(self): return None if not self.instance.due_date else (self.instance.due_date - timezone.localdate()).days
-    def get_days_left(self, obj): return None if not obj.due_date else (obj.due_date - timezone.localdate()).days
-    def get_state(self, obj):
-        if obj.status == CRMTask.STATUS_DONE: return 'done'
-        if obj.status == CRMTask.STATUS_IN_PROGRESS: return 'in_progress'
-        days = self.get_days_left(obj)
-        if days is not None and days < 0: return 'overdue'
-        return obj.status or 'new'
-    def get_state_label(self, obj): return {'new':'Нова','in_progress':'В роботі','done':'Виконана','overdue':'Прострочена'}.get(self.get_state(obj), 'Нова')
 
 def safe_get_company(user):
     try: return user.company
@@ -140,10 +95,6 @@ class VisitViewSet(BaseVisitViewSet):
     @action(detail=True, methods=['get'], url_path='pdf')
     def export_pdf(self, request, pk=None):
         visit = self.get_object(); company = visit.company
-        car_data = {}
-        if visit.delivery_data and str(visit.delivery_data).strip().startswith('{'):
-            try: car_data = json.loads(visit.delivery_data)
-            except Exception: car_data = {}
         services = list(getattr(visit, 'services', OrderService.objects.none()).all())
         parts = list(getattr(visit, 'parts', OrderPart.objects.none()).all())
         services_total = sum((money_value(s.price) * money_value(s.quantity or 1) for s in services), Decimal('0.00'))
@@ -153,10 +104,51 @@ class VisitViewSet(BaseVisitViewSet):
         comp_phone = html_text(getattr(company, 'phone', '') or '')
         comp_addr = html_text(getattr(company, 'address', '') or '')
         visit_dt = timezone.localtime(visit.scheduled_datetime or visit.created_at).strftime('%d.%m.%Y %H:%M')
-        services_rows = ''.join(f"<tr><td>{html_text(s.name)}</td><td class='center'>{qty_display(s.quantity)}</td><td class='right'>{money_display(s.price)}</td><td class='right'>{money_display(money_value(s.price)*money_value(s.quantity or 1))}</td></tr>" for s in services)
-        parts_rows = ''.join(f"<tr><td>{html_text(p.brand)}</td><td>{html_text(p.article)}</td><td>{html_text(p.name)}</td><td class='center'>{qty_display(p.quantity)}</td><td class='right'>{money_display(p.sell_price)}</td><td class='right'>{money_display(money_value(p.sell_price)*money_value(p.quantity or 1))}</td></tr>" for p in parts)
-        html_content = f"""<!doctype html><html><head><meta charset='utf-8'><title>Сервісний звіт №{visit.id}</title><style>body{{font-family:Arial,sans-serif;margin:0;color:#111827;background:#f1f5f9;font-size:13px}}.page{{max-width:980px;margin:24px auto;background:white;padding:30px;border-radius:24px}}.actions{{max-width:980px;margin:18px auto 0;display:flex;gap:10px;justify-content:flex-end}}button{{border:0;border-radius:14px;padding:12px 18px;font-weight:800;cursor:pointer}}.primary{{background:#2563eb;color:white}}.muted{{background:#e2e8f0;color:#334155}}.top{{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid #111827;padding-bottom:18px;margin-bottom:22px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}}.card{{border:1px solid #e2e8f0;border-radius:16px;padding:12px;background:#f8fafc}}.label{{color:#94a3b8;text-transform:uppercase;font-size:10px;font-weight:900}}.value{{margin-top:5px;font-size:14px;font-weight:800}}h3{{margin:24px 0 10px;font-size:16px;text-transform:uppercase}}table{{width:100%;border-collapse:collapse}}th{{background:#f1f5f9;color:#475569;text-transform:uppercase;font-size:10px}}th,td{{border:1px solid #e2e8f0;padding:9px;vertical-align:top}}.right{{text-align:right}}.center{{text-align:center}}.summary{{margin-top:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}}@media print{{body{{background:white}}.actions{{display:none}}.page{{margin:0;max-width:none;border-radius:0;padding:18px}}}}</style></head><body><div class='actions'><button class='primary' onclick='window.print()'>Зберегти як PDF / Друк</button><button class='muted' onclick='window.close()'>Закрити</button></div><main class='page'><section class='top'><div><h1>{comp_name}</h1><p>{comp_addr}</p><p>{comp_phone}</p></div><div style='text-align:right'><h2>Сервісний звіт</h2><p>Візит №{visit.id}</p><p>{html_text(visit_dt)}</p></div></section><div class='grid'><div class='card'><div class='label'>Клієнт</div><div class='value'>{html_text(visit.client)}</div></div><div class='card'><div class='label'>Телефон</div><div class='value'>{html_text(visit.phone)}</div></div><div class='card'><div class='label'>Номер</div><div class='value'>{html_text(visit.plate)}</div></div><div class='card'><div class='label'>VIN</div><div class='value'>{html_text(visit.vin_code)}</div></div></div>{'<h3>Роботи</h3><table><thead><tr><th>Назва</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr></thead><tbody>'+services_rows+'</tbody></table>' if services_rows else ''}{'<h3>Запчастини</h3><table><thead><tr><th>Бренд</th><th>Артикул</th><th>Назва</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr></thead><tbody>'+parts_rows+'</tbody></table>' if parts_rows else ''}<section class='summary'><div class='card'><div class='label'>Роботи</div><div class='value'>{money_display(services_total)}</div></div><div class='card'><div class='label'>Запчастини</div><div class='value'>{money_display(parts_total)}</div></div><div class='card'><div class='label'>Разом</div><div class='value'>{money_display(grand_total)}</div></div></section></main></body></html>"""
+        services_rows = ''.join(f"<tr><td>{html_text(s.name)}</td><td>{qty_display(s.quantity)}</td><td>{money_display(s.price)}</td><td>{money_display(money_value(s.price)*money_value(s.quantity or 1))}</td></tr>" for s in services)
+        parts_rows = ''.join(f"<tr><td>{html_text(p.brand)}</td><td>{html_text(p.article)}</td><td>{html_text(p.name)}</td><td>{qty_display(p.quantity)}</td><td>{money_display(p.sell_price)}</td><td>{money_display(money_value(p.sell_price)*money_value(p.quantity or 1))}</td></tr>" for p in parts)
+        html_content = f"""<!doctype html><html><head><meta charset='utf-8'><title>Сервісний звіт №{visit.id}</title><style>body{{font-family:Arial,sans-serif;margin:24px;color:#111827}}table{{width:100%;border-collapse:collapse;margin-top:14px}}th,td{{border:1px solid #e2e8f0;padding:8px;text-align:left}}th{{background:#f1f5f9}}.top{{display:flex;justify-content:space-between;border-bottom:2px solid #111827;padding-bottom:12px}}.actions{{text-align:right;margin-bottom:14px}}button{{border:0;border-radius:12px;padding:10px 14px;font-weight:800;background:#2563eb;color:white}}</style></head><body><div class='actions'><button onclick='window.print()'>Друк / PDF</button></div><div class='top'><div><h2>{comp_name}</h2><p>{comp_addr}<br>{comp_phone}</p></div><div><h2>Сервісний звіт №{visit.id}</h2><p>{html_text(visit_dt)}</p></div></div><p><b>Клієнт:</b> {html_text(visit.client)} | <b>Тел:</b> {html_text(visit.phone)} | <b>Авто:</b> {html_text(visit.plate)} | <b>VIN:</b> {html_text(visit.vin_code)}</p>{'<h3>Роботи</h3><table><tr><th>Назва</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr>'+services_rows+'</table>' if services_rows else ''}{'<h3>Запчастини</h3><table><tr><th>Бренд</th><th>Артикул</th><th>Назва</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr>'+parts_rows+'</table>' if parts_rows else ''}<h2 style='text-align:right'>Разом: {money_display(grand_total)}</h2></body></html>"""
         return HttpResponse(html_content, content_type='text/html; charset=utf-8')
+
+class CRMTaskSerializer(serializers.ModelSerializer):
+    state = serializers.SerializerMethodField(); state_label = serializers.SerializerMethodField(); days_left = serializers.SerializerMethodField()
+    class Meta:
+        model = CRMTask
+        fields = ['id','visit','client','phone','plate','title','description','due_date','status','state','state_label','days_left','created_at','updated_at']
+        read_only_fields = ['id','created_at','updated_at']
+    def get_days_left(self, obj): return None if not obj.due_date else (obj.due_date - timezone.localdate()).days
+    def get_state(self, obj):
+        if obj.status == CRMTask.STATUS_DONE: return 'done'
+        if obj.status == CRMTask.STATUS_IN_PROGRESS: return 'in_progress'
+        days = self.get_days_left(obj)
+        if days is not None and days < 0: return 'overdue'
+        return obj.status or 'new'
+    def get_state_label(self, obj): return {'new':'Нова','in_progress':'В роботі','done':'Виконана','overdue':'Прострочена'}.get(self.get_state(obj), 'Нова')
+
+class VehicleRecommendationViewSet(viewsets.ModelViewSet):
+    serializer_class = VehicleRecommendationSerializer
+    permission_classes = [IsAuthenticated]
+    def get_queryset(self):
+        company = safe_ensure_company(self.request.user)
+        queryset = VehicleRecommendation.objects.filter(company=company) if company else VehicleRecommendation.objects.none()
+        search = self.request.query_params.get('search', '').strip()
+        status_filter = self.request.query_params.get('status', '').strip()
+        visit_id = self.request.query_params.get('visit', '').strip()
+        if search: queryset = queryset.filter(Q(client__icontains=search)|Q(phone__icontains=search)|Q(plate__icontains=search)|Q(title__icontains=search)|Q(description__icontains=search))
+        if status_filter: queryset = queryset.filter(status=status_filter)
+        if visit_id: queryset = queryset.filter(visit_id=visit_id)
+        return queryset.order_by('status','due_date','-created_at')
+    def perform_create(self, serializer):
+        company = safe_ensure_company(self.request.user)
+        if not company: raise ValueError('Немає CRM-компанії для створення рекомендації.')
+        visit = None; visit_id = self.request.data.get('visit')
+        if visit_id:
+            try: visit = Visit.objects.get(id=visit_id, company=company)
+            except Visit.DoesNotExist: visit = None
+        defaults = {'client': self.request.data.get('client') or visit.client, 'phone': self.request.data.get('phone') or visit.phone, 'plate': self.request.data.get('plate') or visit.plate} if visit else {}
+        serializer.save(company=company, created_by=self.request.user, **defaults)
+    @action(detail=True, methods=['post'], url_path='mark-done')
+    def mark_done(self, request, pk=None):
+        rec = self.get_object(); rec.status = VehicleRecommendation.STATUS_DONE; rec.save(update_fields=['status','updated_at']); return Response(self.get_serializer(rec).data)
 
 class CRMTaskViewSet(viewsets.ModelViewSet):
     serializer_class = CRMTaskSerializer
@@ -203,9 +195,7 @@ class OrderPartViewSet(viewsets.ModelViewSet):
             instance.refresh_from_db(); sync_order_part_after_update(instance, old_quantity=old_quantity)
         except Exception as exc: print(f'STOCK SYNC: order part update sync failed: {exc}')
         return response
-    def partial_update(self, request, *args, **kwargs):
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
+    def partial_update(self, request, *args, **kwargs): kwargs['partial'] = True; return self.update(request, *args, **kwargs)
     @action(detail=True, methods=['post'], url_path='return')
     def return_part(self, request, pk=None):
         part = self.get_object()
@@ -214,8 +204,7 @@ class OrderPartViewSet(viewsets.ModelViewSet):
             ok, message = return_order_part_to_stock(part, quantity=request.data.get('quantity'), reason=request.data.get('reason') or 'Повернення товару', comment=request.data.get('comment') or '', return_to_stock=request.data.get('return_to_stock') is not False)
             part.refresh_from_db()
             return Response({'ok': ok, 'message': message, 'part': self.get_serializer(part).data}, status=200 if ok else 400)
-        except Exception as exc:
-            return Response({'ok': False, 'message': str(exc)}, status=400)
+        except Exception as exc: return Response({'ok': False, 'message': str(exc)}, status=400)
     @action(detail=True, methods=['post'], url_path='delete-with-stock')
     def delete_with_stock(self, request, pk=None):
         part = self.get_object(); visit_id = part.visit_id
@@ -223,57 +212,32 @@ class OrderPartViewSet(viewsets.ModelViewSet):
             from .stock_reservations import delete_order_part_with_stock
             ok, message = delete_order_part_with_stock(part, stock_action=request.data.get('stock_action') or 'return', reason=request.data.get('reason') or 'Видалення позиції', comment=request.data.get('comment') or '')
             if not ok: return Response({'ok': False, 'message': message}, status=400)
-            part.delete()
-            visit = Visit.objects.get(id=visit_id)
+            part.delete(); visit = Visit.objects.get(id=visit_id)
             return Response({'ok': True, 'message': 'Товар видалено', 'visit': VisitSerializer(visit).data})
-        except Exception as exc:
-            return Response({'ok': False, 'message': str(exc)}, status=400)
+        except Exception as exc: return Response({'ok': False, 'message': str(exc)}, status=400)
 
 class OrderServiceViewSet(viewsets.ModelViewSet):
-    serializer_class = OrderServiceSerializer
-    permission_classes = [IsAuthenticated]
+    serializer_class = OrderServiceSerializer; permission_classes = [IsAuthenticated]
     def get_queryset(self):
-        company = safe_ensure_company(self.request.user)
-        return OrderService.objects.filter(visit__company=company) if company else OrderService.objects.none()
+        company = safe_ensure_company(self.request.user); return OrderService.objects.filter(visit__company=company) if company else OrderService.objects.none()
     def perform_create(self, serializer):
         company = safe_ensure_company(self.request.user); visit = Visit.objects.get(id=self.request.data.get('visit'), company=company); serializer.save(visit=visit)
-
 class ServiceCatalogViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceCatalogSerializer; permission_classes = [IsAuthenticated]
-    def get_queryset(self):
-        company = safe_ensure_company(self.request.user); return ServiceCatalog.objects.filter(company=company) if company else ServiceCatalog.objects.none()
-    def perform_create(self, serializer):
-        company = safe_ensure_company(self.request.user)
-        if not company: raise ValueError('Немає CRM-компанії для створення послуги.')
-        serializer.save(company=company)
-
+    def get_queryset(self): company = safe_ensure_company(self.request.user); return ServiceCatalog.objects.filter(company=company) if company else ServiceCatalog.objects.none()
+    def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer; permission_classes = [IsAuthenticated]
-    def get_queryset(self):
-        company = safe_ensure_company(self.request.user); return Category.objects.filter(company=company) if company else Category.objects.none()
-    def perform_create(self, serializer):
-        company = safe_ensure_company(self.request.user)
-        if not company: raise ValueError('Немає CRM-компанії для створення категорії.')
-        serializer.save(company=company)
-
+    def get_queryset(self): company = safe_ensure_company(self.request.user); return Category.objects.filter(company=company) if company else Category.objects.none()
+    def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class InventoryItemViewSet(viewsets.ModelViewSet):
     serializer_class = InventoryItemSerializer; permission_classes = [IsAuthenticated]
-    def get_queryset(self):
-        company = safe_ensure_company(self.request.user); return InventoryItem.objects.filter(company=company) if company else InventoryItem.objects.none()
-    def perform_create(self, serializer):
-        company = safe_ensure_company(self.request.user)
-        if not company: raise ValueError('Немає CRM-компанії для створення товару.')
-        serializer.save(company=company)
-
+    def get_queryset(self): company = safe_ensure_company(self.request.user); return InventoryItem.objects.filter(company=company) if company else InventoryItem.objects.none()
+    def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class SupplierViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierSerializer; permission_classes = [IsAuthenticated]
-    def get_queryset(self):
-        company = safe_ensure_company(self.request.user); return Supplier.objects.filter(company=company) if company else Supplier.objects.none()
-    def perform_create(self, serializer):
-        company = safe_ensure_company(self.request.user)
-        if not company: raise ValueError('Немає CRM-компанії для створення постачальника.')
-        serializer.save(company=company)
-
+    def get_queryset(self): company = safe_ensure_company(self.request.user); return Supplier.objects.filter(company=company) if company else Supplier.objects.none()
+    def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class MechanicViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     def list(self, request):
@@ -306,6 +270,5 @@ class MechanicViewSet(viewsets.ViewSet):
     def destroy(self, request, pk=None):
         company = safe_ensure_company(request.user)
         if not company or not hasattr(request.user, 'company'): return Response(status=403)
-        try:
-            User.objects.get(id=pk, employee_profile__company=company).delete(); return Response({'message':'Видалено'})
+        try: User.objects.get(id=pk, employee_profile__company=company).delete(); return Response({'message':'Видалено'})
         except User.DoesNotExist: return Response(status=404)

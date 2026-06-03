@@ -18,3 +18,9 @@ class CoreConfig(AppConfig):
             repair_stock_schema()
         except Exception as exc:
             print(f"Stock schema check error: {exc}")
+
+        try:
+            from .db_repair_crm_legacy import repair_crm_legacy_schema
+            repair_crm_legacy_schema()
+        except Exception as exc:
+            print(f"CRM legacy schema check error: {exc}")

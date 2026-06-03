@@ -1,6 +1,15 @@
 import axios from 'axios';
 
-const DEFAULT_API_ORIGIN = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
+const LEGACY_API_ORIGINS = [
+  'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io',
+  'https://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io',
+  'http://ydy3swnvdledj1sdinrvvleo.95.217.211.207.sslip.io',
+  'https://ydy3swnvdledj1sdinrvvleo.95.217.211.207.sslip.io',
+];
+
+const DEFAULT_API_ORIGIN =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' ? window.location.origin : LEGACY_API_ORIGINS[0]);
 
 const normalizeBaseUrl = (rawUrl) => {
   let url = String(rawUrl || DEFAULT_API_ORIGIN).trim();
@@ -13,16 +22,36 @@ const normalizeBaseUrl = (rawUrl) => {
   return url;
 };
 
-const api = axios.create({
-  baseURL: normalizeBaseUrl(import.meta.env.VITE_API_URL),
-});
+export const API_ORIGIN = normalizeBaseUrl(DEFAULT_API_ORIGIN);
 
-api.interceptors.request.use((config) => {
+const normalizeRequestUrl = (url = '') => {
+  if (!url) return url;
+  const original = String(url);
+  const legacyOrigin = LEGACY_API_ORIGINS.find((origin) => original.startsWith(origin));
+  if (legacyOrigin) {
+    return `${API_ORIGIN}${original.slice(legacyOrigin.length)}`;
+  }
+  return original;
+};
+
+const attachAuthAndNormalize = (config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
+    config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
+  config.url = normalizeRequestUrl(config.url);
   return config;
+};
+
+// Global fallback for legacy pages that still import axios directly.
+axios.defaults.baseURL = API_ORIGIN;
+axios.interceptors.request.use(attachAuthAndNormalize);
+
+const api = axios.create({
+  baseURL: API_ORIGIN,
 });
+
+api.interceptors.request.use(attachAuthAndNormalize);
 
 export default api;

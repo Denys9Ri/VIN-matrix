@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowUpRight, Car, CreditCard, History, PackageSearch, Phone, RefreshCcw, Search, ShoppingBag, Star, UserRound, X } from 'lucide-react';
+import { AlertTriangle, Car, CreditCard, History, PackageSearch, Phone, RefreshCcw, Search, Star, UserRound, X } from 'lucide-react';
 import api from '../api/axios';
 
 const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
@@ -75,15 +75,22 @@ export default function ClientsCRM() {
     <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5">
       <section className="bg-white border border-slate-200 rounded-3xl p-3 md:p-4 shadow-sm h-fit">
         <h2 className="font-black uppercase text-slate-900 mb-3">Список клієнтів</h2>
-        <div className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+        <div className="space-y-3 max-h-none xl:max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
           {loading ? <Empty text="Завантаження..."/> : clients.map((c) => <ClientCard key={c.key} client={c} active={selected?.key === c.key} onClick={() => openClient(c)}/>) }
           {!loading && !clients.length && <Empty text="Клієнтів не знайдено"/>}
         </div>
       </section>
-      <section className="min-w-0">
+
+      <section className="hidden xl:block min-w-0">
         {selected ? <ClientDrawer client={selected} tab={tab} setTab={setTab}/> : <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm"><UserRound className="mx-auto text-slate-300 mb-3" size={48}/><h3 className="font-black text-slate-800 uppercase">Оберіть клієнта</h3><p className="text-sm font-bold text-slate-400 mt-2">Тут буде історія замовлень, товари, авто, борги та повернення.</p></div>}
       </section>
     </div>
+
+    {selected && <div className="xl:hidden fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm p-3 flex items-end">
+      <div className="bg-white rounded-t-3xl w-full max-h-[92vh] overflow-hidden shadow-2xl">
+        <ClientDrawer client={selected} tab={tab} setTab={setTab} onClose={() => setSelected(null)}/>
+      </div>
+    </div>}
   </div>;
 }
 
@@ -95,21 +102,21 @@ function ClientCard({ client, active, onClick }) {
   </button>;
 }
 
-function ClientDrawer({ client, tab, setTab }) {
+function ClientDrawer({ client, tab, setTab, onClose }) {
   const parts = arr(client.parts);
   const orders = arr(client.orders);
   const debts = orders.filter((o) => Number(o.debt_amount || 0) > 0 || ['unpaid', 'debt', 'cod'].includes(o.payment_status));
   const returns = parts.filter((p) => ['returned', 'defective'].includes(p.stock_status));
-  return <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-    <div className="p-5 border-b border-slate-100 bg-gradient-to-br from-white to-slate-50">
-      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-        <div><h2 className="text-2xl font-black text-slate-900 uppercase">{client.client || 'Без імені'}</h2><p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2"><Phone size={15}/>{client.phone || '-'}</p></div>
-        <Badge status={client.status}/>
+  return <div className="bg-white xl:border xl:border-slate-200 xl:rounded-3xl xl:shadow-sm overflow-hidden max-h-[92vh] xl:max-h-none flex flex-col">
+    <div className="p-4 md:p-5 border-b border-slate-100 bg-gradient-to-br from-white to-slate-50 shrink-0">
+      <div className="flex items-start justify-between gap-4">
+        <div><h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase">{client.client || 'Без імені'}</h2><p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2"><Phone size={15}/>{client.phone || '-'}</p></div>
+        <div className="flex items-center gap-2"><Badge status={client.status}/>{onClose && <button onClick={onClose} className="bg-slate-100 text-slate-500 rounded-xl p-2"><X size={18}/></button>}</div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5"><Stat label="Замовлень" value={client.orders_count}/><Stat label="Покупки" value={money(client.total_revenue)}/><Stat label="Прибуток" value={money(client.total_profit)} good/><Stat label="Борг" value={money(client.debt_amount)} bad={client.debt_amount > 0}/></div>
     </div>
     <Tabs active={tab} setActive={setTab}/>
-    <div className="p-4 md:p-5">
+    <div className="p-4 md:p-5 overflow-y-auto">
       {tab === 'overview' && <Overview client={client} parts={parts} debts={debts} returns={returns}/>} 
       {tab === 'orders' && <Orders orders={orders}/>} 
       {tab === 'parts' && <Parts parts={parts}/>} 
@@ -122,7 +129,7 @@ function ClientDrawer({ client, tab, setTab }) {
 
 function Tabs({ active, setActive }) {
   const tabs = [['overview', Star, 'Огляд'], ['orders', History, 'Замовлення'], ['parts', PackageSearch, 'Товари'], ['cars', Car, 'Авто'], ['debts', CreditCard, 'Борги'], ['returns', AlertTriangle, 'Повернення']];
-  return <div className="bg-slate-100 p-1 grid grid-cols-2 md:grid-cols-6 gap-1 sticky top-0 z-10">{tabs.map(([key, Icon, label]) => <button key={key} onClick={()=>setActive(key)} className={`rounded-xl p-3 text-[10px] font-black uppercase flex items-center justify-center gap-1.5 ${active === key ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-white'}`}><Icon size={14}/>{label}</button>)}</div>;
+  return <div className="bg-slate-100 p-1 grid grid-cols-3 md:grid-cols-6 gap-1 sticky top-0 z-10 shrink-0 overflow-x-auto">{tabs.map(([key, Icon, label]) => <button key={key} onClick={()=>setActive(key)} className={`rounded-xl p-3 text-[10px] font-black uppercase flex items-center justify-center gap-1.5 ${active === key ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-white'}`}><Icon size={14}/>{label}</button>)}</div>;
 }
 
 function Overview({ client, parts, debts, returns }) {

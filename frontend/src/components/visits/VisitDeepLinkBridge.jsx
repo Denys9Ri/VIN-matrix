@@ -17,6 +17,24 @@ function clickVisitCard(visitId) {
   return true;
 }
 
+function setNativeInputValue(input, value) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  if (setter) setter.call(input, value);
+  else input.value = value;
+}
+
+function syncBoardDate(targetDate) {
+  if (!targetDate) return true;
+  const input = document.querySelector('input[type="date"]');
+  if (!input) return false;
+  if (input.value === targetDate) return true;
+
+  setNativeInputValue(input, targetDate);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
 export default function VisitDeepLinkBridge() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -25,11 +43,29 @@ export default function VisitDeepLinkBridge() {
 
   useEffect(() => {
     if (location.pathname !== '/visits') return;
-    const visitId = params.get('visit_id') || location.state?.visit_id || location.state?.visitId || '';
-    if (!visitId || openedRef.current === String(visitId)) return;
-    openedRef.current = String(visitId);
+    const visitId = params.get('visit_id') || location.state?.open_visit_id || location.state?.visit_id || location.state?.visitId || '';
+    if (!visitId) return;
 
     let cancelled = false;
+    const targetKey = `${visitId}:${params.get('date') || ''}`;
+    if (openedRef.current === targetKey) return;
+    openedRef.current = targetKey;
+
+    const tryOpen = () => {
+      if (cancelled) return;
+      if (!clickVisitCard(visitId)) setTimeout(tryOpen, 300);
+    };
+
+    const waitForBoardDateAndOpen = (targetDate, attempts = 0) => {
+      if (cancelled) return;
+      const synced = syncBoardDate(targetDate);
+      if (!synced && attempts < 20) {
+        setTimeout(() => waitForBoardDateAndOpen(targetDate, attempts + 1), 150);
+        return;
+      }
+      setTimeout(tryOpen, synced ? 800 : 500);
+    };
+
     const openVisit = async () => {
       try {
         const res = await api.get(`/api/visits/${visitId}/`);
@@ -42,17 +78,9 @@ export default function VisitDeepLinkBridge() {
           return;
         }
 
-        const tryOpen = () => {
-          if (cancelled) return;
-          if (!clickVisitCard(visitId)) setTimeout(tryOpen, 300);
-        };
-        setTimeout(tryOpen, 500);
+        waitForBoardDateAndOpen(targetDate);
       } catch {
-        const tryOpen = () => {
-          if (cancelled) return;
-          if (!clickVisitCard(visitId)) setTimeout(tryOpen, 300);
-        };
-        setTimeout(tryOpen, 500);
+        waitForBoardDateAndOpen(params.get('date'));
       }
     };
 

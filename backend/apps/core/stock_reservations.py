@@ -108,6 +108,7 @@ def sell_order_part(part):
     inventory_id, status, reserved_qty = _get_extra(part.id)
     if status == SOLD:
         return True
+
     inventory = None
     if inventory_id:
         try:
@@ -131,7 +132,7 @@ def sell_order_part(part):
             StockMovement.objects.create(
                 company=part.visit.company,
                 inventory_item=inventory,
-                movement_type='sale',
+                movement_type='adjustment',
                 source_order_part=part,
                 brand=part.brand,
                 article=part.article,
@@ -200,27 +201,24 @@ def sync_order_part_after_create(part):
 
 
 def attach_stock_workflow():
-    from .views import OrderPartViewSet, VisitViewSet
-    original_order_part_perform_create = OrderPartViewSet.perform_create
+    from django.db.models.signals import post_save
+    from .models import OrderPart, Visit
 
-    if getattr(OrderPartViewSet, '_stock_reservation_attached', False):
-        return
-
-    def perform_create_with_stock(self, serializer):
-        original_order_part_perform_create(self, serializer)
+    def order_part_post_save(sender, instance, created=False, **kwargs):
+        if not created:
+            return
         try:
-            sync_order_part_after_create(serializer.instance)
+            sync_order_part_after_create(instance)
         except Exception as exc:
-            print(f'Stock sync after part create failed: {exc}')
+            print(f'Stock sync after order part save failed: {exc}')
 
-    def perform_update_with_stock(self, serializer):
-        instance = serializer.save()
+    def visit_post_save(sender, instance, created=False, **kwargs):
+        if created:
+            return
         try:
             sync_visit_stock_for_status(instance)
         except Exception as exc:
-            print(f'Stock sync after visit update failed: {exc}')
-        return instance
+            print(f'Stock sync after visit save failed: {exc}')
 
-    OrderPartViewSet.perform_create = perform_create_with_stock
-    VisitViewSet.perform_update = perform_update_with_stock
-    OrderPartViewSet._stock_reservation_attached = True
+    post_save.connect(order_part_post_save, sender=OrderPart, dispatch_uid='vin_matrix_order_part_stock_sync')
+    post_save.connect(visit_post_save, sender=Visit, dispatch_uid='vin_matrix_visit_stock_sync')

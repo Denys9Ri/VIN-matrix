@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
 import StoreOrders from './pages/StoreOrders';
+import ClientsCRM from './pages/ClientsCRM';
 import Analytics from './pages/Analytics';
 import PartnerClients from './pages/PartnerClients';
 import Partners from './pages/Partners';
@@ -102,6 +103,7 @@ function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
+          <Route path="clients" element={<ClientsCRM />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="partner-clients" element={<PartnerClients />} />
           <Route path="partners" element={<Partners />} />

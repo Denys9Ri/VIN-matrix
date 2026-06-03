@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Boxes, CalendarClock, CheckCircle2, ClipboardList, ExternalLink, Loader2, PackageCheck, Search, Truck, Users, XCircle } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, ExternalLink, Loader2, PackageCheck, Search, Truck, Users, XCircle } from 'lucide-react';
 import api from '../api/axios';
 
 const tabs = [
@@ -34,6 +34,12 @@ const dateText = (value) => {
   if (!value) return 'Без дати';
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? 'Без дати' : d.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+const dateISO = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 const getSupplierStyle = (item) => {
@@ -75,6 +81,7 @@ export default function SupplierOrders() {
         ...part,
         visit_id: visit.id,
         visit_date: visit.scheduled_datetime || visit.created_at,
+        visit_board_date: dateISO(visit.scheduled_datetime || visit.created_at || visit.updated_at),
         plate: visit.plate,
         client: visit.client,
         phone: visit.phone,
@@ -150,6 +157,13 @@ export default function SupplierOrders() {
     }
   };
 
+  const openVisit = (item) => {
+    const query = new URLSearchParams();
+    query.set('visit_id', item.visit_id);
+    if (item.visit_board_date) query.set('date', item.visit_board_date);
+    navigate(`/visits?${query.toString()}`, { state: { open_visit_id: item.visit_id } });
+  };
+
   return <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-8 py-4 md:py-8 min-h-screen overflow-x-hidden">
     <div className="mb-5 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
       <div className="min-w-0">
@@ -185,7 +199,7 @@ export default function SupplierOrders() {
     </div>
 
     {loading ? <Empty text="Завантаження замовлень..." /> : groups.length === 0 ? <Empty text="Позицій для постачальників немає" /> : <div className="space-y-5">
-      {groups.map((group) => <SupplierGroup key={group.supplier} group={group} busy={busy} onStatus={changeStatus} onGroupStatus={changeGroupStatus} onOpenVisit={(item) => navigate('/visits', { state: { supplierOrderPart: item.id, search: item.plate } })} />)}
+      {groups.map((group) => <SupplierGroup key={group.supplier} group={group} busy={busy} onStatus={changeStatus} onGroupStatus={changeGroupStatus} onOpenVisit={openVisit} />)}
     </div>}
   </div>;
 }

@@ -42,10 +42,17 @@ const getVisitSearchQuery = (url = '') => {
   }
 };
 
+const isPhoneLikeQuery = (value = '') => /^[+\d\s()-]{6,20}$/.test(String(value).trim()) && String(value).replace(/\D/g, '').length >= 9;
+const isShortOrderIdQuery = (value = '') => /^\d{1,8}$/.test(String(value).trim());
+const canOfferCreateOrder = (value = '') => {
+  const query = String(value || '').trim();
+  return Boolean(query) && (!/^\d+$/.test(query) || isPhoneLikeQuery(query));
+};
+
 const isNumericVisitSearch = (config) => {
   if ((config.method || 'get').toLowerCase() !== 'get') return false;
   const query = getVisitSearchQuery(config.url);
-  return isVisitSearchUrl(config.url) && /^\d+$/.test(query) && query.length <= 8;
+  return isVisitSearchUrl(config.url) && isShortOrderIdQuery(query);
 };
 
 const rewriteNumericVisitSearch = (config) => {
@@ -73,7 +80,7 @@ const createStoreOrderFromSearch = async (config) => {
   if (!visit.startsWith(NEW_STORE_ORDER_PREFIX)) return config;
 
   const rawQuery = decodeURIComponent(visit.slice(NEW_STORE_ORDER_PREFIX.length)).trim();
-  const looksPhone = /^[+\d\s()-]{6,}$/.test(rawQuery);
+  const looksPhone = isPhoneLikeQuery(rawQuery);
   const clientName = (looksPhone ? 'Новий покупець' : (rawQuery || 'Новий покупець')).slice(0, 100);
   const phone = normalizePhone(looksPhone ? rawQuery : '');
   const today = new Date();
@@ -134,17 +141,18 @@ const normalizeVisitSearchResponse = (response) => {
 
   if (isVisitSearchUrl(response.config?.url) && Array.isArray(response.data)) {
     const query = getVisitSearchQuery(response.config.url);
-    if (query && !/^\d+$/.test(query)) {
+    if (canOfferCreateOrder(query)) {
       const alreadyExists = response.data.some((item) => String(item.id || '').startsWith(NEW_STORE_ORDER_PREFIX));
       if (!alreadyExists) {
+        const phone = isPhoneLikeQuery(query) ? normalizePhone(query) : FALLBACK_PHONE;
         response.data = [
           ...response.data,
           {
             id: `${NEW_STORE_ORDER_PREFIX}${encodeURIComponent(query)}`,
             plate: '+ Створити нове замовлення',
-            client: query,
-            phone: FALLBACK_PHONE,
-            vin_code: 'Нове замовлення з цією запчастиною',
+            client: isPhoneLikeQuery(query) ? 'Новий покупець' : query,
+            phone,
+            vin_code: isPhoneLikeQuery(query) ? `Телефон: ${phone}` : 'Нове замовлення з цією запчастиною',
             status: 'SELECTION',
             __create_store_order: true,
           },

@@ -8,6 +8,7 @@ const LEGACY_API_ORIGINS = [
 ];
 
 const NEW_STORE_ORDER_PREFIX = 'NEW_STORE_ORDER::';
+const FALLBACK_PHONE = '0000000000';
 
 const DEFAULT_API_ORIGIN =
   import.meta.env.VITE_API_URL ||
@@ -15,12 +16,8 @@ const DEFAULT_API_ORIGIN =
 
 const normalizeBaseUrl = (rawUrl) => {
   let url = String(rawUrl || DEFAULT_API_ORIGIN).trim();
-  while (url.endsWith('/')) {
-    url = url.slice(0, -1);
-  }
-  if (url.toLowerCase().endsWith('/api')) {
-    url = url.slice(0, -4);
-  }
+  while (url.endsWith('/')) url = url.slice(0, -1);
+  if (url.toLowerCase().endsWith('/api')) url = url.slice(0, -4);
   return url;
 };
 
@@ -30,9 +27,7 @@ const normalizeRequestUrl = (url = '') => {
   if (!url) return url;
   const original = String(url);
   const legacyOrigin = LEGACY_API_ORIGINS.find((origin) => original.startsWith(origin));
-  if (legacyOrigin) {
-    return `${API_ORIGIN}${original.slice(legacyOrigin.length)}`;
-  }
+  if (legacyOrigin) return `${API_ORIGIN}${original.slice(legacyOrigin.length)}`;
   return original;
 };
 
@@ -50,7 +45,7 @@ const getVisitSearchQuery = (url = '') => {
 const isNumericVisitSearch = (config) => {
   if ((config.method || 'get').toLowerCase() !== 'get') return false;
   const query = getVisitSearchQuery(config.url);
-  return isVisitSearchUrl(config.url) && /^\d+$/.test(query);
+  return isVisitSearchUrl(config.url) && /^\d+$/.test(query) && query.length <= 8;
 };
 
 const rewriteNumericVisitSearch = (config) => {
@@ -61,6 +56,11 @@ const rewriteNumericVisitSearch = (config) => {
   config.url = `${base}/${query}/`;
   config.__singleVisitSearch = true;
   return config;
+};
+
+const normalizePhone = (value) => {
+  const phone = String(value || '').trim().slice(0, 20);
+  return phone || FALLBACK_PHONE;
 };
 
 const createStoreOrderFromSearch = async (config) => {
@@ -74,8 +74,8 @@ const createStoreOrderFromSearch = async (config) => {
 
   const rawQuery = decodeURIComponent(visit.slice(NEW_STORE_ORDER_PREFIX.length)).trim();
   const looksPhone = /^[+\d\s()-]{6,}$/.test(rawQuery);
-  const clientName = looksPhone ? 'Новий покупець' : (rawQuery || 'Новий покупець');
-  const phone = looksPhone ? rawQuery : '';
+  const clientName = (looksPhone ? 'Новий покупець' : (rawQuery || 'Новий покупець')).slice(0, 100);
+  const phone = normalizePhone(looksPhone ? rawQuery : '');
   const today = new Date();
 
   const delivery = {
@@ -88,7 +88,7 @@ const createStoreOrderFromSearch = async (config) => {
   const orderPayload = {
     client: clientName,
     phone,
-    plate: `ORDER-${Date.now()}`,
+    plate: `ORD-${Date.now()}`.slice(0, 20),
     vin_code: null,
     status: 'SELECTION',
     delivery_type: 'pickup',
@@ -109,6 +109,8 @@ const createStoreOrderFromSearch = async (config) => {
   });
 
   data.visit = orderResponse.data.id;
+  data.quantity = data.quantity || 1;
+  data.supplier = String(data.supplier || 'Пошук запчастин').slice(0, 100);
   config.data = data;
   config.__createdStoreOrderId = orderResponse.data.id;
   return config;
@@ -141,7 +143,7 @@ const normalizeVisitSearchResponse = (response) => {
             id: `${NEW_STORE_ORDER_PREFIX}${encodeURIComponent(query)}`,
             plate: '+ Створити нове замовлення',
             client: query,
-            phone: '',
+            phone: FALLBACK_PHONE,
             vin_code: 'Нове замовлення з цією запчастиною',
             status: 'SELECTION',
             __create_store_order: true,
@@ -170,10 +172,7 @@ axios.defaults.baseURL = API_ORIGIN;
 axios.interceptors.request.use(attachAuthAndNormalize);
 axios.interceptors.response.use(normalizeVisitSearchResponse);
 
-const api = axios.create({
-  baseURL: API_ORIGIN,
-});
-
+const api = axios.create({ baseURL: API_ORIGIN });
 api.interceptors.request.use(attachAuthAndNormalize);
 api.interceptors.response.use(normalizeVisitSearchResponse);
 

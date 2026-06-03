@@ -29,16 +29,17 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     fetchUserRole();
   }, []);
 
-  const visitsName = businessType === 'store' ? 'Замовлення' : 'Візити';
-  const visitsIcon = businessType === 'store' ? <Package size={20} /> : <CarFront size={20} />;
+  const isStore = businessType === 'store';
+  const visitsName = isStore ? 'Замовлення' : 'Візити';
+  const visitsIcon = isStore ? <Package size={20} /> : <CarFront size={20} />;
 
   const paidMenuItems = [
     { name: 'Панель', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Пошук запчастин', icon: <Search size={20} />, path: '/search' },
     { name: 'Склад', icon: <Briefcase size={20} />, path: '/inventory' },
-    ...(businessType === 'store' ? [{ name: 'Клієнти', icon: <Users size={20} />, path: '/clients' }] : []),
+    ...(isStore ? [{ name: 'Клієнти', icon: <Users size={20} />, path: '/clients' }] : []),
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
-    { name: 'CRM', icon: <Users size={20} />, path: '/crm/supplier-orders' },
+    ...(!isStore ? [{ name: 'CRM', icon: <Users size={20} />, path: '/crm/supplier-orders' }] : []),
     { name: 'Комплекси', icon: <Boxes size={20} />, path: '/complexes' },
   ];
 

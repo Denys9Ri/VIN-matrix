@@ -15,6 +15,7 @@ import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
+import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -62,7 +63,7 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function VisitsWithCrm() {
-  return <><Visits /><VisitCrmBridge /></>;
+  return <><Visits /><VisitDeepLinkBridge /><VisitCrmBridge /></>;
 }
 
 function App() {

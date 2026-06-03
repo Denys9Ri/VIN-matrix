@@ -5,6 +5,8 @@ from django.db import connection, transaction
 RESERVED = 'reserved'
 SOLD = 'sold'
 RELEASED = 'released'
+RETURNED = 'returned'
+DEFECTIVE = 'defective'
 NONE = 'none'
 
 
@@ -70,6 +72,29 @@ def _sell_stock(inventory_id, qty, reserved_to_remove=0):
         return False
 
 
+def _return_stock(inventory_id, qty):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                UPDATE core_inventoryitem
+                SET quantity = quantity + %s
+                WHERE id = %s
+                RETURNING quantity, reserved_quantity
+                ''',
+                [int(qty or 0), inventory_id]
+            )
+            row = cursor.fetchone()
+        if not row:
+            print(f'STOCK SYNC: return SQL did not update stock={inventory_id}; qty={qty}')
+            return False
+        print(f'STOCK SYNC: returned to stock item={inventory_id} new_quantity={row[0]} new_reserved={row[1]}')
+        return True
+    except Exception as exc:
+        print(f'STOCK SYNC: cannot return stock item={inventory_id}: {exc}')
+        return False
+
+
 def _get_extra(part_id):
     try:
         with connection.cursor() as cursor:
@@ -130,6 +155,27 @@ def _find_inventory_item(part):
     return None
 
 
+def _create_stock_movement(part, inventory, qty, note):
+    try:
+        from .models import StockMovement
+        StockMovement.objects.create(
+            company=part.visit.company,
+            inventory_item=inventory,
+            movement_type='adjustment',
+            source_order_part=part,
+            brand=part.brand,
+            article=part.article,
+            name=part.name,
+            quantity=int(qty or 0),
+            buy_price=getattr(part, 'buy_price', 0) or 0,
+            sell_price=getattr(part, 'sell_price', 0) or 0,
+            note=note,
+            created_by=None,
+        )
+    except Exception as exc:
+        print(f'STOCK SYNC: movement create failed for part={getattr(part, "id", None)}: {exc}')
+
+
 def reserve_order_part(part, inventory_item=None):
     from .models import InventoryItem
     if not part:
@@ -164,25 +210,29 @@ def reserve_order_part(part, inventory_item=None):
         if not _change_stock_reserved(inventory.id, qty):
             return False
         _set_part_extra(part.id, inventory.id, RESERVED, qty)
+        _create_stock_movement(part, inventory, 0, f'Резерв товару під замовлення №{part.visit_id}: {qty} шт')
         print(f'STOCK SYNC: reserved part={part.id}; stock={inventory.id}; qty={qty}')
         return True
 
 
-def release_order_part(part):
+def release_order_part(part, reason='Зняття резерву', comment=''):
     if not part:
         return False
     inventory_id, status, reserved_qty = _get_extra(part.id)
     if status != RESERVED or not inventory_id or reserved_qty <= 0:
         return False
+    from .models import InventoryItem
     with transaction.atomic():
+        inventory = InventoryItem.objects.select_for_update().get(id=inventory_id)
         _change_stock_reserved(inventory_id, -reserved_qty)
         _set_part_extra(part.id, inventory_id, RELEASED, 0)
+        _create_stock_movement(part, inventory, 0, f'{reason}. Замовлення №{part.visit_id}. {comment}'.strip())
     print(f'STOCK SYNC: released reserve part={part.id}; stock={inventory_id}; qty={reserved_qty}')
     return True
 
 
 def sell_order_part(part):
-    from .models import InventoryItem, StockMovement
+    from .models import InventoryItem
     if not part:
         return False
     qty = _int_qty(getattr(part, 'quantity', 1)) or 1
@@ -214,24 +264,91 @@ def sell_order_part(part):
         if not _sell_stock(inventory.id, qty, reserved_qty):
             return False
         _set_part_extra(part.id, inventory.id, SOLD, 0)
-        try:
-            StockMovement.objects.create(
-                company=part.visit.company,
-                inventory_item=inventory,
-                movement_type='adjustment',
-                source_order_part=part,
-                brand=part.brand,
-                article=part.article,
-                name=part.name,
-                quantity=-qty,
-                buy_price=getattr(part, 'buy_price', 0) or 0,
-                sell_price=getattr(part, 'sell_price', 0) or 0,
-                note=f'Списання при виконанні замовлення №{part.visit_id}',
-                created_by=None,
-            )
-        except Exception as exc:
-            print(f'STOCK SYNC: movement create failed for part={part.id}: {exc}')
+        _create_stock_movement(part, inventory, -qty, f'Списання при виконанні замовлення №{part.visit_id}')
     print(f'STOCK SYNC: sold part={part.id}; stock={inventory.id}; qty={qty}')
+    return True
+
+
+def return_order_part_to_stock(part, quantity=None, reason='Повернення товару', comment='', return_to_stock=True):
+    from .models import InventoryItem
+    if not part:
+        return False, 'Товар не знайдено'
+    full_qty = _int_qty(getattr(part, 'quantity', 1)) or 1
+    qty = _int_qty(quantity) or full_qty
+    qty = min(qty, full_qty)
+    inventory_id, status, reserved_qty = _get_extra(part.id)
+
+    if status in [RETURNED, DEFECTIVE]:
+        return False, 'Цей товар уже повернений або списаний як брак'
+    if status == RESERVED:
+        ok = release_order_part(part, reason=reason, comment=comment)
+        return ok, 'Резерв знято' if ok else 'Не вдалося зняти резерв'
+    if status != SOLD or not inventory_id:
+        _set_part_extra(part.id, inventory_id, DEFECTIVE if not return_to_stock else RETURNED, 0)
+        return True, 'Товар не був списаний зі складу, склад не змінювався'
+
+    with transaction.atomic():
+        inventory = InventoryItem.objects.select_for_update().get(id=inventory_id)
+        if return_to_stock:
+            if not _return_stock(inventory_id, qty):
+                return False, 'Не вдалося повернути товар на склад'
+            _set_part_extra(part.id, inventory_id, RETURNED, 0)
+            _create_stock_movement(part, inventory, qty, f'Повернення на склад. Причина: {reason}. Замовлення №{part.visit_id}. {comment}'.strip())
+            return True, 'Товар повернуто на склад'
+        _set_part_extra(part.id, inventory_id, DEFECTIVE, 0)
+        _create_stock_movement(part, inventory, 0, f'Брак / не повернуто на склад. Причина: {reason}. Замовлення №{part.visit_id}. {comment}'.strip())
+        return True, 'Товар позначено як брак, склад не збільшувався'
+
+
+def delete_order_part_with_stock(part, stock_action='return', reason='Видалення позиції', comment=''):
+    if not part:
+        return False, 'Товар не знайдено'
+    inventory_id, status, reserved_qty = _get_extra(part.id)
+    if status == RESERVED:
+        release_order_part(part, reason=reason, comment=comment)
+    elif status == SOLD and inventory_id and stock_action == 'return':
+        ok, message = return_order_part_to_stock(part, quantity=getattr(part, 'quantity', 1), reason=reason, comment=comment, return_to_stock=True)
+        if not ok:
+            return False, message
+    elif status == SOLD and inventory_id and stock_action == 'defect':
+        return_order_part_to_stock(part, quantity=getattr(part, 'quantity', 1), reason=reason, comment=comment, return_to_stock=False)
+    return True, 'Товар можна видаляти'
+
+
+def sync_order_part_after_update(part, old_quantity=None):
+    if not part:
+        return False
+    old_qty = _int_qty(old_quantity)
+    new_qty = _int_qty(getattr(part, 'quantity', 1)) or 1
+    inventory_id, status, reserved_qty = _get_extra(part.id)
+    if old_qty <= 0 or old_qty == new_qty:
+        return True
+    delta = new_qty - old_qty
+    if status == SOLD and inventory_id:
+        if delta > 0:
+            part.quantity = delta
+            ok = sell_order_part(part)
+            part.quantity = new_qty
+            return ok
+        if delta < 0:
+            part.quantity = abs(delta)
+            ok, _msg = return_order_part_to_stock(part, quantity=abs(delta), reason='Зменшення кількості в замовленні', return_to_stock=True)
+            part.quantity = new_qty
+            if ok:
+                _set_part_extra(part.id, inventory_id, SOLD, 0)
+            return ok
+    if status == RESERVED and inventory_id:
+        if delta > 0:
+            stock_qty, stock_reserved = _stock_extra(inventory_id)
+            available = max(stock_qty - stock_reserved, 0)
+            if available < delta:
+                print(f'STOCK SYNC: cannot increase reserve for part={part.id}; available={available}; delta={delta}')
+                return False
+            _change_stock_reserved(inventory_id, delta)
+        elif delta < 0:
+            _change_stock_reserved(inventory_id, delta)
+        _set_part_extra(part.id, inventory_id, RESERVED, new_qty)
+        return True
     return True
 
 
@@ -256,7 +373,7 @@ def sell_visit_parts(visit):
     failed = 0
     for part in visit.parts.all():
         _inventory_id, status, _reserved_qty = _get_extra(part.id)
-        if status == SOLD:
+        if status in [SOLD, RETURNED, DEFECTIVE]:
             continue
         if sell_order_part(part): sold += 1
         else: failed += 1

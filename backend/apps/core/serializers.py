@@ -60,6 +60,14 @@ class OrderPartSerializer(serializers.ModelSerializer):
             if status == 'released': return 'Мій склад — резерв знято'
             return 'Мій склад'
         return obj.supplier or 'Постачальник не вказаний'
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        try:
+            from .stock_reservations import sync_order_part_after_create
+            sync_order_part_after_create(instance)
+        except Exception as exc:
+            print(f'STOCK SYNC: serializer create sync failed for part={getattr(instance, "id", None)}: {exc}')
+        return instance
 
 class OrderServiceSerializer(serializers.ModelSerializer):
     class Meta:

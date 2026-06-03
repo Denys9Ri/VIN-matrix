@@ -79,9 +79,12 @@ const createStoreOrderFromSearch = async (config) => {
   const visit = String(data.visit || '');
   if (!visit.startsWith(NEW_STORE_ORDER_PREFIX)) return config;
 
-  const rawQuery = decodeURIComponent(visit.slice(NEW_STORE_ORDER_PREFIX.length)).trim();
+  const encoded = visit.slice(NEW_STORE_ORDER_PREFIX.length);
+  const rawQuery = decodeURIComponent(encoded.split('::')[0] || '').trim();
+  const encodedClient = encoded.includes('::') ? encoded.split('::').slice(1).join('::') : '';
+  const hintedClient = encodedClient ? decodeURIComponent(encodedClient).trim() : '';
   const looksPhone = isPhoneLikeQuery(rawQuery);
-  const clientName = (looksPhone ? 'Новий покупець' : (rawQuery || 'Новий покупець')).slice(0, 100);
+  const clientName = (hintedClient || (looksPhone ? 'Новий покупець' : (rawQuery || 'Новий покупець'))).slice(0, 100);
   const phone = normalizePhone(looksPhone ? rawQuery : '');
   const today = new Date();
 
@@ -134,10 +137,37 @@ const attachAuthAndNormalize = async (config) => {
   return createStoreOrderFromSearch(rewritten);
 };
 
+const decoratePart = (part) => {
+  if (!part || typeof part !== 'object') return part;
+  if (part.source_label) {
+    return { ...part, supplier: part.source_label };
+  }
+  if (part.stock_status === 'sold') return { ...part, supplier: 'Мій склад — списано' };
+  if (part.stock_status === 'reserved') return { ...part, supplier: 'Мій склад — резерв' };
+  if (part.stock_status === 'released') return { ...part, supplier: 'Мій склад — резерв знято' };
+  if (part.inventory_item) return { ...part, supplier: 'Мій склад' };
+  return part;
+};
+
+const decorateVisitParts = (data) => {
+  if (Array.isArray(data)) {
+    return data.map((visit) => visit?.parts ? { ...visit, parts: visit.parts.map(decoratePart) } : visit);
+  }
+  if (data?.parts) {
+    return { ...data, parts: data.parts.map(decoratePart) };
+  }
+  if (data?.brand && data?.article) {
+    return decoratePart(data);
+  }
+  return data;
+};
+
 const normalizeVisitSearchResponse = (response) => {
   if (response.config?.__singleVisitSearch && response.data && !Array.isArray(response.data)) {
     response.data = [response.data];
   }
+
+  response.data = decorateVisitParts(response.data);
 
   if (isVisitSearchUrl(response.config?.url) && Array.isArray(response.data)) {
     const query = getVisitSearchQuery(response.config.url);
@@ -145,12 +175,15 @@ const normalizeVisitSearchResponse = (response) => {
       const alreadyExists = response.data.some((item) => String(item.id || '').startsWith(NEW_STORE_ORDER_PREFIX));
       if (!alreadyExists) {
         const phone = isPhoneLikeQuery(query) ? normalizePhone(query) : FALLBACK_PHONE;
+        const existingClient = response.data.find((item) => item?.phone === phone || String(item?.phone || '').replace(/\D/g, '') === String(phone).replace(/\D/g, ''));
+        const clientName = existingClient?.client || (isPhoneLikeQuery(query) ? 'Новий покупець' : query);
+        const syntheticId = `${NEW_STORE_ORDER_PREFIX}${encodeURIComponent(query)}${clientName ? `::${encodeURIComponent(clientName)}` : ''}`;
         response.data = [
           ...response.data,
           {
-            id: `${NEW_STORE_ORDER_PREFIX}${encodeURIComponent(query)}`,
+            id: syntheticId,
             plate: '+ Створити нове замовлення',
-            client: isPhoneLikeQuery(query) ? 'Новий покупець' : query,
+            client: clientName,
             phone,
             vin_code: isPhoneLikeQuery(query) ? `Телефон: ${phone}` : 'Нове замовлення з цією запчастиною',
             status: 'SELECTION',
@@ -175,7 +208,6 @@ const normalizeVisitSearchResponse = (response) => {
   return response;
 };
 
-// Global fallback for legacy pages that still import axios directly.
 axios.defaults.baseURL = API_ORIGIN;
 axios.interceptors.request.use(attachAuthAndNormalize);
 axios.interceptors.response.use(normalizeVisitSearchResponse);

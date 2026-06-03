@@ -40,7 +40,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     ...(isStore ? [{ name: 'Клієнти', icon: <Users size={20} />, path: '/clients' }] : []),
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
     ...(!isStore ? [{ name: 'CRM', icon: <Users size={20} />, path: '/crm/supplier-orders' }] : []),
-    { name: 'Комплекси', icon: <Boxes size={20} />, path: '/complexes' },
+    ...(!isStore ? [{ name: 'Комплекси', icon: <Boxes size={20} />, path: '/complexes' }] : []),
   ];
 
   const menuItems = [

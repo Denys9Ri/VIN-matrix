@@ -106,6 +106,8 @@ def sell_order_part(part):
         return False
     qty = _int_qty(getattr(part, 'quantity', 1)) or 1
     inventory_id, status, reserved_qty = _get_extra(part.id)
+    if status == SOLD:
+        return True
     inventory = None
     if inventory_id:
         try:
@@ -187,20 +189,29 @@ def sync_visit_stock_for_status(visit):
     return reserve_visit_parts(visit)
 
 
+def sync_order_part_after_create(part):
+    visit_status = getattr(getattr(part, 'visit', None), 'status', '')
+    if visit_status == 'COMPLETED':
+        return sell_order_part(part)
+    if visit_status == 'CANCELLED':
+        _set_part_extra(part.id, None, RELEASED, 0)
+        return False
+    return reserve_order_part(part)
+
+
 def attach_stock_workflow():
     from .views import OrderPartViewSet, VisitViewSet
     original_order_part_perform_create = OrderPartViewSet.perform_create
-    original_visit_perform_update = getattr(VisitViewSet, 'perform_update', None)
 
     if getattr(OrderPartViewSet, '_stock_reservation_attached', False):
         return
 
-    def perform_create_with_reserve(self, serializer):
+    def perform_create_with_stock(self, serializer):
         original_order_part_perform_create(self, serializer)
         try:
-            reserve_order_part(serializer.instance)
+            sync_order_part_after_create(serializer.instance)
         except Exception as exc:
-            print(f'Stock reserve after part create failed: {exc}')
+            print(f'Stock sync after part create failed: {exc}')
 
     def perform_update_with_stock(self, serializer):
         instance = serializer.save()
@@ -210,6 +221,6 @@ def attach_stock_workflow():
             print(f'Stock sync after visit update failed: {exc}')
         return instance
 
-    OrderPartViewSet.perform_create = perform_create_with_reserve
+    OrderPartViewSet.perform_create = perform_create_with_stock
     VisitViewSet.perform_update = perform_update_with_stock
     OrderPartViewSet._stock_reservation_attached = True

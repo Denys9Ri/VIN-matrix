@@ -8,6 +8,7 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
+import StoreOrders from './pages/StoreOrders';
 import Analytics from './pages/Analytics';
 import PartnerClients from './pages/PartnerClients';
 import Partners from './pages/Partners';
@@ -63,6 +64,28 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function VisitsWithCrm() {
+  const [businessType, setBusinessType] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/api/settings/')
+      .then((res) => {
+        if (!cancelled) setBusinessType(res.data?.company?.business_type || 'sto');
+      })
+      .catch(() => {
+        if (!cancelled) setBusinessType('sto');
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!businessType) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження режиму...</div>;
+  }
+
+  if (businessType === 'store') {
+    return <StoreOrders />;
+  }
+
   return <><Visits /><VisitDeepLinkBridge /><VisitCrmBridge /></>;
 }
 

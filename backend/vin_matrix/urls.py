@@ -23,6 +23,7 @@ from apps.core.ocr_views import RecognizeDocumentView
 from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
 from apps.core.stock_actions import StockMinQuantityView, StockReserveView, StockReleaseView, StockWriteOffVisitView
+from apps.core.crm_client_views import StoreClientListView, StoreClientDetailView
 from apps.core.paid_views import (
     PartSearchView,
     MechanicViewSet,
@@ -75,6 +76,8 @@ urlpatterns = [
     path('api/stock/reserve/', StockReserveView.as_view(), name='stock-reserve'),
     path('api/stock/release/', StockReleaseView.as_view(), name='stock-release'),
     path('api/stock/write-off-visit/', StockWriteOffVisitView.as_view(), name='stock-write-off-visit'),
+    path('api/store-clients/', StoreClientListView.as_view(), name='store-client-list'),
+    path('api/store-clients/detail/', StoreClientDetailView.as_view(), name='store-client-detail'),
     path('api/', include(router.urls)),
 ]
 

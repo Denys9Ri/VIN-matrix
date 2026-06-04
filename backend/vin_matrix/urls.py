@@ -24,7 +24,7 @@ from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
 from apps.core.stock_actions import StockMinQuantityView, StockReserveView, StockReleaseView, StockWriteOffVisitView
 from apps.core.crm_client_views import StoreClientListView, StoreClientDetailView
-from apps.core.crm_client_update_views import StoreClientUpdateView
+from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
 from apps.core.paid_views import (
     PartSearchView,
     MechanicViewSet,
@@ -80,6 +80,7 @@ urlpatterns = [
     path('api/store-clients/', StoreClientListView.as_view(), name='store-client-list'),
     path('api/store-clients/detail/', StoreClientDetailView.as_view(), name='store-client-detail'),
     path('api/store-clients/update/', StoreClientUpdateView.as_view(), name='store-client-update'),
+    path('api/store-clients/repeat-sale/', StoreClientRepeatSaleView.as_view(), name='store-client-repeat-sale'),
     path('api/', include(router.urls)),
 ]
 

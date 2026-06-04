@@ -24,6 +24,11 @@ def normalize_phone(value):
     return digits or 'no-phone'
 
 
+def search_order_id(value):
+    value = str(value or '').strip().replace('№', '').replace('#', '')
+    return int(value) if value.isdigit() else None
+
+
 def parse_stock_statuses(part_ids):
     if not part_ids:
         return {}
@@ -113,15 +118,31 @@ def serialize_order(visit, stock_statuses=None):
 def build_clients(company, search=''):
     qs = Visit.objects.filter(company=company).prefetch_related('parts').order_by('-created_at')
     if search:
-        qs = qs.filter(
-            Q(client__icontains=search) |
-            Q(phone__icontains=search) |
-            Q(plate__icontains=search) |
-            Q(vin_code__icontains=search) |
-            Q(parts__brand__icontains=search) |
-            Q(parts__article__icontains=search) |
-            Q(parts__name__icontains=search)
-        ).distinct()
+        order_id = search_order_id(search)
+        if order_id:
+            exact_order_qs = qs.filter(id=order_id)
+            if exact_order_qs.exists():
+                qs = exact_order_qs
+            else:
+                qs = qs.filter(
+                    Q(client__icontains=search) |
+                    Q(phone__icontains=search) |
+                    Q(plate__icontains=search) |
+                    Q(vin_code__icontains=search) |
+                    Q(parts__brand__icontains=search) |
+                    Q(parts__article__icontains=search) |
+                    Q(parts__name__icontains=search)
+                ).distinct()
+        else:
+            qs = qs.filter(
+                Q(client__icontains=search) |
+                Q(phone__icontains=search) |
+                Q(plate__icontains=search) |
+                Q(vin_code__icontains=search) |
+                Q(parts__brand__icontains=search) |
+                Q(parts__article__icontains=search) |
+                Q(parts__name__icontains=search)
+            ).distinct()
     visits = list(qs)
     all_part_ids = [p.id for v in visits for p in v.parts.all()]
     stock_statuses = parse_stock_statuses(all_part_ids)

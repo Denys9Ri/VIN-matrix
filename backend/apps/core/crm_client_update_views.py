@@ -1,3 +1,4 @@
+import re
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -18,10 +19,9 @@ def is_generic_plate(value):
 
 
 def safe_decimal(value, default=0):
-    try:
-        return str(value if value not in [None, ''] else default).replace(',', '.')
-    except Exception:
-        return default
+    raw = str(value if value not in [None, ''] else default).replace(',', '.').replace(' ', '')
+    match = re.search(r'-?\d+(?:\.\d+)?', raw)
+    return match.group(0) if match else str(default)
 
 
 def find_client_visits(company, wanted):

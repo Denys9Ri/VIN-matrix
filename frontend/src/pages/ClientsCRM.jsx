@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Car, CreditCard, History, PackageSearch, Phone, RefreshCcw, Search, Star, UserRound, X } from 'lucide-react';
+import { AlertTriangle, Car, CreditCard, Edit3, History, PackageSearch, Phone, RefreshCcw, Search, Star, UserRound, X } from 'lucide-react';
 import api from '../api/axios';
 
 const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
@@ -16,6 +16,7 @@ export default function ClientsCRM() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [editClient, setEditClient] = useState(null);
 
   const load = async (query = search) => {
     setLoading(true);
@@ -47,6 +48,47 @@ export default function ClientsCRM() {
       setSelected(res.data);
     } catch {
       setMessage('Не вдалося відкрити картку клієнта.');
+    }
+  };
+
+  const openEdit = (client) => {
+    const car = arr(client.cars)[0] || {};
+    setEditClient({
+      key: client.key,
+      client: client.client || '',
+      phone: client.phone || '',
+      plate: car.plate || '',
+      vin_code: car.vin_code || '',
+      overwrite_car: false,
+    });
+  };
+
+  const saveClient = async (e) => {
+    e.preventDefault();
+    if (!editClient) return;
+    try {
+      const res = await api.patch('/api/store-clients/update/', editClient);
+      if (res.data?.client) {
+        setSelected(res.data.client);
+        setClients((prev) => prev.map((c) => c.key === editClient.key ? {
+          ...c,
+          key: res.data.client.key,
+          client: res.data.client.client,
+          phone: res.data.client.phone,
+          orders_count: res.data.client.orders_count,
+          total_revenue: res.data.client.total_revenue,
+          total_profit: res.data.client.total_profit,
+          debt_amount: res.data.client.debt_amount,
+          cars: res.data.client.cars,
+          status: res.data.client.status,
+          last_order_date: res.data.client.last_order_date,
+        } : c));
+      }
+      setEditClient(null);
+      setMessage(`Картку клієнта оновлено. Змінено замовлень: ${res.data?.updated ?? 0}.`);
+      load(search);
+    } catch (error) {
+      setMessage(error.response?.data?.error || 'Не вдалося оновити клієнта.');
     }
   };
 
@@ -82,15 +124,17 @@ export default function ClientsCRM() {
       </section>
 
       <section className="hidden xl:block min-w-0">
-        {selected ? <ClientDrawer client={selected} tab={tab} setTab={setTab}/> : <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm"><UserRound className="mx-auto text-slate-300 mb-3" size={48}/><h3 className="font-black text-slate-800 uppercase">Оберіть клієнта</h3><p className="text-sm font-bold text-slate-400 mt-2">Тут буде історія замовлень, товари, авто, борги та повернення.</p></div>}
+        {selected ? <ClientDrawer client={selected} tab={tab} setTab={setTab} onEdit={() => openEdit(selected)}/> : <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm"><UserRound className="mx-auto text-slate-300 mb-3" size={48}/><h3 className="font-black text-slate-800 uppercase">Оберіть клієнта</h3><p className="text-sm font-bold text-slate-400 mt-2">Тут буде історія замовлень, товари, авто, борги та повернення.</p></div>}
       </section>
     </div>
 
     {selected && <div className="xl:hidden fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm p-3 flex items-end">
       <div className="bg-white rounded-t-3xl w-full max-h-[92vh] overflow-hidden shadow-2xl">
-        <ClientDrawer client={selected} tab={tab} setTab={setTab} onClose={() => setSelected(null)}/>
+        <ClientDrawer client={selected} tab={tab} setTab={setTab} onClose={() => setSelected(null)} onEdit={() => openEdit(selected)}/>
       </div>
     </div>}
+
+    {editClient && <EditClientModal form={editClient} setForm={setEditClient} onClose={() => setEditClient(null)} onSubmit={saveClient}/>} 
   </div>;
 }
 
@@ -102,7 +146,7 @@ function ClientCard({ client, active, onClick }) {
   </button>;
 }
 
-function ClientDrawer({ client, tab, setTab, onClose }) {
+function ClientDrawer({ client, tab, setTab, onClose, onEdit }) {
   const parts = arr(client.parts);
   const orders = arr(client.orders);
   const debts = orders.filter((o) => Number(o.debt_amount || 0) > 0 || ['unpaid', 'debt', 'cod'].includes(o.payment_status));
@@ -111,7 +155,7 @@ function ClientDrawer({ client, tab, setTab, onClose }) {
     <div className="p-4 md:p-5 border-b border-slate-100 bg-gradient-to-br from-white to-slate-50 shrink-0">
       <div className="flex items-start justify-between gap-4">
         <div><h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase">{client.client || 'Без імені'}</h2><p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2"><Phone size={15}/>{client.phone || '-'}</p></div>
-        <div className="flex items-center gap-2"><Badge status={client.status}/>{onClose && <button onClick={onClose} className="bg-slate-100 text-slate-500 rounded-xl p-2"><X size={18}/></button>}</div>
+        <div className="flex items-center gap-2"><Badge status={client.status}/><button onClick={onEdit} className="bg-blue-50 text-blue-700 border border-blue-100 rounded-xl p-2" title="Редагувати клієнта"><Edit3 size={18}/></button>{onClose && <button onClick={onClose} className="bg-slate-100 text-slate-500 rounded-xl p-2"><X size={18}/></button>}</div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5"><Stat label="Замовлень" value={client.orders_count}/><Stat label="Покупки" value={money(client.total_revenue)}/><Stat label="Прибуток" value={money(client.total_profit)} good/><Stat label="Борг" value={money(client.debt_amount)} bad={client.debt_amount > 0}/></div>
     </div>
@@ -126,6 +170,24 @@ function ClientDrawer({ client, tab, setTab, onClose }) {
     </div>
   </div>;
 }
+
+function EditClientModal({ form, setForm, onClose, onSubmit }) {
+  return <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+    <form onSubmit={onSubmit} className="bg-white rounded-3xl w-full max-w-xl mx-auto my-8 p-5 md:p-6 shadow-2xl">
+      <div className="flex justify-between items-start gap-3 mb-5"><div><h2 className="text-2xl font-black uppercase text-slate-900">Картка покупця</h2><p className="text-sm font-bold text-slate-500 mt-1">Заповніть ПІБ, телефон, авто та VIN для постійного клієнта.</p></div><button type="button" onClick={onClose} className="bg-slate-100 rounded-xl p-2 text-slate-500"><X size={18}/></button></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Field label="ПІБ клієнта" value={form.client} onChange={(v)=>setForm({...form, client:v})} required/>
+        <Field label="Телефон" value={form.phone} onChange={(v)=>setForm({...form, phone:v})} required/>
+        <Field label="Номер авто" value={form.plate} onChange={(v)=>setForm({...form, plate:v.toUpperCase()})}/>
+        <Field label="VIN" value={form.vin_code} onChange={(v)=>setForm({...form, vin_code:v.toUpperCase()})}/>
+      </div>
+      <label className="mt-4 flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-2xl p-3 text-sm font-bold text-amber-800"><input type="checkbox" checked={form.overwrite_car} onChange={(e)=>setForm({...form, overwrite_car:e.target.checked})} className="mt-1"/> Оновити авто/VIN у всіх замовленнях цього клієнта. Якщо не вмикати — авто заміниться тільки там, де був технічний номер ORDER/Sale або порожній VIN.</label>
+      <button className="mt-5 w-full bg-blue-600 text-white rounded-xl p-4 font-black uppercase text-xs">Зберегти клієнта</button>
+    </form>
+  </div>;
+}
+
+function Field({ label, value, onChange, required }) { return <label className="block"><span className="text-[10px] font-black uppercase text-slate-500 mb-1.5 block">{label}</span><input required={required} value={value || ''} onChange={(e)=>onChange(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500"/></label>; }
 
 function Tabs({ active, setActive }) {
   const tabs = [['overview', Star, 'Огляд'], ['orders', History, 'Замовлення'], ['parts', PackageSearch, 'Товари'], ['cars', Car, 'Авто'], ['debts', CreditCard, 'Борги'], ['returns', AlertTriangle, 'Повернення']];

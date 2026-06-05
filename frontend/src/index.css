@@ -23,3 +23,5 @@ body {
   overflow-x: hidden;
 }
 
+@media (max-width: 1279px) {
+  .xl\:hidden.fixed

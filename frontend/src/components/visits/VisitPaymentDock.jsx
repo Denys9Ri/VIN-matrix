@@ -7,11 +7,17 @@ const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFraction
 const num = (v) => Number(String(v || '').replace(',', '.')) || 0;
 const payTypeLabels = { cash: 'Готівка', card: 'Карта', transfer: 'Переказ', terminal: 'Термінал', other: 'Інше' };
 const purposeLabels = { partial: 'Часткова оплата', final: 'Закриття боргу', legacy: 'Стара передплата', prepayment: 'Передплата' };
+const norm = (value = '') => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 function findVisitIdFromScreen() {
-  const text = document.body?.innerText || '';
-  const modalMatch = text.match(/ВІЗИТ\s*№\s*(\d+)/i) || text.match(/Візит\s*№\s*(\d+)/i) || text.match(/#\s*ВІЗИТ\s*№\s*(\d+)/i) || text.match(/#\s*Візит\s*№\s*(\d+)/i);
-  if (modalMatch?.[1]) return modalMatch[1];
+  const text = norm(document.body?.innerText || '');
+  const marker = 'візит №';
+  const pos = text.indexOf(marker);
+  if (pos >= 0) {
+    const tail = text.slice(pos + marker.length).trim();
+    const id = tail.match(/^\d+/)?.[0];
+    if (id) return id;
+  }
   const params = new URLSearchParams(window.location.search);
   return params.get('visit_id') || '';
 }
@@ -19,17 +25,17 @@ function findVisitIdFromScreen() {
 function findVisitModalRoot() {
   const candidates = Array.from(document.querySelectorAll('div'));
   return candidates.find((el) => {
-    const text = el.innerText || '';
-    return text.includes('Візит №') && text.includes('Огляд') && text.includes('Підсумок');
+    const text = norm(el.innerText || '');
+    return text.includes('візит №') && text.includes('огляд') && text.includes('підсумок');
   }) || null;
 }
 
 function findTabsBar() {
   const candidates = Array.from(document.querySelectorAll('div'));
   return candidates.find((el) => {
-    const buttons = Array.from(el.querySelectorAll(':scope > button'));
-    const labels = buttons.map((b) => (b.innerText || '').trim()).join('|');
-    return buttons.length >= 6 && labels.includes('Огляд') && labels.includes('Підсумок') && labels.includes('Запчастини');
+    const buttons = Array.from(el.children).filter((node) => node.tagName === 'BUTTON');
+    const labels = norm(buttons.map((b) => b.innerText || '').join('|'));
+    return buttons.length >= 6 && labels.includes('огляд') && labels.includes('підсумок') && labels.includes('запчастини');
   }) || null;
 }
 
@@ -58,7 +64,7 @@ export default function VisitPaymentDock() {
     update();
     const observer = new MutationObserver(update);
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    const timer = setInterval(update, 800);
+    const timer = setInterval(update, 600);
     return () => { observer.disconnect(); clearInterval(timer); };
   }, []);
 
@@ -143,11 +149,7 @@ export default function VisitPaymentDock() {
   const total = Number(finance?.grand_total || 0);
 
   const tabButton = (
-    <button
-      type="button"
-      onClick={() => { setOpen(true); load(); }}
-      className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase whitespace-nowrap ${open ? 'bg-blue-600 text-white' : debt > 0 ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}
-    >
+    <button type="button" onClick={() => { setOpen(true); load(); }} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase whitespace-nowrap ${open ? 'bg-blue-600 text-white' : debt > 0 ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
       <CreditCard size={15}/>
       Оплата
       <span className="rounded-xl bg-white/70 text-slate-700 px-2 py-0.5">{debt > 0 ? money(debt) : 'OK'}</span>
@@ -215,12 +217,7 @@ export default function VisitPaymentDock() {
     </div>
   ) : null;
 
-  return (
-    <>
-      {tabsBar ? createPortal(tabButton, tabsBar) : null}
-      {createPortal(panel, document.body)}
-    </>
-  );
+  return <>{tabsBar ? createPortal(tabButton, tabsBar) : null}{createPortal(panel, document.body)}</>;
 }
 
 function MoneyCard({ label, value, good, bad }) {

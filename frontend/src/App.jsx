@@ -51,40 +51,30 @@ const ProtectedRoute = ({ children }) => {
   }, [token, location.pathname]);
 
   if (!token) return <Navigate to="/login" replace />;
-
-  if (checking) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Перевірка доступу...</div>;
-  }
+  if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Перевірка доступу...</div>;
 
   const isAllowedRoute = allowedWhenBlocked.some((path) => location.pathname === path || location.pathname.startsWith(path + '/'));
-
-  if (accessAllowed === false && role === 'client' && !isAllowedRoute) {
-    return <Navigate to="/settings" replace />;
-  }
-
+  if (accessAllowed === false && role === 'client' && !isAllowedRoute) return <Navigate to="/settings" replace />;
   return children;
 };
 
 function VisitsWithCrm() {
+  const location = useLocation();
   const [businessType, setBusinessType] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     api.get('/api/settings/')
-      .then((res) => {
-        if (!cancelled) setBusinessType(res.data?.company?.business_type || 'sto');
-      })
-      .catch(() => {
-        if (!cancelled) setBusinessType('sto');
-      });
+      .then((res) => { if (!cancelled) setBusinessType(res.data?.company?.business_type || 'sto'); })
+      .catch(() => { if (!cancelled) setBusinessType('sto'); });
     return () => { cancelled = true; };
   }, []);
 
-  if (!businessType) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження режиму...</div>;
-  }
+  if (!businessType) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження режиму...</div>;
 
   if (businessType === 'store') {
+    const params = new URLSearchParams(location.search);
+    if (params.get('visit_id')) return <AttentionAction />;
     return <StoreOrders />;
   }
 
@@ -97,23 +87,13 @@ function CRMByBusinessType() {
   useEffect(() => {
     let cancelled = false;
     api.get('/api/settings/')
-      .then((res) => {
-        if (!cancelled) setBusinessType(res.data?.company?.business_type || 'sto');
-      })
-      .catch(() => {
-        if (!cancelled) setBusinessType('sto');
-      });
+      .then((res) => { if (!cancelled) setBusinessType(res.data?.company?.business_type || 'sto'); })
+      .catch(() => { if (!cancelled) setBusinessType('sto'); });
     return () => { cancelled = true; };
   }, []);
 
-  if (!businessType) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження CRM...</div>;
-  }
-
-  if (businessType === 'store') {
-    return <ClientsCRM />;
-  }
-
+  if (!businessType) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження CRM...</div>;
+  if (businessType === 'store') return <ClientsCRM />;
   return <CRM />;
 }
 
@@ -123,7 +103,6 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} /> 
-        
         <Route path="/" element={ <ProtectedRoute><MainLayout /></ProtectedRoute> }>
           <Route index element={<Dashboard />} />
           <Route path="search" element={<UniversalSearch />} />

@@ -26,6 +26,7 @@ from apps.core.stock_actions import StockMinQuantityView, StockReserveView, Stoc
 from apps.core.crm_client_views import StoreClientListView, StoreClientDetailView
 from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
 from apps.core.notification_views import NotificationsSummaryView
+from apps.core.payment_views import VisitAddPaymentView, VisitDebtReminderView, VisitMarkPaidView, VisitPaymentListView
 from apps.core.paid_views import (
     PartSearchView,
     MechanicViewSet,
@@ -71,6 +72,10 @@ urlpatterns = [
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/search-parts/', PartSearchView.as_view(), name='search-parts'),
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
+    path('api/payments/', VisitPaymentListView.as_view(), name='visit-payments'),
+    path('api/visits/<int:pk>/add-payment/', VisitAddPaymentView.as_view(), name='visit-add-payment'),
+    path('api/visits/<int:pk>/mark-paid/', VisitMarkPaidView.as_view(), name='visit-mark-paid'),
+    path('api/visits/<int:pk>/debt-reminder/', VisitDebtReminderView.as_view(), name='visit-debt-reminder'),
     path('api/visits/recognize_document/', RecognizeDocumentView.as_view(), name='recognize-document'),
     path('api/visit-acceptance-act/', VisitAcceptanceActView.as_view(), name='visit-acceptance-act'),
     path('api/visit-diagnostic-checklist/', VisitDiagnosticChecklistView.as_view(), name='visit-diagnostic-checklist'),

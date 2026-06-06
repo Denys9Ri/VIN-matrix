@@ -22,6 +22,49 @@ def _norm(value):
     return ''.join(ch for ch in str(value or '').upper().strip() if ch.isalnum())
 
 
+def _part_label(part):
+    brand = (getattr(part, 'brand', '') or '').strip()
+    article = (getattr(part, 'article', '') or '').strip()
+    name = (getattr(part, 'name', '') or '').strip()
+    return f'{brand} {article}'.strip() or name or 'Товар'
+
+
+def _company_mode(company):
+    return 'store' if getattr(company, 'business_type', '') == 'store' else 'sto'
+
+
+def _log_stock_activity(part, inventory, action_type, title, description, qty=0, reason='', comment=''):
+    try:
+        from .activity import log_activity
+        visit = getattr(part, 'visit', None)
+        company = getattr(visit, 'company', None) or getattr(inventory, 'company', None)
+        if not company:
+            return None
+        return log_activity(
+            company=company,
+            user=None,
+            visit=visit,
+            order_part=part,
+            inventory_item=inventory,
+            mode=_company_mode(company),
+            action_type=action_type,
+            title=title,
+            description=description,
+            metadata={
+                'brand': getattr(part, 'brand', '') or getattr(inventory, 'brand', '') or '',
+                'article': getattr(part, 'article', '') or getattr(inventory, 'article', '') or '',
+                'part_name': getattr(part, 'name', '') or getattr(inventory, 'name', '') or '',
+                'quantity': int(qty or 0),
+                'reason': reason or '',
+                'comment': comment or '',
+                'stock_action': action_type,
+            }
+        )
+    except Exception as exc:
+        print(f'ACTIVITY STOCK LOG failed: {exc}')
+        return None
+
+
 def _stock_extra(inventory_id):
     try:
         with connection.cursor() as cursor:
@@ -211,6 +254,7 @@ def reserve_order_part(part, inventory_item=None):
             return False
         _set_part_extra(part.id, inventory.id, RESERVED, qty)
         _create_stock_movement(part, inventory, 0, f'Резерв товару під замовлення №{part.visit_id}: {qty} шт')
+        _log_stock_activity(part, inventory, 'stock_reserved', 'Резерв зі складу', f'{_part_label(part)} · {qty} шт · замовлення/візит №{part.visit_id}', qty=qty)
         print(f'STOCK SYNC: reserved part={part.id}; stock={inventory.id}; qty={qty}')
         return True
 
@@ -227,6 +271,7 @@ def release_order_part(part, reason='Зняття резерву', comment=''):
         _change_stock_reserved(inventory_id, -reserved_qty)
         _set_part_extra(part.id, inventory_id, RELEASED, 0)
         _create_stock_movement(part, inventory, 0, f'{reason}. Замовлення №{part.visit_id}. {comment}'.strip())
+        _log_stock_activity(part, inventory, 'stock_released', 'Знято резерв зі складу', f'{_part_label(part)} · {reserved_qty} шт · {reason}', qty=reserved_qty, reason=reason, comment=comment)
     print(f'STOCK SYNC: released reserve part={part.id}; stock={inventory_id}; qty={reserved_qty}')
     return True
 
@@ -265,6 +310,7 @@ def sell_order_part(part):
             return False
         _set_part_extra(part.id, inventory.id, SOLD, 0)
         _create_stock_movement(part, inventory, -qty, f'Списання при виконанні замовлення №{part.visit_id}')
+        _log_stock_activity(part, inventory, 'stock_sold', 'Списано товар зі складу', f'{_part_label(part)} · {qty} шт · замовлення/візит №{part.visit_id}', qty=-qty)
     print(f'STOCK SYNC: sold part={part.id}; stock={inventory.id}; qty={qty}')
     return True
 
@@ -294,9 +340,11 @@ def return_order_part_to_stock(part, quantity=None, reason='Повернення
                 return False, 'Не вдалося повернути товар на склад'
             _set_part_extra(part.id, inventory_id, RETURNED, 0)
             _create_stock_movement(part, inventory, qty, f'Повернення на склад. Причина: {reason}. Замовлення №{part.visit_id}. {comment}'.strip())
+            _log_stock_activity(part, inventory, 'stock_returned', 'Повернення на склад', f'{_part_label(part)} · {qty} шт · причина: {reason}', qty=qty, reason=reason, comment=comment)
             return True, 'Товар повернуто на склад'
         _set_part_extra(part.id, inventory_id, DEFECTIVE, 0)
         _create_stock_movement(part, inventory, 0, f'Брак / не повернуто на склад. Причина: {reason}. Замовлення №{part.visit_id}. {comment}'.strip())
+        _log_stock_activity(part, inventory, 'stock_defective', 'Товар позначено як брак', f'{_part_label(part)} · причина: {reason}', qty=0, reason=reason, comment=comment)
         return True, 'Товар позначено як брак, склад не збільшувався'
 
 

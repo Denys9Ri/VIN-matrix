@@ -59,8 +59,8 @@ export default function AttentionAction() {
     }
   };
 
-  const openOrder = () => navigate(`/visits?visit_id=${order?.id || visitId}${tab ? `&tab=${tab}` : ''}`);
-  const openClient = () => navigate(`/clients?search=${encodeURIComponent(order?.phone || order?.client || '')}&order_id=${order?.id || visitId}&tab=debts`);
+  const openOrder = () => navigate(`/visits?visit_id=${order?.id || visitId}${tab ? `&tab=${tab}` : ''}&open=board`);
+  const openClient = () => navigate(`/clients?search=${encodeURIComponent(order?.phone || order?.client || '')}&order_id=${order?.id || visitId}&tab=debts&autopen=1`);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-blue-600 font-black"><RefreshCcw className="animate-spin mr-2"/> Завантаження...</div>;
   if (!order) return <div className="max-w-3xl mx-auto p-6"><EmptyState message={message || 'Замовлення не знайдено.'} onBack={() => navigate(-1)} /></div>;
@@ -85,54 +85,16 @@ export default function AttentionAction() {
               <p className="text-sm font-bold text-slate-600 mt-1">{order.client || 'Покупець'} • {order.phone || 'без телефону'}</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge>{status[order.status] || order.status}</Badge>
-            <Badge>{pay[order.payment_status] || order.payment_status}</Badge>
-          </div>
+          <div className="flex flex-wrap gap-2"><Badge>{status[order.status] || order.status}</Badge><Badge>{pay[order.payment_status] || order.payment_status}</Badge></div>
         </div>
       </div>
 
       <div className="p-5 md:p-7 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5">
         <div className="space-y-4">
-          <Panel title="Клієнт">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Info icon={UserRound} label="Клієнт" value={order.client || '—'} />
-              <Info icon={Phone} label="Телефон" value={order.phone || '—'} />
-              <Info icon={Package} label="Авто / VIN" value={`${order.plate || '—'} ${order.vin_code || ''}`} />
-              <Info icon={Truck} label="Доставка" value={order.delivery_type || '—'} />
-            </div>
-          </Panel>
-
-          <Panel title="Товари в замовленні">
-            {parts.length ? <div className="space-y-2">{parts.map((p) => <div key={p.id} className="rounded-2xl bg-slate-50 border border-slate-100 p-3">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                <div>
-                  <p className="font-black text-slate-900">{p.brand} {p.article}</p>
-                  <p className="text-sm font-bold text-slate-500">{p.name}</p>
-                  <p className="text-xs font-black text-slate-400 uppercase mt-1">{p.supplier || p.source_label || 'Постачальник не вказаний'}</p>
-                </div>
-                <div className="text-left md:text-right">
-                  <p className="font-black text-slate-900">{p.quantity || 1} шт</p>
-                  <p className="text-sm font-black text-emerald-600">{money(num(p.sell_price) * (num(p.quantity) || 1))}</p>
-                </div>
-              </div>
-            </div>)}</div> : <Empty text="Товарів немає" />}
-          </Panel>
+          <Panel title="Клієнт"><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Info icon={UserRound} label="Клієнт" value={order.client || '—'} /><Info icon={Phone} label="Телефон" value={order.phone || '—'} /><Info icon={Package} label="Авто / VIN" value={`${order.plate || '—'} ${order.vin_code || ''}`} /><Info icon={Truck} label="Доставка" value={order.delivery_type || '—'} /></div></Panel>
+          <Panel title="Товари в замовленні">{parts.length ? <div className="space-y-2">{parts.map((p) => <div key={p.id} className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><div className="flex flex-col md:flex-row md:items-center justify-between gap-2"><div><p className="font-black text-slate-900">{p.brand} {p.article}</p><p className="text-sm font-bold text-slate-500">{p.name}</p><p className="text-xs font-black text-slate-400 uppercase mt-1">{p.supplier || p.source_label || 'Постачальник не вказаний'}</p></div><div className="text-left md:text-right"><p className="font-black text-slate-900">{p.quantity || 1} шт</p><p className="text-sm font-black text-emerald-600">{money(num(p.sell_price) * (num(p.quantity) || 1))}</p></div></div></div>)}</div> : <Empty text="Товарів немає" />}</Panel>
         </div>
-
-        <aside className="space-y-4">
-          <Panel title="Оплата">
-            <div className="grid grid-cols-1 gap-2">
-              <PayLine label="Сума" value={money(totals.total)} />
-              <PayLine label="Внесено" value={money(totals.paid)} />
-              <PayLine label="Залишилось" value={money(totals.left)} danger={totals.left > 0 && order.payment_status !== 'paid'} />
-            </div>
-            {order.payment_status !== 'paid' && <button onClick={markPaid} disabled={busy} className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 disabled:opacity-50"><CheckCircle2 size={17}/>{busy ? 'Закриваю...' : 'Оплачено / закрити борг'}</button>}
-          </Panel>
-
-          <button onClick={openOrder} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-md shadow-blue-100"><ExternalLink size={17}/> Відкрити замовлення</button>
-          <button onClick={openClient} className="w-full bg-white border border-blue-100 text-blue-700 rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2"><UserRound size={17}/> Відкрити клієнта</button>
-        </aside>
+        <aside className="space-y-4"><Panel title="Оплата"><div className="grid grid-cols-1 gap-2"><PayLine label="Сума" value={money(totals.total)} /><PayLine label="Внесено" value={money(totals.paid)} /><PayLine label="Залишилось" value={money(totals.left)} danger={totals.left > 0 && order.payment_status !== 'paid'} /></div>{order.payment_status !== 'paid' && <button onClick={markPaid} disabled={busy} className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 disabled:opacity-50"><CheckCircle2 size={17}/>{busy ? 'Закриваю...' : 'Оплачено / закрити борг'}</button>}</Panel><button onClick={openOrder} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-md shadow-blue-100"><ExternalLink size={17}/> Відкрити замовлення</button><button onClick={openClient} className="w-full bg-white border border-blue-100 text-blue-700 rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2"><UserRound size={17}/> Відкрити клієнта</button></aside>
       </div>
     </section>
   </div>;

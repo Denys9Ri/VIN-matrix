@@ -83,19 +83,19 @@ def _build_filters(request, company):
         where.append("(a.title ILIKE %s OR a.description ILIKE %s OR a.metadata->>'client' ILIKE %s OR a.metadata->>'phone' ILIKE %s OR a.metadata->>'article' ILIKE %s OR a.metadata->>'brand' ILIKE %s OR a.metadata->>'part_name' ILIKE %s)")
         params.extend([like, like, like, like, like, like, like])
     if category == 'finance':
-        where.append("a.action_type LIKE 'payment_%'")
+        where.append("a.action_type LIKE 'payment_%%'")
     elif category == 'stock':
-        where.append("a.action_type LIKE 'stock_%'")
+        where.append("a.action_type LIKE 'stock_%%'")
     elif category == 'cancel':
-        where.append("(a.action_type LIKE '%cancel%' OR a.action_type LIKE '%deleted%')")
+        where.append("(a.action_type LIKE '%%cancel%%' OR a.action_type LIKE '%%deleted%%')")
     elif category == 'return':
-        where.append("(a.action_type LIKE '%return%' OR a.action_type = 'stock_defective')")
+        where.append("(a.action_type LIKE '%%return%%' OR a.action_type = 'stock_defective')")
     return where, params
 
 
 def _apply_finance_guard(where, can_view_finance):
     if not can_view_finance:
-        where.append("a.action_type NOT LIKE 'payment_%'")
+        where.append("a.action_type NOT LIKE 'payment_%%'")
 
 
 def _fetch_rows(where, params, limit):
@@ -119,13 +119,13 @@ def _summary(where, params):
     with connection.cursor() as cursor:
         cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where}", params)
         total = cursor.fetchone()[0] or 0
-        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND a.action_type LIKE 'payment_%'", params)
+        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND a.action_type LIKE 'payment_%%'", params)
         payments = cursor.fetchone()[0] or 0
-        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND a.action_type LIKE 'stock_%'", params)
+        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND a.action_type LIKE 'stock_%%'", params)
         stock = cursor.fetchone()[0] or 0
-        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND (a.action_type LIKE '%return%' OR a.action_type='stock_defective')", params)
+        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND (a.action_type LIKE '%%return%%' OR a.action_type='stock_defective')", params)
         returns = cursor.fetchone()[0] or 0
-        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND (a.action_type LIKE '%cancel%' OR a.action_type LIKE '%deleted%')", params)
+        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND (a.action_type LIKE '%%cancel%%' OR a.action_type LIKE '%%deleted%%')", params)
         cancels = cursor.fetchone()[0] or 0
         cursor.execute(f"""
             SELECT COALESCE(NULLIF(u.first_name, ''), u.username, 'Система') AS actor, COUNT(*) AS cnt

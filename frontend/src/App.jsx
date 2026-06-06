@@ -32,10 +32,7 @@ const ProtectedRoute = ({ children }) => {
 
   useEffect(() => {
     const checkAccess = async () => {
-      if (!token) {
-        setChecking(false);
-        return;
-      }
+      if (!token) { setChecking(false); return; }
       try {
         const res = await api.get('/api/settings/');
         const data = res.data || {};
@@ -74,7 +71,7 @@ function VisitsWithCrm() {
 
   if (businessType === 'store') {
     const params = new URLSearchParams(location.search);
-    if (params.get('visit_id')) return <AttentionAction />;
+    if (params.get('visit_id') && params.get('open') !== 'board') return <AttentionAction />;
     return <StoreOrders />;
   }
 

@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .activity import log_activity
 from .models import CRMTask, Visit
 from .safe_crm_views import safe_ensure_company
 
@@ -22,6 +23,20 @@ def f(value):
         return float(dec(value))
     except Exception:
         return 0.0
+
+
+def money_text(value):
+    return f"{f(value):,.2f}".replace(',', ' ') + ' ₴'
+
+
+def pay_type_label(value):
+    return {
+        'cash': 'Готівка',
+        'card': 'Карта',
+        'transfer': 'Переказ',
+        'terminal': 'Термінал',
+        'other': 'Інше',
+    }.get(value or 'cash', value or 'Готівка')
 
 
 def rows_for_visit(visit_id):
@@ -71,6 +86,27 @@ def add_payment(visit, user, amount, payment_type='cash', purpose='partial', com
         )
         payment_id = cursor.fetchone()[0]
     finance = sync_status(visit)
+    is_final = purpose == 'final' or f(finance.get('debt_amount')) <= 0
+    log_activity(
+        company=visit.company,
+        user=user,
+        visit=visit,
+        action_type='payment_closed' if is_final else 'payment_added',
+        title='Борг закрито' if is_final else f'Додано оплату {money_text(amount)}',
+        description=f"{money_text(amount)} · {pay_type_label(payment_type)} · залишок боргу {money_text(finance.get('debt_amount'))}" + (f" · {comment}" if comment else ''),
+        old_value=None,
+        new_value=str(finance.get('debt_amount')),
+        metadata={
+            'payment_id': payment_id,
+            'amount': f(amount),
+            'payment_type': payment_type or 'cash',
+            'payment_purpose': purpose or 'partial',
+            'comment': comment or '',
+            'debt_amount': finance.get('debt_amount'),
+            'paid_amount': finance.get('paid_amount'),
+            'grand_total': finance.get('grand_total'),
+        }
+    )
     return payment_id, finance
 
 
@@ -148,5 +184,14 @@ class VisitDebtReminderView(APIView):
             description=request.data.get('comment') or f"Борг {finance['debt_amount']} грн по №{visit.id}",
             due_date=request.data.get('due_date') or None,
             created_by=request.user,
+        )
+        log_activity(
+            company=company,
+            user=request.user,
+            visit=visit,
+            action_type='payment_reminder_created',
+            title='Створено нагадування по боргу',
+            description=request.data.get('comment') or f"Борг {money_text(finance['debt_amount'])} по №{visit.id}",
+            metadata={'task_id': task.id, 'debt_amount': finance.get('debt_amount'), 'due_date': request.data.get('due_date') or None}
         )
         return Response({'id': task.id, 'message': 'Нагадування створено.'})

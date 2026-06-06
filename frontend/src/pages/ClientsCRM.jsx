@@ -147,45 +147,47 @@ export default function ClientsCRM() {
 
   const submitSearch = (e) => { e.preventDefault(); load(search); };
 
-  return <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen bg-slate-50/40">
-    <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-5">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-900 flex items-center gap-3"><UserRound className="text-blue-600"/> Клієнти</h1>
-        <p className="text-slate-500 font-semibold text-sm mt-1">Міні-CRM магазину: швидка історія покупок, повторний продаж, авто, борги та прибуток.</p>
+  return <div className="w-full max-w-none mx-auto p-4 md:p-6 2xl:p-8 md:pl-64 xl:pl-72 min-h-screen bg-slate-50/40">
+    <div className="max-w-[1800px] mx-auto">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-5">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-900 flex items-center gap-3"><UserRound className="text-blue-600"/> Клієнти</h1>
+          <p className="text-slate-500 font-semibold text-sm mt-1">Міні-CRM магазину: швидка історія покупок, повторний продаж, авто, борги та прибуток.</p>
+        </div>
+        <button onClick={() => load(search)} className="bg-white border border-blue-100 text-blue-700 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-sm"><RefreshCcw size={16}/> Оновити</button>
       </div>
-      <button onClick={() => load(search)} className="bg-white border border-blue-100 text-blue-700 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-sm"><RefreshCcw size={16}/> Оновити</button>
+
+      {message && <div className="mb-5 bg-blue-50 border border-blue-100 text-blue-700 rounded-2xl p-3 font-bold text-sm flex justify-between gap-3 shadow-sm"><span>{message}</span><button onClick={()=>setMessage('')}><X size={16}/></button></div>}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <Stat label="Клієнтів" value={totals.count}/><Stat label="Покупок" value={money(totals.revenue)}/><Stat label="Прибуток" value={money(totals.profit)} good/><Stat label="Борги" value={money(totals.debt)} bad={totals.debt > 0}/>
+      </div>
+
+      <form onSubmit={submitSearch} className="bg-white border border-slate-200 rounded-3xl p-3 md:p-4 shadow-sm mb-5 flex flex-col md:flex-row gap-3">
+        <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17}/><input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Пошук: № замовлення, телефон, ПІБ, авто, VIN, артикул або товар..." className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500"/></div>
+        <button className="bg-blue-600 text-white rounded-xl px-6 py-3 text-xs font-black uppercase shadow-md shadow-blue-100">Знайти</button>
+      </form>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[440px_minmax(0,1fr)] 2xl:grid-cols-[480px_minmax(0,1fr)] gap-5 items-start">
+        <section className="bg-white border border-slate-200 rounded-3xl p-3 md:p-4 shadow-sm h-fit xl:sticky xl:top-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-black uppercase text-slate-900">Список клієнтів</h2>
+            <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-500 px-2 py-1 rounded-lg">{clients.length}</span>
+          </div>
+          <div className="space-y-3 max-h-none xl:max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+            {loading ? <Empty text="Завантаження..."/> : clients.map((c) => <ClientCard key={c.key} client={c} active={selected?.key === c.key} onClick={() => openClient(c)}/>) }
+            {!loading && !clients.length && <Empty text="Клієнтів не знайдено"/>}
+          </div>
+        </section>
+
+        <section className="hidden xl:block min-w-0 w-full">
+          {selected ? <ClientDrawer client={selected} tab={tab} setTab={setTab} onEdit={() => openEdit(selected)} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={openSearchByPart} onRepeatPart={repeatPart} busyRepeat={busyRepeat}/> : <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm"><UserRound className="mx-auto text-slate-300 mb-3" size={48}/><h3 className="font-black text-slate-800 uppercase">Оберіть клієнта</h3><p className="text-sm font-bold text-slate-400 mt-2">Тут буде історія покупок, товари, авто, борги та повернення.</p></div>}
+        </section>
+      </div>
     </div>
 
-    {message && <div className="mb-5 bg-blue-50 border border-blue-100 text-blue-700 rounded-2xl p-3 font-bold text-sm flex justify-between gap-3 shadow-sm"><span>{message}</span><button onClick={()=>setMessage('')}><X size={16}/></button></div>}
-
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-      <Stat label="Клієнтів" value={totals.count}/><Stat label="Покупок" value={money(totals.revenue)}/><Stat label="Прибуток" value={money(totals.profit)} good/><Stat label="Борги" value={money(totals.debt)} bad={totals.debt > 0}/>
-    </div>
-
-    <form onSubmit={submitSearch} className="bg-white border border-slate-200 rounded-3xl p-3 md:p-4 shadow-sm mb-5 flex flex-col md:flex-row gap-3">
-      <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17}/><input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Пошук: № замовлення, телефон, ПІБ, авто, VIN, артикул або товар..." className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500"/></div>
-      <button className="bg-blue-600 text-white rounded-xl px-6 py-3 text-xs font-black uppercase shadow-md shadow-blue-100">Знайти</button>
-    </form>
-
-    <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5">
-      <section className="bg-white border border-slate-200 rounded-3xl p-3 md:p-4 shadow-sm h-fit">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-black uppercase text-slate-900">Список клієнтів</h2>
-          <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-500 px-2 py-1 rounded-lg">{clients.length}</span>
-        </div>
-        <div className="space-y-3 max-h-none xl:max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
-          {loading ? <Empty text="Завантаження..."/> : clients.map((c) => <ClientCard key={c.key} client={c} active={selected?.key === c.key} onClick={() => openClient(c)}/>) }
-          {!loading && !clients.length && <Empty text="Клієнтів не знайдено"/>}
-        </div>
-      </section>
-
-      <section className="hidden xl:block min-w-0">
-        {selected ? <ClientDrawer client={selected} tab={tab} setTab={setTab} onEdit={() => openEdit(selected)} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={openSearchByPart} onRepeatPart={repeatPart} busyRepeat={busyRepeat}/> : <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm"><UserRound className="mx-auto text-slate-300 mb-3" size={48}/><h3 className="font-black text-slate-800 uppercase">Оберіть клієнта</h3><p className="text-sm font-bold text-slate-400 mt-2">Тут буде історія покупок, товари, авто, борги та повернення.</p></div>}
-      </section>
-    </div>
-
-    {selected && <div className="xl:hidden fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm p-3 flex items-end">
-      <div className="bg-white rounded-t-3xl w-full max-h-[92vh] overflow-hidden shadow-2xl">
+    {selected && <div className="xl:hidden fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm p-0 block">
+      <div className="bg-white w-full h-screen overflow-hidden shadow-2xl rounded-none">
         <ClientDrawer client={selected} tab={tab} setTab={setTab} onClose={() => setSelected(null)} onEdit={() => openEdit(selected)} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={openSearchByPart} onRepeatPart={repeatPart} busyRepeat={busyRepeat}/>
       </div>
     </div>}
@@ -209,7 +211,7 @@ function ClientDrawer({ client, tab, setTab, onClose, onEdit, expandedOrders, to
   const parts = arr(client.parts);
   const debts = orders.filter((o) => Number(o.debt_amount || 0) > 0 || ['unpaid', 'debt', 'cod'].includes(o.payment_status));
   const returns = parts.filter((p) => ['returned', 'defective'].includes(p.stock_status));
-  return <div className="bg-white xl:border xl:border-slate-200 xl:rounded-3xl xl:shadow-sm overflow-hidden max-h-[92vh] xl:max-h-none flex flex-col">
+  return <div className="bg-white xl:border xl:border-slate-200 xl:rounded-3xl xl:shadow-sm overflow-hidden h-full xl:h-auto xl:max-h-none flex flex-col">
     <div className="h-2 bg-gradient-to-r from-blue-600 via-cyan-400 to-emerald-400 shrink-0"/>
     <div className="p-4 md:p-5 border-b border-slate-100 bg-gradient-to-br from-white to-blue-50/40 shrink-0">
       <div className="flex items-start justify-between gap-4">
@@ -225,7 +227,7 @@ function ClientDrawer({ client, tab, setTab, onClose, onEdit, expandedOrders, to
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5"><Stat label="Замовлень" value={client.orders_count}/><Stat label="Покупки" value={money(client.total_revenue)}/><Stat label="Прибуток" value={money(client.total_profit)} good/><Stat label="Борг" value={money(client.debt_amount)} bad={client.debt_amount > 0}/></div>
     </div>
     <Tabs active={tab} setActive={setTab}/>
-    <div className="p-4 md:p-5 overflow-y-auto bg-slate-50/50">
+    <div className="p-4 md:p-5 overflow-y-auto bg-slate-50/50 flex-1 xl:flex-none">
       {tab === 'overview' && <Overview client={client} orders={orders} parts={parts} debts={debts} returns={returns} onRepeatPart={onRepeatPart} onSearchPart={onSearchPart} busyRepeat={busyRepeat}/>} 
       {tab === 'history' && <PurchaseHistory orders={orders} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busyRepeat={busyRepeat}/>} 
       {tab === 'cars' && <Cars cars={arr(client.cars)}/>} 
@@ -275,7 +277,7 @@ function Overview({ client, orders, parts, debts, returns, onRepeatPart, onSearc
 function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, onRepeatPart, busyRepeat }) {
   if (!orders.length) return <Empty text="Історії покупок ще немає"/>;
   return <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-    <div className="hidden md:grid grid-cols-[110px_90px_140px_1fr_120px_120px_46px] gap-3 px-4 py-3 bg-slate-100 text-[10px] font-black uppercase text-slate-500 tracking-wide">
+    <div className="hidden md:grid grid-cols-[100px_72px_130px_minmax(160px,1fr)_100px_100px_42px] xl:grid-cols-[110px_90px_140px_minmax(220px,1fr)_120px_120px_46px] gap-3 px-4 py-3 bg-slate-100 text-[10px] font-black uppercase text-slate-500 tracking-wide">
       <span>Дата</span><span>№</span><span>Статус</span><span>Товари</span><span>Сума</span><span>Прибуток</span><span></span>
     </div>
     <div className="divide-y divide-slate-100">
@@ -284,7 +286,7 @@ function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, on
         const parts = arr(order.parts);
         return <div key={order.id} className="bg-white">
           <button onClick={() => toggleOrder(order.id)} className={`w-full text-left transition ${open ? 'bg-blue-600 text-white' : 'hover:bg-blue-50 text-slate-800'}`}>
-            <div className="hidden md:grid grid-cols-[110px_90px_140px_1fr_120px_120px_46px] gap-3 items-center px-4 py-3">
+            <div className="hidden md:grid grid-cols-[100px_72px_130px_minmax(160px,1fr)_100px_100px_42px] xl:grid-cols-[110px_90px_140px_minmax(220px,1fr)_120px_120px_46px] gap-3 items-center px-4 py-3">
               <span className="font-black text-sm">{fmtDate(order.scheduled_datetime || order.created_at)}</span>
               <span className="font-black">№{order.id}</span>
               <StatusChip status={order.status} invert={open}/>
@@ -305,7 +307,7 @@ function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, on
             </div>
           </button>
           {open && <div className="bg-slate-50 p-3 md:p-4">
-            <div className="hidden md:grid grid-cols-[130px_1fr_120px_90px_90px_90px_110px] gap-3 px-3 py-2 text-[10px] font-black uppercase text-slate-400">
+            <div className="hidden md:grid grid-cols-[120px_minmax(170px,1fr)_110px_70px_80px_90px_96px] xl:grid-cols-[130px_minmax(220px,1fr)_120px_90px_90px_90px_110px] gap-3 px-3 py-2 text-[10px] font-black uppercase text-slate-400">
               <span>Артикул</span><span>Назва</span><span>Постачальник</span><span>К-сть</span><span>Закупка</span><span>Продаж</span><span>Дія</span>
             </div>
             <div className="space-y-2">
@@ -323,7 +325,7 @@ function Cars({ cars }) { return <div className="grid grid-cols-1 md:grid-cols-2
 function Debts({ debts }) { return <Table headers={['Дата', '№', 'Сума', 'Оплата', 'Статус']} rows={debts.map(o=>[fmtDate(o.scheduled_datetime || o.created_at), `№${o.id}`, money(o.debt_amount || o.revenue), payLabel[o.payment_status] || o.payment_status, orderLabel[o.status] || o.status])}/>; }
 function Returns({ returns }) { return <div className="space-y-2">{returns.map((p)=><PartLine key={`${p.order_id}-${p.id}`} p={p} returnMode/>)}{!returns.length && <Empty text="Повернень немає"/>}</div>; }
 
-function PartLine({ p, returnMode, onSearchPart, onRepeatPart, busy }) { return <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm md:grid md:grid-cols-[130px_1fr_120px_90px_90px_90px_110px] md:items-center md:gap-3 flex flex-col gap-3"><div><button onClick={()=>onSearchPart?.(p)} className="font-black text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-4 flex items-center gap-1 text-left"><span>{p.brand} {p.article}</span><ExternalLink size={13}/></button>{returnMode && <p className="text-[10px] font-black uppercase text-rose-600 mt-1">{p.stock_status === 'defective' ? 'Брак' : 'Повернено'}</p>}</div><p className="text-xs font-bold text-slate-600">{p.name}</p><p className="text-xs font-black text-slate-500 uppercase">{p.supplier || '-'}</p><p className="font-black text-slate-800">{p.quantity} шт</p><p className="font-black text-slate-700">{money(p.buy_price)}</p><div><p className="font-black text-slate-900">{money(p.revenue)}</p><p className="text-xs font-black text-emerald-600">+{money(p.profit)}</p></div>{onRepeatPart && <button disabled={busy} onClick={()=>onRepeatPart(p)} className="bg-emerald-600 text-white rounded-xl px-3 py-2 text-[10px] font-black uppercase flex items-center justify-center gap-1 disabled:opacity-40"><Repeat2 size={13}/>{busy ? '...' : 'Повторити'}</button>}</div>; }
+function PartLine({ p, returnMode, onSearchPart, onRepeatPart, busy }) { return <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm md:grid md:grid-cols-[120px_minmax(170px,1fr)_110px_70px_80px_90px_96px] xl:grid-cols-[130px_minmax(220px,1fr)_120px_90px_90px_90px_110px] md:items-center md:gap-3 flex flex-col gap-3"><div><button onClick={()=>onSearchPart?.(p)} className="font-black text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-4 flex items-center gap-1 text-left"><span>{p.brand} {p.article}</span><ExternalLink size={13}/></button>{returnMode && <p className="text-[10px] font-black uppercase text-rose-600 mt-1">{p.stock_status === 'defective' ? 'Брак' : 'Повернено'}</p>}</div><p className="text-xs font-bold text-slate-600">{p.name}</p><p className="text-xs font-black text-slate-500 uppercase">{p.supplier || '-'}</p><p className="font-black text-slate-800">{p.quantity} шт</p><p className="font-black text-slate-700">{money(p.buy_price)}</p><div><p className="font-black text-slate-900">{money(p.revenue)}</p><p className="text-xs font-black text-emerald-600">+{money(p.profit)}</p></div>{onRepeatPart && <button disabled={busy} onClick={()=>onRepeatPart(p)} className="bg-emerald-600 text-white rounded-xl px-3 py-2 text-[10px] font-black uppercase flex items-center justify-center gap-1 disabled:opacity-40"><Repeat2 size={13}/>{busy ? '...' : 'Повторити'}</button>}</div>; }
 function OrderLine({ order }) { return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 flex justify-between gap-3"><div><p className="font-black text-slate-900">Замовлення №{order.id}</p><p className="text-xs font-bold text-slate-500">{fmtDate(order.scheduled_datetime || order.created_at)} • {payLabel[order.payment_status] || order.payment_status}</p></div><p className="font-black text-rose-600">{money(order.debt_amount || order.revenue)}</p></div>; }
 function Table({ headers, rows }) { if (!rows.length) return <Empty text="Даних немає"/>; return <div className="overflow-x-auto bg-white border border-slate-200 rounded-3xl shadow-sm"><table className="w-full min-w-[720px] text-sm"><thead><tr className="text-left text-[10px] font-black uppercase text-slate-400 border-b bg-slate-50">{headers.map(h=><th key={h} className="py-3 px-3">{h}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i} className="border-b border-slate-100 hover:bg-slate-50">{r.map((c,j)=><td key={j} className="py-3 px-3 font-bold text-slate-700">{c}</td>)}</tr>)}</tbody></table></div>; }
 function Stat({ label, value, good, bad }) { return <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400">{label}</p><p className={`text-lg font-black mt-1 ${good ? 'text-emerald-600' : bad ? 'text-rose-600' : 'text-slate-900'}`}>{value}</p></div>; }

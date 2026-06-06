@@ -211,9 +211,9 @@ function ClientDrawer({ client, tab, setTab, onClose, onEdit, expandedOrders, to
   const parts = arr(client.parts);
   const debts = orders.filter((o) => Number(o.debt_amount || 0) > 0 || ['unpaid', 'debt', 'cod'].includes(o.payment_status));
   const returns = parts.filter((p) => ['returned', 'defective'].includes(p.stock_status));
-  return <div className="bg-white xl:border xl:border-slate-200 xl:rounded-3xl xl:shadow-sm overflow-hidden h-full xl:h-auto xl:max-h-none flex flex-col">
-    <div className="h-2 bg-gradient-to-r from-blue-600 via-cyan-400 to-emerald-400 shrink-0"/>
-    <div className="p-4 md:p-5 border-b border-slate-100 bg-gradient-to-br from-white to-blue-50/40 shrink-0">
+  return <div className="bg-white xl:border xl:border-slate-200 xl:rounded-3xl xl:shadow-sm overflow-y-auto xl:overflow-hidden h-full xl:h-auto xl:max-h-none xl:flex xl:flex-col">
+    <div className="h-2 bg-gradient-to-r from-blue-600 via-cyan-400 to-emerald-400"/>
+    <div className="p-4 md:p-5 border-b border-slate-100 bg-gradient-to-br from-white to-blue-50/40">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -227,7 +227,7 @@ function ClientDrawer({ client, tab, setTab, onClose, onEdit, expandedOrders, to
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5"><Stat label="Замовлень" value={client.orders_count}/><Stat label="Покупки" value={money(client.total_revenue)}/><Stat label="Прибуток" value={money(client.total_profit)} good/><Stat label="Борг" value={money(client.debt_amount)} bad={client.debt_amount > 0}/></div>
     </div>
     <Tabs active={tab} setActive={setTab}/>
-    <div className="p-4 md:p-5 overflow-y-auto bg-slate-50/50 flex-1 xl:flex-none">
+    <div className="p-4 md:p-5 bg-slate-50/50 overflow-visible xl:overflow-y-auto xl:flex-1">
       {tab === 'overview' && <Overview client={client} orders={orders} parts={parts} debts={debts} returns={returns} onRepeatPart={onRepeatPart} onSearchPart={onSearchPart} busyRepeat={busyRepeat}/>} 
       {tab === 'history' && <PurchaseHistory orders={orders} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busyRepeat={busyRepeat}/>} 
       {tab === 'cars' && <Cars cars={arr(client.cars)}/>} 
@@ -257,7 +257,7 @@ function Field({ label, value, onChange, required }) { return <label className="
 
 function Tabs({ active, setActive }) {
   const tabs = [['overview', Star, 'Огляд'], ['history', History, 'Історія покупок'], ['cars', Car, 'Авто'], ['debts', CreditCard, 'Борги'], ['returns', AlertTriangle, 'Повернення']];
-  return <div className="bg-white border-b border-slate-100 p-2 grid grid-cols-2 md:grid-cols-5 gap-2 sticky top-0 z-10 shrink-0 overflow-x-auto">{tabs.map(([key, Icon, label]) => <button key={key} onClick={()=>setActive(key)} className={`rounded-2xl p-3 text-[10px] font-black uppercase flex items-center justify-center gap-1.5 transition ${active === key ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}><Icon size={14}/>{label}</button>)}</div>;
+  return <div className="bg-white border-b border-slate-100 p-2 grid grid-cols-2 md:grid-cols-5 gap-2 sticky top-0 z-10 xl:shrink-0 overflow-x-auto">{tabs.map(([key, Icon, label]) => <button key={key} onClick={()=>setActive(key)} className={`rounded-2xl p-3 text-[10px] font-black uppercase flex items-center justify-center gap-1.5 transition ${active === key ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}><Icon size={14}/>{label}</button>)}</div>;
 }
 
 function Overview({ client, orders, parts, debts, returns, onRepeatPart, onSearchPart, busyRepeat }) {

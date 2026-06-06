@@ -25,6 +25,7 @@ from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
 from apps.core.stock_actions import StockMinQuantityView, StockReserveView, StockReleaseView, StockWriteOffVisitView
 from apps.core.crm_client_views import StoreClientListView, StoreClientDetailView
 from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
+from apps.core.notification_views import NotificationsSummaryView
 from apps.core.paid_views import (
     PartSearchView,
     MechanicViewSet,
@@ -69,6 +70,7 @@ urlpatterns = [
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/search-parts/', PartSearchView.as_view(), name='search-parts'),
+    path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
     path('api/visits/recognize_document/', RecognizeDocumentView.as_view(), name='recognize-document'),
     path('api/visit-acceptance-act/', VisitAcceptanceActView.as_view(), name='visit-acceptance-act'),
     path('api/visit-diagnostic-checklist/', VisitDiagnosticChecklistView.as_view(), name='visit-diagnostic-checklist'),

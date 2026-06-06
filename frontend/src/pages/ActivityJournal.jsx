@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { CalendarDays, Filter, History, RefreshCcw, Search, ShieldAlert } from 'lucide-react';
 import ActivityTimeline from '../components/activity/ActivityTimeline';
 import api from '../api/axios';
@@ -8,6 +9,7 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+const emptyFilters = { q: '', mode: '', category: '', type: '', user: '', date_from: '', date_to: '', visit: '', phone: '' };
 const modes = [['', 'Усі режими'], ['store', 'Магазин'], ['sto', 'СТО'], ['system', 'Система']];
 const categories = [['', 'Усі дії'], ['finance', 'Фінанси'], ['stock', 'Склад'], ['cancel', 'Скасування'], ['return', 'Повернення']];
 const actionTypes = [
@@ -32,11 +34,34 @@ const actionTypes = [
   ['ttn_added', 'ТТН'],
 ];
 
+const clean = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => String(v || '').trim() !== ''));
+
 export default function ActivityJournal() {
-  const [filters, setFilters] = useState({ q: '', mode: '', category: '', type: '', user: '', date_from: '', date_to: '', visit: '', phone: '' });
+  const location = useLocation();
+  const [filters, setFilters] = useState(emptyFilters);
   const [applied, setApplied] = useState({ limit: 120 });
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const next = { ...emptyFilters };
+    ['q', 'search', 'mode', 'category', 'type', 'action_type', 'user', 'user_id', 'date_from', 'date_to', 'visit', 'visit_id', 'phone', 'client_phone'].forEach((key) => {
+      const val = params.get(key);
+      if (!val) return;
+      if (key === 'search') next.q = val;
+      else if (key === 'action_type') next.type = val;
+      else if (key === 'user_id') next.user = val;
+      else if (key === 'visit_id') next.visit = val;
+      else if (key === 'client_phone') next.phone = val;
+      else next[key] = val;
+    });
+    const prepared = clean(next);
+    if (Object.keys(prepared).length) {
+      setFilters((p) => ({ ...p, ...next }));
+      setApplied({ ...prepared, limit: 160 });
+    }
+  }, [location.search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,11 +80,10 @@ export default function ActivityJournal() {
   const query = useMemo(() => ({ ...applied, limit: 160 }), [applied]);
   const apply = (e) => {
     e?.preventDefault?.();
-    setApplied(Object.fromEntries(Object.entries(filters).filter(([, v]) => String(v || '').trim() !== '')));
+    setApplied(clean(filters));
   };
   const reset = () => {
-    const empty = { q: '', mode: '', category: '', type: '', user: '', date_from: '', date_to: '', visit: '', phone: '' };
-    setFilters(empty);
+    setFilters(emptyFilters);
     setApplied({ limit: 120 });
   };
   const setToday = () => {
@@ -103,7 +127,7 @@ export default function ActivityJournal() {
       <ShieldAlert size={17} className="mt-0.5 shrink-0"/> Тут видно, хто створив, змінив, списав, повернув, скасував або прийняв оплату. Це журнал довіри для власника бізнесу.
     </div>
 
-    <ActivityTimeline visitId={query.visit} phone={query.phone} mode={query.mode} type={query.type} limit={query.limit || 160} title="Усі дії" />
+    <ActivityTimeline query={query} title="Усі дії" />
   </div>;
 }
 

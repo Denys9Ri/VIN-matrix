@@ -26,6 +26,12 @@ class CoreConfig(AppConfig):
             print(f"Payment schema check error: {exc}")
 
         try:
+            from .db_repair_activity import repair_activity_schema
+            repair_activity_schema()
+        except Exception as exc:
+            print(f"Activity schema check error: {exc}")
+
+        try:
             from .db_repair_crm_legacy import repair_crm_legacy_schema
             repair_crm_legacy_schema()
         except Exception as exc:

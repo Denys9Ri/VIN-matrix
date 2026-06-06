@@ -6,6 +6,7 @@ import {
   Wallet, Search, CarFront, Package, ArrowRight, 
   Settings2, X, Clock, CheckCircle2, Loader2, Camera, ImagePlus, ClipboardList
 } from 'lucide-react';
+import AttentionCenter from '../components/notifications/AttentionCenter';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ const Dashboard = () => {
 
   const defaultWidgets = {
     welcome: true,
+    attentionCenter: true,
     quickActions: true,
     aiScanner: true,
     todayTasks: true,
@@ -182,6 +184,8 @@ const Dashboard = () => {
           </div>
         )}
 
+        {activeWidgets.attentionCenter && <AttentionCenter />}
+
         {activeWidgets.quickActions && (
           <div className="col-span-1 md:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-center">
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-4">Швидкі дії</h3>
@@ -238,6 +242,7 @@ const Dashboard = () => {
             <h2 className="text-lg font-black uppercase mb-6 flex items-center gap-2 text-slate-800"><Settings2 size={20} className="text-blue-500"/> Налаштування Панелі</h2>
             <div className="space-y-3">
               <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-colors"><span className="text-sm font-bold text-slate-700 flex items-center gap-2"><LayoutGrid size={16} className="text-slate-400"/> Привітання та Пошук</span><input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.welcome} onChange={() => toggleWidget('welcome')} /></label>
+              <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-colors"><span className="text-sm font-bold text-slate-700 flex items-center gap-2"><AlertCircle size={16} className="text-slate-400"/> Центр повідомлень</span><input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.attentionCenter} onChange={() => toggleWidget('attentionCenter')} /></label>
               <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-colors"><span className="text-sm font-bold text-slate-700 flex items-center gap-2"><Plus size={16} className="text-slate-400"/> Швидкі дії</span><input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.quickActions} onChange={() => toggleWidget('quickActions')} /></label>
               <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-colors"><span className="text-sm font-bold text-slate-700 flex items-center gap-2"><Camera size={16} className="text-slate-400"/> Хмарний ШІ-сканер</span><input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.aiScanner} onChange={() => toggleWidget('aiScanner')} /></label>
               <label className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-colors"><span className="text-sm font-bold text-slate-700 flex items-center gap-2"><CalendarDays size={16} className="text-slate-400"/> План на сьогодні</span><input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={activeWidgets.todayTasks} onChange={() => toggleWidget('todayTasks')} /></label>

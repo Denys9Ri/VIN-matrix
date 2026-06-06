@@ -75,14 +75,51 @@ class OrderServiceSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['visit']
 
+def _visit_payment_rows(visit_id):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT id, amount, payment_type, payment_purpose, comment, created_at FROM core_visitpayment WHERE visit_id=%s ORDER BY created_at DESC, id DESC', [visit_id])
+            rows = cursor.fetchall()
+        return [{'id': r[0], 'amount': float(r[1] or 0), 'payment_type': r[2], 'payment_purpose': r[3], 'comment': r[4] or '', 'created_at': r[5]} for r in rows]
+    except Exception:
+        return []
+
+def _visit_finance(obj):
+    try:
+        parts_total = sum(float(p.sell_price or 0) * float(p.quantity or 1) for p in obj.parts.all())
+        parts_cost = sum(float(p.buy_price or 0) * float(p.quantity or 1) for p in obj.parts.all())
+        services_total = sum(float(s.price or 0) * float(s.quantity or 1) for s in obj.services.all())
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT COALESCE(SUM(amount), 0) FROM core_visitpayment WHERE visit_id=%s', [obj.id])
+            paid = float(cursor.fetchone()[0] or 0)
+    except Exception:
+        parts_total = parts_cost = services_total = 0
+        paid = float(obj.prepayment_amount or 0)
+    if paid <= 0:
+        paid = float(obj.prepayment_amount or 0)
+    total = parts_total + services_total
+    debt = max(total - paid, 0)
+    profit = parts_total - parts_cost + services_total
+    return {'parts_total': round(parts_total, 2), 'services_total': round(services_total, 2), 'grand_total': round(total, 2), 'paid_amount': round(paid, 2), 'debt_amount': round(debt, 2), 'profit': round(profit, 2), 'margin': round((profit / total * 100) if total else 0, 1)}
+
 class VisitSerializer(serializers.ModelSerializer):
     services = OrderServiceSerializer(many=True, read_only=True)
     parts = OrderPartSerializer(many=True, read_only=True)
+    finance = serializers.SerializerMethodField()
+    payments = serializers.SerializerMethodField()
+    paid_amount = serializers.SerializerMethodField()
+    debt_amount = serializers.SerializerMethodField()
+    grand_total = serializers.SerializerMethodField()
 
     class Meta:
         model = Visit
         fields = '__all__'
-        read_only_fields = ['company', 'created_at', 'updated_at']
+        read_only_fields = ['company', 'created_at', 'updated_at', 'finance', 'payments', 'paid_amount', 'debt_amount', 'grand_total']
+    def get_finance(self, obj): return _visit_finance(obj)
+    def get_payments(self, obj): return _visit_payment_rows(obj.id)
+    def get_paid_amount(self, obj): return _visit_finance(obj)['paid_amount']
+    def get_debt_amount(self, obj): return _visit_finance(obj)['debt_amount']
+    def get_grand_total(self, obj): return _visit_finance(obj)['grand_total']
 
 class ComplexServiceItemSerializer(serializers.ModelSerializer):
     class Meta:

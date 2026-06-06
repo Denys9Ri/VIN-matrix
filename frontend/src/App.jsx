@@ -20,6 +20,7 @@ import SupplierOrders from './pages/SupplierOrders';
 import AttentionAction from './pages/AttentionAction';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
+import ActivityDock from './components/activity/ActivityDock';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -73,10 +74,10 @@ function VisitsWithCrm() {
   if (businessType === 'store') {
     const params = new URLSearchParams(location.search);
     if (params.get('visit_id') && params.get('open') !== 'board') return <AttentionAction />;
-    return <StoreOrders />;
+    return <><StoreOrders /><ActivityDock /></>;
   }
 
-  return <><Visits /><VisitDeepLinkBridge /><VisitCrmBridge /></>;
+  return <><Visits /><VisitDeepLinkBridge /><VisitCrmBridge /><ActivityDock /></>;
 }
 
 function CRMByBusinessType() {
@@ -91,8 +92,8 @@ function CRMByBusinessType() {
   }, []);
 
   if (!businessType) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження CRM...</div>;
-  if (businessType === 'store') return <ClientsCRM />;
-  return <CRM />;
+  if (businessType === 'store') return <><ClientsCRM /><ActivityDock /></>;
+  return <><CRM /><ActivityDock /></>;
 }
 
 function App() {
@@ -108,7 +109,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
           <Route path="attention" element={<AttentionAction />} />
-          <Route path="clients" element={<ClientsCRM />} />
+          <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="activity" element={<ActivityJournal />} />
           <Route path="journal" element={<ActivityJournal />} />

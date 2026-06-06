@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck, ShieldCheck, Boxes } from 'lucide-react';
+import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck, ShieldCheck, Boxes, History } from 'lucide-react';
 import api from '../../api/axios';
 
 const Sidebar = ({ isOpen, closeMenu }) => {
@@ -39,6 +39,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     { name: 'Склад', icon: <Briefcase size={20} />, path: '/inventory' },
     ...(isStore ? [{ name: 'Клієнти', icon: <Users size={20} />, path: '/clients' }] : []),
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
+    { name: 'Журнал дій', icon: <History size={20} />, path: '/activity' },
     ...(!isStore ? [{ name: 'CRM', icon: <Users size={20} />, path: '/crm/supplier-orders' }] : []),
     ...(!isStore ? [{ name: 'Комплекси', icon: <Boxes size={20} />, path: '/complexes' }] : []),
   ];

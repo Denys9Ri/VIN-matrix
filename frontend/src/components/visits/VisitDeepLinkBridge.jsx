@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
+import VisitPaymentDock from './VisitPaymentDock';
 
 function dateISO(value) {
   if (!value) return '';
@@ -88,5 +89,5 @@ export default function VisitDeepLinkBridge() {
     return () => { cancelled = true; };
   }, [location.pathname, location.search, location.state, navigate, params]);
 
-  return null;
+  return <VisitPaymentDock />;
 }

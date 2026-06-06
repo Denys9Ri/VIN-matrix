@@ -48,6 +48,7 @@ export default function NotificationBell() {
   const [summary, setSummary] = useState(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState({});
 
   const activeSections = useMemo(() => {
     const sections = summary?.active_sections || summary?.sections || [];
@@ -85,6 +86,11 @@ export default function NotificationBell() {
     goTo(actionUrl(section, item));
   };
 
+  const toggleExpand = (event, key) => {
+    event.stopPropagation();
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   return <div className="relative">
     <button onClick={() => setOpen(true)} className="relative w-9 h-9 md:w-10 md:h-10 rounded-full bg-slate-100 hover:bg-blue-50 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-all" title="Центр повідомлень">
       <Bell size={18} />
@@ -103,11 +109,14 @@ export default function NotificationBell() {
           {!loading && activeSections.length === 0 && <Empty text="Все спокійно. Критичних задач немає." />}
           {activeSections.map((section) => {
             const tone = toneMap[section.severity] || toneMap.info;
+            const items = section.items || [];
+            const isOpen = !!expanded[section.key];
+            const visibleItems = isOpen ? items : items.slice(0, 3);
             return <button key={section.key} onClick={() => goTo(section.url)} className={`w-full text-left rounded-2xl border border-slate-100 bg-white p-3 transition ${tone.card}`}>
               <div className="flex gap-3"><SectionIcon section={section} /><div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2"><p className="font-black text-slate-900 leading-tight">{section.title}</p><span className="bg-slate-100 text-slate-700 rounded-xl px-2 py-1 text-xs font-black shrink-0">{section.count}</span></div>
                 <p className="text-xs font-bold text-slate-500 mt-1">{formatAmount(section.amount) || section.subtitle || 'Потребує уваги'}</p>
-                {section.items?.length > 0 && <div className="mt-3 space-y-1.5">{section.items.slice(0, 3).map((item) => <button type="button" onClick={(e) => itemClick(e, section, item)} key={`${section.key}-${item.id}-${item.title}`} className="w-full text-left bg-slate-50 hover:bg-white hover:ring-2 hover:ring-blue-100 rounded-xl p-2 transition group"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-black text-slate-800 truncate">{item.title}</p><p className="text-[11px] font-bold text-slate-500 truncate">{item.subtitle}</p></div><ExternalLink size={12} className="text-slate-300 group-hover:text-blue-600 shrink-0 mt-0.5" /></div></button>)}{section.items.length > 3 && <p className="text-[10px] font-black uppercase text-slate-400 px-1">+ ще {section.items.length - 3}</p>}</div>}
+                {items.length > 0 && <div className="mt-3 space-y-1.5">{visibleItems.map((item) => <button type="button" onClick={(e) => itemClick(e, section, item)} key={`${section.key}-${item.id}-${item.title}`} className="w-full text-left bg-slate-50 hover:bg-white hover:ring-2 hover:ring-blue-100 rounded-xl p-2 transition group"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-black text-slate-800 truncate">{item.title}</p><p className="text-[11px] font-bold text-slate-500 truncate">{item.subtitle}</p></div><ExternalLink size={12} className="text-slate-300 group-hover:text-blue-600 shrink-0 mt-0.5" /></div></button>)}{items.length > 3 && <button type="button" onClick={(e) => toggleExpand(e, section.key)} className="w-full text-[10px] font-black uppercase text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl px-3 py-2">{isOpen ? 'Згорнути' : `Показати всі: ще ${items.length - 3}`}</button>}</div>}
               </div></div>
             </button>;
           })}

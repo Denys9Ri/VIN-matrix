@@ -3,6 +3,7 @@ import { LogOut, Menu, Search, Settings, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import CopyButton from '../common/CopyButton';
+import NotificationBell from '../notifications/NotificationBell';
 
 const roleLabel = {
   admin: 'Адміністратор',
@@ -80,12 +81,12 @@ const Header = ({ toggleMenu }) => {
   return (
     <>
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 sticky top-0 z-30 shadow-sm w-full">
-        <div className="flex items-center gap-2 md:gap-3 flex-1">
+        <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
           <button onClick={toggleMenu} className="md:hidden p-1.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors shrink-0">
             <Menu size={24} />
           </button>
 
-          <div className="relative w-full max-w-[160px] sm:max-w-[200px] md:max-w-md">
+          <div className="relative w-full max-w-[150px] sm:max-w-[220px] md:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input
               type="text"
@@ -116,6 +117,8 @@ const Header = ({ toggleMenu }) => {
           <span className={`hidden sm:inline-flex px-2.5 py-1 rounded-full text-[11px] font-black ${statusDanger ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
             {statusText}
           </span>
+
+          {role !== 'partner' && <NotificationBell />}
 
           <button onClick={() => setMenuOpen(!menuOpen)} className="w-8 h-8 md:w-9 md:h-9 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shrink-0 shadow-md shadow-blue-200">
             {initials}

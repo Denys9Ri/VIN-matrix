@@ -13,6 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .activity import log_activity
 from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation, CRMTask
 from .serializers import CategorySerializer, InventoryItemSerializer, OrderPartSerializer, OrderServiceSerializer, ServiceCatalogSerializer, SupplierSerializer, VisitSerializer, VehicleRecommendationSerializer
 from .views import VisitViewSet as BaseVisitViewSet
@@ -33,6 +34,10 @@ def qty_display(value):
         qty = Decimal(str(value or 0))
         return str(qty.normalize()) if qty == qty.to_integral() else str(qty)
     except Exception: return str(value or '1')
+def is_store(company): return getattr(company, 'business_type', '') == 'store'
+def obj_mode(company): return 'store' if is_store(company) else 'sto'
+def visit_word(company): return 'замовлення' if is_store(company) else 'візит'
+def part_label(part): return f"{safe_text(getattr(part, 'brand', ''), 80)} {safe_text(getattr(part, 'article', ''), 80)}".strip() or safe_text(getattr(part, 'name', ''), 120) or 'Товар'
 
 def safe_get_company(user):
     try: return user.company
@@ -91,7 +96,34 @@ class VisitViewSet(BaseVisitViewSet):
     def perform_create(self, serializer):
         company = safe_ensure_company(self.request.user)
         if not company: raise ValueError('Немає CRM-компанії для створення візиту.')
-        serializer.save(company=company)
+        visit = serializer.save(company=company)
+        word = visit_word(company)
+        log_activity(company=company, user=self.request.user, visit=visit, action_type='order_created' if is_store(company) else 'visit_created', title=f"Створено {word} №{visit.id}", description=f"Клієнт: {visit.client or 'Новий покупець'} · {visit.phone or 'без телефону'}", metadata={'client': visit.client, 'phone': visit.phone, 'status': visit.status})
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        old_status = instance.status
+        old_scheduled = instance.scheduled_datetime
+        old_delivery = instance.delivery_data or ''
+        response = super().update(request, *args, **kwargs)
+        try:
+            instance.refresh_from_db(); company = instance.company; word = visit_word(company)
+            if old_status != instance.status:
+                action = 'order_status_changed' if is_store(company) else 'visit_status_changed'
+                if is_store(company) and instance.status == 'CANCELLED': action = 'order_cancelled'
+                if is_store(company) and instance.status == 'COMPLETED': action = 'order_completed'
+                log_activity(company=company, user=request.user, visit=instance, action_type=action, title='Змінено статус', description=f"{word.capitalize()} №{instance.id}: {old_status} → {instance.status}", old_value=old_status, new_value=instance.status, metadata={'client': instance.client, 'phone': instance.phone})
+            if old_scheduled != instance.scheduled_datetime:
+                log_activity(company=company, user=request.user, visit=instance, action_type='visit_status_changed' if not is_store(company) else 'order_status_changed', title='Змінено дату запису', description=f"{old_scheduled or '—'} → {instance.scheduled_datetime or '—'}", old_value=old_scheduled, new_value=instance.scheduled_datetime)
+            if is_store(company) and old_delivery != (instance.delivery_data or ''):
+                action = 'ttn_added' if 'ttn' in str(instance.delivery_data or '').lower() or '204' in str(instance.delivery_data or '') else 'delivery_updated'
+                log_activity(company=company, user=request.user, visit=instance, action_type=action, title='Оновлено доставку', description=f"Дані доставки у замовленні №{instance.id} оновлено", old_value=old_delivery, new_value=instance.delivery_data or '', metadata={'client': instance.client, 'phone': instance.phone})
+        except Exception as exc: print(f'ACTIVITY: visit update log failed: {exc}')
+        return response
+    def partial_update(self, request, *args, **kwargs): kwargs['partial'] = True; return self.update(request, *args, **kwargs)
+    def perform_destroy(self, instance):
+        company = instance.company; word = visit_word(company)
+        log_activity(company=company, user=self.request.user, visit=instance, action_type='order_cancelled' if is_store(company) else 'visit_cancelled', title=f"Скасовано/видалено {word} №{instance.id}", description=f"Клієнт: {instance.client or '—'} · {instance.phone or '—'}")
+        instance.delete()
     @action(detail=True, methods=['get'], url_path='pdf')
     def export_pdf(self, request, pk=None):
         visit = self.get_object(); company = visit.company
@@ -130,9 +162,7 @@ class VehicleRecommendationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         company = safe_ensure_company(self.request.user)
         queryset = VehicleRecommendation.objects.filter(company=company) if company else VehicleRecommendation.objects.none()
-        search = self.request.query_params.get('search', '').strip()
-        status_filter = self.request.query_params.get('status', '').strip()
-        visit_id = self.request.query_params.get('visit', '').strip()
+        search = self.request.query_params.get('search', '').strip(); status_filter = self.request.query_params.get('status', '').strip(); visit_id = self.request.query_params.get('visit', '').strip()
         if search: queryset = queryset.filter(Q(client__icontains=search)|Q(phone__icontains=search)|Q(plate__icontains=search)|Q(title__icontains=search)|Q(description__icontains=search))
         if status_filter: queryset = queryset.filter(status=status_filter)
         if visit_id: queryset = queryset.filter(visit_id=visit_id)
@@ -151,11 +181,9 @@ class VehicleRecommendationViewSet(viewsets.ModelViewSet):
         rec = self.get_object(); rec.status = VehicleRecommendation.STATUS_DONE; rec.save(update_fields=['status','updated_at']); return Response(self.get_serializer(rec).data)
 
 class CRMTaskViewSet(viewsets.ModelViewSet):
-    serializer_class = CRMTaskSerializer
-    permission_classes = [IsAuthenticated]
+    serializer_class = CRMTaskSerializer; permission_classes = [IsAuthenticated]
     def get_queryset(self):
-        company = safe_ensure_company(self.request.user)
-        queryset = CRMTask.objects.filter(company=company) if company else CRMTask.objects.none()
+        company = safe_ensure_company(self.request.user); queryset = CRMTask.objects.filter(company=company) if company else CRMTask.objects.none()
         search = self.request.query_params.get('search', '').strip(); status_filter = self.request.query_params.get('status', '').strip(); visit_id = self.request.query_params.get('visit', '').strip()
         if search: queryset = queryset.filter(Q(client__icontains=search)|Q(phone__icontains=search)|Q(plate__icontains=search)|Q(title__icontains=search)|Q(description__icontains=search))
         if status_filter in ['new','in_progress','done','overdue']: queryset = queryset.filter(status=status_filter)
@@ -175,27 +203,34 @@ class CRMTaskViewSet(viewsets.ModelViewSet):
         task = self.get_object(); task.status = CRMTask.STATUS_DONE; task.save(update_fields=['status','updated_at']); return Response(self.get_serializer(task).data)
 
 class OrderPartViewSet(viewsets.ModelViewSet):
-    serializer_class = OrderPartSerializer
-    permission_classes = [IsAuthenticated]
+    serializer_class = OrderPartSerializer; permission_classes = [IsAuthenticated]
     def get_queryset(self):
         company = safe_ensure_company(self.request.user)
         return OrderPart.objects.filter(visit__company=company) if company else OrderPart.objects.none()
     def perform_create(self, serializer):
-        company = safe_ensure_company(self.request.user)
-        visit = Visit.objects.get(id=self.request.data.get('visit'), company=company)
-        supplier = self.request.data.get('supplier') or ''
-        is_local = self.request.data.get('is_local') is True or str(self.request.data.get('is_local')).lower() == 'true'
+        company = safe_ensure_company(self.request.user); visit = Visit.objects.get(id=self.request.data.get('visit'), company=company)
+        supplier = self.request.data.get('supplier') or ''; is_local = self.request.data.get('is_local') is True or str(self.request.data.get('is_local')).lower() == 'true'
         supplier_color = normalize_supplier_badge_key(self.request.data.get('supplier_color'), supplier_name=supplier, is_local=is_local)
-        serializer.save(visit=visit, supplier_color=supplier_color)
+        part = serializer.save(visit=visit, supplier_color=supplier_color)
+        log_activity(company=company, user=self.request.user, visit=visit, order_part=part, action_type='part_added', title='Додано товар' if is_store(company) else 'Додано запчастину', description=f"{part_label(part)} · {qty_display(part.quantity)} шт · продаж {money_display(part.sell_price)}", metadata={'supplier': part.supplier, 'buy_price': float(money_value(part.buy_price)), 'sell_price': float(money_value(part.sell_price))})
     def update(self, request, *args, **kwargs):
-        instance = self.get_object(); old_quantity = instance.quantity
+        instance = self.get_object(); old = {'quantity': instance.quantity, 'buy_price': instance.buy_price, 'sell_price': instance.sell_price, 'status': instance.status}
         response = super().update(request, *args, **kwargs)
         try:
             from .stock_reservations import sync_order_part_after_update
-            instance.refresh_from_db(); sync_order_part_after_update(instance, old_quantity=old_quantity)
-        except Exception as exc: print(f'STOCK SYNC: order part update sync failed: {exc}')
+            instance.refresh_from_db(); sync_order_part_after_update(instance, old_quantity=old['quantity'])
+            changes = []
+            for field, label in [('quantity','кількість'),('buy_price','закупка'),('sell_price','продаж'),('status','статус')]:
+                if str(old[field]) != str(getattr(instance, field)):
+                    changes.append(f"{label}: {old[field]} → {getattr(instance, field)}")
+            if changes:
+                log_activity(company=instance.visit.company, user=request.user, visit=instance.visit, order_part=instance, action_type='part_status_changed' if str(old['status']) != str(instance.status) else 'part_updated', title='Оновлено товар' if is_store(instance.visit.company) else 'Оновлено запчастину', description=f"{part_label(instance)} · {'; '.join(changes)}", old_value=json.dumps(old, default=str, ensure_ascii=False), new_value=json.dumps({'quantity': instance.quantity, 'buy_price': instance.buy_price, 'sell_price': instance.sell_price, 'status': instance.status}, default=str, ensure_ascii=False))
+        except Exception as exc: print(f'STOCK/ACTIVITY: order part update failed: {exc}')
         return response
     def partial_update(self, request, *args, **kwargs): kwargs['partial'] = True; return self.update(request, *args, **kwargs)
+    def perform_destroy(self, instance):
+        log_activity(company=instance.visit.company, user=self.request.user, visit=instance.visit, order_part=instance, action_type='part_deleted', title='Видалено товар' if is_store(instance.visit.company) else 'Видалено запчастину', description=f"{part_label(instance)} · {qty_display(instance.quantity)} шт")
+        instance.delete()
     @action(detail=True, methods=['post'], url_path='return')
     def return_part(self, request, pk=None):
         part = self.get_object()
@@ -203,15 +238,17 @@ class OrderPartViewSet(viewsets.ModelViewSet):
             from .stock_reservations import return_order_part_to_stock
             ok, message = return_order_part_to_stock(part, quantity=request.data.get('quantity'), reason=request.data.get('reason') or 'Повернення товару', comment=request.data.get('comment') or '', return_to_stock=request.data.get('return_to_stock') is not False)
             part.refresh_from_db()
+            log_activity(company=part.visit.company, user=request.user, visit=part.visit, order_part=part, action_type='part_returned', title='Повернення товару' if is_store(part.visit.company) else 'Повернення запчастини', description=f"{part_label(part)} · {message}. Причина: {request.data.get('reason') or 'Повернення товару'}", metadata={'reason': request.data.get('reason') or '', 'comment': request.data.get('comment') or '', 'return_to_stock': request.data.get('return_to_stock') is not False})
             return Response({'ok': ok, 'message': message, 'part': self.get_serializer(part).data}, status=200 if ok else 400)
         except Exception as exc: return Response({'ok': False, 'message': str(exc)}, status=400)
     @action(detail=True, methods=['post'], url_path='delete-with-stock')
     def delete_with_stock(self, request, pk=None):
-        part = self.get_object(); visit_id = part.visit_id
+        part = self.get_object(); visit_id = part.visit_id; visit = part.visit; part_desc = f"{part_label(part)} · {qty_display(part.quantity)} шт"
         try:
             from .stock_reservations import delete_order_part_with_stock
             ok, message = delete_order_part_with_stock(part, stock_action=request.data.get('stock_action') or 'return', reason=request.data.get('reason') or 'Видалення позиції', comment=request.data.get('comment') or '')
             if not ok: return Response({'ok': False, 'message': message}, status=400)
+            log_activity(company=visit.company, user=request.user, visit=visit, order_part=part, action_type='part_deleted', title='Видалено товар' if is_store(visit.company) else 'Видалено запчастину', description=f"{part_desc}. {message}", metadata={'stock_action': request.data.get('stock_action') or 'return', 'reason': request.data.get('reason') or 'Видалення позиції'})
             part.delete(); visit = Visit.objects.get(id=visit_id)
             return Response({'ok': True, 'message': 'Товар видалено', 'visit': VisitSerializer(visit).data})
         except Exception as exc: return Response({'ok': False, 'message': str(exc)}, status=400)
@@ -221,7 +258,23 @@ class OrderServiceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         company = safe_ensure_company(self.request.user); return OrderService.objects.filter(visit__company=company) if company else OrderService.objects.none()
     def perform_create(self, serializer):
-        company = safe_ensure_company(self.request.user); visit = Visit.objects.get(id=self.request.data.get('visit'), company=company); serializer.save(visit=visit)
+        company = safe_ensure_company(self.request.user); visit = Visit.objects.get(id=self.request.data.get('visit'), company=company); service = serializer.save(visit=visit)
+        log_activity(company=company, user=self.request.user, visit=visit, action_type='service_added', title='Додано роботу', description=f"{service.name} · {qty_display(service.quantity)} · {money_display(service.price)}")
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object(); old = {'name': instance.name, 'price': instance.price, 'quantity': instance.quantity, 'status': getattr(instance, 'status', '')}
+        response = super().update(request, *args, **kwargs)
+        try:
+            instance.refresh_from_db(); changes = []
+            for field, label in [('name','назва'),('price','ціна'),('quantity','кількість'),('status','статус')]:
+                if hasattr(instance, field) and str(old.get(field)) != str(getattr(instance, field)): changes.append(f"{label}: {old.get(field)} → {getattr(instance, field)}")
+            if changes: log_activity(company=instance.visit.company, user=request.user, visit=instance.visit, action_type='service_updated', title='Оновлено роботу', description=f"{instance.name} · {'; '.join(changes)}", old_value=json.dumps(old, default=str, ensure_ascii=False))
+        except Exception as exc: print(f'ACTIVITY: service update failed: {exc}')
+        return response
+    def partial_update(self, request, *args, **kwargs): kwargs['partial'] = True; return self.update(request, *args, **kwargs)
+    def perform_destroy(self, instance):
+        log_activity(company=instance.visit.company, user=self.request.user, visit=instance.visit, action_type='service_deleted', title='Видалено роботу', description=f"{instance.name} · {qty_display(instance.quantity)} · {money_display(instance.price)}")
+        instance.delete()
+
 class ServiceCatalogViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceCatalogSerializer; permission_classes = [IsAuthenticated]
     def get_queryset(self): company = safe_ensure_company(self.request.user); return ServiceCatalog.objects.filter(company=company) if company else ServiceCatalog.objects.none()
@@ -233,7 +286,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class InventoryItemViewSet(viewsets.ModelViewSet):
     serializer_class = InventoryItemSerializer; permission_classes = [IsAuthenticated]
     def get_queryset(self): company = safe_ensure_company(self.request.user); return InventoryItem.objects.filter(company=company) if company else InventoryItem.objects.none()
-    def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
+    def perform_create(self, serializer): company = safe_ensure_company(self.request.user); item = serializer.save(company=company); log_activity(company=company, user=self.request.user, inventory_item=item, action_type='stock_adjusted', title='Створено товар на складі', description=f"{item.brand} {item.article} · {item.quantity} шт")
 class SupplierViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierSerializer; permission_classes = [IsAuthenticated]
     def get_queryset(self): company = safe_ensure_company(self.request.user); return Supplier.objects.filter(company=company) if company else Supplier.objects.none()

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bell, Clock3, CreditCard, PackageMinus, RefreshCcw, RotateCcw, Truck, X } from 'lucide-react';
+import { AlertTriangle, Bell, Clock3, CreditCard, ExternalLink, PackageMinus, RefreshCcw, RotateCcw, Truck, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 
@@ -82,6 +82,11 @@ export default function NotificationBell() {
     if (url) navigate(url);
   };
 
+  const itemClick = (event, item) => {
+    event.stopPropagation();
+    goTo(item?.url);
+  };
+
   return <div className="relative">
     <button
       onClick={() => setOpen(true)}
@@ -128,10 +133,15 @@ export default function NotificationBell() {
                   </div>
                   <p className="text-xs font-bold text-slate-500 mt-1">{formatAmount(section.amount) || section.subtitle || 'Потребує уваги'}</p>
                   {section.items?.length > 0 && <div className="mt-3 space-y-1.5">
-                    {section.items.slice(0, 3).map((item) => <div key={`${section.key}-${item.id}-${item.title}`} className="bg-slate-50 rounded-xl p-2">
-                      <p className="text-xs font-black text-slate-800 truncate">{item.title}</p>
-                      <p className="text-[11px] font-bold text-slate-500 truncate">{item.subtitle}</p>
-                    </div>)}
+                    {section.items.slice(0, 3).map((item) => <button type="button" onClick={(e) => itemClick(e, item)} key={`${section.key}-${item.id}-${item.title}`} className="w-full text-left bg-slate-50 hover:bg-white hover:ring-2 hover:ring-blue-100 rounded-xl p-2 transition group">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-slate-800 truncate">{item.title}</p>
+                          <p className="text-[11px] font-bold text-slate-500 truncate">{item.subtitle}</p>
+                        </div>
+                        <ExternalLink size={12} className="text-slate-300 group-hover:text-blue-600 shrink-0 mt-0.5" />
+                      </div>
+                    </button>)}
                     {section.items.length > 3 && <p className="text-[10px] font-black uppercase text-slate-400 px-1">+ ще {section.items.length - 3}</p>}
                   </div>}
                 </div>

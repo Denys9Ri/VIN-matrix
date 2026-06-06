@@ -20,6 +20,12 @@ class CoreConfig(AppConfig):
             print(f"Stock schema check error: {exc}")
 
         try:
+            from .db_repair_payments import repair_payment_schema
+            repair_payment_schema()
+        except Exception as exc:
+            print(f"Payment schema check error: {exc}")
+
+        try:
             from .db_repair_crm_legacy import repair_crm_legacy_schema
             repair_crm_legacy_schema()
         except Exception as exc:

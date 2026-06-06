@@ -34,13 +34,28 @@ def parse_stock_statuses(part_ids):
         return {}
     try:
         with connection.cursor() as cursor:
-            cursor.execute(
-                'SELECT id, stock_status FROM core_orderpart WHERE id = ANY(%s)',
-                [list(part_ids)]
-            )
+            cursor.execute('SELECT id, stock_status FROM core_orderpart WHERE id = ANY(%s)', [list(part_ids)])
             return {row[0]: row[1] or 'none' for row in cursor.fetchall()}
     except Exception:
         return {}
+
+
+def payments_for_visits(visit_ids):
+    if not visit_ids:
+        return {}, {}
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT visit_id, id, amount, payment_type, payment_purpose, comment, created_at FROM core_visitpayment WHERE visit_id = ANY(%s) ORDER BY created_at DESC, id DESC', [list(visit_ids)])
+            rows = cursor.fetchall()
+        grouped = defaultdict(list)
+        totals = defaultdict(float)
+        for r in rows:
+            item = {'id': r[1], 'amount': money(r[2]), 'payment_type': r[3] or 'cash', 'payment_purpose': r[4] or 'partial', 'comment': r[5] or '', 'created_at': r[6]}
+            grouped[r[0]].append(item)
+            totals[r[0]] += item['amount']
+        return grouped, totals
+    except Exception:
+        return {}, {}
 
 
 def part_totals(parts):
@@ -56,12 +71,6 @@ def part_totals(parts):
     return {'revenue': round(revenue, 2), 'cost': round(cost, 2), 'profit': round(profit, 2), 'margin': round(margin, 1)}
 
 
-def payment_debt_amount(visit, revenue):
-    if visit.payment_status in ['unpaid', 'debt']:
-        return revenue
-    return 0.0
-
-
 def client_status(summary):
     if summary['debt_amount'] > 0:
         return 'Борг'
@@ -74,10 +83,15 @@ def client_status(summary):
     return 'Новий'
 
 
-def serialize_order(visit, stock_statuses=None):
+def serialize_order(visit, stock_statuses=None, payments=None, paid_total=None):
     parts = list(visit.parts.all())
     stock_statuses = stock_statuses or {}
     totals = part_totals(parts)
+    payments = payments or []
+    paid = paid_total if paid_total is not None else sum(money(p.get('amount')) for p in payments)
+    if paid <= 0:
+        paid = money(visit.prepayment_amount)
+    debt = max(totals['revenue'] - paid, 0)
     return {
         'id': visit.id,
         'client': visit.client,
@@ -93,7 +107,9 @@ def serialize_order(visit, stock_statuses=None):
         'cost': totals['cost'],
         'profit': totals['profit'],
         'margin': totals['margin'],
-        'debt_amount': payment_debt_amount(visit, totals['revenue']),
+        'paid_amount': round(paid, 2),
+        'debt_amount': round(debt, 2),
+        'payments': payments,
         'parts_count': len(parts),
         'parts': [
             {
@@ -124,32 +140,17 @@ def build_clients(company, search=''):
             if exact_order_qs.exists():
                 qs = exact_order_qs
             else:
-                qs = qs.filter(
-                    Q(client__icontains=search) |
-                    Q(phone__icontains=search) |
-                    Q(plate__icontains=search) |
-                    Q(vin_code__icontains=search) |
-                    Q(parts__brand__icontains=search) |
-                    Q(parts__article__icontains=search) |
-                    Q(parts__name__icontains=search)
-                ).distinct()
+                qs = qs.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(parts__brand__icontains=search) | Q(parts__article__icontains=search) | Q(parts__name__icontains=search)).distinct()
         else:
-            qs = qs.filter(
-                Q(client__icontains=search) |
-                Q(phone__icontains=search) |
-                Q(plate__icontains=search) |
-                Q(vin_code__icontains=search) |
-                Q(parts__brand__icontains=search) |
-                Q(parts__article__icontains=search) |
-                Q(parts__name__icontains=search)
-            ).distinct()
+            qs = qs.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(parts__brand__icontains=search) | Q(parts__article__icontains=search) | Q(parts__name__icontains=search)).distinct()
     visits = list(qs)
     all_part_ids = [p.id for v in visits for p in v.parts.all()]
     stock_statuses = parse_stock_statuses(all_part_ids)
+    payments_map, paid_map = payments_for_visits([v.id for v in visits])
     groups = defaultdict(lambda: {
-        'key': '', 'client': '', 'phone': '', 'orders': [], 'cars': {}, 'parts': [],
+        'key': '', 'client': '', 'phone': '', 'orders': [], 'cars': {}, 'parts': [], 'payments': [],
         'orders_count': 0, 'total_revenue': 0.0, 'total_cost': 0.0, 'total_profit': 0.0,
-        'debt_amount': 0.0, 'returns_count': 0, 'last_order_date': None,
+        'paid_amount': 0.0, 'debt_amount': 0.0, 'returns_count': 0, 'last_order_date': None,
     })
     for visit in visits:
         key = normalize_phone(visit.phone) if normalize_phone(visit.phone) != 'no-phone' else f'name:{visit.client or visit.id}'
@@ -159,12 +160,14 @@ def build_clients(company, search=''):
             g['client'] = visit.client
         if not g['phone'] and visit.phone:
             g['phone'] = visit.phone
-        order = serialize_order(visit, stock_statuses)
+        order = serialize_order(visit, stock_statuses, payments_map.get(visit.id, []), paid_map.get(visit.id, None))
         g['orders'].append(order)
+        g['payments'].extend([{**p, 'order_id': visit.id} for p in order['payments']])
         g['orders_count'] += 1
         g['total_revenue'] += order['revenue']
         g['total_cost'] += order['cost']
         g['total_profit'] += order['profit']
+        g['paid_amount'] += order['paid_amount']
         g['debt_amount'] += order['debt_amount']
         order_date = visit.scheduled_datetime or visit.created_at
         if order_date and (not g['last_order_date'] or order_date > g['last_order_date']):
@@ -181,6 +184,7 @@ def build_clients(company, search=''):
         g['total_revenue'] = round(g['total_revenue'], 2)
         g['total_cost'] = round(g['total_cost'], 2)
         g['total_profit'] = round(g['total_profit'], 2)
+        g['paid_amount'] = round(g['paid_amount'], 2)
         g['margin'] = round((g['total_profit'] / g['total_revenue'] * 100) if g['total_revenue'] else 0, 1)
         g['debt_amount'] = round(g['debt_amount'], 2)
         g['cars'] = list(g['cars'].values())
@@ -207,6 +211,7 @@ class StoreClientListView(APIView):
                 'orders_count': c['orders_count'],
                 'total_revenue': c['total_revenue'],
                 'total_profit': c['total_profit'],
+                'paid_amount': c['paid_amount'],
                 'margin': c['margin'],
                 'debt_amount': c['debt_amount'],
                 'returns_count': c['returns_count'],
@@ -214,6 +219,7 @@ class StoreClientListView(APIView):
                 'cars': c['cars'][:3],
                 'status': c['status'],
                 'last_parts': c['parts'][:5],
+                'last_payments': c['payments'][:5],
             })
         return Response({'results': compact})
 

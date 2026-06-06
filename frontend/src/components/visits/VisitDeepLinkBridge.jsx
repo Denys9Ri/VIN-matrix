@@ -36,6 +36,49 @@ function syncBoardDate(targetDate) {
   return true;
 }
 
+function BoardDateClickFix() {
+  useEffect(() => {
+    const styleId = 'sto-board-date-click-fix-style';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        [data-sto-date-picker="true"] { cursor: pointer; }
+        [data-sto-date-picker="true"] span:last-child::before { content: '📅 '; }
+        [data-sto-date-picker="true"]:hover span:last-child { color: #2563eb; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const enhance = () => {
+      const inputs = Array.from(document.querySelectorAll('input[type="date"]'));
+      inputs.forEach((input) => {
+        const label = input.closest('label');
+        if (!label || label.dataset.stoDatePicker === 'true') return;
+        const text = (label.innerText || '').toLowerCase();
+        if (!text.includes('дата дошки')) return;
+        label.dataset.stoDatePicker = 'true';
+        label.title = 'Відкрити календар';
+        label.addEventListener('click', () => {
+          try {
+            if (typeof input.showPicker === 'function') input.showPicker();
+            else input.focus();
+          } catch {
+            input.focus();
+          }
+        });
+      });
+    };
+
+    enhance();
+    const observer = new MutationObserver(enhance);
+    observer.observe(document.body, { childList: true, subtree: true });
+    const timer = setInterval(enhance, 1000);
+    return () => { observer.disconnect(); clearInterval(timer); };
+  }, []);
+  return null;
+}
+
 export default function VisitDeepLinkBridge() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -89,5 +132,5 @@ export default function VisitDeepLinkBridge() {
     return () => { cancelled = true; };
   }, [location.pathname, location.search, location.state, navigate, params]);
 
-  return <VisitPaymentDock />;
+  return <><BoardDateClickFix /><VisitPaymentDock /></>;
 }

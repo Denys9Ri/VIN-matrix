@@ -16,6 +16,7 @@ import Partners from './pages/Partners';
 import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
+import AttentionAction from './pages/AttentionAction';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import api from './api/axios';
@@ -129,6 +130,7 @@ function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
+          <Route path="attention" element={<AttentionAction />} />
           <Route path="clients" element={<ClientsCRM />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="partner-clients" element={<PartnerClients />} />
@@ -138,7 +140,6 @@ function App() {
           <Route path="crm/clients" element={<CRMByBusinessType />} />
           <Route path="crm/:tab" element={<CRMByBusinessType />} />
           <Route path="crm/supplier-orders" element={<SupplierOrders />} />
-          <Route path="supplier-orders" element={<SupplierOrders />} />
         </Route>
       </Routes>
     </BrowserRouter>

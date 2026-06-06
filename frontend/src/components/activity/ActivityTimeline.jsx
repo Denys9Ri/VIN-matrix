@@ -17,7 +17,7 @@ const actionConfig = (type = '') => {
   return { icon: Package, dot: 'bg-slate-400', card: 'bg-white border-slate-200', iconBox: 'bg-slate-100 text-slate-600' };
 };
 
-export default function ActivityTimeline({ visitId, phone, mode, type, limit = 80, compact = false, title = 'Історія дій' }) {
+export default function ActivityTimeline({ visitId, phone, mode, type, query = {}, limit = 80, compact = false, title = 'Історія дій' }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,11 +27,12 @@ export default function ActivityTimeline({ visitId, phone, mode, type, limit = 8
     setError('');
     try {
       const params = new URLSearchParams();
+      Object.entries(query || {}).forEach(([key, value]) => { if (value !== undefined && value !== null && String(value).trim() !== '') params.set(key, value); });
       if (visitId) params.set('visit', visitId);
       if (phone) params.set('phone', phone);
       if (mode) params.set('mode', mode);
       if (type) params.set('type', type);
-      params.set('limit', limit);
+      params.set('limit', query?.limit || limit);
       const res = await api.get(`/api/activity/?${params.toString()}`);
       setItems(arr(res.data?.results));
     } catch (e) {
@@ -41,7 +42,7 @@ export default function ActivityTimeline({ visitId, phone, mode, type, limit = 8
     }
   };
 
-  useEffect(() => { load(); }, [visitId, phone, mode, type, limit]);
+  useEffect(() => { load(); }, [visitId, phone, mode, type, limit, JSON.stringify(query || {})]);
 
   const grouped = useMemo(() => {
     const map = new Map();

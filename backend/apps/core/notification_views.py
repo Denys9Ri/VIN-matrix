@@ -40,6 +40,21 @@ def safe_int(value, default=0):
         return default
 
 
+def normalize_phone(value):
+    digits = ''.join(ch for ch in str(value or '') if ch.isdigit())
+    return digits or 'no-phone'
+
+
+def client_debt_url(visit):
+    key = normalize_phone(getattr(visit, 'phone', ''))
+    return f'/clients?key={key}&tab=debts&order_id={visit.id}'
+
+
+def order_url(visit, tab=''):
+    base = f'/visits?visit_id={visit.id}'
+    return f'{base}&tab={tab}' if tab else base
+
+
 def delivery_json(visit):
     raw = getattr(visit, 'delivery_data', None)
     if not raw:
@@ -91,20 +106,13 @@ def build_low_stock(company):
         if available <= min_q:
             items.append({
                 'id': item.id,
+                'type': 'inventory',
                 'title': f'{item.brand} {item.article}',
                 'subtitle': f'Доступно {available}, резерв {safe_int(reserved)}, мінімум {min_q}',
                 'meta': item.name,
                 'url': f'/inventory?item={item.id}',
             })
-    return section(
-        'low_stock',
-        'Закінчується товар',
-        len(items),
-        'warning' if items else 'info',
-        '/inventory?filter=restock',
-        items[:8],
-        subtitle='Товари, де доступно менше або дорівнює мінімуму',
-    )
+    return section('low_stock', 'Закінчується товар', len(items), 'warning' if items else 'info', '/inventory?filter=restock', items[:8], subtitle='Товари, де доступно менше або дорівнює мінімуму')
 
 
 def build_debts(company):
@@ -121,15 +129,20 @@ def build_debts(company):
         if debt <= 0:
             continue
         total_debt += debt
+        key = normalize_phone(visit.phone)
         items.append({
             'id': visit.id,
+            'type': 'client_debt',
+            'client_key': key,
+            'visit_id': visit.id,
             'title': f'№{visit.id} • {visit.client}',
             'subtitle': f'{visit.phone or "—"} • борг {debt:,.2f} ₴'.replace(',', ' '),
             'meta': getattr(visit, 'plate', '') or '',
-            'url': f'/visits?visit_id={visit.id}',
+            'url': client_debt_url(visit),
+            'order_url': order_url(visit),
+            'amount': round(debt, 2),
         })
-    severity = 'critical' if total_debt > 0 else 'info'
-    return section('debts', 'Є борги', len(items), severity, '/clients?filter=debt', items[:8], total_debt, 'Клієнти або замовлення з незакритою сумою')
+    return section('debts', 'Є борги', len(items), 'critical' if total_debt > 0 else 'info', '/clients?filter=debt', items[:8], total_debt, 'Клієнти або замовлення з незакритою сумою')
 
 
 def build_payment_due(company):
@@ -148,17 +161,21 @@ def build_payment_due(company):
         total_due += due
         items.append({
             'id': visit.id,
+            'type': 'order_payment',
+            'visit_id': visit.id,
+            'client_key': normalize_phone(visit.phone),
             'title': f'№{visit.id} • {visit.client}',
             'subtitle': f'{payment_status or "оплата"} • залишок {due:,.2f} ₴'.replace(',', ' '),
             'meta': getattr(visit, 'phone', '') or '',
-            'url': f'/visits?visit_id={visit.id}',
+            'url': order_url(visit),
+            'client_url': client_debt_url(visit),
+            'amount': round(due, 2),
         })
     return section('payment_due', 'Очікує оплати', len(items), 'warning' if items else 'info', '/visits?filter=payment_due', items[:8], total_due, 'Активні замовлення, де оплата ще не закрита')
 
 
 def build_overdue_orders(company, is_store):
     now = timezone.now()
-    today = timezone.localdate()
     items = []
     visits = Visit.objects.filter(company=company).exclude(status__in=CLOSED_STATUSES).prefetch_related('parts').order_by('-created_at')[:500]
     for visit in visits:
@@ -179,12 +196,19 @@ def build_overdue_orders(company, is_store):
                 overdue = True
                 reason = 'Прострочений запис'
         if overdue:
+            first_part = visit.parts.all()[0] if visit.parts.exists() else None
+            title = f'№{visit.id} • {visit.client}'
+            if first_part:
+                title = f'№{visit.id} • {first_part.brand} {first_part.article}'
             items.append({
                 'id': visit.id,
-                'title': f'№{visit.id} • {visit.client}',
-                'subtitle': reason,
+                'type': 'order',
+                'visit_id': visit.id,
+                'client_key': normalize_phone(visit.phone),
+                'title': title,
+                'subtitle': f'{reason} • {visit.client}',
                 'meta': getattr(visit, 'phone', '') or '',
-                'url': f'/visits?visit_id={visit.id}',
+                'url': order_url(visit),
             })
     title = 'Прострочені замовлення' if is_store else 'Прострочені візити'
     return section('overdue_orders', title, len(items), 'critical' if items else 'info', '/visits?filter=overdue', items[:8], subtitle='Активні записи, які зависли довше норми')
@@ -203,10 +227,13 @@ def build_np_returns(company):
         if is_np and is_return:
             items.append({
                 'id': visit.id,
+                'type': 'order_delivery',
+                'visit_id': visit.id,
+                'client_key': normalize_phone(visit.phone),
                 'title': f'№{visit.id} • {visit.client}',
                 'subtitle': f'ТТН {ttn or "—"}',
                 'meta': getattr(visit, 'phone', '') or '',
-                'url': f'/visits?visit_id={visit.id}&tab=delivery',
+                'url': order_url(visit, 'delivery'),
             })
     return section('np_returns', 'Повернення Новою поштою', len(items), 'critical' if items else 'info', '/visits?filter=np_return', items[:8], subtitle='Відправлення, які повертаються або повернуті')
 
@@ -223,10 +250,14 @@ def build_parts_in_transit(company):
         days = (timezone.now() - visit.created_at).days
         items.append({
             'id': visit.id,
+            'type': 'order_part_delay',
+            'visit_id': visit.id,
+            'part_id': first.id,
+            'client_key': normalize_phone(visit.phone),
             'title': f'№{visit.id} • {first.brand} {first.article}',
             'subtitle': f'Очікує {days} дн. • {visit.client}',
             'meta': first.name,
-            'url': f'/visits?visit_id={visit.id}',
+            'url': order_url(visit, 'parts'),
         })
     return section('parts_in_transit', 'Товар у дорозі більше 3 днів', len(items), 'warning' if items else 'info', '/visits?filter=parts_delay', items[:8], subtitle='Замовлення з деталями, які довго не отримані')
 
@@ -236,6 +267,7 @@ def build_sto_tasks(company):
     overdue_tasks = CRMTask.objects.filter(company=company, due_date__lt=today).exclude(status__in=['done', 'DONE']).order_by('due_date')[:8]
     items = [{
         'id': task.id,
+        'type': 'crm_task',
         'title': task.title,
         'subtitle': f'{task.client or task.phone or "Клієнт"} • до {task.due_date}',
         'meta': task.plate or '',
@@ -250,6 +282,7 @@ def build_sto_reminders(company):
     reminders = CRMServiceReminder.objects.filter(company=company, status='active', due_date__lte=soon).order_by('due_date')[:8]
     items = [{
         'id': r.id,
+        'type': 'service_reminder',
         'title': r.title or r.get_reminder_type_display(),
         'subtitle': f'{r.client or r.phone or "Клієнт"} • {r.due_date or "без дати"}',
         'meta': r.plate or '',
@@ -264,6 +297,7 @@ def build_sto_recommendations(company):
     recs = VehicleRecommendation.objects.filter(company=company, status='active', due_date__lte=soon).order_by('due_date')[:8]
     items = [{
         'id': rec.id,
+        'type': 'recommendation',
         'title': rec.title,
         'subtitle': f'{rec.client or rec.phone or "Клієнт"} • {rec.due_date or "без дати"}',
         'meta': rec.plate or '',
@@ -281,23 +315,11 @@ class NotificationsSummaryView(APIView):
             return Response({'total': 0, 'critical': 0, 'warning': 0, 'info': 0, 'sections': []})
 
         is_store = getattr(company, 'business_type', 'sto') == 'store'
-        sections = [
-            build_low_stock(company),
-            build_debts(company),
-            build_payment_due(company),
-            build_overdue_orders(company, is_store),
-        ]
+        sections = [build_low_stock(company), build_debts(company), build_payment_due(company), build_overdue_orders(company, is_store)]
         if is_store:
-            sections.extend([
-                build_np_returns(company),
-                build_parts_in_transit(company),
-            ])
+            sections.extend([build_np_returns(company), build_parts_in_transit(company)])
         else:
-            sections.extend([
-                build_sto_tasks(company),
-                build_sto_reminders(company),
-                build_sto_recommendations(company),
-            ])
+            sections.extend([build_sto_tasks(company), build_sto_reminders(company), build_sto_recommendations(company)])
 
         active_sections = [s for s in sections if s.get('count', 0) > 0]
         total = sum(s.get('count', 0) for s in active_sections)

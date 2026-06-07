@@ -320,16 +320,40 @@ class PlatformClient(models.Model):
     PAYMENT_ACTIVE = 'active'
     PAYMENT_INACTIVE = 'inactive'
     PAYMENT_STATUS_CHOICES = [(PAYMENT_PENDING, 'Pending'), (PAYMENT_TRIAL, 'Trial'), (PAYMENT_ACTIVE, 'Active'), (PAYMENT_INACTIVE, 'Inactive')]
+
+    BILLING_TRIAL = 'trial'
+    BILLING_ACTIVE = 'active'
+    BILLING_DUE_SOON = 'payment_due_soon'
+    BILLING_GRACE = 'grace'
+    BILLING_BLOCKED = 'blocked'
+    BILLING_MANUAL_FREE = 'manual_free'
+    BILLING_CHOICES = [
+        (BILLING_TRIAL, 'Trial'),
+        (BILLING_ACTIVE, 'Active'),
+        (BILLING_DUE_SOON, 'Payment due soon'),
+        (BILLING_GRACE, 'Grace period'),
+        (BILLING_BLOCKED, 'Blocked'),
+        (BILLING_MANUAL_FREE, 'Manual free access'),
+    ]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='platform_client_profile')
     client_code = models.PositiveIntegerField(unique=True)
     phone = models.CharField(max_length=30, blank=True, null=True)
     assigned_owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='managed_platform_clients')
     referred_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='referred_platform_clients')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_TRIAL)
+    billing_status = models.CharField(max_length=30, choices=BILLING_CHOICES, default=BILLING_TRIAL)
     is_access_enabled = models.BooleanField(default=True)
+    subscription_price = models.DecimalField(max_digits=10, decimal_places=2, default=2000)
     trial_started_at = models.DateTimeField(null=True, blank=True)
     trial_until = models.DateTimeField(null=True, blank=True)
     subscription_started_at = models.DateTimeField(null=True, blank=True)
     subscription_until = models.DateTimeField(null=True, blank=True)
+    grace_until = models.DateTimeField(null=True, blank=True)
+    payment_notice_from = models.DateTimeField(null=True, blank=True)
+    blocked_at = models.DateTimeField(null=True, blank=True)
+    blocked_reason = models.CharField(max_length=255, blank=True, null=True)
+    last_payment_at = models.DateTimeField(null=True, blank=True)
+    last_payment_method = models.CharField(max_length=50, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self): return f"{self.client_code} - {self.user.username}"

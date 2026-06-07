@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LogOut, Menu, Settings, UserRound } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, LogOut, Menu, Settings, UserRound } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import CopyButton from '../common/CopyButton';
 import NotificationBell from '../notifications/NotificationBell';
@@ -20,18 +20,62 @@ const getInitials = (fullName, username) => {
   return String(username || 'U').slice(0, 2).toUpperCase();
 };
 
+const formatShortDate = (value) => {
+  if (!value) return null;
+  const display = String(value);
+  const match = display.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (match) return `${match[1]}.${match[2]}`;
+  return display;
+};
+
+const getBillingBadge = (profile = {}) => {
+  const billing = profile.billing || {};
+  const status = billing.billing_status || billing.status || profile.billing_status;
+  const daysLeft = billing.days_left ?? profile.days_until_subscription_end;
+  const graceDaysLeft = billing.grace_days_left;
+  const overdueDays = billing.overdue_days;
+  const date = formatShortDate(billing.subscription_end_display || billing.trial_until_display || profile.subscription_end_display);
+
+  if (profile.access_allowed === false || status === 'blocked') {
+    return { text: 'Доступ призупинено', tone: 'danger', icon: <AlertTriangle size={14} /> };
+  }
+  if (status === 'grace') {
+    const days = overdueDays || (graceDaysLeft ? Math.max(1, 4 - Number(graceDaysLeft)) : 1);
+    return { text: `Прострочено ${days} дн.`, tone: 'warning', icon: <AlertTriangle size={14} /> };
+  }
+  if (status === 'payment_due_soon') {
+    return { text: `Оплата через ${daysLeft ?? 3} дн.`, tone: 'warning', icon: <Clock3 size={14} /> };
+  }
+  if (status === 'trial') {
+    return { text: `Тест ${daysLeft ?? 14} дн.`, tone: 'trial', icon: <CalendarDays size={14} /> };
+  }
+  if (date) {
+    return { text: `Активний до ${date}`, tone: 'success', icon: <CheckCircle2 size={14} /> };
+  }
+  return { text: 'Активний', tone: 'success', icon: <CheckCircle2 size={14} /> };
+};
+
+const badgeClass = {
+  success: 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-emerald-100/60',
+  trial: 'bg-blue-50 text-blue-700 border-blue-100 shadow-blue-100/60',
+  warning: 'bg-amber-50 text-amber-800 border-amber-100 shadow-amber-100/60',
+  danger: 'bg-rose-50 text-rose-700 border-rose-100 shadow-rose-100/60',
+};
+
 const Header = ({ toggleMenu }) => {
   const [profile, setProfile] = useState(null);
   const [partnerStats, setPartnerStats] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const role = profile?.actual_role || profile?.account_role || profile?.role || 'client';
   const user = profile?.user || {};
   const fullName = user.first_name || user.username || 'Користувач';
   const userCode = profile?.user_code || profile?.client_code_display || null;
   const initials = useMemo(() => getInitials(fullName, user.username), [fullName, user.username]);
+  const billingBadge = useMemo(() => getBillingBadge(profile || {}), [profile]);
 
   const loadProfile = async () => {
     try {
@@ -59,7 +103,7 @@ const Header = ({ toggleMenu }) => {
 
   useEffect(() => {
     loadProfile();
-  }, []);
+  }, [location.pathname]);
 
   const logout = () => {
     localStorage.removeItem('access_token');
@@ -67,8 +111,7 @@ const Header = ({ toggleMenu }) => {
     navigate('/login');
   };
 
-  const statusText = profile?.subscription_label || (profile?.access_allowed === false ? 'Немає доступу' : 'Активний');
-  const statusDanger = profile?.access_allowed === false || profile?.subscription_warning;
+  const statusDanger = billingBadge.tone === 'danger' || billingBadge.tone === 'warning';
 
   return (
     <>
@@ -96,9 +139,17 @@ const Header = ({ toggleMenu }) => {
             </div>
           )}
 
-          <span className={`hidden sm:inline-flex px-2.5 py-1 rounded-full text-[11px] font-black ${statusDanger ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
-            {statusText}
-          </span>
+          {role === 'client' && (
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-black shadow-sm transition hover:scale-[1.02] ${badgeClass[billingBadge.tone] || badgeClass.success}`}
+              title="Тариф і оплата"
+            >
+              {billingBadge.icon}
+              <span>{billingBadge.text}</span>
+            </button>
+          )}
 
           {role !== 'partner' && <NotificationBell />}
 
@@ -123,8 +174,12 @@ const Header = ({ toggleMenu }) => {
                 )}
                 {role === 'client' && (
                   <>
+                    <div className={`flex items-center gap-2 rounded-2xl border px-3 py-2 font-black text-xs ${badgeClass[billingBadge.tone] || badgeClass.success}`}>
+                      {billingBadge.icon}
+                      <span>{billingBadge.text}</span>
+                    </div>
                     <p className="font-bold text-slate-700">Доступ: {profile?.access_allowed === false ? 'немає доступу' : 'активний'}</p>
-                    <p className={`font-bold ${statusDanger ? 'text-rose-700' : 'text-slate-700'}`}>До: {profile?.subscription_end_display || '—'}</p>
+                    <p className={`font-bold ${statusDanger ? 'text-rose-700' : 'text-slate-700'}`}>До: {profile?.billing?.subscription_end_display || profile?.billing?.trial_until_display || profile?.subscription_end_display || '—'}</p>
                   </>
                 )}
               </div>
@@ -142,14 +197,28 @@ const Header = ({ toggleMenu }) => {
         </div>
       </header>
 
+      {role === 'client' && (
+        <button
+          type="button"
+          onClick={() => navigate('/settings')}
+          className={`sm:hidden fixed bottom-4 left-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full border text-[11px] font-black shadow-xl ${badgeClass[billingBadge.tone] || badgeClass.success}`}
+        >
+          {billingBadge.icon}
+          <span>{billingBadge.text}</span>
+        </button>
+      )}
+
       {toastVisible && (
-        <div className="fixed bottom-5 right-5 z-50 w-[320px] bg-white border border-rose-200 shadow-2xl rounded-2xl p-4">
+        <div className="fixed bottom-5 right-5 z-50 w-[320px] bg-white border border-amber-200 shadow-2xl rounded-2xl p-4">
           <div className="flex gap-3">
-            <UserRound className="text-rose-600 shrink-0" size={22} />
+            <UserRound className="text-amber-600 shrink-0" size={22} />
             <div>
-              <p className="font-black text-slate-900">Нагадування про підписку</p>
-              <p className="text-sm text-slate-600 mt-1">Ваш доступ закінчується {profile?.subscription_end_display || 'скоро'}. Щоб не втратити доступ, продовжіть підписку.</p>
-              <button onClick={() => setToastVisible(false)} className="mt-3 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 font-bold text-xs">Зрозуміло</button>
+              <p className="font-black text-slate-900">Нагадування про оплату</p>
+              <p className="text-sm text-slate-600 mt-1">{profile?.billing?.message || `Ваш доступ закінчується ${profile?.subscription_end_display || 'скоро'}. Щоб не втратити доступ, продовжіть оплату.`}</p>
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => navigate('/settings')} className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 font-bold text-xs">Оплата</button>
+                <button onClick={() => setToastVisible(false)} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs">Закрити</button>
+              </div>
             </div>
           </div>
         </div>

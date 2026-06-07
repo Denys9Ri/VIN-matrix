@@ -18,6 +18,7 @@ from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClient
 from apps.core.notification_views import NotificationsSummaryView
 from apps.core.activity_views import ActivityLogView
 from apps.core.global_search_views import GlobalSearchView
+from apps.core.company_option_views import CompanyDictionariesView, CompanyOptionBulkView, CompanyOptionDetailView, CompanyOptionListCreateView
 from apps.core.data_exchange_views import ClientsExportView, OrdersExportView, InventoryExportView, BackupExportView, LegacyClientsImportView
 from apps.core.payment_views import VisitAddPaymentView, VisitDebtReminderView, VisitMarkPaidView, VisitPaymentListView
 from apps.core.paid_views import PartSearchView, MechanicViewSet, CategoryViewSet, InventoryItemViewSet, SupplierViewSet
@@ -61,6 +62,10 @@ urlpatterns = [
     path('api/global-search/', GlobalSearchView.as_view(), name='global-search'),
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
     path('api/activity/', ActivityLogView.as_view(), name='activity-log'),
+    path('api/settings/options/', CompanyOptionListCreateView.as_view(), name='company-option-list'),
+    path('api/settings/options/<int:pk>/', CompanyOptionDetailView.as_view(), name='company-option-detail'),
+    path('api/settings/options/bulk/', CompanyOptionBulkView.as_view(), name='company-option-bulk'),
+    path('api/settings/dictionaries/', CompanyDictionariesView.as_view(), name='company-dictionaries'),
     path('api/export/clients/', ClientsExportView.as_view(), name='export-clients'),
     path('api/export/orders/', OrdersExportView.as_view(), name='export-orders'),
     path('api/export/inventory/', InventoryExportView.as_view(), name='export-inventory'),

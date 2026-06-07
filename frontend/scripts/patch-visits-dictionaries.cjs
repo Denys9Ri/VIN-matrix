@@ -44,6 +44,10 @@ const stoStatusMatches = (visitStatus, option) => {
   const aliases = [...(stoStatusAliases[option?.semantic_role] || []), option?.key].filter(Boolean);
   return aliases.includes(visitStatus);
 };
+const stoStatusLabel = (statuses, key) => {
+  const all = [...(Array.isArray(statuses) ? statuses : []), ...fallbackStoVisitStatuses];
+  return all.find((status) => status.key === key)?.label || key || 'SELECTION';
+};
 `;
   src = src.replace('const workflowFilled = (data, type) => {', `${constants}\nconst workflowFilled = (data, type) => {`);
 }
@@ -61,13 +65,16 @@ if (!src.includes('fetchStoVisitStatuses')) {
     try {
       const res = await axios.get(\`${API_BASE}/api/settings/dictionaries/?mode=sto\`, { headers });
       const list = Array.isArray(res.data?.sto_visit_status) ? res.data.sto_visit_status : [];
-      setStoVisitStatuses(list);
+      setStoVisitStatuses(list.length ? list : fallbackStoVisitStatuses);
     } catch {
-      setStoVisitStatuses([]);
+      setStoVisitStatuses(fallbackStoVisitStatuses);
     }
   };
 `;
   src = src.replace('  const fetchData = async () => {', `${loader}\n  const fetchData = async () => {`);
+} else {
+  src = src.replace('setStoVisitStatuses(list);', 'setStoVisitStatuses(list.length ? list : fallbackStoVisitStatuses);');
+  src = src.replace('setStoVisitStatuses([]);', 'setStoVisitStatuses(fallbackStoVisitStatuses);');
 }
 
 if (!src.includes('fetchStoVisitStatuses();')) {
@@ -119,5 +126,25 @@ if (src.includes(oldGrid)) {
   src = src.replace(oldGrid, newGrid);
 }
 
+const oldModalProps = 'workflowInfo={workflowInfo} onCopy={copyText} />';
+const newModalProps = 'workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} />';
+if (src.includes(oldModalProps) && !src.includes('stoVisitStatuses={boardStatuses}')) {
+  src = src.replace(oldModalProps, newModalProps);
+}
+
+const oldSignature = 'workflowInfo, onCopy }) {';
+const newSignature = 'workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy }) {';
+if (src.includes(oldSignature)) {
+  src = src.replace(oldSignature, newSignature);
+}
+
+src = src.replace('{visit.status || \'SELECTION\'}</span>', '{stoStatusLabel(visit.status)}</span>');
+
+const oldStaticStatusGrid = `<div className="mt-4 grid grid-cols-3 gap-2"><StatusBtn active={['PENDING','DRAFT','SELECTION'].includes(visit.status)} onClick={() => onPatch('status','PENDING')} label="В черзі"/><StatusBtn active={['IN_PROGRESS','ORDERED'].includes(visit.status)} onClick={() => onPatch('status','IN_PROGRESS')} label="В роботі"/><StatusBtn active={visit.status === 'DONE'} onClick={() => onPatch('status','DONE')} label="Готово"/></div>`;
+const newDictionaryStatusGrid = `<div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">{stoVisitStatuses.map((status) => <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>)}</div>`;
+if (src.includes(oldStaticStatusGrid)) {
+  src = src.replace(oldStaticStatusGrid, newDictionaryStatusGrid);
+}
+
 fs.writeFileSync(file, src);
-console.log('Visits.jsx patched: STO statuses are dictionary-driven.');
+console.log('Visits.jsx patched: STO statuses have fallback and modal switcher.');

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench, ArrowRight, Building2, BadgeCheck, SlidersHorizontal } from 'lucide-react';
+import { LogOut, User, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench, ArrowRight, Building2, BadgeCheck, SlidersHorizontal, CreditCard, CalendarDays, Clock3, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -8,13 +8,21 @@ const getMechanicName = (mech = {}) => {
   const user = getMechanicUser(mech);
   return user.first_name || user.username || mech.first_name || mech.username || mech.name || `Працівник #${mech.id || ''}`;
 };
+const money = (value, currency = 'UAH') => `${Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 0 })} ${currency === 'UAH' ? 'грн' : currency}`;
+const billingTone = (status) => {
+  if (status === 'blocked') return { box: 'from-rose-600 via-red-600 to-orange-500', badge: 'bg-white/15 text-white border-white/25', icon: <AlertTriangle size={18}/> };
+  if (status === 'grace' || status === 'payment_due_soon') return { box: 'from-amber-500 via-orange-500 to-yellow-500', badge: 'bg-white/15 text-white border-white/25', icon: <Clock3 size={18}/> };
+  if (status === 'trial') return { box: 'from-blue-600 via-indigo-600 to-sky-500', badge: 'bg-white/15 text-white border-white/25', icon: <CalendarDays size={18}/> };
+  return { box: 'from-emerald-600 via-teal-600 to-cyan-500', badge: 'bg-white/15 text-white border-white/25', icon: <CheckCircle2 size={18}/> };
+};
 
 const Settings = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState({
     user: { first_name: '', email: '', username: '' },
     company: { name: '', logo: null, phone: '', address: '', document_footer: '', global_margin_percent: 20, business_type: 'sto' },
-    role: 'owner'
+    role: 'owner',
+    billing: null
   });
   const [mechanics, setMechanics] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +31,8 @@ const Settings = () => {
   const [isAddingMechanic, setIsAddingMechanic] = useState(false);
   const [isEditingMechanic, setIsEditingMechanic] = useState(null);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingNotice, setBillingNotice] = useState('');
   const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', global_margin_percent: 20, logo: null, business_type: 'sto' });
   const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
   const [mechanicData, setMechanicData] = useState({ username: '', password: '', first_name: '', can_create_visits: false, can_view_finances: false });
@@ -30,21 +40,23 @@ const Settings = () => {
 
   const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
+  const authHeaders = { Authorization: `Bearer ${token}` };
 
   useEffect(() => { fetchData(); }, [navigate]);
 
   const fetchData = async () => {
     try {
-      const profileRes = await axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } });
+      const profileRes = await axios.get(`${API_BASE}/api/settings/`, { headers: authHeaders });
       const nextProfile = profileRes.data || {};
       setProfile({
         user: nextProfile.user || {},
         company: nextProfile.company || {},
         role: nextProfile.role || 'owner',
+        billing: nextProfile.billing || null,
         ...nextProfile,
       });
       if (nextProfile.role === 'owner') {
-        const mechanicsRes = await axios.get(`${API_BASE}/api/mechanics/`, { headers: { Authorization: `Bearer ${token}` } });
+        const mechanicsRes = await axios.get(`${API_BASE}/api/mechanics/`, { headers: authHeaders });
         setMechanics(Array.isArray(mechanicsRes.data) ? mechanicsRes.data : []);
         setFormData({
           first_name: nextProfile.user?.first_name || '',
@@ -63,6 +75,18 @@ const Settings = () => {
     } finally { setLoading(false); }
   };
 
+  const requestPayment = async (method = 'monobank_jar') => {
+    setBillingLoading(true);
+    setBillingNotice('');
+    try {
+      const res = await axios.post(`${API_BASE}/api/billing/payment-request/`, { method, comment: method === 'cash' ? 'Клієнт планує оплату готівкою' : 'Клієнт натиснув “Я оплатив” у кабінеті' }, { headers: authHeaders });
+      setBillingNotice(res.data?.message || 'Заявку створено. Ми перевіримо оплату і підтвердимо доступ.');
+      await fetchData();
+    } catch (error) {
+      setBillingNotice(error.response?.data?.error || 'Не вдалося створити заявку на оплату.');
+    } finally { setBillingLoading(false); }
+  };
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
@@ -76,7 +100,7 @@ const Settings = () => {
     data.append('company[business_type]', formData.business_type);
     if (formData.logo) data.append('company[logo]', formData.logo);
     try {
-      await axios.patch(`${API_BASE}/api/settings/`, data, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
+      await axios.patch(`${API_BASE}/api/settings/`, data, { headers: { ...authHeaders, 'Content-Type': 'multipart/form-data' } });
       alert("Налаштування збережено!");
       await fetchData();
       setIsEditingProfile(false);
@@ -88,7 +112,7 @@ const Settings = () => {
     e.preventDefault();
     if (passData.new !== passData.confirm) return alert("Паролі не збігаються");
     try {
-      await axios.post(`${API_BASE}/api/change-password/`, { old_password: passData.old, new_password: passData.new }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API_BASE}/api/change-password/`, { old_password: passData.old, new_password: passData.new }, { headers: authHeaders });
       alert("Пароль змінено!");
       setIsChangingPassword(false);
       setPassData({ old: '', new: '', confirm: '' });
@@ -98,7 +122,7 @@ const Settings = () => {
   const handleAddMechanic = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_BASE}/api/mechanics/`, mechanicData, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API_BASE}/api/mechanics/`, mechanicData, { headers: authHeaders });
       alert("Працівника додано!");
       setIsAddingMechanic(false);
       setMechanicData({ username: '', password: '', first_name: '', can_create_visits: false, can_view_finances: false });
@@ -109,7 +133,7 @@ const Settings = () => {
   const handleDeleteMechanic = async (id) => {
     if (window.confirm("Видалити цього працівника назавжди?")) {
       try {
-        await axios.delete(`${API_BASE}/api/mechanics/${id}/`, { headers: { Authorization: `Bearer ${token}` } });
+        await axios.delete(`${API_BASE}/api/mechanics/${id}/`, { headers: authHeaders });
         fetchData();
       } catch { alert("Помилка видалення"); }
     }
@@ -118,7 +142,7 @@ const Settings = () => {
   const handleUpdateMechanic = async (e) => {
     e.preventDefault();
     try {
-      await axios.patch(`${API_BASE}/api/mechanics/${isEditingMechanic}/`, editMechanicData, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.patch(`${API_BASE}/api/mechanics/${isEditingMechanic}/`, editMechanicData, { headers: authHeaders });
       alert("Дані працівника оновлено!");
       setIsEditingMechanic(null);
       fetchData();
@@ -141,6 +165,8 @@ const Settings = () => {
   }
 
   const isSto = profile.company?.business_type === 'sto';
+  const billing = profile.billing || {};
+  const tone = billingTone(billing.billing_status || billing.status);
   const sectionCards = [
     ...(isSto ? [{ icon: <Wrench size={22}/>, title: 'Послуги', desc: 'Прайс робіт і стандартних послуг', path: '/settings/services' }] : []),
     { icon: <SlidersHorizontal size={22}/>, title: 'Статуси і довідники', desc: 'Статуси, типи оплат, джерела, причини відмов і категорії', path: '/settings/dictionaries' },
@@ -157,6 +183,8 @@ const Settings = () => {
         </div>
         <button onClick={() => {localStorage.clear(); navigate('/login');}} className="self-start md:self-auto flex items-center gap-2 text-red-500 bg-red-50 hover:bg-red-100 px-4 py-3 rounded-2xl font-black text-xs uppercase transition-all shrink-0"><LogOut size={17}/> Вийти</button>
       </div>
+
+      <BillingCard billing={billing} tone={tone} notice={billingNotice} loading={billingLoading} onPayment={requestPayment} />
 
       <div className={`grid grid-cols-1 ${sectionCards.length >= 4 ? 'md:grid-cols-4' : sectionCards.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
         {sectionCards.map((card) => <SettingsNavCard key={card.title} {...card} onClick={() => navigate(card.path)} />)}
@@ -235,6 +263,37 @@ const Settings = () => {
     </div>
   );
 };
+
+const BillingCard = ({ billing = {}, tone, notice, loading, onPayment }) => (
+  <div className={`rounded-[32px] overflow-hidden shadow-xl shadow-slate-200/60 bg-gradient-to-r ${tone.box} text-white`}>
+    <div className="p-5 md:p-6 grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-5 items-stretch">
+      <div>
+        <div className="flex items-center gap-2 text-white/80 text-[10px] font-black uppercase tracking-widest"><CreditCard size={15}/> Тариф і оплата</div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <h2 className="text-2xl md:text-3xl font-black uppercase italic">{billing.plan_name || 'VIN-matrix Full'}</h2>
+          <span className={`px-3 py-1.5 rounded-full border text-[10px] font-black uppercase ${tone.badge}`}>{billing.label || 'Активний'}</span>
+        </div>
+        <p className="mt-3 text-sm md:text-base font-bold text-white/90 max-w-2xl">{billing.message || '14 днів безкоштовно, потім 2000 грн/місяць. Усі функції включені.'}</p>
+        {notice && <div className="mt-4 bg-white/15 border border-white/20 rounded-2xl px-4 py-3 text-sm font-bold">{notice}</div>}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <BillingMetric icon={<DollarSign size={16}/>} label="Сума" value={money(billing.price || 2000, billing.currency || 'UAH')} />
+        <BillingMetric icon={tone.icon} label="Статус" value={billing.label || 'Активний'} />
+        <BillingMetric icon={<CalendarDays size={16}/>} label="Дата" value={billing.subscription_end_display || billing.trial_until_display || '14 днів тест'} />
+        <BillingMetric icon={<Clock3 size={16}/>} label="Днів" value={billing.days_left !== null && billing.days_left !== undefined ? `${billing.days_left} дн.` : billing.grace_days_left ? `${billing.grace_days_left} дн.` : '—'} />
+      </div>
+    </div>
+    <div className="bg-white/12 border-t border-white/15 p-4 md:px-6 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <p className="text-xs font-bold text-white/80">Оплата поки вручну: Monobank банка або готівка. Після перевірки адміністратор підтвердить доступ.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full md:w-auto">
+        <button disabled={loading} onClick={() => onPayment('monobank_jar')} className="bg-white text-slate-900 rounded-2xl px-5 py-3 text-xs font-black uppercase hover:bg-slate-50 disabled:opacity-60">{loading ? 'Зачекайте...' : 'Я оплатив'}</button>
+        <button disabled={loading} onClick={() => onPayment('cash')} className="bg-slate-900/35 border border-white/20 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase hover:bg-slate-900/50 disabled:opacity-60">Оплата готівкою</button>
+      </div>
+    </div>
+  </div>
+);
+
+const BillingMetric = ({ icon, label, value }) => <div className="bg-white/15 border border-white/20 rounded-2xl p-3"><div className="flex items-center gap-2 text-white/75 text-[9px] font-black uppercase tracking-wider">{icon}{label}</div><p className="mt-2 font-black text-lg leading-tight">{value}</p></div>;
 
 const SettingsNavCard = ({ icon, title, desc, onClick }) => (
   <button onClick={onClick} className="group bg-white border border-slate-100 rounded-[28px] p-5 text-left shadow-sm hover:shadow-xl hover:shadow-blue-100/50 hover:border-blue-100 transition-all flex items-center justify-between gap-4">

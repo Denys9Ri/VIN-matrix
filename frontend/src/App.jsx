@@ -21,6 +21,7 @@ import AttentionAction from './pages/AttentionAction';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import ActivityDock from './components/activity/ActivityDock';
+import DocumentDock from './components/documents/DocumentDock';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -74,10 +75,10 @@ function VisitsWithCrm() {
   if (businessType === 'store') {
     const params = new URLSearchParams(location.search);
     if (params.get('visit_id') && params.get('open') !== 'board') return <AttentionAction />;
-    return <><StoreOrders /><ActivityDock /></>;
+    return <><StoreOrders /><ActivityDock /><DocumentDock /></>;
   }
 
-  return <><Visits /><VisitDeepLinkBridge /><VisitCrmBridge /><ActivityDock /></>;
+  return <><Visits /><VisitDeepLinkBridge /><VisitCrmBridge /><ActivityDock /><DocumentDock /></>;
 }
 
 function CRMByBusinessType() {

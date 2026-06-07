@@ -12,6 +12,7 @@ import StoreOrders from './pages/StoreOrders';
 import ClientsCRM from './pages/ClientsCRM';
 import Analytics from './pages/Analytics';
 import ActivityJournal from './pages/ActivityJournal';
+import DataExchange from './pages/DataExchange';
 import PartnerClients from './pages/PartnerClients';
 import Partners from './pages/Partners';
 import Complexes from './pages/Complexes';
@@ -115,6 +116,7 @@ function App() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="activity" element={<ActivityJournal />} />
           <Route path="journal" element={<ActivityJournal />} />
+          <Route path="data" element={<DataExchange />} />
           <Route path="partner-clients" element={<PartnerClients />} />
           <Route path="partners" element={<Partners />} />
           <Route path="complexes" element={<Complexes />} />

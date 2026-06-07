@@ -21,6 +21,7 @@ from apps.core.global_search_views import GlobalSearchView
 from apps.core.company_option_views import CompanyDictionariesView, CompanyOptionBulkView, CompanyOptionDetailView, CompanyOptionListCreateView
 from apps.core.data_exchange_views import ClientsExportView, OrdersExportView, InventoryExportView, BackupExportView, LegacyClientsImportView
 from apps.core.payment_views import VisitAddPaymentView, VisitDebtReminderView, VisitMarkPaidView, VisitPaymentListView
+from apps.core.billing_views import BillingAdminConfirmPaymentView, BillingAdminPaymentsView, BillingAdminRejectPaymentView, BillingMeView, BillingPaymentRequestView
 from apps.core.paid_views import PartSearchView, MechanicViewSet, CategoryViewSet, InventoryItemViewSet, SupplierViewSet
 from apps.core.partner_views import PartnerManagementViewSet
 from apps.core.platform_auth_views import RegisterView
@@ -62,6 +63,11 @@ urlpatterns = [
     path('api/global-search/', GlobalSearchView.as_view(), name='global-search'),
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
     path('api/activity/', ActivityLogView.as_view(), name='activity-log'),
+    path('api/billing/me/', BillingMeView.as_view(), name='billing-me'),
+    path('api/billing/payment-request/', BillingPaymentRequestView.as_view(), name='billing-payment-request'),
+    path('api/billing/admin/payments/', BillingAdminPaymentsView.as_view(), name='billing-admin-payments'),
+    path('api/billing/admin/confirm-payment/', BillingAdminConfirmPaymentView.as_view(), name='billing-admin-confirm-payment'),
+    path('api/billing/admin/reject-payment/', BillingAdminRejectPaymentView.as_view(), name='billing-admin-reject-payment'),
     path('api/settings/options/', CompanyOptionListCreateView.as_view(), name='company-option-list'),
     path('api/settings/options/<int:pk>/', CompanyOptionDetailView.as_view(), name='company-option-detail'),
     path('api/settings/options/bulk/', CompanyOptionBulkView.as_view(), name='company-option-bulk'),

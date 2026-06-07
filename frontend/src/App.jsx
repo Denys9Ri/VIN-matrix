@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import UniversalSearch from './pages/UniversalSearch';
 import Inventory from './pages/Inventory';
 import Settings from './pages/Settings';
+import DocumentSettings from './pages/DocumentSettings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
@@ -23,8 +24,6 @@ import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import ActivityDock from './components/activity/ActivityDock';
 import DocumentDock from './components/documents/DocumentDock';
-import DocumentSettingsDock from './components/documents/DocumentSettingsDock';
-import DataSettingsShortcut from './components/data/DataSettingsShortcut';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -110,7 +109,8 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
-          <Route path="settings" element={<><Settings /><DocumentSettingsDock /><DataSettingsShortcut /></>} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="settings/documents" element={<DocumentSettings />} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
           <Route path="attention" element={<AttentionAction />} />
           <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />

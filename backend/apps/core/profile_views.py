@@ -11,7 +11,7 @@ from .partner_views import (
     repair_legacy_account,
 )
 from .serializers import CompanySerializer, UserSerializer
-from .subscriptions import subscription_payload
+from .subscriptions import get_billing_status, subscription_payload
 
 
 class ProfileSettingsView(BaseProfileSettingsView):
@@ -33,12 +33,13 @@ class ProfileSettingsView(BaseProfileSettingsView):
         actual_role = detect_role(user)
         settings_role = 'mechanic' if actual_role == 'mechanic' else 'owner'
         sub = subscription_payload(client_profile) if client_profile else {}
+        billing = get_billing_status(client_profile) if client_profile else {'access_allowed': True, 'status': 'none'}
 
         access_allowed = True
         access_message = ''
-        if actual_role == 'client' and client_profile and not client_profile.is_access_enabled:
+        if actual_role == 'client' and client_profile and not billing.get('access_allowed'):
             access_allowed = False
-            access_message = 'Немає доступу через відсутність оплати.'
+            access_message = billing.get('message') or 'Немає доступу через відсутність оплати.'
 
         permissions = {
             'can_create_visits': actual_role in ['admin', 'partner', 'client'] or bool(employee and employee.can_create_visits),
@@ -85,6 +86,8 @@ class ProfileSettingsView(BaseProfileSettingsView):
             'client_code_display': f'C{client_profile.client_code}' if client_profile else None,
             'phone': client_profile.phone if client_profile else None,
             'subscription_status': client_profile.payment_status if client_profile else None,
+            'billing_status': billing.get('billing_status'),
+            'billing': billing,
             'subscription_end_display': sub.get('subscription_end_display'),
             'days_until_subscription_end': sub.get('days_until_subscription_end'),
             'subscription_warning': sub.get('subscription_warning', False),

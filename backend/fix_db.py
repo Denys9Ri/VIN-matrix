@@ -218,6 +218,9 @@ queries_alter = [
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS phone varchar(50) NULL;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS address varchar(255) NULL;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS document_footer text NULL;",
+    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS document_requisites text NULL;",
+    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS document_signature varchar(255) NULL;",
+    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS document_warranty_text text NULL;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS global_margin_percent numeric(5, 2) NOT NULL DEFAULT 20.00;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS logo varchar(100) NULL;",
     "ALTER TABLE core_visit ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone;",
@@ -248,91 +251,14 @@ queries_alter = [
     "ALTER TABLE core_vehiclerecommendation ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'active';",
     "ALTER TABLE core_vehiclerecommendation ADD COLUMN IF NOT EXISTS created_at timestamp with time zone NOT NULL DEFAULT NOW();",
     "ALTER TABLE core_vehiclerecommendation ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_crmtask ADD COLUMN IF NOT EXISTS client varchar(100) NULL;",
-    "ALTER TABLE core_crmtask ADD COLUMN IF NOT EXISTS phone varchar(30) NULL;",
-    "ALTER TABLE core_crmtask ADD COLUMN IF NOT EXISTS plate varchar(20) NULL;",
-    "ALTER TABLE core_crmtask ADD COLUMN IF NOT EXISTS description text NULL;",
-    "ALTER TABLE core_crmtask ADD COLUMN IF NOT EXISTS due_date date NULL;",
-    "ALTER TABLE core_crmtask ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'new';",
-    "ALTER TABLE core_crmtask ADD COLUMN IF NOT EXISTS created_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_crmtask ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_crmcommunication ADD COLUMN IF NOT EXISTS client varchar(100) NULL;",
-    "ALTER TABLE core_crmcommunication ADD COLUMN IF NOT EXISTS phone varchar(30) NULL;",
-    "ALTER TABLE core_crmcommunication ADD COLUMN IF NOT EXISTS plate varchar(20) NULL;",
-    "ALTER TABLE core_crmcommunication ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'called';",
-    "ALTER TABLE core_crmcommunication ADD COLUMN IF NOT EXISTS comment text NULL;",
-    "ALTER TABLE core_crmcommunication ADD COLUMN IF NOT EXISTS created_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_crmcommunication ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_crmclientstatus ADD COLUMN IF NOT EXISTS client varchar(100) NULL;",
-    "ALTER TABLE core_crmclientstatus ADD COLUMN IF NOT EXISTS phone varchar(30) NULL;",
-    "ALTER TABLE core_crmclientstatus ADD COLUMN IF NOT EXISTS plate varchar(20) NULL;",
-    "ALTER TABLE core_crmclientstatus ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'new';",
-    "ALTER TABLE core_crmclientstatus ADD COLUMN IF NOT EXISTS note text NULL;",
-    "ALTER TABLE core_crmclientstatus ADD COLUMN IF NOT EXISTS created_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_crmclientstatus ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS client varchar(100) NULL;",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS phone varchar(30) NULL;",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS plate varchar(20) NULL;",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS reminder_type varchar(20) NOT NULL DEFAULT 'maintenance';",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS title varchar(255) NULL;",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS due_date date NULL;",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS due_mileage integer NULL;",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS note text NULL;",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'active';",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS created_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_crmservicereminder ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT NOW();",
-    "ALTER TABLE core_orderpart ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'WAITING';",
-    "ALTER TABLE core_orderpart ADD COLUMN IF NOT EXISTS quantity numeric(8, 2) NOT NULL DEFAULT 1;",
-    "ALTER TABLE core_orderservice ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'PENDING';",
-    "ALTER TABLE core_orderservice ADD COLUMN IF NOT EXISTS quantity numeric(8, 2) NOT NULL DEFAULT 1;",
-    "ALTER TABLE core_platformclient ADD COLUMN IF NOT EXISTS referred_by_id integer NULL REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED;",
-    "ALTER TABLE core_platformclient ADD COLUMN IF NOT EXISTS payment_status varchar(20) NOT NULL DEFAULT 'pending';",
-    "ALTER TABLE core_platformclient ADD COLUMN IF NOT EXISTS is_access_enabled boolean NOT NULL DEFAULT false;",
-    "ALTER TABLE core_platformclient ADD COLUMN IF NOT EXISTS created_at timestamp with time zone DEFAULT NOW();",
-    "ALTER TABLE crm_visit ADD COLUMN IF NOT EXISTS mileage integer;",
 ]
 
+for table, sql in queries_create:
+    with connection.cursor() as cursor:
+        run_sql(cursor, sql, f"Таблиця {table} ОК")
+
 with connection.cursor() as cursor:
-    for label, sql in queries_create:
-        run_sql(cursor, sql, f"Таблиця {label} ОК")
-
     for sql in queries_alter:
-        run_sql(cursor, sql)
-
-    cleanup_queries = [
-        "UPDATE core_employee SET role = 'mechanic' WHERE role IS NULL;",
-        "UPDATE core_employee SET can_create_visits = false WHERE can_create_visits IS NULL;",
-        "UPDATE core_employee SET can_view_finances = false WHERE can_view_finances IS NULL;",
-        "UPDATE core_supplier SET warehouse_prefs = '[]'::jsonb WHERE warehouse_prefs IS NULL;",
-        "UPDATE core_company SET euro_rate = 42.00 WHERE euro_rate IS NULL;",
-        "UPDATE core_company SET business_type = 'sto' WHERE business_type IS NULL;",
-        "UPDATE core_company SET global_margin_percent = 20.00 WHERE global_margin_percent IS NULL;",
-        "UPDATE core_servicecomplex SET is_active = true WHERE is_active IS NULL;",
-        "UPDATE core_servicecomplex SET created_at = NOW() WHERE created_at IS NULL;",
-        "UPDATE core_servicecomplex SET updated_at = NOW() WHERE updated_at IS NULL;",
-        "UPDATE core_vehiclerecommendation SET status = 'active' WHERE status IS NULL;",
-        "UPDATE core_vehiclerecommendation SET created_at = NOW() WHERE created_at IS NULL;",
-        "UPDATE core_vehiclerecommendation SET updated_at = NOW() WHERE updated_at IS NULL;",
-        "UPDATE core_crmtask SET status = 'new' WHERE status IS NULL;",
-        "UPDATE core_crmtask SET created_at = NOW() WHERE created_at IS NULL;",
-        "UPDATE core_crmtask SET updated_at = NOW() WHERE updated_at IS NULL;",
-        "UPDATE core_crmcommunication SET status = 'called' WHERE status IS NULL;",
-        "UPDATE core_crmcommunication SET created_at = NOW() WHERE created_at IS NULL;",
-        "UPDATE core_crmcommunication SET updated_at = NOW() WHERE updated_at IS NULL;",
-        "UPDATE core_crmclientstatus SET status = 'new' WHERE status IS NULL;",
-        "UPDATE core_crmclientstatus SET created_at = NOW() WHERE created_at IS NULL;",
-        "UPDATE core_crmclientstatus SET updated_at = NOW() WHERE updated_at IS NULL;",
-        "UPDATE core_crmservicereminder SET reminder_type = 'maintenance' WHERE reminder_type IS NULL;",
-        "UPDATE core_crmservicereminder SET status = 'active' WHERE status IS NULL;",
-        "UPDATE core_crmservicereminder SET created_at = NOW() WHERE created_at IS NULL;",
-        "UPDATE core_crmservicereminder SET updated_at = NOW() WHERE updated_at IS NULL;",
-        "UPDATE core_orderpart SET quantity = 1 WHERE quantity IS NULL;",
-        "UPDATE core_orderservice SET quantity = 1 WHERE quantity IS NULL;",
-        "UPDATE core_platformclient SET payment_status = 'pending' WHERE payment_status IS NULL;",
-        "UPDATE core_platformclient SET is_access_enabled = false WHERE is_access_enabled IS NULL;",
-        "UPDATE core_platformclient SET created_at = NOW() WHERE created_at IS NULL;",
-    ]
-    for sql in cleanup_queries:
         run_sql(cursor, sql)
 
 print("✅ Ремонт бази завершено. Можна перезапускати backend.")

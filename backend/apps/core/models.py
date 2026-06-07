@@ -220,6 +220,50 @@ class CRMServiceReminder(models.Model):
         indexes = [models.Index(fields=['company', 'phone', 'plate', 'status'])]
     def __str__(self): return f"{self.client or self.phone or self.plate or 'Клієнт'} — {self.title or self.reminder_type}"
 
+class CompanyOption(models.Model):
+    MODE_STORE = 'store'
+    MODE_STO = 'sto'
+    MODE_BOTH = 'both'
+    MODE_SYSTEM = 'system'
+    MODE_CHOICES = [(MODE_STORE, 'Магазин'), (MODE_STO, 'СТО'), (MODE_BOTH, 'Обидва режими'), (MODE_SYSTEM, 'Система')]
+    GROUP_STORE_ORDER_STATUS = 'store_order_status'
+    GROUP_STO_VISIT_STATUS = 'sto_visit_status'
+    GROUP_PART_STATUS = 'part_status'
+    GROUP_PAYMENT_TYPE = 'payment_type'
+    GROUP_ORDER_SOURCE = 'order_source'
+    GROUP_CANCEL_REASON = 'cancel_reason'
+    GROUP_PRODUCT_CATEGORY = 'product_category'
+    GROUP_CLIENT_STATUS = 'client_status'
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='options')
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default=MODE_BOTH)
+    group = models.CharField(max_length=60)
+    key = models.CharField(max_length=80)
+    label = models.CharField(max_length=120)
+    description = models.TextField(blank=True, null=True)
+    color = models.CharField(max_length=30, default='slate')
+    icon = models.CharField(max_length=40, blank=True, null=True)
+    sort_order = models.PositiveIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+    is_system = models.BooleanField(default=False)
+    is_default = models.BooleanField(default=False)
+    semantic_role = models.CharField(max_length=60, blank=True, null=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['group', 'sort_order', 'id']
+        unique_together = ('company', 'group', 'key')
+        indexes = [
+            models.Index(fields=['company', 'group', 'is_active']),
+            models.Index(fields=['company', 'mode', 'group']),
+            models.Index(fields=['company', 'semantic_role']),
+        ]
+
+    def __str__(self):
+        return f"{self.company_id}:{self.group}:{self.key} — {self.label}"
+
 class Category(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)

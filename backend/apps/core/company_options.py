@@ -2,7 +2,7 @@ DEFAULT_COMPANY_OPTIONS = [
     # Магазин: статуси замовлень
     {'mode': 'store', 'group': 'store_order_status', 'key': 'NEW', 'label': 'Нове', 'color': 'blue', 'icon': 'sparkles', 'sort_order': 10, 'is_system': True, 'is_default': True, 'semantic_role': 'new', 'metadata': {'show_on_board': True, 'final': False}},
     {'mode': 'store', 'group': 'store_order_status', 'key': 'PROCESSING', 'label': 'В обробці', 'color': 'amber', 'icon': 'clock', 'sort_order': 20, 'is_system': True, 'semantic_role': 'in_progress', 'metadata': {'show_on_board': True, 'final': False}},
-    {'mode': 'store', 'group': 'store_order_status', 'key': 'WAITING', 'label': 'Очікує товар', 'color': 'blue', 'icon': 'truck', 'sort_order': 30, 'is_system': True, 'semantic_role': 'waiting', 'metadata': {'show_on_board': True, 'final': False}},
+    {'mode': 'store', 'group': 'store_order_status', 'key': 'WAITING', 'label': 'Очікує товар', 'color': 'blue', 'icon': 'truck', 'sort_order': 30, 'is_system': True, 'semantic_role': 'waiting', 'metadata': {'show_on_board': False, 'final': False, 'merged_into': 'PROCESSING'}},
     {'mode': 'store', 'group': 'store_order_status', 'key': 'READY', 'label': 'Готове', 'color': 'indigo', 'icon': 'check-circle', 'sort_order': 40, 'is_system': True, 'semantic_role': 'ready', 'metadata': {'show_on_board': True, 'final': False}},
     {'mode': 'store', 'group': 'store_order_status', 'key': 'SHIPPED', 'label': 'Відправлено', 'color': 'emerald', 'icon': 'send', 'sort_order': 50, 'is_system': True, 'semantic_role': 'shipped', 'metadata': {'show_on_board': True, 'final': False}},
     {'mode': 'store', 'group': 'store_order_status', 'key': 'DONE', 'label': 'Виконано', 'color': 'emerald', 'icon': 'badge-check', 'sort_order': 60, 'is_system': True, 'semantic_role': 'done', 'metadata': {'show_on_board': True, 'final': True}},
@@ -12,7 +12,7 @@ DEFAULT_COMPANY_OPTIONS = [
     # СТО: статуси візитів
     {'mode': 'sto', 'group': 'sto_visit_status', 'key': 'SELECTION', 'label': 'В черзі / підбір', 'color': 'amber', 'icon': 'clock', 'sort_order': 10, 'is_system': True, 'is_default': True, 'semantic_role': 'new', 'metadata': {'show_on_board': True, 'final': False}},
     {'mode': 'sto', 'group': 'sto_visit_status', 'key': 'ORDERED', 'label': 'В роботі', 'color': 'blue', 'icon': 'wrench', 'sort_order': 20, 'is_system': True, 'semantic_role': 'in_progress', 'metadata': {'show_on_board': True, 'final': False}},
-    {'mode': 'sto', 'group': 'sto_visit_status', 'key': 'WAITING_PARTS', 'label': 'Чекаємо запчастини', 'color': 'orange', 'icon': 'package-search', 'sort_order': 30, 'is_system': True, 'semantic_role': 'waiting', 'metadata': {'show_on_board': True, 'final': False}},
+    {'mode': 'sto', 'group': 'sto_visit_status', 'key': 'WAITING_PARTS', 'label': 'Чекаємо запчастини', 'color': 'orange', 'icon': 'package-search', 'sort_order': 30, 'is_system': True, 'semantic_role': 'waiting', 'metadata': {'show_on_board': False, 'final': False, 'merged_into': 'ORDERED'}},
     {'mode': 'sto', 'group': 'sto_visit_status', 'key': 'DONE', 'label': 'Готово', 'color': 'emerald', 'icon': 'check-circle', 'sort_order': 40, 'is_system': True, 'semantic_role': 'ready', 'metadata': {'show_on_board': True, 'final': False}},
     {'mode': 'sto', 'group': 'sto_visit_status', 'key': 'ISSUED', 'label': 'Видано', 'color': 'emerald', 'icon': 'badge-check', 'sort_order': 50, 'is_system': True, 'semantic_role': 'done', 'metadata': {'show_on_board': False, 'final': True}},
     {'mode': 'sto', 'group': 'sto_visit_status', 'key': 'CANCELLED', 'label': 'Скасовано', 'color': 'rose', 'icon': 'x-circle', 'sort_order': 90, 'is_system': True, 'semantic_role': 'cancelled', 'metadata': {'show_on_board': False, 'final': True}},
@@ -65,40 +65,32 @@ DEFAULT_COMPANY_OPTIONS = [
 
     # Категорії товарів як довідник. Стара таблиця Category залишається окремо, щоб нічого не ламати.
     {'mode': 'both', 'group': 'product_category', 'key': 'filters', 'label': 'Фільтри', 'color': 'blue', 'icon': 'filter', 'sort_order': 10, 'is_system': True, 'semantic_role': 'category'},
-    {'mode': 'both', 'group': 'product_category', 'key': 'oils', 'label': 'Масла', 'color': 'amber', 'icon': 'droplet', 'sort_order': 20, 'is_system': True, 'semantic_role': 'category'},
-    {'mode': 'both', 'group': 'product_category', 'key': 'brakes', 'label': 'Гальма', 'color': 'rose', 'icon': 'disc', 'sort_order': 30, 'is_system': True, 'semantic_role': 'category'},
-    {'mode': 'both', 'group': 'product_category', 'key': 'suspension', 'label': 'Підвіска', 'color': 'indigo', 'icon': 'activity', 'sort_order': 40, 'is_system': True, 'semantic_role': 'category'},
-    {'mode': 'both', 'group': 'product_category', 'key': 'electric', 'label': 'Електрика', 'color': 'yellow', 'icon': 'zap', 'sort_order': 50, 'is_system': True, 'semantic_role': 'category'},
-    {'mode': 'both', 'group': 'product_category', 'key': 'tires', 'label': 'Шини', 'color': 'slate', 'icon': 'circle', 'sort_order': 60, 'is_system': True, 'semantic_role': 'category'},
-    {'mode': 'both', 'group': 'product_category', 'key': 'chemistry', 'label': 'Хімія', 'color': 'cyan', 'icon': 'flask-conical', 'sort_order': 70, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'brakes', 'label': 'Гальмівна система', 'color': 'rose', 'icon': 'disc', 'sort_order': 20, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'suspension', 'label': 'Підвіска', 'color': 'amber', 'icon': 'car', 'sort_order': 30, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'engine', 'label': 'Двигун', 'color': 'orange', 'icon': 'settings', 'sort_order': 40, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'oils', 'label': 'Мастила та рідини', 'color': 'emerald', 'icon': 'droplets', 'sort_order': 50, 'is_system': True, 'semantic_role': 'category'},
 ]
 
 
-def seed_company_options(company, *, force=False):
+def seed_company_options(company):
     from .models import CompanyOption
-
-    created = 0
-    updated = 0
+    if not company:
+        return
     for item in DEFAULT_COMPANY_OPTIONS:
-        defaults = {
-            'mode': item.get('mode', 'both'),
-            'label': item.get('label', item['key']),
-            'description': item.get('description'),
-            'color': item.get('color', 'slate'),
-            'icon': item.get('icon'),
-            'sort_order': item.get('sort_order', 100),
-            'is_active': item.get('is_active', True),
-            'is_system': item.get('is_system', True),
-            'is_default': item.get('is_default', False),
-            'semantic_role': item.get('semantic_role'),
-            'metadata': item.get('metadata', {}),
-        }
-        option, was_created = CompanyOption.objects.get_or_create(company=company, group=item['group'], key=item['key'], defaults=defaults)
-        if was_created:
-            created += 1
-        elif force and option.is_system:
-            for field, value in defaults.items():
-                setattr(option, field, value)
-            option.save(update_fields=list(defaults.keys()) + ['updated_at'])
-            updated += 1
-    return {'created': created, 'updated': updated}
+        if item['mode'] not in ('both', getattr(company, 'business_type', 'sto')):
+            continue
+        defaults = item.copy()
+        mode = defaults.pop('mode')
+        group = defaults.pop('group')
+        key = defaults.pop('key')
+        obj, created = CompanyOption.objects.get_or_create(company=company, group=group, key=key, defaults={**defaults, 'mode': mode})
+        if created:
+            continue
+        # Keep legacy seeded waiting columns out of the main boards without touching user-edited labels/colors.
+        if group in ('store_order_status', 'sto_visit_status') and defaults.get('semantic_role') == 'waiting':
+            metadata = obj.metadata or {}
+            if metadata.get('show_on_board') is not False:
+                metadata['show_on_board'] = False
+                metadata['merged_into'] = defaults.get('metadata', {}).get('merged_into')
+                obj.metadata = metadata
+                obj.save(update_fields=['metadata'])

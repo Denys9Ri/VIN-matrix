@@ -17,6 +17,7 @@ from apps.core.crm_client_views import StoreClientListView, StoreClientDetailVie
 from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
 from apps.core.notification_views import NotificationsSummaryView
 from apps.core.activity_views import ActivityLogView
+from apps.core.global_search_views import GlobalSearchView
 from apps.core.data_exchange_views import ClientsExportView, OrdersExportView, InventoryExportView, BackupExportView, LegacyClientsImportView
 from apps.core.payment_views import VisitAddPaymentView, VisitDebtReminderView, VisitMarkPaidView, VisitPaymentListView
 from apps.core.paid_views import PartSearchView, MechanicViewSet, CategoryViewSet, InventoryItemViewSet, SupplierViewSet
@@ -57,6 +58,7 @@ urlpatterns = [
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/search-parts/', PartSearchView.as_view(), name='search-parts'),
+    path('api/global-search/', GlobalSearchView.as_view(), name='global-search'),
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
     path('api/activity/', ActivityLogView.as_view(), name='activity-log'),
     path('api/export/clients/', ClientsExportView.as_view(), name='export-clients'),

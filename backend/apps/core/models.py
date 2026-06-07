@@ -153,14 +153,7 @@ class CRMCommunication(models.Model):
     STATUS_REFUSED = 'refused'
     STATUS_THINKING = 'thinking'
     STATUS_AGREED = 'agreed'
-    STATUS_CHOICES = [
-        (STATUS_CALLED, 'Дзвонили клієнту'),
-        (STATUS_NO_ANSWER, 'Клієнт не відповів'),
-        (STATUS_CALL_BACK, 'Домовились передзвонити'),
-        (STATUS_REFUSED, 'Клієнт відмовився'),
-        (STATUS_THINKING, 'Клієнт думає'),
-        (STATUS_AGREED, 'Клієнт погодився'),
-    ]
+    STATUS_CHOICES = [(STATUS_CALLED, 'Дзвонили клієнту'), (STATUS_NO_ANSWER, 'Клієнт не відповів'), (STATUS_CALL_BACK, 'Домовились передзвонити'), (STATUS_REFUSED, 'Клієнт відмовився'), (STATUS_THINKING, 'Клієнт думає'), (STATUS_AGREED, 'Клієнт погодився')]
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='crm_communications')
     visit = models.ForeignKey(Visit, on_delete=models.SET_NULL, null=True, blank=True, related_name='crm_communications')
     client = models.CharField(max_length=100, blank=True, null=True)
@@ -182,14 +175,7 @@ class CRMClientStatus(models.Model):
     STATUS_SLEEPING = 'sleeping'
     STATUS_PROBLEM = 'problem'
     STATUS_VIP = 'vip'
-    STATUS_CHOICES = [
-        (STATUS_NEW, 'Новий'),
-        (STATUS_ACTIVE, 'Активний'),
-        (STATUS_REGULAR, 'Постійний'),
-        (STATUS_SLEEPING, 'Сплячий'),
-        (STATUS_PROBLEM, 'Проблемний'),
-        (STATUS_VIP, 'VIP'),
-    ]
+    STATUS_CHOICES = [(STATUS_NEW, 'Новий'), (STATUS_ACTIVE, 'Активний'), (STATUS_REGULAR, 'Постійний'), (STATUS_SLEEPING, 'Сплячий'), (STATUS_PROBLEM, 'Проблемний'), (STATUS_VIP, 'VIP')]
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='crm_client_statuses')
     client = models.CharField(max_length=100, blank=True, null=True)
     phone = models.CharField(max_length=30, blank=True, null=True)
@@ -199,13 +185,10 @@ class CRMClientStatus(models.Model):
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_crm_client_statuses')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         ordering = ['-updated_at', '-id']
         indexes = [models.Index(fields=['company', 'phone', 'plate'])]
-
-    def __str__(self):
-        return f"{self.client or self.phone or self.plate or 'Клієнт'} — {self.status}"
+    def __str__(self): return f"{self.client or self.phone or self.plate or 'Клієнт'} — {self.status}"
 
 class CRMServiceReminder(models.Model):
     TYPE_OIL = 'oil'
@@ -213,11 +196,96 @@ class CRMServiceReminder(models.Model):
     TYPE_BRAKES = 'brakes'
     TYPE_TIRES = 'tires'
     TYPE_MAINTENANCE = 'maintenance'
-    TYPE_CHOICES = [
-        (TYPE_OIL, 'Заміна масла'),
-        (TYPE_FILTERS, 'Фільтри'),
-        (TYPE_BRAKES, 'Гальма'),
-        (TYPE_TIRES, 'Сезонна заміна шин'),
-        (TYPE_MAINTENANCE, 'ТО'),
-    ]
+    TYPE_CHOICES = [(TYPE_OIL, 'Заміна масла'), (TYPE_FILTERS, 'Фільтри'), (TYPE_BRAKES, 'Гальма'), (TYPE_TIRES, 'Сезонна заміна шин'), (TYPE_MAINTENANCE, 'ТО')]
     STATUS_ACTIVE = 'active'
+    STATUS_DONE = 'done'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [(STATUS_ACTIVE, 'Активне'), (STATUS_DONE, 'Виконано'), (STATUS_CANCELLED, 'Скасовано')]
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='crm_service_reminders')
+    visit = models.ForeignKey(Visit, on_delete=models.SET_NULL, null=True, blank=True, related_name='crm_service_reminders')
+    client = models.CharField(max_length=100, blank=True, null=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    plate = models.CharField(max_length=20, blank=True, null=True)
+    reminder_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_MAINTENANCE)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    due_date = models.DateField(null=True, blank=True)
+    due_mileage = models.PositiveIntegerField(null=True, blank=True)
+    note = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_crm_service_reminders')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        ordering = ['status', 'due_date', 'due_mileage', '-created_at']
+        indexes = [models.Index(fields=['company', 'phone', 'plate', 'status'])]
+    def __str__(self): return f"{self.client or self.phone or self.plate or 'Клієнт'} — {self.title or self.reminder_type}"
+
+class Category(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    def __str__(self): return self.name
+
+class Supplier(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    api_key = models.CharField(max_length=255, blank=True, null=True)
+    price_file = models.FileField(upload_to='supplier_prices/', null=True, blank=True)
+    warehouse_prefs = models.JSONField(default=list, blank=True)
+
+class InventoryItem(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_items')
+    brand = models.CharField(max_length=100)
+    article = models.CharField(max_length=100)
+    name = models.TextField()
+    quantity = models.IntegerField(default=0)
+    buy_price = models.DecimalField(max_digits=10, decimal_places=2)
+    sell_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        indexes = [models.Index(fields=['company', 'brand', 'article'])]
+    def __str__(self): return f"{self.brand} {self.article}"
+
+class StockMovement(models.Model):
+    TYPE_RECEIPT = 'receipt'
+    TYPE_ADJUSTMENT = 'adjustment'
+    TYPE_CHOICES = [(TYPE_RECEIPT, 'Прихід'), (TYPE_ADJUSTMENT, 'Корекція')]
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='stock_movements')
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name='movements')
+    movement_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_RECEIPT)
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    source_order_part = models.ForeignKey(OrderPart, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    brand = models.CharField(max_length=100)
+    article = models.CharField(max_length=100)
+    name = models.TextField()
+    quantity = models.IntegerField(default=1)
+    buy_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    sell_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_stock_movements')
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [models.Index(fields=['company', 'created_at'])]
+    def __str__(self): return f"{self.brand} {self.article} +{self.quantity}"
+
+class PlatformClient(models.Model):
+    PAYMENT_PENDING = 'pending'
+    PAYMENT_TRIAL = 'trial'
+    PAYMENT_ACTIVE = 'active'
+    PAYMENT_INACTIVE = 'inactive'
+    PAYMENT_STATUS_CHOICES = [(PAYMENT_PENDING, 'Pending'), (PAYMENT_TRIAL, 'Trial'), (PAYMENT_ACTIVE, 'Active'), (PAYMENT_INACTIVE, 'Inactive')]
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='platform_client_profile')
+    client_code = models.PositiveIntegerField(unique=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    assigned_owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='managed_platform_clients')
+    referred_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='referred_platform_clients')
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_TRIAL)
+    is_access_enabled = models.BooleanField(default=True)
+    trial_started_at = models.DateTimeField(null=True, blank=True)
+    trial_until = models.DateTimeField(null=True, blank=True)
+    subscription_started_at = models.DateTimeField(null=True, blank=True)
+    subscription_until = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    def __str__(self): return f"{self.client_code} - {self.user.username}"

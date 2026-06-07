@@ -57,6 +57,9 @@ class ProfileSettingsView(BaseProfileSettingsView):
             'phone': '',
             'address': '',
             'document_footer': '',
+            'document_requisites': '',
+            'document_signature': '',
+            'document_warranty_text': '',
             'global_margin_percent': 20,
             'business_type': 'sto',
         }
@@ -91,3 +94,38 @@ class ProfileSettingsView(BaseProfileSettingsView):
             'access_allowed': access_allowed,
             'access_message': access_message,
         })
+
+    def patch(self, request):
+        repair_legacy_account(request.user)
+        company = get_user_company(request.user)
+        if not company:
+            return Response({'error': 'Немає компанії для редагування.'}, status=403)
+
+        user = request.user
+        if 'first_name' in request.data or 'user[first_name]' in request.data:
+            user.first_name = request.data.get('user[first_name]') or request.data.get('first_name') or ''
+        if 'email' in request.data or 'user[email]' in request.data:
+            user.email = request.data.get('user[email]') or request.data.get('email') or ''
+        user.save()
+
+        mapping = {
+            'company[name]': 'name', 'name': 'name',
+            'company[phone]': 'phone', 'phone': 'phone',
+            'company[address]': 'address', 'address': 'address',
+            'company[document_footer]': 'document_footer', 'document_footer': 'document_footer',
+            'company[document_requisites]': 'document_requisites', 'document_requisites': 'document_requisites',
+            'company[document_signature]': 'document_signature', 'document_signature': 'document_signature',
+            'company[document_warranty_text]': 'document_warranty_text', 'document_warranty_text': 'document_warranty_text',
+            'company[global_margin_percent]': 'global_margin_percent', 'global_margin_percent': 'global_margin_percent',
+            'company[business_type]': 'business_type', 'business_type': 'business_type',
+            'company[euro_rate]': 'euro_rate', 'euro_rate': 'euro_rate',
+        }
+        for key, field in mapping.items():
+            if key in request.data:
+                setattr(company, field, request.data.get(key))
+
+        logo = request.data.get('company[logo]') or request.data.get('logo')
+        if logo:
+            company.logo = logo
+        company.save()
+        return Response({'message': 'Дані успішно оновлено.'})

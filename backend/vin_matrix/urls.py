@@ -5,18 +5,8 @@ from django.conf import settings
 from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
-from apps.core.views import (
-    LogoutView,
-    ChangePasswordView,
-)
-from apps.core.safe_crm_views import (
-    VisitViewSet,
-    ServiceCatalogViewSet,
-    OrderPartViewSet,
-    OrderServiceViewSet,
-    VehicleRecommendationViewSet,
-    CRMTaskViewSet,
-)
+from apps.core.views import LogoutView, ChangePasswordView
+from apps.core.safe_crm_views import VisitViewSet, ServiceCatalogViewSet, OrderPartViewSet, OrderServiceViewSet, VehicleRecommendationViewSet, CRMTaskViewSet
 from apps.core.communication_views import CRMCommunicationViewSet, CRMClientStatusViewSet, CRMServiceReminderViewSet
 from apps.core.visit_workflow_views import VisitAcceptanceActView, VisitDiagnosticChecklistView
 from apps.core.ocr_views import RecognizeDocumentView
@@ -27,14 +17,9 @@ from apps.core.crm_client_views import StoreClientListView, StoreClientDetailVie
 from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
 from apps.core.notification_views import NotificationsSummaryView
 from apps.core.activity_views import ActivityLogView
+from apps.core.data_exchange_views import ClientsExportView, OrdersExportView, InventoryExportView, BackupExportView, LegacyClientsImportView
 from apps.core.payment_views import VisitAddPaymentView, VisitDebtReminderView, VisitMarkPaidView, VisitPaymentListView
-from apps.core.paid_views import (
-    PartSearchView,
-    MechanicViewSet,
-    CategoryViewSet,
-    InventoryItemViewSet,
-    SupplierViewSet,
-)
+from apps.core.paid_views import PartSearchView, MechanicViewSet, CategoryViewSet, InventoryItemViewSet, SupplierViewSet
 from apps.core.partner_views import PartnerManagementViewSet
 from apps.core.platform_auth_views import RegisterView
 from apps.core.platform_client_views import SecurePlatformClientViewSet
@@ -74,6 +59,11 @@ urlpatterns = [
     path('api/search-parts/', PartSearchView.as_view(), name='search-parts'),
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
     path('api/activity/', ActivityLogView.as_view(), name='activity-log'),
+    path('api/export/clients/', ClientsExportView.as_view(), name='export-clients'),
+    path('api/export/orders/', OrdersExportView.as_view(), name='export-orders'),
+    path('api/export/inventory/', InventoryExportView.as_view(), name='export-inventory'),
+    path('api/export/backup/', BackupExportView.as_view(), name='export-backup'),
+    path('api/import/clients/', LegacyClientsImportView.as_view(), name='import-clients'),
     path('api/payments/', VisitPaymentListView.as_view(), name='visit-payments'),
     path('api/visits/<int:pk>/add-payment/', VisitAddPaymentView.as_view(), name='visit-add-payment'),
     path('api/visits/<int:pk>/mark-paid/', VisitMarkPaidView.as_view(), name='visit-mark-paid'),
@@ -93,6 +83,4 @@ urlpatterns = [
     path('api/', include(router.urls)),
 ]
 
-urlpatterns += [
-    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
-]
+urlpatterns += [re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT})]

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench } from 'lucide-react';
+import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench, ArrowRight, Building2, BadgeCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -128,69 +128,86 @@ const Settings = () => {
     );
   }
 
+  const isSto = profile.company.business_type === 'sto';
+  const sectionCards = [
+    ...(isSto ? [{ icon: <Wrench size={22}/>, title: 'Послуги', desc: 'Прайс робіт і стандартних послуг', path: '/settings/services' }] : []),
+    { icon: <FileText size={22}/>, title: 'Документи', desc: 'Реквізити, гарантія, підписи та текст бланків', path: '/settings/documents' },
+    { icon: <FileSpreadsheet size={22}/>, title: 'Дані', desc: 'Імпорт, експорт і резервна копія бізнесу', path: '/data' },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 p-3 md:p-4 w-full overflow-x-hidden">
-      <div className="flex justify-between items-center mt-4 md:mt-0">
-        <h1 className="text-xl md:text-2xl font-black uppercase italic truncate pr-2">Налаштування</h1>
-        <button onClick={() => {localStorage.clear(); navigate('/login');}} className="flex items-center gap-2 text-red-500 font-bold hover:bg-red-50 p-2 md:px-4 md:py-2 rounded-xl transition-all shrink-0"><LogOut size={18}/> <span className="hidden sm:inline">Вийти</span></button>
+    <div className="max-w-6xl mx-auto space-y-6 pb-20 p-3 md:p-6 w-full overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mt-4 md:mt-0">
+        <div>
+          <h1 className="text-2xl md:text-4xl font-black uppercase italic text-slate-900">Налаштування</h1>
+          <p className="text-sm md:text-base text-slate-500 font-semibold mt-2 max-w-2xl">Керуйте компанією, документами, прайсом, командою та даними системи.</p>
+        </div>
+        <button onClick={() => {localStorage.clear(); navigate('/login');}} className="self-start md:self-auto flex items-center gap-2 text-red-500 bg-red-50 hover:bg-red-100 px-4 py-3 rounded-2xl font-black text-xs uppercase transition-all shrink-0"><LogOut size={17}/> Вийти</button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {profile.company.business_type === 'sto' && <SettingsNavCard icon={<Wrench size={20}/>} title="Послуги" desc="Прайс робіт і стандартних послуг" onClick={() => navigate('/settings/services')} />}
-        <SettingsNavCard icon={<FileText size={20}/>} title="Документи" desc="Реквізити, гарантія і підписи" onClick={() => navigate('/settings/documents')} />
-        <SettingsNavCard icon={<FileSpreadsheet size={20}/>} title="Дані" desc="Імпорт, експорт і резервна копія" onClick={() => navigate('/data')} />
+      <div className={`grid grid-cols-1 ${sectionCards.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
+        {sectionCards.map((card) => <SettingsNavCard key={card.title} {...card} onClick={() => navigate(card.path)} />)}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
-          <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-4 sm:gap-6 items-center sm:items-start text-center sm:text-left">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 bg-slate-50 rounded-2xl flex-shrink-0 overflow-hidden border-2 border-slate-100 flex items-center justify-center">
-              {profile.company.logo ? <img src={profile.company.logo} alt="Logo" className="w-full h-full object-contain" /> : <ImageIcon className="text-slate-300" size={32} />}
-            </div>
-            <div className="flex-1 w-full">
-              <div className="flex justify-between items-start gap-3">
-                <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">{profile.company.name}</h2>
-                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${profile.company.business_type === 'store' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{profile.company.business_type === 'store' ? 'Магазин' : 'СТО'}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-900 via-blue-700 to-cyan-500 p-5 md:p-6 text-white">
+              <div className="flex items-center gap-2 text-blue-100 text-[10px] font-black uppercase tracking-widest"><Building2 size={15}/> Профіль компанії</div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-5 mt-5">
+                <div className="w-24 h-24 bg-white/95 rounded-3xl flex-shrink-0 overflow-hidden border border-white/30 shadow-xl flex items-center justify-center">
+                  {profile.company.logo ? <img src={profile.company.logo} alt="Logo" className="w-full h-full object-contain" /> : <ImageIcon className="text-slate-300" size={34} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="text-2xl md:text-3xl font-black truncate">{profile.company.name}</h2>
+                    <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white">{isSto ? 'СТО' : 'Магазин'}</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4 text-sm font-bold text-blue-50">
+                    <p className="flex items-center gap-2 min-w-0"><MapPin size={15} className="shrink-0"/><span className="truncate">{profile.company.address || 'Адреса не вказана'}</span></p>
+                    <p className="flex items-center gap-2"><Phone size={15} className="shrink-0"/> {profile.company.phone || 'Телефон не вказаний'}</p>
+                    <p className="flex items-center gap-2"><DollarSign size={15} className="shrink-0"/> Націнка: {profile.company.global_margin_percent}%</p>
+                    <p className="flex items-center gap-2"><BadgeCheck size={15} className="shrink-0"/> Активний профіль</p>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1 mt-2">
-                <p className="text-slate-500 text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-2 truncate"><MapPin size={14} className="shrink-0"/> <span className="truncate">{profile.company.address || 'Адреса не вказана'}</span></p>
-                <p className="text-slate-500 text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-2"><Phone size={14} className="shrink-0"/> {profile.company.phone || 'Телефон не вказаний'}</p>
-                <p className="text-blue-600 text-xs sm:text-sm font-bold flex items-center justify-center sm:justify-start gap-2"><DollarSign size={14} className="shrink-0"/> Націнка: {profile.company.global_margin_percent}%</p>
-              </div>
-              <button onClick={() => setIsEditingProfile(true)} className="mt-4 w-full sm:w-auto bg-slate-100 sm:bg-transparent px-4 py-2 sm:p-0 rounded-lg text-blue-600 font-bold text-sm sm:hover:underline transition-colors">Змінити реквізити та лого</button>
             </div>
-          </div>
-
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5 md:p-6">
-            <h2 className="font-black uppercase text-slate-900 mb-2">Розділи налаштувань</h2>
-            <p className="text-sm font-semibold text-slate-500 mb-4">Основна сторінка тепер чиста. Прайс, документи і дані відкриваються окремими професійними сторінками.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {profile.company.business_type === 'sto' && <MiniLink title="Послуги" onClick={() => navigate('/settings/services')} />}
-              <MiniLink title="Документи" onClick={() => navigate('/settings/documents')} />
-              <MiniLink title="Дані" onClick={() => navigate('/data')} />
+            <div className="p-5 md:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className="font-black text-slate-900 uppercase">Бізнес-ідентичність</h3>
+                <p className="text-sm font-semibold text-slate-500 mt-1">Логотип, назва, адреса, телефон, режим роботи та базова націнка.</p>
+              </div>
+              <button onClick={() => setIsEditingProfile(true)} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase shadow-lg shadow-blue-100 transition">Змінити реквізити</button>
             </div>
           </div>
         </div>
 
         <div className="space-y-6">
-          <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100">
-            <h3 className="font-black uppercase tracking-wider text-sm flex items-center gap-2 mb-4 text-slate-700"><ShieldAlert className="text-purple-600" size={18}/> Безпека</h3>
-            <button onClick={() => setIsChangingPassword(true)} className="w-full bg-slate-50 text-slate-700 font-bold text-sm hover:bg-slate-100 p-3 rounded-xl transition-all">Змінити мій пароль</button>
+          <div className="bg-white p-5 md:p-6 rounded-[28px] shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <h3 className="font-black uppercase tracking-wider text-sm flex items-center gap-2 text-slate-800"><ShieldAlert className="text-purple-600" size={18}/> Безпека</h3>
+              <span className="text-[10px] font-black uppercase px-2 py-1 rounded-full bg-purple-50 text-purple-700">Акаунт</span>
+            </div>
+            <p className="text-sm font-semibold text-slate-500 mb-4">Зміна пароля для входу в систему.</p>
+            <button onClick={() => setIsChangingPassword(true)} className="w-full bg-slate-50 text-slate-800 font-black text-xs uppercase hover:bg-slate-100 p-4 rounded-2xl transition-all">Змінити мій пароль</button>
           </div>
 
-          {profile.company.business_type === 'sto' && (
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-4 md:p-6 bg-slate-50/50 border-b border-slate-50 flex justify-between items-center gap-2">
-                <h3 className="font-black uppercase tracking-wider text-xs sm:text-sm flex items-center gap-2 text-slate-700 truncate"><Users className="text-green-600 shrink-0" size={18}/> Команда СТО</h3>
-                <button onClick={() => setIsAddingMechanic(true)} className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-all shrink-0"><Plus size={16}/></button>
+          {isSto && (
+            <div className="bg-white rounded-[28px] shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-5 md:p-6 bg-slate-50/70 border-b border-slate-100 flex justify-between items-center gap-2">
+                <div>
+                  <h3 className="font-black uppercase tracking-wider text-sm flex items-center gap-2 text-slate-800"><Users className="text-green-600 shrink-0" size={18}/> Команда СТО</h3>
+                  <p className="text-xs font-bold text-slate-500 mt-1">Працівники та доступи</p>
+                </div>
+                <button onClick={() => setIsAddingMechanic(true)} className="bg-green-100 text-green-700 p-3 rounded-2xl hover:bg-green-200 transition-all shrink-0"><Plus size={17}/></button>
               </div>
               <div className="p-3 md:p-4 space-y-2">
                 {mechanics.length === 0 ? <p className="text-slate-400 text-sm text-center py-4">Немає працівників</p> : mechanics.map(m => (
-                  <div key={m.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center lg:flex-col lg:items-stretch xl:flex-row xl:items-center gap-2 group">
-                    <div className="overflow-hidden pr-2"><p className="font-bold text-sm text-slate-800 truncate">{m.first_name}</p><p className="text-[10px] sm:text-xs text-slate-500 truncate">Логін: {m.username}</p></div>
-                    <div className="flex gap-1 lg:opacity-100 xl:opacity-0 group-hover:opacity-100 transition-all shrink-0 self-end xl:self-center">
-                      <button onClick={() => { setIsEditingMechanic(m.id); setEditMechanicData({ first_name: m.first_name, new_password: '', can_create_visits: m.can_create_visits || false, can_view_finances: m.can_view_finances || false }); }} className="bg-white text-slate-400 hover:text-blue-600 p-1.5 rounded shadow-sm"><Pencil size={14}/></button>
-                      <button onClick={() => handleDeleteMechanic(m.id)} className="bg-white text-slate-400 hover:text-red-500 p-1.5 rounded shadow-sm"><Trash2 size={14}/></button>
+                  <div key={m.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center gap-2 group">
+                    <div className="overflow-hidden pr-2"><p className="font-black text-sm text-slate-800 truncate">{m.first_name}</p><p className="text-[10px] sm:text-xs text-slate-500 truncate">Логін: {m.username}</p></div>
+                    <div className="flex gap-1 transition-all shrink-0">
+                      <button onClick={() => { setIsEditingMechanic(m.id); setEditMechanicData({ first_name: m.first_name, new_password: '', can_create_visits: m.can_create_visits || false, can_view_finances: m.can_view_finances || false }); }} className="bg-white text-slate-400 hover:text-blue-600 p-2 rounded-xl shadow-sm"><Pencil size={14}/></button>
+                      <button onClick={() => handleDeleteMechanic(m.id)} className="bg-white text-slate-400 hover:text-red-500 p-2 rounded-xl shadow-sm"><Trash2 size={14}/></button>
                     </div>
                   </div>
                 ))}
@@ -209,11 +226,16 @@ const Settings = () => {
 };
 
 function SettingsNavCard({ icon, title, desc, onClick }) {
-  return <button onClick={onClick} className="bg-white border border-slate-100 rounded-3xl p-4 text-left shadow-sm hover:border-blue-200 hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-start gap-3"><span className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">{icon}</span><span><span className="block font-black uppercase text-slate-900 text-sm">{title}</span><span className="block text-xs font-bold text-slate-500 mt-1 leading-snug">{desc}</span></span></button>;
-}
-
-function MiniLink({ title, onClick }) {
-  return <button onClick={onClick} className="rounded-2xl bg-slate-50 border border-slate-100 hover:bg-blue-50 hover:border-blue-100 text-slate-800 hover:text-blue-700 font-black uppercase text-xs py-4 transition">{title}</button>;
+  return (
+    <button onClick={onClick} className="group bg-white border border-slate-100 rounded-[28px] p-5 text-left shadow-sm hover:border-blue-200 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center gap-4 min-h-[118px]">
+      <span className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-black uppercase text-slate-900 text-base">{title}</span>
+        <span className="block text-xs font-bold text-slate-500 mt-1 leading-snug">{desc}</span>
+      </span>
+      <span className="w-9 h-9 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center shrink-0 group-hover:bg-blue-50 group-hover:text-blue-600 transition"><ArrowRight size={17}/></span>
+    </button>
+  );
 }
 
 function MechanicCreateModal({ mechanicData, setMechanicData, onClose, onSubmit }) {

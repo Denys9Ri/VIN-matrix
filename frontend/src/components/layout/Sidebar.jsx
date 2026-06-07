@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck, ShieldCheck, Boxes, History } from 'lucide-react';
+import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck, ShieldCheck, Boxes, History, FileSpreadsheet } from 'lucide-react';
 import api from '../../api/axios';
 
 const Sidebar = ({ isOpen, closeMenu }) => {
@@ -16,7 +16,6 @@ const Sidebar = ({ isOpen, closeMenu }) => {
         const response = await api.get('/api/settings/');
         const data = response.data || {};
         const effectiveRole = data.actual_role || data.account_role || data.role || 'client';
-
         setRole(effectiveRole);
         setBusinessType(data.company?.business_type || 'sto');
         setCanManagePartners(data.permissions?.can_manage_partners === true);
@@ -40,6 +39,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     ...(isStore ? [{ name: 'Клієнти', icon: <Users size={20} />, path: '/clients' }] : []),
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
     { name: 'Журнал дій', icon: <History size={20} />, path: '/activity' },
+    { name: 'Дані', icon: <FileSpreadsheet size={20} />, path: '/data' },
     ...(!isStore ? [{ name: 'CRM', icon: <Users size={20} />, path: '/crm/supplier-orders' }] : []),
     ...(!isStore ? [{ name: 'Комплекси', icon: <Boxes size={20} />, path: '/complexes' }] : []),
   ];
@@ -54,9 +54,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
 
   return (
     <>
-      {isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden" onClick={closeMenu} />
-      )}
+      {isOpen && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden" onClick={closeMenu} />}
       <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col transform transition-transform duration-300 ease-in-out md:translate-x-0 shadow-2xl md:shadow-none ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-16 flex items-center justify-between px-6 text-white border-b border-slate-800">
           <div className="font-bold text-xl"><span className="font-black tracking-tighter text-blue-500">VIN</span><span className="italic text-white">-matrix</span></div>
@@ -72,11 +70,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
               </li>
             ))}
           </ul>
-          {!accessAllowed && (
-            <div className="mx-1 mt-5 rounded-xl bg-rose-500/10 border border-rose-500/20 p-3 text-xs font-bold text-rose-200">
-              Немає доступу через відсутність оплати.
-            </div>
-          )}
+          {!accessAllowed && <div className="mx-1 mt-5 rounded-xl bg-rose-500/10 border border-rose-500/20 p-3 text-xs font-bold text-rose-200">Немає доступу через відсутність оплати.</div>}
         </nav>
       </div>
     </>

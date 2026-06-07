@@ -6,6 +6,7 @@ import UniversalSearch from './pages/UniversalSearch';
 import Inventory from './pages/Inventory';
 import Settings from './pages/Settings';
 import DocumentSettings from './pages/DocumentSettings';
+import ServicesSettings from './pages/ServicesSettings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
@@ -110,6 +111,7 @@ function App() {
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="settings/services" element={<ServicesSettings />} />
           <Route path="settings/documents" element={<DocumentSettings />} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
           <Route path="attention" element={<AttentionAction />} />

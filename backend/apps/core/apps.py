@@ -32,6 +32,12 @@ class CoreConfig(AppConfig):
             print(f"Activity schema check error: {exc}")
 
         try:
+            from .db_repair_options import repair_options_schema
+            repair_options_schema()
+        except Exception as exc:
+            print(f"CompanyOption schema check error: {exc}")
+
+        try:
             from .db_repair_crm_legacy import repair_crm_legacy_schema
             repair_crm_legacy_schema()
         except Exception as exc:

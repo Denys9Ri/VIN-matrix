@@ -64,18 +64,58 @@ DEFAULT_COMPANY_OPTIONS = [
     {'mode': 'both', 'group': 'client_status', 'key': 'vip', 'label': 'VIP', 'color': 'amber', 'icon': 'crown', 'sort_order': 60, 'is_system': True, 'semantic_role': 'vip'},
 
     # Категорії товарів як довідник. Стара таблиця Category залишається окремо, щоб нічого не ламати.
-    {'mode': 'both', 'group': 'product_category', 'key': 'filters', 'label': 'Фільтри', 'color': 'blue', 'icon': 'filter', 'sort_order': 10, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'filters', 'label': 'Фільтри', 'color': 'blue', 'icon': 'filter', 'sort_order': 10, 'is_system': True, 'is_default': True, 'semantic_role': 'category'},
     {'mode': 'both', 'group': 'product_category', 'key': 'brakes', 'label': 'Гальмівна система', 'color': 'rose', 'icon': 'disc', 'sort_order': 20, 'is_system': True, 'semantic_role': 'category'},
     {'mode': 'both', 'group': 'product_category', 'key': 'suspension', 'label': 'Підвіска', 'color': 'amber', 'icon': 'car', 'sort_order': 30, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'steering', 'label': 'Рульове керування', 'color': 'indigo', 'icon': 'disc-3', 'sort_order': 35, 'is_system': True, 'semantic_role': 'category'},
     {'mode': 'both', 'group': 'product_category', 'key': 'engine', 'label': 'Двигун', 'color': 'orange', 'icon': 'settings', 'sort_order': 40, 'is_system': True, 'semantic_role': 'category'},
-    {'mode': 'both', 'group': 'product_category', 'key': 'oils', 'label': 'Мастила та рідини', 'color': 'emerald', 'icon': 'droplets', 'sort_order': 50, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'timing', 'label': 'ГРМ та ремені', 'color': 'orange', 'icon': 'rotate-cw', 'sort_order': 45, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'cooling', 'label': 'Охолодження', 'color': 'cyan', 'icon': 'fan', 'sort_order': 50, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'fuel', 'label': 'Паливна система', 'color': 'amber', 'icon': 'fuel', 'sort_order': 55, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'ignition', 'label': 'Запалювання', 'color': 'yellow', 'icon': 'zap', 'sort_order': 60, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'transmission', 'label': 'Трансмісія / зчеплення', 'color': 'purple', 'icon': 'cog', 'sort_order': 65, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'exhaust', 'label': 'Вихлопна система', 'color': 'slate', 'icon': 'wind', 'sort_order': 70, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'electrics', 'label': 'Електрика та датчики', 'color': 'blue', 'icon': 'cable', 'sort_order': 75, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'lighting', 'label': 'Світло та оптика', 'color': 'yellow', 'icon': 'lightbulb', 'sort_order': 80, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'body', 'label': 'Кузовні деталі', 'color': 'slate', 'icon': 'car-front', 'sort_order': 85, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'climate', 'label': 'Кондиціонер / клімат', 'color': 'sky', 'icon': 'snowflake', 'sort_order': 90, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'bearings', 'label': 'Підшипники та ступиці', 'color': 'indigo', 'icon': 'circle-dot', 'sort_order': 95, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'oils', 'label': 'Мастила та рідини', 'color': 'emerald', 'icon': 'droplets', 'sort_order': 100, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'chemistry', 'label': 'Автохімія', 'color': 'emerald', 'icon': 'flask-conical', 'sort_order': 105, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'wipers', 'label': 'Двірники та омивачі', 'color': 'cyan', 'icon': 'waves', 'sort_order': 110, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'tires', 'label': 'Шини та диски', 'color': 'slate', 'icon': 'circle', 'sort_order': 115, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'battery', 'label': 'Акумулятори', 'color': 'green', 'icon': 'battery-charging', 'sort_order': 120, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'tools', 'label': 'Інструменти', 'color': 'slate', 'icon': 'wrench', 'sort_order': 125, 'is_system': True, 'semantic_role': 'category'},
+    {'mode': 'both', 'group': 'product_category', 'key': 'accessories', 'label': 'Аксесуари', 'color': 'pink', 'icon': 'sparkles', 'sort_order': 130, 'is_system': True, 'semantic_role': 'category'},
 ]
 
 
-def seed_company_options(company):
+def sync_product_categories(company):
+    from .models import Category, CompanyOption
+    if not company:
+        return 0
+    created = 0
+    options = CompanyOption.objects.filter(company=company, group='product_category', is_active=True).order_by('sort_order', 'id')
+    existing = {str(item.name or '').strip().lower(): item for item in Category.objects.filter(company=company)}
+    for option in options:
+        name = str(option.label or '').strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in existing:
+            continue
+        Category.objects.create(company=company, name=name)
+        existing[key] = True
+        created += 1
+    return created
+
+
+def seed_company_options(company, force=False):
     from .models import CompanyOption
     if not company:
-        return
+        return {'created': 0, 'updated': 0, 'categories_synced': 0}
+    created_count = 0
+    updated_count = 0
     for item in DEFAULT_COMPANY_OPTIONS:
         if item['mode'] not in ('both', getattr(company, 'business_type', 'sto')):
             continue
@@ -85,7 +125,15 @@ def seed_company_options(company):
         key = defaults.pop('key')
         obj, created = CompanyOption.objects.get_or_create(company=company, group=group, key=key, defaults={**defaults, 'mode': mode})
         if created:
+            created_count += 1
             continue
+        # Не перетираємо ручні назви/кольори власника. Оновлюємо тільки службові системні поля при restore_defaults(force=True).
+        if force and obj.is_system:
+            for field in ['description', 'color', 'icon', 'sort_order', 'semantic_role', 'is_default']:
+                if field in defaults:
+                    setattr(obj, field, defaults[field])
+            obj.mode = mode
+            updated_count += 1
         # Keep legacy seeded waiting columns out of the main boards without touching user-edited labels/colors.
         if group in ('store_order_status', 'sto_visit_status') and defaults.get('semantic_role') == 'waiting':
             metadata = obj.metadata or {}
@@ -93,4 +141,11 @@ def seed_company_options(company):
                 metadata['show_on_board'] = False
                 metadata['merged_into'] = defaults.get('metadata', {}).get('merged_into')
                 obj.metadata = metadata
-                obj.save(update_fields=['metadata'])
+                updated_count += 1
+        if force and obj.is_system and 'metadata' in defaults:
+            metadata = obj.metadata or {}
+            metadata.update(defaults.get('metadata') or {})
+            obj.metadata = metadata
+        if updated_count:
+            obj.save()
+    return {'created': created_count, 'updated': updated_count, 'categories_synced': sync_product_categories(company)}

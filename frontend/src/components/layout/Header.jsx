@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LogOut, Menu, Search, Settings, UserRound } from 'lucide-react';
+import { LogOut, Menu, Settings, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import CopyButton from '../common/CopyButton';
 import NotificationBell from '../notifications/NotificationBell';
+import GlobalSearchBox from '../search/GlobalSearchBox';
 
 const roleLabel = {
   admin: 'Адміністратор',
@@ -20,7 +21,6 @@ const getInitials = (fullName, username) => {
 };
 
 const Header = ({ toggleMenu }) => {
-  const [query, setQuery] = useState('');
   const [profile, setProfile] = useState(null);
   const [partnerStats, setPartnerStats] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -32,14 +32,6 @@ const Header = ({ toggleMenu }) => {
   const fullName = user.first_name || user.username || 'Користувач';
   const userCode = profile?.user_code || profile?.client_code_display || null;
   const initials = useMemo(() => getInitials(fullName, user.username), [fullName, user.username]);
-
-  const handleQuickSearch = (e) => {
-    if (e.key === 'Enter' && query.trim()) {
-      const value = encodeURIComponent(query.trim());
-      navigate('/search?q=' + value);
-      setQuery('');
-    }
-  };
 
   const loadProfile = async () => {
     try {
@@ -86,17 +78,7 @@ const Header = ({ toggleMenu }) => {
             <Menu size={24} />
           </button>
 
-          <div className="relative w-full max-w-[150px] sm:max-w-[220px] md:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-            <input
-              type="text"
-              placeholder="Артикул..."
-              className="w-full pl-8 pr-3 py-1.5 md:py-2 bg-slate-100 border border-slate-200 rounded-full text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all font-bold text-slate-700 uppercase placeholder:normal-case placeholder:font-medium"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleQuickSearch}
-            />
-          </div>
+          <GlobalSearchBox compact />
         </div>
 
         <div className="flex items-center gap-2 md:gap-4 ml-2 shrink-0 relative">

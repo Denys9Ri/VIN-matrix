@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search, ChevronDown, ChevronUp, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, Wrench, CheckSquare } from 'lucide-react';
+import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Search, ChevronDown, ChevronUp, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, Wrench, CheckSquare, FileText, FileSpreadsheet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -187,6 +187,12 @@ const Settings = () => {
         </button>
       </div>
       
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <SettingsNavCard icon={<DollarSign size={20}/>} title="Послуги" desc="Прайс робіт і стандартних послуг" onClick={() => document.getElementById('services-settings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+        <SettingsNavCard icon={<FileText size={20}/>} title="Документи" desc="Реквізити, гарантія і підписи" onClick={() => navigate('/settings/documents')} />
+        <SettingsNavCard icon={<FileSpreadsheet size={20}/>} title="Дані" desc="Імпорт, експорт і резервна копія" onClick={() => navigate('/data')} />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-4 sm:gap-6 items-center sm:items-start text-center sm:text-left">
@@ -213,7 +219,7 @@ const Settings = () => {
           </div>
 
           {profile.company.business_type === 'sto' && (
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            <div id="services-settings" className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden scroll-mt-24">
               <div className="p-4 md:p-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
                 <h2 className="font-black uppercase text-sm tracking-wider flex items-center gap-2"><DollarSign size={18} className="text-green-600"/> Прайс послуг</h2>
                 <div className="relative w-full sm:w-64">
@@ -337,23 +343,20 @@ const Settings = () => {
                   <span className="text-sm font-bold text-slate-700">Бачить фінанси (ціни, загальну касу)</span>
                 </label>
               </div>
-
-              <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-black uppercase mt-6 shadow-lg shadow-green-100 transition-all text-xs tracking-widest">Створити акаунт</button>
+              <button type="submit" className="w-full bg-green-600 text-white py-3 rounded-xl font-black hover:bg-green-700">Створити</button>
             </form>
           </div>
         </div>
       )}
 
       {isEditingMechanic && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto pt-10">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative my-auto">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
             <button onClick={() => setIsEditingMechanic(null)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full"><X size={20} /></button>
-            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Pencil className="text-blue-600"/> Редагувати працівника</h2>
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Pencil className="text-blue-600"/> Редагування працівника</h2>
             <form onSubmit={handleUpdateMechanic} className="space-y-4">
-              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Нове ім'я (необов'язково)</label>
-              <input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 text-sm" value={editMechanicData.first_name} onChange={e => setEditMechanicData({...editMechanicData, first_name: e.target.value})}/>
-              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 mt-4">Новий пароль (залиште пустим, якщо не міняєте)</label>
-              <input type="password" placeholder="Новий пароль..." className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 text-sm" value={editMechanicData.new_password} onChange={e => setEditMechanicData({...editMechanicData, new_password: e.target.value})}/>
+              <input required type="text" placeholder="Ім'я" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium text-sm" value={editMechanicData.first_name} onChange={e => setEditMechanicData({...editMechanicData, first_name: e.target.value})}/>
+              <input type="password" placeholder="Новий пароль (залишити пустим, якщо не міняти)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-medium text-sm" value={editMechanicData.new_password} onChange={e => setEditMechanicData({...editMechanicData, new_password: e.target.value})}/>
               
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mt-2 space-y-3">
                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Права доступу</p>
@@ -363,13 +366,45 @@ const Settings = () => {
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" checked={editMechanicData.can_view_finances} onChange={e => setEditMechanicData({...editMechanicData, can_view_finances: e.target.checked})} />
-                  <span className="text-sm font-bold text-slate-700">Бачить фінанси (ціни, загальну касу)</span>
+                  <span className="text-sm font-bold text-slate-700">Бачить фінанси</span>
                 </label>
               </div>
-
-              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black uppercase mt-6 transition-all text-xs tracking-widest">Зберегти зміни</button>
+              <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-700">Зберегти зміни</button>
             </form>
           </div>
+        </div>
+      )}
+
+      {isEditingProfile && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+                <button onClick={() => setIsEditingProfile(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full"><X size={20} /></button>
+                <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Store className="text-blue-600"/> Реквізити</h2>
+                <form onSubmit={handleSaveProfile} className="space-y-4">
+                    <input className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500 font-bold" placeholder="Назва бізнесу" value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})}/>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500" placeholder="Телефон" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}/>
+                      <input type="number" step="0.01" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500" placeholder="Націнка %" value={formData.global_margin_percent} onChange={e => setFormData({...formData, global_margin_percent: e.target.value})}/>
+                    </div>
+                    <input className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500" placeholder="Адреса" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})}/>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Режим роботи</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setFormData({...formData, business_type: 'sto'})} className={`py-3 rounded-xl font-black text-xs uppercase ${formData.business_type === 'sto' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>СТО</button>
+                        <button type="button" onClick={() => setFormData({...formData, business_type: 'store'})} className={`py-3 rounded-xl font-black text-xs uppercase ${formData.business_type === 'store' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>Магазин</button>
+                      </div>
+                    </div>
+                    <textarea className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500" placeholder="Текст у чеку" value={formData.document_footer} onChange={e => setFormData({...formData, document_footer: e.target.value})}/>
+                    <label className="block bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition-colors">
+                      <ImageIcon className="mx-auto mb-2 text-slate-400" size={24}/>
+                      <span className="text-sm font-bold text-slate-500">Завантажити логотип</span>
+                      <input type="file" className="hidden" accept="image/*" onChange={e => setFormData({...formData, logo: e.target.files[0]})}/>
+                    </label>
+                    <button disabled={saveLoading} className="w-full bg-blue-600 text-white py-4 rounded-xl font-black hover:bg-blue-700 shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
+                      {saveLoading ? <Loader2 className="animate-spin"/> : <Save size={20}/>} Зберегти
+                    </button>
+                </form>
+            </div>
         </div>
       )}
 
@@ -377,58 +412,12 @@ const Settings = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
             <button onClick={() => setIsChangingPassword(false)} className="absolute right-4 top-4 text-slate-400 bg-slate-100 p-2 rounded-full"><X size={20} /></button>
-            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Key className="text-purple-600"/> Зміна пароля</h2>
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Key className="text-blue-600"/> Новий пароль</h2>
             <form onSubmit={handleChangePassword} className="space-y-4">
-              <input required type="password" placeholder="Старий пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-purple-500 text-sm" value={passData.old} onChange={e => setPassData({...passData, old: e.target.value})}/>
-              <input required type="password" placeholder="Новий пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-purple-500 text-sm" value={passData.new} onChange={e => setPassData({...passData, new: e.target.value})}/>
-              <input required type="password" placeholder="Підтвердіть пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-purple-500 text-sm" value={passData.confirm} onChange={e => setPassData({...passData, confirm: e.target.value})}/>
-              <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-black uppercase mt-6 shadow-lg shadow-purple-100 text-xs tracking-widest">Оновити пароль</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isEditingProfile && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 z-50 overflow-y-auto pt-10 pb-20">
-          <div className="bg-white rounded-3xl w-full max-w-2xl p-4 sm:p-6 md:p-8 shadow-2xl my-auto relative">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg sm:text-2xl font-black italic uppercase truncate pr-8">Налаштування системи</h2>
-              <button onClick={() => setIsEditingProfile(false)} className="absolute right-4 sm:right-6 top-4 sm:top-6 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors"><X size={20} /></button>
-            </div>
-            <form onSubmit={handleSaveProfile} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
-              <div className="md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <label className="block text-[10px] sm:text-xs font-black uppercase text-slate-500 mb-3">Тип бізнесу</label>
-                <div className="flex gap-2">
-                  <button 
-                    type="button"
-                    onClick={() => setFormData({...formData, business_type: 'sto'})}
-                    className={`flex-1 py-3 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-all ${formData.business_type === 'sto' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
-                  >
-                    <Wrench size={16}/> СТО / Сервіс
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setFormData({...formData, business_type: 'store'})}
-                    className={`flex-1 py-3 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-all ${formData.business_type === 'store' ? 'bg-amber-500 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
-                  >
-                    <Store size={16}/> Магазин деталей
-                  </button>
-                </div>
-              </div>
-
-              <div className="md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300 mt-2">
-                <label className="block text-[10px] sm:text-xs font-black uppercase text-slate-500 mb-2">Логотип (PNG/JPG)</label>
-                <input type="file" accept="image/*" className="text-sm w-full" onChange={(e) => setFormData({...formData, logo: e.target.files[0]})} />
-              </div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Назва компанії</label><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500" value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Націнка (%)</label><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-black text-blue-600 outline-none focus:border-blue-500" value={formData.global_margin_percent} onChange={e => setFormData({...formData, global_margin_percent: e.target.value})} /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Телефон</label><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Адреса</label><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
-              <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Текст у підвалі чека (Гарантія)</label><textarea rows="3" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-500 resize-none" value={formData.document_footer} onChange={e => setFormData({...formData, document_footer: e.target.value})}></textarea></div>
-              <button type="submit" disabled={saveLoading} className="md:col-span-2 w-full bg-blue-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs mt-2 shadow-lg shadow-blue-200 transition-all hover:bg-blue-700">
-                {saveLoading ? <Loader2 className="animate-spin mx-auto" /> : "ЗБЕРЕГТИ НАЛАШТУВАННЯ"}
-              </button>
+              <input required type="password" placeholder="Старий пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500" value={passData.old} onChange={e => setPassData({...passData, old: e.target.value})}/>
+              <input required type="password" placeholder="Новий пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500" value={passData.new} onChange={e => setPassData({...passData, new: e.target.value})}/>
+              <input required type="password" placeholder="Повторіть новий пароль" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl py-3 px-4 outline-none focus:border-blue-500" value={passData.confirm} onChange={e => setPassData({...passData, confirm: e.target.value})}/>
+              <button className="w-full bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-700">Змінити пароль</button>
             </form>
           </div>
         </div>
@@ -436,5 +425,17 @@ const Settings = () => {
     </div>
   );
 };
+
+function SettingsNavCard({ icon, title, desc, onClick }) {
+  return (
+    <button onClick={onClick} className="bg-white border border-slate-100 rounded-3xl p-4 text-left shadow-sm hover:border-blue-200 hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-start gap-3">
+      <span className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">{icon}</span>
+      <span>
+        <span className="block font-black uppercase text-slate-900 text-sm">{title}</span>
+        <span className="block text-xs font-bold text-slate-500 mt-1 leading-snug">{desc}</span>
+      </span>
+    </button>
+  );
+}
 
 export default Settings;

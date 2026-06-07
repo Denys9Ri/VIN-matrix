@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, Store, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench, ArrowRight, Building2, BadgeCheck, SlidersHorizontal } from 'lucide-react';
+import { LogOut, User, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench, ArrowRight, Building2, BadgeCheck, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+
+const getMechanicUser = (mech = {}) => mech.user || mech.employee_user || mech.profile || {};
+const getMechanicName = (mech = {}) => {
+  const user = getMechanicUser(mech);
+  return user.first_name || user.username || mech.first_name || mech.username || mech.name || `Працівник #${mech.id || ''}`;
+};
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -30,19 +36,25 @@ const Settings = () => {
   const fetchData = async () => {
     try {
       const profileRes = await axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } });
-      setProfile(profileRes.data);
-      if (profileRes.data.role === 'owner') {
+      const nextProfile = profileRes.data || {};
+      setProfile({
+        user: nextProfile.user || {},
+        company: nextProfile.company || {},
+        role: nextProfile.role || 'owner',
+        ...nextProfile,
+      });
+      if (nextProfile.role === 'owner') {
         const mechanicsRes = await axios.get(`${API_BASE}/api/mechanics/`, { headers: { Authorization: `Bearer ${token}` } });
-        setMechanics(mechanicsRes.data);
+        setMechanics(Array.isArray(mechanicsRes.data) ? mechanicsRes.data : []);
         setFormData({
-          first_name: profileRes.data.user.first_name || '',
-          email: profileRes.data.user.email || '',
-          company_name: profileRes.data.company.name || '',
-          phone: profileRes.data.company.phone || '',
-          address: profileRes.data.company.address || '',
-          document_footer: profileRes.data.company.document_footer || '',
-          global_margin_percent: profileRes.data.company.global_margin_percent || 20,
-          business_type: profileRes.data.company.business_type || 'sto',
+          first_name: nextProfile.user?.first_name || '',
+          email: nextProfile.user?.email || '',
+          company_name: nextProfile.company?.name || '',
+          phone: nextProfile.company?.phone || '',
+          address: nextProfile.company?.address || '',
+          document_footer: nextProfile.company?.document_footer || '',
+          global_margin_percent: nextProfile.company?.global_margin_percent || 20,
+          business_type: nextProfile.company?.business_type || 'sto',
           logo: null
         });
       }
@@ -120,15 +132,15 @@ const Settings = () => {
       <div className="max-w-md mx-auto pt-20 text-center space-y-8 p-4 w-full">
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
           <div className="bg-blue-100 w-20 h-20 rounded-3xl text-blue-600 flex items-center justify-center mx-auto mb-6"><User size={40}/></div>
-          <h1 className="text-2xl font-black text-slate-900">{profile.user.first_name || profile.user.username}</h1>
-          <p className="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2">{profile.company.name} • Працівник</p>
+          <h1 className="text-2xl font-black text-slate-900">{profile.user?.first_name || profile.user?.username || 'Працівник'}</h1>
+          <p className="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2">{profile.company?.name || 'Компанія'} • Працівник</p>
           <button onClick={() => {localStorage.clear(); navigate('/login');}} className="w-full flex items-center justify-center gap-3 bg-red-50 text-red-500 py-4 rounded-xl font-black uppercase tracking-widest mt-10 hover:bg-red-100 transition-colors"><LogOut size={20}/> Вийти з акаунта</button>
         </div>
       </div>
     );
   }
 
-  const isSto = profile.company.business_type === 'sto';
+  const isSto = profile.company?.business_type === 'sto';
   const sectionCards = [
     ...(isSto ? [{ icon: <Wrench size={22}/>, title: 'Послуги', desc: 'Прайс робіт і стандартних послуг', path: '/settings/services' }] : []),
     { icon: <SlidersHorizontal size={22}/>, title: 'Статуси і довідники', desc: 'Статуси, типи оплат, джерела, причини відмов і категорії', path: '/settings/dictionaries' },
@@ -157,17 +169,17 @@ const Settings = () => {
               <div className="flex items-center gap-2 text-blue-100 text-[10px] font-black uppercase tracking-widest"><Building2 size={15}/> Профіль компанії</div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-5 mt-5">
                 <div className="w-24 h-24 bg-white/95 rounded-3xl flex-shrink-0 overflow-hidden border border-white/30 shadow-xl flex items-center justify-center">
-                  {profile.company.logo ? <img src={profile.company.logo} alt="Logo" className="w-full h-full object-contain" /> : <ImageIcon className="text-slate-300" size={34} />}
+                  {profile.company?.logo ? <img src={profile.company.logo} alt="Logo" className="w-full h-full object-contain" /> : <ImageIcon className="text-slate-300" size={34} />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-3">
-                    <h2 className="text-2xl md:text-3xl font-black truncate">{profile.company.name}</h2>
+                    <h2 className="text-2xl md:text-3xl font-black truncate">{profile.company?.name || 'Компанія'}</h2>
                     <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white">{isSto ? 'СТО' : 'Магазин'}</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4 text-sm font-bold text-blue-50">
-                    <p className="flex items-center gap-2 min-w-0"><MapPin size={15} className="shrink-0"/><span className="truncate">{profile.company.address || 'Адреса не вказана'}</span></p>
-                    <p className="flex items-center gap-2"><Phone size={15} className="shrink-0"/> {profile.company.phone || 'Телефон не вказаний'}</p>
-                    <p className="flex items-center gap-2"><DollarSign size={15} className="shrink-0"/> Націнка: {profile.company.global_margin_percent}%</p>
+                    <p className="flex items-center gap-2 min-w-0"><MapPin size={15} className="shrink-0"/><span className="truncate">{profile.company?.address || 'Адреса не вказана'}</span></p>
+                    <p className="flex items-center gap-2"><Phone size={15} className="shrink-0"/> {profile.company?.phone || 'Телефон не вказаний'}</p>
+                    <p className="flex items-center gap-2"><DollarSign size={15} className="shrink-0"/> Націнка: {profile.company?.global_margin_percent || 20}%</p>
                     <p className="flex items-center gap-2"><BadgeCheck size={15} className="shrink-0"/> Активний профіль</p>
                   </div>
                 </div>
@@ -200,12 +212,15 @@ const Settings = () => {
                 <button onClick={() => setIsAddingMechanic(true)} className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition-colors"><Plus size={18}/></button>
               </div>
               <div className="p-3 space-y-2 max-h-[420px] overflow-y-auto">
-                {mechanics.map((mech) => (
-                  <div key={mech.id} className="bg-slate-50 p-3 rounded-2xl flex items-center justify-between gap-3">
-                    <div className="min-w-0"><p className="font-bold text-slate-800 truncate">{mech.user.first_name || mech.user.username}</p><p className="text-[10px] text-slate-400 font-black uppercase">{mech.can_view_finances ? 'Фінанси' : 'Майстер'}</p></div>
-                    <div className="flex gap-1 shrink-0"><button onClick={() => { setIsEditingMechanic(mech.id); setEditMechanicData({ first_name: mech.user.first_name || '', new_password: '', can_create_visits: mech.can_create_visits, can_view_finances: mech.can_view_finances }); }} className="p-2 text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-100"><Pencil size={15}/></button><button onClick={() => handleDeleteMechanic(mech.id)} className="p-2 text-red-500 bg-red-50 rounded-xl hover:bg-red-100"><Trash2 size={15}/></button></div>
-                  </div>
-                ))}
+                {mechanics.map((mech) => {
+                  const name = getMechanicName(mech);
+                  return (
+                    <div key={mech.id || name} className="bg-slate-50 p-3 rounded-2xl flex items-center justify-between gap-3">
+                      <div className="min-w-0"><p className="font-bold text-slate-800 truncate">{name}</p><p className="text-[10px] text-slate-400 font-black uppercase">{mech.can_view_finances ? 'Фінанси' : 'Майстер'}</p></div>
+                      <div className="flex gap-1 shrink-0"><button onClick={() => { setIsEditingMechanic(mech.id); setEditMechanicData({ first_name: name, new_password: '', can_create_visits: Boolean(mech.can_create_visits), can_view_finances: Boolean(mech.can_view_finances) }); }} className="p-2 text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-100"><Pencil size={15}/></button><button onClick={() => handleDeleteMechanic(mech.id)} className="p-2 text-red-500 bg-red-50 rounded-xl hover:bg-red-100"><Trash2 size={15}/></button></div>
+                    </div>
+                  );
+                })}
                 {mechanics.length === 0 && <div className="p-6 text-center text-slate-400 font-bold">Працівників ще немає</div>}
               </div>
             </div>
@@ -229,6 +244,6 @@ const SettingsNavCard = ({ icon, title, desc, onClick }) => (
 
 const Modal = ({ title, children, onClose }) => <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"><div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto"><div className="flex items-center justify-between mb-6"><h2 className="text-xl font-black uppercase italic text-slate-900">{title}</h2><button onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-500"><X size={20}/></button></div>{children}</div></div>;
 
-const MechanicModal = ({ title, data, setData, onSubmit, onClose, isEdit }) => <Modal title={title} onClose={onClose}><form onSubmit={onSubmit} className="space-y-4"><input placeholder="Ім'я" className="input" value={data.first_name} onChange={e => setData({...data, first_name: e.target.value})}/>{!isEdit && <input placeholder="Логін" className="input" value={data.username} onChange={e => setData({...data, username: e.target.value})}/>}<input type="password" placeholder={isEdit ? "Новий пароль (необов'язково)" : "Пароль"} className="input" value={isEdit ? data.new_password : data.password} onChange={e => setData({...data, [isEdit ? 'new_password' : 'password']: e.target.value})}/><label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm"><input type="checkbox" checked={data.can_create_visits} onChange={e => setData({...data, can_create_visits: e.target.checked})}/> Створювати візити</label><label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm"><input type="checkbox" checked={data.can_view_finances} onChange={e => setData({...data, can_view_finances: e.target.checked})}/> Бачити фінанси</label><button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase">Зберегти</button></form></Modal>;
+const MechanicModal = ({ title, data, setData, onSubmit, onClose, isEdit }) => <Modal title={title} onClose={onClose}><form onSubmit={onSubmit} className="space-y-4"><input placeholder="Ім'я" className="input" value={data.first_name || ''} onChange={e => setData({...data, first_name: e.target.value})}/>{!isEdit && <input placeholder="Логін" className="input" value={data.username || ''} onChange={e => setData({...data, username: e.target.value})}/>}<input type="password" placeholder={isEdit ? "Новий пароль (необов'язково)" : "Пароль"} className="input" value={isEdit ? (data.new_password || '') : (data.password || '')} onChange={e => setData({...data, [isEdit ? 'new_password' : 'password']: e.target.value})}/><label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm"><input type="checkbox" checked={Boolean(data.can_create_visits)} onChange={e => setData({...data, can_create_visits: e.target.checked})}/> Створювати візити</label><label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm"><input type="checkbox" checked={Boolean(data.can_view_finances)} onChange={e => setData({...data, can_view_finances: e.target.checked})}/> Бачити фінанси</label><button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase">Зберегти</button></form></Modal>;
 
 export default Settings;

@@ -2,7 +2,7 @@ import json
 import re
 from decimal import Decimal
 
-from django.db.models import Q, Sum
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -62,8 +62,8 @@ def _visit_url(visit, company):
 def _client_url(visit, company):
     search = _digits(visit.phone) or visit.client or visit.plate or visit.id
     if getattr(company, 'business_type', '') == 'store':
-        return f'/clients?search={search}&order_id={visit.id}'
-    return f'/crm/clients?search={search}&visit={visit.id}'
+        return f'/clients?search={search}&order_id={visit.id}&tab=history&autopen=1'
+    return f'/crm/clients?search={search}&order_id={visit.id}&tab=history&autopen=1'
 
 
 def _delivery_values(visit):
@@ -136,7 +136,6 @@ class GlobalSearchView(APIView):
             seen.add(key)
             results.append(item)
 
-        # 1. Замовлення / візити: номер, телефон, клієнт, VIN, номер авто, ТТН.
         visit_q = Q(client__icontains=q) | Q(phone__icontains=q) | Q(plate__icontains=q) | Q(vin_code__icontains=q) | Q(delivery_data__icontains=q)
         if q_digits and len(q_digits) >= 4:
             visit_q |= Q(phone__icontains=q_digits) | Q(delivery_data__icontains=q_digits)
@@ -175,7 +174,6 @@ class GlobalSearchView(APIView):
                 {'visit_id': v.id, 'client': v.client, 'phone': v.phone, 'date': _date_iso(v.scheduled_datetime or v.created_at)}
             ))
 
-        # 2. Клієнти: показати як окремі сутності, щоб швидко відкрити історію.
         client_q = Q(client__icontains=q) | Q(phone__icontains=q) | Q(plate__icontains=q) | Q(vin_code__icontains=q)
         if q_digits and len(q_digits) >= 4:
             client_q |= Q(phone__icontains=q_digits)
@@ -203,7 +201,6 @@ class GlobalSearchView(APIView):
                 {'visit_id': v.id, 'phone': v.phone, 'client': v.client}
             ))
 
-        # 3. Товари у замовленнях / запчастини у візитах.
         part_q = Q(brand__icontains=q) | Q(article__icontains=q) | Q(name__icontains=q) | Q(supplier__icontains=q) | Q(visit__client__icontains=q) | Q(visit__phone__icontains=q)
         if q_number:
             part_q |= Q(visit_id=q_number)
@@ -225,7 +222,6 @@ class GlobalSearchView(APIView):
                 {'visit_id': p.visit_id, 'part_id': p.id, 'article': p.article, 'brand': p.brand}
             ))
 
-        # 4. Склад.
         inventory_q = Q(brand__icontains=q) | Q(article__icontains=q) | Q(name__icontains=q) | Q(supplier__name__icontains=q)
         stock_items = list(
             InventoryItem.objects.filter(company=company).filter(inventory_q)
@@ -245,7 +241,6 @@ class GlobalSearchView(APIView):
                 {'inventory_id': item.id, 'article': item.article, 'brand': item.brand, 'quantity': item.quantity}
             ))
 
-        # 5. Постачальники.
         suppliers = list(Supplier.objects.filter(company=company).filter(Q(name__icontains=q)).order_by('name')[:6])
         for supplier in suppliers:
             count = InventoryItem.objects.filter(company=company, supplier=supplier).count()
@@ -261,7 +256,6 @@ class GlobalSearchView(APIView):
                 {'supplier_id': supplier.id}
             ))
 
-        # 6. Якщо запит схожий на артикул — швидкий перехід у пошук постачальників.
         if re.search(r'[A-Za-zА-Яа-яІіЇїЄєҐґ0-9]', q):
             add(_result(
                 'external_parts',

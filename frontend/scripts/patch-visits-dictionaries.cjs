@@ -63,7 +63,7 @@ if (!src.includes('fetchStoVisitStatuses')) {
   const loader = `
   const fetchStoVisitStatuses = async () => {
     try {
-      const res = await axios.get(\`${API_BASE}/api/settings/dictionaries/?mode=sto\`, { headers });
+      const res = await axios.get(\`\${API_BASE}/api/settings/dictionaries/?mode=sto\`, { headers });
       const list = Array.isArray(res.data?.sto_visit_status) ? res.data.sto_visit_status : [];
       setStoVisitStatuses(list.length ? list : fallbackStoVisitStatuses);
     } catch {

@@ -22,6 +22,7 @@ import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import ActivityDock from './components/activity/ActivityDock';
 import DocumentDock from './components/documents/DocumentDock';
+import DocumentSettingsDock from './components/documents/DocumentSettingsDock';
 import api from './api/axios';
 
 const allowedWhenBlocked = ['/visits', '/settings'];
@@ -107,7 +108,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
-          <Route path="settings" element={<Settings />} />
+          <Route path="settings" element={<><Settings /><DocumentSettingsDock /></>} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
           <Route path="attention" element={<AttentionAction />} />
           <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />

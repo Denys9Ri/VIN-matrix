@@ -7,6 +7,7 @@ import Inventory from './pages/Inventory';
 import Settings from './pages/Settings';
 import DocumentSettings from './pages/DocumentSettings';
 import ServicesSettings from './pages/ServicesSettings';
+import DictionarySettings from './pages/DictionarySettings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
@@ -113,6 +114,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="settings/services" element={<ServicesSettings />} />
           <Route path="settings/documents" element={<DocumentSettings />} />
+          <Route path="settings/dictionaries" element={<DictionarySettings />} />
           <Route path="visits" element={<VisitsWithCrm />} /> 
           <Route path="attention" element={<AttentionAction />} />
           <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />

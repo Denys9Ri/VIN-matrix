@@ -58,7 +58,7 @@ class CoreConfig(AppConfig):
         try:
             from django.urls import path
             from .client_link_views import AdminClientLinkSettingsView, ClientLinkSettingsView
-            from .novapost_views import NovaPostProfileDetailView, NovaPostProfileListCreateView, NovaPostProfileTestView
+            from .novapost_views import NovaPostCitiesView, NovaPostProfileDetailView, NovaPostProfileListCreateView, NovaPostProfileTestView, NovaPostWarehousesView
             import vin_matrix.urls as root_urls
             names = {getattr(item, 'name', None) for item in root_urls.urlpatterns}
             if 'billing-client-link' not in names:
@@ -71,5 +71,9 @@ class CoreConfig(AppConfig):
                 root_urls.urlpatterns.insert(73, path('api/delivery/novapost/profiles/<int:pk>/', NovaPostProfileDetailView.as_view(), name='novapost-profile-detail'))
             if 'novapost-profile-test' not in names:
                 root_urls.urlpatterns.insert(74, path('api/delivery/novapost/profiles/<int:pk>/test/', NovaPostProfileTestView.as_view(), name='novapost-profile-test'))
+            if 'novapost-cities' not in names:
+                root_urls.urlpatterns.insert(75, path('api/delivery/novapost/cities/', NovaPostCitiesView.as_view(), name='novapost-cities'))
+            if 'novapost-warehouses' not in names:
+                root_urls.urlpatterns.insert(76, path('api/delivery/novapost/warehouses/', NovaPostWarehousesView.as_view(), name='novapost-warehouses'))
         except Exception as exc:
             print(f"Dynamic route attach error: {exc}")

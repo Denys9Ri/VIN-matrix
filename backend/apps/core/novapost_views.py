@@ -62,6 +62,25 @@ def fetch_profile(company_id, profile_id, include_secret=False):
     return profile_payload(row, include_secret=include_secret) if row else None
 
 
+def get_default_profile(company_id, include_secret=False):
+    repair_novapost_schema()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            '''
+            SELECT id, company_id, name, api_key, sender_name, sender_phone, sender_city,
+                   sender_city_ref, sender_warehouse, sender_warehouse_ref, is_default,
+                   is_active, created_at, updated_at
+            FROM core_novapostprofile
+            WHERE company_id=%s AND is_active=true
+            ORDER BY is_default DESC, id DESC
+            LIMIT 1
+            ''',
+            [company_id],
+        )
+        row = cursor.fetchone()
+    return profile_payload(row, include_secret=include_secret) if row else None
+
+
 def list_profiles(company_id):
     repair_novapost_schema()
     with connection.cursor() as cursor:
@@ -94,6 +113,32 @@ def clean(value, limit=None):
     return value[:limit] if limit else value
 
 
+def nova_post_request(api_key, model_name, called_method, method_properties=None, timeout=12):
+    payload = {
+        'apiKey': clean(api_key),
+        'modelName': model_name,
+        'calledMethod': called_method,
+        'methodProperties': method_properties or {},
+    }
+    data = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(
+        NOVA_POST_API_URL,
+        data=data,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        raw = response.read().decode('utf-8')
+        return json.loads(raw or '{}')
+
+
+def active_api_key(company_id, profile_id=None):
+    profile = fetch_profile(company_id, profile_id, include_secret=True) if profile_id else get_default_profile(company_id, include_secret=True)
+    if not profile:
+        return None, None
+    return profile.get('api_key'), profile
+
+
 def set_default_profile(company_id, profile_id):
     with connection.cursor() as cursor:
         cursor.execute('UPDATE core_novapostprofile SET is_default=false WHERE company_id=%s AND id<>%s', [company_id, profile_id])
@@ -104,23 +149,8 @@ def test_nova_post_key(api_key):
     api_key = clean(api_key)
     if not api_key:
         return False, 'API-ключ не вказано.', None
-    payload = {
-        'apiKey': api_key,
-        'modelName': 'AddressGeneral',
-        'calledMethod': 'getCities',
-        'methodProperties': {'Limit': 1},
-    }
     try:
-        data = json.dumps(payload).encode('utf-8')
-        req = urllib.request.Request(
-            NOVA_POST_API_URL,
-            data=data,
-            headers={'Content-Type': 'application/json'},
-            method='POST',
-        )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            raw = response.read().decode('utf-8')
-            result = json.loads(raw or '{}')
+        result = nova_post_request(api_key, 'AddressGeneral', 'getCities', {'Limit': 1})
         ok = bool(result.get('success'))
         if ok:
             return True, 'API-ключ працює. Підключення до Нової пошти успішне.', result
@@ -131,6 +161,30 @@ def test_nova_post_key(api_key):
         return False, f'Не вдалося перевірити API-ключ: {exc}', None
 
 
+def city_payload(item):
+    return {
+        'ref': item.get('Ref') or '',
+        'description': item.get('Description') or '',
+        'description_ru': item.get('DescriptionRu') or '',
+        'area': item.get('AreaDescription') or item.get('Area') or '',
+        'settlement_type': item.get('SettlementTypeDescription') or '',
+        'raw': item,
+    }
+
+
+def warehouse_payload(item):
+    return {
+        'ref': item.get('Ref') or '',
+        'description': item.get('Description') or '',
+        'description_ru': item.get('DescriptionRu') or '',
+        'number': item.get('Number') or '',
+        'short_address': item.get('ShortAddress') or '',
+        'city_ref': item.get('CityRef') or '',
+        'category': item.get('CategoryOfWarehouse') or '',
+        'raw': item,
+    }
+
+
 class NovaPostProfileListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -139,7 +193,8 @@ class NovaPostProfileListCreateView(APIView):
         company = get_user_company(request.user)
         if not company:
             return Response({'error': 'Компанію не знайдено.'}, status=403)
-        return Response({'results': list_profiles(company.id), 'count': len(list_profiles(company.id))})
+        rows = list_profiles(company.id)
+        return Response({'results': rows, 'count': len(rows)})
 
     @transaction.atomic
     def post(self, request):
@@ -272,3 +327,59 @@ class NovaPostProfileTestView(APIView):
             'api_key_masked': mask_key(profile.get('api_key')),
             'raw_success': bool(raw.get('success')) if isinstance(raw, dict) else False,
         }, status=200 if ok else 400)
+
+
+class NovaPostCitiesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        repair_legacy_account(request.user)
+        company = get_user_company(request.user)
+        if not company:
+            return Response({'error': 'Компанію не знайдено.'}, status=403)
+        query = clean(request.query_params.get('q'), 120)
+        if len(query) < 2:
+            return Response({'results': [], 'count': 0, 'message': 'Введіть мінімум 2 символи.'})
+        profile_id = request.query_params.get('profile_id')
+        api_key, profile = active_api_key(company.id, profile_id=profile_id)
+        if not api_key:
+            return Response({'error': 'Додайте активний профіль Нової пошти з API-ключем.'}, status=400)
+        try:
+            raw = nova_post_request(api_key, 'AddressGeneral', 'getCities', {'FindByString': query, 'Limit': 20})
+            if not raw.get('success'):
+                errors = raw.get('errors') or raw.get('warnings') or []
+                return Response({'error': '; '.join([str(x) for x in errors]) or 'Нова пошта не повернула міста.'}, status=400)
+            results = [city_payload(item) for item in raw.get('data', [])]
+            return Response({'results': results, 'count': len(results), 'profile': {'id': profile.get('id'), 'name': profile.get('name')}})
+        except Exception as exc:
+            return Response({'error': f'Не вдалося знайти міста: {exc}'}, status=400)
+
+
+class NovaPostWarehousesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        repair_legacy_account(request.user)
+        company = get_user_company(request.user)
+        if not company:
+            return Response({'error': 'Компанію не знайдено.'}, status=403)
+        city_ref = clean(request.query_params.get('city_ref'), 120)
+        if not city_ref:
+            return Response({'results': [], 'count': 0, 'message': 'Спочатку виберіть місто.'})
+        query = clean(request.query_params.get('q'), 120)
+        profile_id = request.query_params.get('profile_id')
+        api_key, profile = active_api_key(company.id, profile_id=profile_id)
+        if not api_key:
+            return Response({'error': 'Додайте активний профіль Нової пошти з API-ключем.'}, status=400)
+        props = {'CityRef': city_ref, 'Limit': 50}
+        if query:
+            props['FindByString'] = query
+        try:
+            raw = nova_post_request(api_key, 'AddressGeneral', 'getWarehouses', props)
+            if not raw.get('success'):
+                errors = raw.get('errors') or raw.get('warnings') or []
+                return Response({'error': '; '.join([str(x) for x in errors]) or 'Нова пошта не повернула відділення.'}, status=400)
+            results = [warehouse_payload(item) for item in raw.get('data', [])]
+            return Response({'results': results, 'count': len(results), 'profile': {'id': profile.get('id'), 'name': profile.get('name')}})
+        except Exception as exc:
+            return Response({'error': f'Не вдалося знайти відділення: {exc}'}, status=400)

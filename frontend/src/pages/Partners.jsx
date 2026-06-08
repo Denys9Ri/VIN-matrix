@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BadgeCheck, BadgeX, Eye, Power, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserCog, Users } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, BadgeX, CreditCard, Eye, Power, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserCog, Users } from 'lucide-react';
 import api from '../api/axios';
 import CopyButton from '../components/common/CopyButton';
 
@@ -21,10 +21,22 @@ const subscriptionClass = (client) => {
   return 'bg-emerald-50 text-emerald-700';
 };
 
+const defaultPaymentLink = {
+  title: 'VIN-matrix підписка',
+  monthly_value: 2000,
+  public_url: '',
+  public_note: '',
+  instruction: 'Вкажіть код клієнта. Наприклад: C6003',
+  is_active: true,
+};
+
 const Partners = () => {
   const [partners, setPartners] = useState([]);
   const [clients, setClients] = useState([]);
   const [alerts, setAlerts] = useState({ expiring_soon: [], expired: [], expiring_count: 0, expired_count: 0 });
+  const [paymentLink, setPaymentLink] = useState(defaultPaymentLink);
+  const [paymentLinkSaving, setPaymentLinkSaving] = useState(false);
+  const [paymentLinkNotice, setPaymentLinkNotice] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -34,10 +46,11 @@ const Partners = () => {
   const loadData = async () => {
     setLoading(true);
     setLoadError('');
-    const [partnersRes, clientsRes, alertsRes] = await Promise.allSettled([
+    const [partnersRes, clientsRes, alertsRes, paymentLinkRes] = await Promise.allSettled([
       api.get('/api/partners/'),
       api.get('/api/platform-clients/'),
       api.get('/api/platform-clients/subscription-alerts/'),
+      api.get('/api/billing/admin/client-link/'),
     ]);
 
     const errors = [];
@@ -49,6 +62,12 @@ const Partners = () => {
 
     if (alertsRes.status === 'fulfilled') setAlerts(alertsRes.value.data || { expiring_soon: [], expired: [], expiring_count: 0, expired_count: 0 });
     else setAlerts({ expiring_soon: [], expired: [], expiring_count: 0, expired_count: 0 });
+
+    if (paymentLinkRes.status === 'fulfilled' && paymentLinkRes.value.data?.client_link_settings) {
+      setPaymentLink({ ...defaultPaymentLink, ...paymentLinkRes.value.data.client_link_settings });
+    } else if (paymentLinkRes.status === 'rejected') {
+      errors.push(`Оплата: ${getErrorMessage(paymentLinkRes.reason)}`);
+    }
 
     if (errors.length) setLoadError(errors.join(' | '));
     setLoading(false);
@@ -72,6 +91,21 @@ const Partners = () => {
 
   const totalActiveClients = clients.filter((client) => client.is_access_enabled).length;
   const alertList = [...(alerts.expiring_soon || []), ...(alerts.expired || [])].slice(0, 5);
+
+  const savePaymentLink = async (e) => {
+    e.preventDefault();
+    setPaymentLinkSaving(true);
+    setPaymentLinkNotice('');
+    try {
+      const res = await api.patch('/api/billing/admin/client-link/', paymentLink);
+      setPaymentLink({ ...defaultPaymentLink, ...(res.data?.client_link_settings || paymentLink) });
+      setPaymentLinkNotice(res.data?.message || 'Налаштування оплати збережено. Клієнти побачать оновлене посилання у своєму кабінеті.');
+    } catch (error) {
+      setPaymentLinkNotice(`Не вдалося зберегти: ${getErrorMessage(error)}`);
+    } finally {
+      setPaymentLinkSaving(false);
+    }
+  };
 
   const togglePartner = async (partner) => {
     try { await api.patch(`/api/partners/${partner.id}/`, { is_active: !partner.is_active }); await loadData(); }
@@ -129,6 +163,8 @@ const Partners = () => {
         <div className="bg-white rounded-2xl border border-orange-200 p-4 shadow-sm"><p className="text-xs font-black uppercase text-orange-500">Підписка скоро / вже закінчилась</p><p className="text-3xl font-black text-orange-600 mt-1">{(alerts.expiring_count || 0) + (alerts.expired_count || 0)}</p></div>
       </div>
 
+      <PaymentLinkSettingsCard form={paymentLink} setForm={setPaymentLink} onSubmit={savePaymentLink} saving={paymentLinkSaving} notice={paymentLinkNotice} />
+
       {alertList.length > 0 && <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-5"><div className="flex items-center gap-2 mb-3"><AlertTriangle className="text-orange-600" size={20} /><h3 className="font-black text-orange-800">Клієнти, у яких скоро закінчиться або вже закінчилась підписка</h3></div><div className="grid md:grid-cols-2 gap-2">{alertList.map((item) => <div key={item.id} className="bg-white/70 rounded-xl px-3 py-2 text-sm font-bold text-slate-700">{item.client_code_display} · {item.full_name} · до {item.subscription_end_display || '—'}</div>)}</div></div>}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-5"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Пошук по ПІБ, телефону, логіну, ID, коду або партнеру" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 font-semibold text-sm outline-none focus:border-blue-500" /></div></div>
@@ -141,5 +177,41 @@ const Partners = () => {
     </div>
   );
 };
+
+function PaymentLinkSettingsCard({ form, setForm, onSubmit, saving, notice }) {
+  return (
+    <form onSubmit={onSubmit} className="bg-gradient-to-r from-slate-900 via-blue-900 to-cyan-700 rounded-[30px] shadow-xl shadow-blue-100 overflow-hidden text-white mb-6">
+      <div className="p-5 md:p-6 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5 border-b border-white/10">
+        <div className="max-w-2xl">
+          <div className="inline-flex items-center gap-2 text-blue-100 text-[10px] font-black uppercase tracking-widest"><CreditCard size={15}/> Налаштування оплати</div>
+          <h2 className="text-2xl md:text-3xl font-black uppercase italic mt-2">Посилання для клієнтів</h2>
+          <p className="text-sm font-semibold text-blue-50/90 mt-2">Сюди вставляється посилання на оплату. Клієнти побачать його у своєму блоці “Тариф і оплата”.</p>
+        </div>
+        <label className="inline-flex items-center gap-2 bg-white/10 border border-white/15 rounded-2xl px-4 py-3 text-xs font-black uppercase w-fit">
+          <input type="checkbox" checked={!!form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> Активно
+        </label>
+      </div>
+      <div className="p-5 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <Input label="Назва оплати" value={form.title || ''} onChange={(value) => setForm({ ...form, title: value })} placeholder="VIN-matrix підписка" />
+        <Input label="Сума за місяць" type="number" value={form.monthly_value || 2000} onChange={(value) => setForm({ ...form, monthly_value: value })} placeholder="2000" />
+        <Input className="lg:col-span-2" label="Посилання для оплати" value={form.public_url || ''} onChange={(value) => setForm({ ...form, public_url: value })} placeholder="Вставте посилання на оплату" />
+        <TextArea className="lg:col-span-2" label="Реквізити / примітка" value={form.public_note || ''} onChange={(value) => setForm({ ...form, public_note: value })} placeholder="Наприклад: картка, банка або коротка примітка" />
+        <TextArea className="lg:col-span-2" label="Інструкція для клієнта" value={form.instruction || ''} onChange={(value) => setForm({ ...form, instruction: value })} placeholder="Наприклад: Вкажіть код клієнта при оплаті" />
+      </div>
+      <div className="px-5 md:px-6 pb-5 md:pb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        {notice ? <p className="text-sm font-bold bg-white/10 border border-white/15 rounded-2xl px-4 py-3">{notice}</p> : <p className="text-xs font-bold text-blue-50/80">Після збереження кнопка “Перейти до оплати” автоматично зʼявиться у клієнтів.</p>}
+        <button disabled={saving} className="bg-white text-slate-900 hover:bg-blue-50 rounded-2xl px-6 py-3 text-xs font-black uppercase disabled:opacity-60">{saving ? 'Зберігаю...' : 'Зберегти налаштування'}</button>
+      </div>
+    </form>
+  );
+}
+
+function Input({ label, value, onChange, placeholder, type = 'text', className = '' }) {
+  return <label className={className}><span className="block text-[10px] font-black uppercase tracking-widest text-blue-100 mb-2">{label}</span><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-blue-100/50 font-bold outline-none focus:bg-white/15 focus:border-white/40" /></label>;
+}
+
+function TextArea({ label, value, onChange, placeholder, className = '' }) {
+  return <label className={className}><span className="block text-[10px] font-black uppercase tracking-widest text-blue-100 mb-2">{label}</span><textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full min-h-[82px] rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-blue-100/50 font-bold outline-none focus:bg-white/15 focus:border-white/40" /></label>;
+}
 
 export default Partners;

@@ -58,7 +58,7 @@ class CoreConfig(AppConfig):
         try:
             from django.urls import path
             from .client_link_views import AdminClientLinkSettingsView, ClientLinkSettingsView
-            from .novapost_views import NovaPostCitiesView, NovaPostDeliveryStatusView, NovaPostDeliveryView, NovaPostProfileDetailView, NovaPostProfileListCreateView, NovaPostProfileTestView, NovaPostWarehousesView
+            from .novapost_views import NovaPostCitiesView, NovaPostDeliveryCreateView, NovaPostDeliveryStatusView, NovaPostDeliveryView, NovaPostProfileDetailView, NovaPostProfileListCreateView, NovaPostProfileTestView, NovaPostWarehousesView
             import vin_matrix.urls as root_urls
             names = {getattr(item, 'name', None) for item in root_urls.urlpatterns}
             if 'billing-client-link' not in names:
@@ -77,7 +77,9 @@ class CoreConfig(AppConfig):
                 root_urls.urlpatterns.insert(76, path('api/delivery/novapost/warehouses/', NovaPostWarehousesView.as_view(), name='novapost-warehouses'))
             if 'novapost-delivery' not in names:
                 root_urls.urlpatterns.insert(77, path('api/delivery/novapost/visits/<int:visit_id>/', NovaPostDeliveryView.as_view(), name='novapost-delivery'))
+            if 'novapost-delivery-create' not in names:
+                root_urls.urlpatterns.insert(78, path('api/delivery/novapost/visits/<int:visit_id>/create/', NovaPostDeliveryCreateView.as_view(), name='novapost-delivery-create'))
             if 'novapost-delivery-status' not in names:
-                root_urls.urlpatterns.insert(78, path('api/delivery/novapost/visits/<int:visit_id>/status/', NovaPostDeliveryStatusView.as_view(), name='novapost-delivery-status'))
+                root_urls.urlpatterns.insert(79, path('api/delivery/novapost/visits/<int:visit_id>/status/', NovaPostDeliveryStatusView.as_view(), name='novapost-delivery-status'))
         except Exception as exc:
             print(f"Dynamic route attach error: {exc}")

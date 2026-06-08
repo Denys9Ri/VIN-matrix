@@ -72,7 +72,14 @@ def clean(value, limit=None):
     return value[:limit] if limit else value
 
 
-def nova_post_request(api_key, model_name, called_method, method_properties=None, timeout=12):
+def dec(value, default=0):
+    try:
+        return float(str(value or default).replace(',', '.'))
+    except Exception:
+        return default
+
+
+def nova_post_request(api_key, model_name, called_method, method_properties=None, timeout=15):
     payload = {'apiKey': clean(api_key), 'modelName': model_name, 'calledMethod': called_method, 'methodProperties': method_properties or {}}
     data = json.dumps(payload).encode('utf-8')
     req = urllib.request.Request(NOVA_POST_API_URL, data=data, headers={'Content-Type': 'application/json'}, method='POST')
@@ -128,7 +135,7 @@ def normalize_np_status(raw_item):
 
 
 def delivery_payload(row):
-    tracking = row[22] or {}
+    tracking = row[21] or {}
     if isinstance(tracking, str):
         try:
             tracking = json.loads(tracking)
@@ -140,7 +147,7 @@ def delivery_payload(row):
         'recipient_city': row[10] or '', 'recipient_city_ref': row[11] or '', 'recipient_warehouse': row[12] or '', 'recipient_warehouse_ref': row[13] or '',
         'payer_type': row[14] or 'recipient', 'payment_method': row[15] or 'cash', 'cod_enabled': bool(row[16]), 'cod_amount': float(row[17] or 0),
         'declared_value': float(row[18] or 0), 'weight': float(row[19] or 1), 'seats_amount': row[20] or 1, 'tracking_data': tracking,
-        'created_at': row[23], 'updated_at': row[24], 'last_checked_at': row[25],
+        'created_at': row[22], 'updated_at': row[23], 'last_checked_at': row[24],
     }
 
 
@@ -159,11 +166,65 @@ def upsert_delivery(company_id, visit_id, data):
     with connection.cursor() as cursor:
         if existing:
             cursor.execute('''UPDATE core_delivery SET novapost_profile_id=%s, ttn=%s, status=%s, status_text=%s, recipient_name=%s, recipient_phone=%s, recipient_city=%s, recipient_city_ref=%s, recipient_warehouse=%s, recipient_warehouse_ref=%s, payer_type=%s, payment_method=%s, cod_enabled=%s, cod_amount=%s, declared_value=%s, weight=%s, seats_amount=%s, tracking_data=%s, updated_at=%s WHERE id=%s''', [data.get('novapost_profile_id'), clean(data.get('ttn'), 80), data.get('status') or existing.get('status') or 'draft', data.get('status_text') or existing.get('status_text') or '', clean(data.get('recipient_name'), 255), clean(data.get('recipient_phone'), 40), clean(data.get('recipient_city'), 255), clean(data.get('recipient_city_ref'), 120), clean(data.get('recipient_warehouse'), 255), clean(data.get('recipient_warehouse_ref'), 120), data.get('payer_type') or 'recipient', data.get('payment_method') or 'cash', bool_value(data.get('cod_enabled'), False), data.get('cod_amount') or 0, data.get('declared_value') or 0, data.get('weight') or 1, data.get('seats_amount') or 1, json.dumps(data.get('tracking_data') or existing.get('tracking_data') or {}), now, existing['id']])
-            delivery_id = existing['id']
         else:
             cursor.execute('''INSERT INTO core_delivery (company_id, visit_id, novapost_profile_id, service, ttn, status, status_text, recipient_name, recipient_phone, recipient_city, recipient_city_ref, recipient_warehouse, recipient_warehouse_ref, payer_type, payment_method, cod_enabled, cod_amount, declared_value, weight, seats_amount, tracking_data, created_at, updated_at) VALUES (%s,%s,%s,'nova_post',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id''', [company_id, visit_id, data.get('novapost_profile_id'), clean(data.get('ttn'), 80), data.get('status') or 'manual', data.get('status_text') or 'ТТН внесено вручну', clean(data.get('recipient_name'), 255), clean(data.get('recipient_phone'), 40), clean(data.get('recipient_city'), 255), clean(data.get('recipient_city_ref'), 120), clean(data.get('recipient_warehouse'), 255), clean(data.get('recipient_warehouse_ref'), 120), data.get('payer_type') or 'recipient', data.get('payment_method') or 'cash', bool_value(data.get('cod_enabled'), False), data.get('cod_amount') or 0, data.get('declared_value') or 0, data.get('weight') or 1, data.get('seats_amount') or 1, json.dumps(data.get('tracking_data') or {}), now, now])
-            delivery_id = cursor.fetchone()[0]
     return fetch_delivery(company_id, visit_id)
+
+
+def get_sender_party(api_key):
+    raw = nova_post_request(api_key, 'Counterparty', 'getCounterparties', {'CounterpartyProperty': 'Sender', 'Page': '1'})
+    if not raw.get('success') or not raw.get('data'):
+        return None, None, raw
+    sender = raw['data'][0]
+    contacts = nova_post_request(api_key, 'Counterparty', 'getCounterpartyContactPersons', {'Ref': sender.get('Ref'), 'Page': '1'})
+    contact = (contacts.get('data') or [{}])[0] if contacts.get('success') else {}
+    return sender, contact, {'sender': sender, 'contact': contact}
+
+
+def build_waybill_payload(api_key, profile, data):
+    required = []
+    for key, label in [('sender_city_ref', 'місто відправника'), ('sender_warehouse_ref', 'відділення відправника')]:
+        if not profile.get(key):
+            required.append(label)
+    for key, label in [('recipient_name', 'одержувач'), ('recipient_phone', 'телефон'), ('recipient_city_ref', 'місто отримувача'), ('recipient_warehouse_ref', 'відділення отримувача')]:
+        if not clean(data.get(key)):
+            required.append(label)
+    if required:
+        return None, f"Заповніть: {', '.join(required)}", None
+    sender, contact, raw_sender = get_sender_party(api_key)
+    if not sender or not contact:
+        return None, 'Не вдалося отримати відправника з кабінету Нової пошти. Перевірте API-ключ і права доступу.', raw_sender
+    recipient_name = clean(data.get('recipient_name'), 255)
+    phone = clean(data.get('recipient_phone'), 40)
+    payer = data.get('payer_type') or 'Recipient'
+    if payer in ['recipient', 'отримувач']:
+        payer = 'Recipient'
+    if payer in ['sender', 'відправник']:
+        payer = 'Sender'
+    payload = {
+        'PayerType': payer,
+        'PaymentMethod': data.get('payment_method') or 'Cash',
+        'DateTime': timezone.now().strftime('%d.%m.%Y'),
+        'CargoType': data.get('cargo_type') or 'Parcel',
+        'ServiceType': data.get('service_type') or 'WarehouseWarehouse',
+        'SeatsAmount': str(int(dec(data.get('seats_amount'), 1) or 1)),
+        'Description': clean(data.get('description') or 'Автозапчастини', 255),
+        'Cost': str(max(dec(data.get('declared_value'), 0), 1)),
+        'Weight': str(max(dec(data.get('weight'), 1), 0.1)),
+        'CitySender': profile.get('sender_city_ref'),
+        'Sender': sender.get('Ref'),
+        'SenderAddress': profile.get('sender_warehouse_ref'),
+        'ContactSender': contact.get('Ref'),
+        'SendersPhone': clean(profile.get('sender_phone') or contact.get('Phones'), 40),
+        'CityRecipient': clean(data.get('recipient_city_ref'), 120),
+        'RecipientAddress': clean(data.get('recipient_warehouse_ref'), 120),
+        'RecipientsPhone': phone,
+        'RecipientName': recipient_name,
+        'RecipientType': 'PrivatePerson',
+    }
+    if bool_value(data.get('cod_enabled'), False) and dec(data.get('cod_amount'), 0) > 0:
+        payload['BackwardDeliveryData'] = [{'PayerType': payer, 'CargoType': 'Money', 'RedeliveryString': str(dec(data.get('cod_amount'), 0))}]
+    return payload, '', raw_sender
 
 
 class NovaPostProfileListCreateView(APIView):
@@ -285,6 +346,31 @@ class NovaPostDeliveryView(APIView):
         if profile_id and not fetch_profile(company.id, profile_id): return Response({'error': 'Профіль Нової пошти не знайдено.'}, status=404)
         delivery = upsert_delivery(company.id, visit_id, {**request.data, 'novapost_profile_id': profile_id})
         return Response({'message': 'Доставку збережено.', 'delivery': delivery})
+
+
+class NovaPostDeliveryCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+    @transaction.atomic
+    def post(self, request, visit_id):
+        repair_legacy_account(request.user); company = get_user_company(request.user)
+        if not company: return Response({'error': 'Компанію не знайдено.'}, status=403)
+        profile_id = request.data.get('novapost_profile_id') or None
+        api_key, profile = active_api_key(company.id, profile_id=profile_id)
+        if not api_key or not profile: return Response({'error': 'Додайте активний профіль Нової пошти з API-ключем.'}, status=400)
+        props, err, raw_sender = build_waybill_payload(api_key, profile, request.data)
+        if err: return Response({'error': err, 'details': raw_sender}, status=400)
+        try:
+            raw = nova_post_request(api_key, 'InternetDocument', 'save', props, timeout=20)
+            if not raw.get('success'):
+                errors = raw.get('errors') or raw.get('warnings') or []
+                return Response({'error': '; '.join([str(x) for x in errors]) or 'Нова пошта не створила ТТН.', 'raw': raw}, status=400)
+            item = (raw.get('data') or [{}])[0]
+            ttn = item.get('IntDocNumber') or item.get('Number') or item.get('Ref') or ''
+            tracking = {'created': item, 'events': [{'time': timezone.now().isoformat(), 'status': 'created', 'text': f'Створено ТТН {ttn}', 'raw': item}]}
+            saved = upsert_delivery(company.id, visit_id, {**request.data, 'novapost_profile_id': profile.get('id'), 'ttn': ttn, 'status': 'created', 'status_text': 'ТТН створено', 'tracking_data': tracking})
+            return Response({'message': 'ТТН Нової пошти створено.', 'delivery': saved, 'raw': item})
+        except Exception as exc:
+            return Response({'error': f'Не вдалося створити ТТН: {exc}'}, status=400)
 
 
 class NovaPostDeliveryStatusView(APIView):

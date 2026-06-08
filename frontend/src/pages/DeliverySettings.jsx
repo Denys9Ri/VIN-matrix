@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BadgeCheck, CheckCircle2, Loader2, MapPin, PackageCheck, Pencil, Plus, Power, ShieldCheck, Star, Trash2, Truck, X } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, CheckCircle2, Loader2, MapPin, PackageCheck, Pencil, Plus, Power, Search, ShieldCheck, Star, Trash2, Truck, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -149,7 +149,7 @@ const DeliverySettings = () => {
           <div>
             <div className="inline-flex items-center gap-2 text-blue-100 text-[10px] font-black uppercase tracking-widest"><ShieldCheck size={15}/> Профілі відправника</div>
             <h2 className="text-2xl font-black uppercase italic mt-2">API-ключі та відправники</h2>
-            <p className="text-blue-50/80 font-semibold text-sm mt-1">API-ключі не показуються повністю — тільки маска для безпеки.</p>
+            <p className="text-blue-50/80 font-semibold text-sm mt-1">API-ключі не показуються повністю — тільки маска для безпеки. Місто та відділення тепер можна знайти через довідники Нової пошти.</p>
           </div>
           <button onClick={loadProfiles} className="bg-white/10 hover:bg-white/20 border border-white/15 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase disabled:opacity-60" disabled={loading}>{loading ? 'Оновлення...' : 'Оновити'}</button>
         </div>
@@ -225,11 +225,13 @@ function ActionButton({ children, onClick, disabled, danger = false }) {
 
 function ProfileModal({ title, form, setForm, onClose, onSubmit, isEdit }) {
   const update = (key, value) => setForm({ ...form, [key]: value });
+  const selectCity = (city) => setForm({ ...form, sender_city: city.description, sender_city_ref: city.ref, sender_warehouse: '', sender_warehouse_ref: '' });
+  const selectWarehouse = (warehouse) => setForm({ ...form, sender_warehouse: warehouse.description || warehouse.short_address, sender_warehouse_ref: warehouse.ref });
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={onSubmit} className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
+      <form onSubmit={onSubmit} className="bg-white rounded-[32px] shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto">
         <div className="p-5 md:p-6 bg-gradient-to-r from-slate-900 via-blue-900 to-cyan-700 text-white flex items-start justify-between gap-4">
-          <div><p className="text-blue-100 text-[10px] font-black uppercase tracking-widest">Нова пошта</p><h2 className="text-2xl font-black uppercase italic mt-1">{title}</h2><p className="text-sm font-semibold text-blue-50/80 mt-2">Дані зберігаються тільки для вашої компанії.</p></div>
+          <div><p className="text-blue-100 text-[10px] font-black uppercase tracking-widest">Нова пошта</p><h2 className="text-2xl font-black uppercase italic mt-1">{title}</h2><p className="text-sm font-semibold text-blue-50/80 mt-2">Дані зберігаються тільки для вашої компанії. Місто та відділення можна знайти через API Нової пошти.</p></div>
           <button type="button" onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 flex items-center justify-center"><X size={20}/></button>
         </div>
         <div className="p-5 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -237,10 +239,12 @@ function ProfileModal({ title, form, setForm, onClose, onSubmit, isEdit }) {
           <Field label={isEdit ? 'Новий API-ключ (необовʼязково)' : 'API-ключ'} value={form.api_key || ''} onChange={(value) => update('api_key', value)} placeholder="Вставте API-ключ Нової пошти" required={!isEdit} />
           <Field label="Відправник" value={form.sender_name} onChange={(value) => update('sender_name', value)} placeholder="ПІБ або назва ФОП" />
           <Field label="Телефон" value={form.sender_phone} onChange={(value) => update('sender_phone', value)} placeholder="0670000000" />
-          <Field label="Місто" value={form.sender_city} onChange={(value) => update('sender_city', value)} placeholder="Київ" />
-          <Field label="Ref міста" value={form.sender_city_ref} onChange={(value) => update('sender_city_ref', value)} placeholder="пізніше підтягнемо автоматично" />
-          <Field label="Відділення" value={form.sender_warehouse} onChange={(value) => update('sender_warehouse', value)} placeholder="Відділення №1" />
-          <Field label="Ref відділення" value={form.sender_warehouse_ref} onChange={(value) => update('sender_warehouse_ref', value)} placeholder="пізніше підтягнемо автоматично" />
+          <NovaPostLookup label="Місто відправника" placeholder="Почніть вводити місто" endpoint="/api/delivery/novapost/cities/" queryKey="q" value={form.sender_city} onManual={(value) => setForm({ ...form, sender_city: value, sender_city_ref: '' })} onSelect={selectCity} renderItem={(item) => <><b>{item.description}</b>{item.area && <span> · {item.area}</span>}{item.settlement_type && <span> · {item.settlement_type}</span>}</>} />
+          <NovaPostLookup label="Відділення відправника" placeholder={form.sender_city_ref ? 'Введіть номер або адресу' : 'Спочатку виберіть місто'} endpoint="/api/delivery/novapost/warehouses/" queryKey="q" disabled={!form.sender_city_ref} extraParams={{ city_ref: form.sender_city_ref }} value={form.sender_warehouse} onManual={(value) => setForm({ ...form, sender_warehouse: value, sender_warehouse_ref: '' })} onSelect={selectWarehouse} renderItem={(item) => <><b>{item.description}</b>{item.short_address && <span> · {item.short_address}</span>}</>} />
+          <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <RefBox label="Ref міста" value={form.sender_city_ref} />
+            <RefBox label="Ref відділення" value={form.sender_warehouse_ref} />
+          </div>
           <label className="md:col-span-2 flex flex-wrap gap-4 bg-slate-50 rounded-2xl border border-slate-100 p-4 text-sm font-black text-slate-700">
             <span className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.is_default} onChange={(e) => update('is_default', e.target.checked)} /> Основний профіль</span>
             <span className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.is_active} onChange={(e) => update('is_active', e.target.checked)} /> Активний</span>
@@ -253,6 +257,61 @@ function ProfileModal({ title, form, setForm, onClose, onSubmit, isEdit }) {
       </form>
     </div>
   );
+}
+
+function NovaPostLookup({ label, value, onManual, onSelect, placeholder, endpoint, queryKey, extraParams = {}, disabled = false, renderItem }) {
+  const [query, setQuery] = useState(value || '');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => { setQuery(value || ''); }, [value]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (disabled || q.length < 2) { setResults([]); setError(''); return; }
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const params = new URLSearchParams({ ...extraParams, [queryKey]: q });
+        const res = await api.get(`${endpoint}?${params.toString()}`);
+        setResults(Array.isArray(res.data?.results) ? res.data.results : []);
+      } catch (err) {
+        setResults([]);
+        setError(getErrorMessage(err));
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [query, endpoint, queryKey, disabled, JSON.stringify(extraParams)]);
+
+  const choose = (item) => {
+    onSelect(item);
+    setResults([]);
+  };
+
+  return (
+    <label className="relative">
+      <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{label}</span>
+      <div className={`flex items-center gap-2 rounded-2xl border ${disabled ? 'bg-slate-50 border-slate-100' : 'bg-white border-slate-200'} px-4 py-3 focus-within:border-blue-500`}>
+        <Search size={16} className="text-slate-400 shrink-0" />
+        <input disabled={disabled} value={query} onChange={(e) => { setQuery(e.target.value); onManual(e.target.value); }} placeholder={placeholder} className="w-full bg-transparent font-bold text-slate-800 outline-none disabled:text-slate-400" />
+        {loading && <Loader2 size={16} className="animate-spin text-blue-600" />}
+      </div>
+      {error && <p className="mt-1 text-xs font-bold text-rose-600">{error}</p>}
+      {results.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
+          {results.map((item) => <button type="button" key={item.ref} onClick={() => choose(item)} className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50 last:border-b-0 text-sm font-semibold text-slate-700">{renderItem(item)}</button>)}
+        </div>
+      )}
+    </label>
+  );
+}
+
+function RefBox({ label, value }) {
+  return <div className="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3"><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-xs font-bold text-slate-600 break-all">{value || 'Заповниться після вибору'}</p></div>;
 }
 
 function Field({ label, value, onChange, placeholder, required }) {

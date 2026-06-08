@@ -28,7 +28,7 @@ import ActivityDock from './components/activity/ActivityDock';
 import DocumentDock from './components/documents/DocumentDock';
 import api from './api/axios';
 
-const allowedWhenBlocked = ['/visits', '/settings'];
+const allowedWhenBlocked = ['/settings', '/billing'];
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('access_token');
@@ -36,6 +36,7 @@ const ProtectedRoute = ({ children }) => {
   const [checking, setChecking] = useState(true);
   const [accessAllowed, setAccessAllowed] = useState(true);
   const [role, setRole] = useState(null);
+  const [billingStatus, setBillingStatus] = useState(null);
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -43,7 +44,9 @@ const ProtectedRoute = ({ children }) => {
       try {
         const res = await api.get('/api/settings/');
         const data = res.data || {};
+        const billing = data.billing || {};
         setRole(data.actual_role || data.account_role || data.role || null);
+        setBillingStatus(billing.billing_status || billing.status || data.billing_status || null);
         setAccessAllowed(data.access_allowed !== false);
       } catch (error) {
         setAccessAllowed(true);
@@ -58,7 +61,8 @@ const ProtectedRoute = ({ children }) => {
   if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Перевірка доступу...</div>;
 
   const isAllowedRoute = allowedWhenBlocked.some((path) => location.pathname === path || location.pathname.startsWith(path + '/'));
-  if (accessAllowed === false && role === 'client' && !isAllowedRoute) return <Navigate to="/settings" replace />;
+  const isBlockedClient = accessAllowed === false && role === 'client';
+  if (isBlockedClient && !isAllowedRoute) return <Navigate to="/billing" replace state={{ billingStatus }} />;
   return children;
 };
 
@@ -111,6 +115,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="billing" element={<Settings />} />
           <Route path="settings" element={<Settings />} />
           <Route path="settings/services" element={<ServicesSettings />} />
           <Route path="settings/documents" element={<DocumentSettings />} />

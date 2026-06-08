@@ -48,3 +48,15 @@ class CoreConfig(AppConfig):
             attach_stock_workflow()
         except Exception as exc:
             print(f"Stock reservation workflow startup error: {exc}")
+
+        try:
+            from django.urls import path
+            from .client_link_views import AdminClientLinkSettingsView, ClientLinkSettingsView
+            import vin_matrix.urls as root_urls
+            names = {getattr(item, 'name', None) for item in root_urls.urlpatterns}
+            if 'billing-client-link' not in names:
+                root_urls.urlpatterns.insert(70, path('api/billing/client-link/', ClientLinkSettingsView.as_view(), name='billing-client-link'))
+            if 'billing-admin-client-link' not in names:
+                root_urls.urlpatterns.insert(71, path('api/billing/admin/client-link/', AdminClientLinkSettingsView.as_view(), name='billing-admin-client-link'))
+        except Exception as exc:
+            print(f"Client link routes attach error: {exc}")

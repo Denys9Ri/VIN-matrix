@@ -58,11 +58,18 @@ class CoreConfig(AppConfig):
         try:
             from django.urls import path
             from .client_link_views import AdminClientLinkSettingsView, ClientLinkSettingsView
+            from .novapost_views import NovaPostProfileDetailView, NovaPostProfileListCreateView, NovaPostProfileTestView
             import vin_matrix.urls as root_urls
             names = {getattr(item, 'name', None) for item in root_urls.urlpatterns}
             if 'billing-client-link' not in names:
                 root_urls.urlpatterns.insert(70, path('api/billing/client-link/', ClientLinkSettingsView.as_view(), name='billing-client-link'))
             if 'billing-admin-client-link' not in names:
                 root_urls.urlpatterns.insert(71, path('api/billing/admin/client-link/', AdminClientLinkSettingsView.as_view(), name='billing-admin-client-link'))
+            if 'novapost-profile-list' not in names:
+                root_urls.urlpatterns.insert(72, path('api/delivery/novapost/profiles/', NovaPostProfileListCreateView.as_view(), name='novapost-profile-list'))
+            if 'novapost-profile-detail' not in names:
+                root_urls.urlpatterns.insert(73, path('api/delivery/novapost/profiles/<int:pk>/', NovaPostProfileDetailView.as_view(), name='novapost-profile-detail'))
+            if 'novapost-profile-test' not in names:
+                root_urls.urlpatterns.insert(74, path('api/delivery/novapost/profiles/<int:pk>/test/', NovaPostProfileTestView.as_view(), name='novapost-profile-test'))
         except Exception as exc:
-            print(f"Client link routes attach error: {exc}")
+            print(f"Dynamic route attach error: {exc}")

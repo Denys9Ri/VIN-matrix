@@ -1,5 +1,10 @@
-from django.urls import re_path
-from apps.core.novapost_views import NovaPostDeliveryCreateView as V
-urlpatterns=[
-re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create-ttn/$',V.as_view()),
-re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create/$',V.as_view())]
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.http import JsonResponse
+from django.urls import include, path, re_path
+from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt import views as jwt_views
+
+from apps.core.views import ChangePasswordView, LogoutView, PlatformClientViewSet, ProfileSettingsView, RegisterView
+from apps.core.safe_crm_views import CRMTask

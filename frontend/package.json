@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/patch-visits-dictionaries.cjs && node scripts/patch-payment-dictionaries.cjs && node scripts/fix-store-orders-syntax.cjs",
-    "prebuild": "node scripts/patch-visits-dictionaries.cjs && node scripts/patch-payment-dictionaries.cjs && node scripts/fix-store-orders-syntax.cjs",
+    "predev": "node scripts/patch-visits-dictionaries.cjs && node scripts/patch-payment-dictionaries.cjs",
+    "prebuild": "node scripts/patch-visits-dictionaries.cjs && node scripts/patch-payment-dictionaries.cjs",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",

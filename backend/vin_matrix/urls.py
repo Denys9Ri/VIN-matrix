@@ -204,8 +204,11 @@ urlpatterns = [
     path('api/delivery/novapost/profiles/<int:pk>/test/', NovaPostProfileTestView.as_view(), name='novapost-profile-test'),
     path('api/delivery/novapost/cities/', NovaPostCitiesView.as_view(), name='novapost-cities'),
     path('api/delivery/novapost/warehouses/', NovaPostWarehousesView.as_view(), name='novapost-warehouses'),
-
-    path('api/delivery/novapost/refresh-active/', NovaPostDeliveryRefreshActiveView.as_view(), name='novapost-delivery-refresh-active'),
+    path(
+        'api/delivery/novapost/refresh-active/',
+        NovaPostDeliveryRefreshActiveView.as_view(),
+        name='novapost-delivery-refresh-active',
+    ),
 
     re_path(
         r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/$',

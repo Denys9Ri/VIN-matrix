@@ -999,71 +999,15 @@ class NovaPostDeliveryStatusView(APIView):
         if not delivery or not delivery.get('ttn'):
             return Response({'error': 'Спочатку внесіть ТТН.'}, status=400)
 
-        profile = get_profile(company.id, delivery.get('novapost_profile_id'), True) or get_profile(company.id, None, True)
+        result = refresh_single_delivery_status(company, request.user, delivery)
 
-        if not profile:
-            return Response({'error': 'Додайте активний профіль Нової пошти.'}, status=400)
-
-        try:
-            raw = np_call(
-                profile.get('api_key'),
-                'TrackingDocument',
-                'getStatusDocuments',
-                {'Documents': [{'DocumentNumber': delivery.get('ttn')}]},
-            )
-        except Exception as e:
-            return Response({'error': str(e)}, status=400)
-
-        if not raw.get('success'):
-            return Response(
-                {
-                    'error': '; '.join(map(str, raw.get('errors') or raw.get('warnings') or [])) or 'Не вдалося отримати статус.',
-                },
-                status=400,
-            )
-
-        item = (raw.get('data') or [{}])[0]
-        status, text = status_map(item)
-
-        history = delivery.get('tracking_data') or {}
-        events = history.get('events') if isinstance(history, dict) else []
-
-        if not isinstance(events, list):
-            events = []
-
-        events.insert(
-            0,
-            {
-                'time': timezone.now().isoformat(),
-                'status': status,
-                'text': text,
-                'raw': item,
-            },
-        )
-
-        saved = save_delivery(
-            company.id,
-            visit_id,
-            {
-                **delivery,
-                'status': status,
-                'status_text': text,
-                'tracking_data': {
-                    'last': item,
-                    'events': events[:30],
-                },
-            },
-        )
-
-        with connection.cursor() as c:
-            c.execute(
-                'UPDATE core_delivery SET last_checked_at=%s WHERE id=%s',
-                [timezone.now(), saved['id']],
-            )
+        if not result.get('ok'):
+            return Response({'error': result.get('error') or 'Не вдалося отримати статус.'}, status=400)
 
         return Response({
             'message': 'Статус Нової пошти оновлено.',
             'delivery': get_delivery(company.id, visit_id),
+            'result': result,
         })
 
 
@@ -1145,6 +1089,25 @@ class NovaPostDeliveryCreateView(APIView):
             },
         )
 
+        visit = update_visit_delivery_data(company, visit_id, saved)
+
+        log_activity(
+            company=company,
+            user=request.user,
+            visit=visit,
+            mode='store',
+            action_type='novapost_ttn_created',
+            title='Створено ТТН Нової пошти',
+            description=f'Створено ТТН {ttn}',
+            old_value=None,
+            new_value=ttn,
+            metadata={
+                'ttn': ttn,
+                'delivery_id': saved.get('id'),
+                'service': 'nova_post',
+            },
+        )
+
         return Response(
             {
                 'message': 'ТТН створено.',
@@ -1179,6 +1142,7 @@ class NovaPostDeliveryRefreshActiveView(APIView):
 
             if item.get('updated'):
                 updated += 1
+
             if not item.get('ok'):
                 errors += 1
 
@@ -1189,4 +1153,3 @@ class NovaPostDeliveryRefreshActiveView(APIView):
             'errors': errors,
             'results': results,
         })
-

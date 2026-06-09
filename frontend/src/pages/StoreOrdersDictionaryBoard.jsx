@@ -369,6 +369,53 @@ export default function StoreOrdersDictionaryBoard() {
     };
   }, [location.search]);
 
+  useEffect(() => {
+    if (modal !== 'create-ttn') return;
+
+    let cancelled = false;
+
+    (async () => {
+      setTtnError('');
+
+      try {
+        const r = await api.get('/api/delivery/novapost/profiles/');
+        const rowsFromProfiles = arr(r.data?.profiles);
+        const rowsFromResults = arr(r.data?.results);
+        const rows = rowsFromProfiles.length ? rowsFromProfiles : rowsFromResults;
+
+        if (cancelled) return;
+
+        setTtnProfiles(rows);
+
+        const defaultProfile = rows.find((profile) => profile.is_default) || rows[0];
+
+        if (defaultProfile) {
+          setTtnForm((prev) => ({
+            ...prev,
+            novapost_profile_id: prev.novapost_profile_id || defaultProfile.id,
+          }));
+        }
+
+        if (!rows.length) {
+          setTtnError('Додайте активний профіль Нової пошти в налаштуваннях доставки.');
+        }
+      } catch (error) {
+        if (cancelled) return;
+
+        setTtnProfiles([]);
+        setTtnError(
+          error.response?.data?.error ||
+            error.response?.data?.message ||
+            'Не вдалося завантажити профілі Нової пошти.'
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modal]);
+
   const statusLabelMap = useMemo(
     () => Object.fromEntries(statuses.map((s) => [s.key, s.label])),
     [statuses]
@@ -631,7 +678,7 @@ export default function StoreOrdersDictionaryBoard() {
       recipient_warehouse: d.recipient_warehouse || '',
       recipient_warehouse_ref: d.recipient_warehouse_ref || '',
       description: d.description || 'Автозапчастини',
-      cost: d.cost || '',
+      cost: d.cost || d.declared_value || '',
       weight: d.weight || '1',
       seats_amount: d.seats_amount || '1',
       payer_type: d.payer_type || 'Recipient',
@@ -640,7 +687,6 @@ export default function StoreOrdersDictionaryBoard() {
       cod_amount: d.cod_amount || '',
     });
 
-    setTtnProfiles((prev) => prev);
     setTtnCities([]);
     setTtnWarehouses([]);
     setTtnError('');
@@ -808,7 +854,7 @@ export default function StoreOrdersDictionaryBoard() {
             )}
 
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
-              Форма створення ТТН буде додана наступним етапом. Дані вже підготовлені з замовлення та доставки.
+              Форма створення ТТН буде додана наступним етапом. Профілі Нової пошти вже завантажуються автоматично.
             </div>
 
             <div className="grid gap-2 text-sm">

@@ -703,6 +703,114 @@ export default function StoreOrdersDictionaryBoard() {
     setModal('create-ttn');
   };
 
+  const searchTtnCities = async (query) => {
+    const value = query || '';
+
+    setTtnForm((prev) => ({
+      ...prev,
+      recipient_city: value,
+      recipient_city_ref: '',
+      recipient_warehouse: '',
+      recipient_warehouse_ref: '',
+    }));
+
+    setTtnWarehouses([]);
+
+    if (value.trim().length < 2) {
+      setTtnCities([]);
+      return;
+    }
+
+    try {
+      setTtnError('');
+
+      const r = await api.get('/api/delivery/novapost/cities/', {
+        params: {
+          q: value.trim(),
+          profile_id: ttnForm.novapost_profile_id || undefined,
+        },
+      });
+
+      setTtnCities(arr(r.data?.results));
+    } catch (error) {
+      setTtnCities([]);
+      setTtnError(
+        error.response?.data?.error ||
+          error.response?.data?.message ||
+          'Не вдалося знайти місто Нової пошти.'
+      );
+    }
+  };
+
+  const selectTtnCity = async (city) => {
+    const cityName = city.description || city.name || '';
+    const cityRef = city.ref || city.Ref || '';
+
+    setTtnForm((prev) => ({
+      ...prev,
+      recipient_city: cityName,
+      recipient_city_ref: cityRef,
+      recipient_warehouse: '',
+      recipient_warehouse_ref: '',
+    }));
+
+    setTtnCities([]);
+    setTtnWarehouses([]);
+
+    if (cityRef) {
+      await searchTtnWarehouses('', cityRef);
+    }
+  };
+
+  const searchTtnWarehouses = async (query = '', cityRefOverride = '') => {
+    const cityRef = cityRefOverride || ttnForm.recipient_city_ref;
+
+    if (!cityRef) {
+      setTtnWarehouses([]);
+      return;
+    }
+
+    if (!cityRefOverride) {
+      setTtnForm((prev) => ({
+        ...prev,
+        recipient_warehouse: query,
+        recipient_warehouse_ref: '',
+      }));
+    }
+
+    try {
+      setTtnError('');
+
+      const r = await api.get('/api/delivery/novapost/warehouses/', {
+        params: {
+          city_ref: cityRef,
+          q: query.trim() || undefined,
+          profile_id: ttnForm.novapost_profile_id || undefined,
+        },
+      });
+
+      setTtnWarehouses(arr(r.data?.results));
+    } catch (error) {
+      setTtnWarehouses([]);
+      setTtnError(
+        error.response?.data?.error ||
+          error.response?.data?.message ||
+          'Не вдалося знайти відділення Нової пошти.'
+      );
+    }
+  };
+
+  const selectTtnWarehouse = (warehouse) => {
+    setTtnForm((prev) => ({
+      ...prev,
+      recipient_warehouse:
+        warehouse.description || warehouse.short_address || warehouse.name || '',
+      recipient_warehouse_ref: warehouse.ref || warehouse.Ref || '',
+    }));
+
+    setTtnWarehouses([]);
+  };
+
   const markPaid = async (total) => {
     await patchOrder({
       payment_status: 'paid',
@@ -864,22 +972,158 @@ export default function StoreOrdersDictionaryBoard() {
             )}
 
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
-              Форма створення ТТН буде додана наступним етапом. Профілі Нової пошти вже завантажуються автоматично.
+              Оберіть профіль відправника, місто та відділення Нової пошти. Ручна ТТН у вкладці доставки не затирається.
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase text-slate-400">
+                  Профіль відправника
+                </label>
+
+                <select
+                  value={ttnForm.novapost_profile_id}
+                  onChange={(e) => {
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      novapost_profile_id: e.target.value,
+                      recipient_city: '',
+                      recipient_city_ref: '',
+                      recipient_warehouse: '',
+                      recipient_warehouse_ref: '',
+                    }));
+                    setTtnCities([]);
+                    setTtnWarehouses([]);
+                    setTtnError('');
+                  }}
+                  className={`${field} mt-1`}
+                >
+                  <option value="">Оберіть профіль Нової пошти</option>
+                  {ttnProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name || 'Нова пошта'}{profile.is_default ? ' • за замовчуванням' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400">
+                  Одержувач
+                </label>
+
+                <input
+                  value={ttnForm.recipient_name}
+                  onChange={(e) =>
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      recipient_name: e.target.value,
+                    }))
+                  }
+                  placeholder="ПІБ одержувача"
+                  className={`${field} mt-1`}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400">
+                  Телефон
+                </label>
+
+                <input
+                  value={ttnForm.recipient_phone}
+                  onChange={(e) =>
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      recipient_phone: e.target.value,
+                    }))
+                  }
+                  placeholder="380..."
+                  className={`${field} mt-1`}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase text-slate-400">
+                  Місто одержувача
+                </label>
+
+                <input
+                  value={ttnForm.recipient_city}
+                  onChange={(e) => searchTtnCities(e.target.value)}
+                  placeholder="Почніть вводити місто, мінімум 2 символи"
+                  className={`${field} mt-1`}
+                />
+
+                {ttnCities.length > 0 && (
+                  <div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 space-y-2">
+                    {ttnCities.map((city) => (
+                      <button
+                        key={city.ref}
+                        type="button"
+                        onClick={() => selectTtnCity(city)}
+                        className="w-full text-left rounded-xl bg-slate-50 hover:bg-blue-50 px-3 py-2 transition"
+                      >
+                        <p className="text-sm font-black text-slate-800">
+                          {city.description}
+                        </p>
+                        <p className="text-xs font-bold text-slate-400">
+                          {[city.settlement_type, city.area].filter(Boolean).join(' • ') || 'Нова пошта'}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase text-slate-400">
+                  Відділення
+                </label>
+
+                <input
+                  value={ttnForm.recipient_warehouse}
+                  onChange={(e) => searchTtnWarehouses(e.target.value)}
+                  disabled={!ttnForm.recipient_city_ref}
+                  placeholder={
+                    ttnForm.recipient_city_ref
+                      ? 'Почніть вводити номер або адресу відділення'
+                      : 'Спочатку оберіть місто'
+                  }
+                  className={`${field} mt-1 disabled:opacity-60 disabled:cursor-not-allowed`}
+                />
+
+                {ttnWarehouses.length > 0 && (
+                  <div className="mt-2 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 space-y-2">
+                    {ttnWarehouses.map((warehouse) => (
+                      <button
+                        key={warehouse.ref}
+                        type="button"
+                        onClick={() => selectTtnWarehouse(warehouse)}
+                        className="w-full text-left rounded-xl bg-slate-50 hover:bg-blue-50 px-3 py-2 transition"
+                      >
+                        <p className="text-sm font-black text-slate-800">
+                          {warehouse.description}
+                        </p>
+                        <p className="text-xs font-bold text-slate-400">
+                          {warehouse.short_address || (warehouse.number ? `№${warehouse.number}` : 'Відділення Нової пошти')}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid gap-2 text-sm">
-              <Info label="Одержувач" value={ttnForm.recipient_name} />
-              <Info label="Телефон" value={ttnForm.recipient_phone} />
-              <Info label="Місто" value={ttnForm.recipient_city || 'Буде обрано в формі'} />
-              <Info label="Відділення" value={ttnForm.recipient_warehouse || 'Буде обрано в формі'} />
+              <Info label="Місто" value={ttnForm.recipient_city || 'Не обрано'} />
+              <Info label="Відділення" value={ttnForm.recipient_warehouse || 'Не обрано'} />
               <Info label="Опис" value={ttnForm.description} />
               <Info label="Вага" value={ttnForm.weight} />
               <Info label="Місць" value={ttnForm.seats_amount} />
               <Info label="Платник доставки" value={ttnForm.payer_type === 'Recipient' ? 'Одержувач' : 'Відправник'} />
               <Info label="Післяплата" value={ttnForm.cod_enabled ? `Так, ${ttnForm.cod_amount || 0} ₴` : 'Ні'} />
               <Info label="Профілі відправника" value={`${ttnProfiles.length} завантажено`} />
-              <Info label="Знайдені міста" value={`${ttnCities.length} варіантів`} />
-              <Info label="Знайдені відділення" value={`${ttnWarehouses.length} варіантів`} />
             </div>
           </div>
         </Modal>

@@ -45,6 +45,42 @@ urlpatterns = [
     path('api/crm/', include('apps.crm.urls')),
     path('api/analytics/', include('apps.analytics.urls')),
 
+        path(
+        'api/delivery/novapost/profiles/',
+        NovaPostProfileListCreateView.as_view(),
+        name='novapost-profiles',
+    ),
+    path(
+        'api/delivery/novapost/profiles/<int:pk>/',
+        NovaPostProfileDetailView.as_view(),
+        name='novapost-profile-detail',
+    ),
+    path(
+        'api/delivery/novapost/profiles/<int:pk>/test/',
+        NovaPostProfileTestView.as_view(),
+        name='novapost-profile-test',
+    ),
+    path(
+        'api/delivery/novapost/cities/',
+        NovaPostCitiesView.as_view(),
+        name='novapost-cities',
+    ),
+    path(
+        'api/delivery/novapost/warehouses/',
+        NovaPostWarehousesView.as_view(),
+        name='novapost-warehouses',
+    ),
+    re_path(
+        r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/$',
+        NovaPostDeliveryView.as_view(),
+        name='novapost-delivery',
+    ),
+    re_path(
+        r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/status/$',
+        NovaPostDeliveryStatusView.as_view(),
+        name='novapost-delivery-status',
+    ),
+
     re_path(
         r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create-ttn/$',
         NovaPostDeliveryCreateView.as_view(),

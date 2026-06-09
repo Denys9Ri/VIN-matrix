@@ -6,4 +6,4 @@ from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from apps.core.views import LogoutView, ChangePasswordView
-from apps.core
+from apps.core.safe_crm_views import VisitViewSet, ServiceCatalogViewSet, OrderPartViewSet

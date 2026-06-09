@@ -1,3 +1,1 @@
-export const field = 'w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500';
-export const primaryBtn = 'inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-xs font-black uppercase text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed';
-export const greenBtn = 'inline-flex items-center justify-center gap-
+export const storeOrdersTtnPatchReady = true;

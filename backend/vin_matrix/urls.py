@@ -7,6 +7,21 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 
 from apps.core.billing_client_link_views import BillingAdminClientLinkView
+from apps.core.billing_views import (
+    BillingMeView,
+    BillingPaymentRequestView,
+    BillingAdminPaymentsView,
+    BillingAdminConfirmPaymentView,
+    BillingAdminRejectPaymentView,
+)
+
+from apps.core.data_exchange_views import (
+    OrdersExportView,
+    ClientsExportView,
+    InventoryExportView,
+    BackupExportView,
+    LegacyClientsImportView,
+)
 
 from apps.core.views import (
     LogoutView,
@@ -140,11 +155,18 @@ urlpatterns = [
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
     path('api/activity/', ActivityLogView.as_view(), name='activity-log'),
 
-    path(
-        'api/billing/admin/client-link/',
-        BillingAdminClientLinkView.as_view(),
-        name='billing-admin-client-link',
-    ),
+    path('api/billing/me/', BillingMeView.as_view(), name='billing-me'),
+    path('api/billing/payment-request/', BillingPaymentRequestView.as_view(), name='billing-payment-request'),
+    path('api/billing/admin/payments/', BillingAdminPaymentsView.as_view(), name='billing-admin-payments'),
+    path('api/billing/admin/confirm/', BillingAdminConfirmPaymentView.as_view(), name='billing-admin-confirm'),
+    path('api/billing/admin/reject/', BillingAdminRejectPaymentView.as_view(), name='billing-admin-reject'),
+    path('api/billing/admin/client-link/', BillingAdminClientLinkView.as_view(), name='billing-admin-client-link'),
+
+    path('api/export/orders/', OrdersExportView.as_view(), name='export-orders'),
+    path('api/export/clients/', ClientsExportView.as_view(), name='export-clients'),
+    path('api/export/inventory/', InventoryExportView.as_view(), name='export-inventory'),
+    path('api/export/backup/', BackupExportView.as_view(), name='export-backup'),
+    path('api/import/legacy-clients/', LegacyClientsImportView.as_view(), name='import-legacy-clients'),
 
     path('api/payments/', VisitPaymentListView.as_view(), name='visit-payments'),
     path('api/visits/<int:pk>/add-payment/', VisitAddPaymentView.as_view(), name='visit-add-payment'),

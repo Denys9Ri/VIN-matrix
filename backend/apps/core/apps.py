@@ -9,5 +9,7 @@ class CoreConfig(AppConfig):
     def ready(self):
         try:
             from django.urls import path
-            import vin_matrix.urls as root_urls
-            from .novapost_views import NovaPostCitiesView, NovaPostDeliveryCreateView, NovaPostDeliveryStatusView, NovaPostDeliveryView, NovaPostProfileDetailView, NovaPostProfileListCreateView, NovaPostProfileTestView, NovaPostWarehousesView
+            import vin_matrix.urls as u
+            from .novapost_views import NovaPostDeliveryCreateView
+            names = {getattr(x, 'name', None) for x in u.urlpatterns}
+            if 'novapost-del

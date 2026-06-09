@@ -5,4 +5,6 @@ import api from '../../api/axios';
 const fuelOptions = ['Порожній', '1/4', '1/2', '3/4', 'Повний'];
 const statusClass = {
   ok: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  attention: 'bg-amber-50 text
+  attention: 'bg-amber-50 text-amber-700 border-amber-100',
+  critical: 'bg-rose-50 text-rose-700 border-rose-100',
+  not_checked: 'bg-slate-100 text-slate-500

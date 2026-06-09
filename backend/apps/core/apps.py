@@ -10,4 +10,4 @@ class CoreConfig(AppConfig):
         repair_hooks = [
             ('db_repair', 'repair_database_schema', 'DB repair startup'),
             ('db_repair_stock', 'repair_stock_schema', 'Stock schema check'),
-            ('db_repair_payments', 'repair_payment
+            ('db_repair_payments', 'repair_payment_schema', 'Payment schema check

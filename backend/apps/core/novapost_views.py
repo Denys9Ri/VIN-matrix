@@ -7,7 +7,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .activity import log_activity
 from .db_repair_novapost import repair_novapost_schema
+from .models import Visit
 from .partner_views import get_user_company, repair_legacy_account
 
 
@@ -419,6 +421,221 @@ def build_ttn(secret, profile, data):
         ]
 
     return props, None
+
+
+def delivery_status_is_final(status):
+    return clean(status).lower() in ['received', 'returned', 'cancelled', 'deleted']
+
+
+def get_active_deliveries(company_id, limit=25):
+    repair_novapost_schema()
+
+    try:
+        limit = min(max(int(limit or 25), 1), 50)
+    except Exception:
+        limit = 25
+
+    with connection.cursor() as c:
+        c.execute(
+            '''
+            SELECT
+                id, company_id, visit_id, novapost_profile_id, service, ttn,
+                status, status_text, recipient_name, recipient_phone,
+                recipient_city, recipient_city_ref, recipient_warehouse,
+                recipient_warehouse_ref, payer_type, payment_method,
+                cod_enabled, cod_amount, declared_value, weight, seats_amount,
+                tracking_data, created_at, updated_at, last_checked_at
+            FROM core_delivery
+            WHERE company_id=%s
+              AND service='nova_post'
+              AND COALESCE(ttn, '') <> ''
+              AND COALESCE(status, '') NOT IN ('received', 'returned', 'cancelled', 'deleted')
+            ORDER BY COALESCE(last_checked_at, created_at) ASC, id ASC
+            LIMIT %s
+            ''',
+            [company_id, limit],
+        )
+        return [delivery_row(row) for row in c.fetchall()]
+
+
+def update_visit_delivery_data(company, visit_id, delivery):
+    try:
+        visit = Visit.objects.get(id=visit_id, company=company)
+    except Exception:
+        return None
+
+    try:
+        current = visit.delivery_data or {}
+
+        if isinstance(current, str):
+            try:
+                current = json.loads(current) if current.strip().startswith('{') else {}
+            except Exception:
+                current = {}
+
+        if not isinstance(current, dict):
+            current = {}
+
+        next_delivery = {
+            **current,
+            'mode': current.get('mode') or 'store',
+            'service': 'nova_post',
+            'ttn': delivery.get('ttn') or current.get('ttn') or '',
+            'delivery_status': delivery.get('status') or current.get('delivery_status') or '',
+            'delivery_status_text': delivery.get('status_text') or current.get('delivery_status_text') or '',
+            'recipient_name': delivery.get('recipient_name') or current.get('recipient_name') or '',
+            'recipient_phone': delivery.get('recipient_phone') or current.get('recipient_phone') or '',
+            'recipient_city': delivery.get('recipient_city') or current.get('recipient_city') or '',
+            'recipient_city_ref': delivery.get('recipient_city_ref') or current.get('recipient_city_ref') or '',
+            'recipient_warehouse': delivery.get('recipient_warehouse') or current.get('recipient_warehouse') or '',
+            'recipient_warehouse_ref': delivery.get('recipient_warehouse_ref') or current.get('recipient_warehouse_ref') or '',
+            'payer_type': delivery.get('payer_type') or current.get('payer_type') or 'Recipient',
+            'payment_method': delivery.get('payment_method') or current.get('payment_method') or 'Cash',
+            'cod_enabled': bool(delivery.get('cod_enabled')),
+            'cod_amount': delivery.get('cod_amount') or 0,
+            'cost': delivery.get('cost') or delivery.get('declared_value') or current.get('cost') or '',
+            'weight': delivery.get('weight') or current.get('weight') or '1',
+            'seats_amount': delivery.get('seats_amount') or current.get('seats_amount') or '1',
+            'novapost_last_checked_at': timezone.now().isoformat(),
+        }
+
+        visit.delivery_data = json.dumps(next_delivery, ensure_ascii=False)
+        visit.save(update_fields=['delivery_data'])
+
+        return visit
+    except Exception as exc:
+        print(f'NovaPost visit delivery_data update failed: {exc}')
+        return visit
+
+
+def refresh_single_delivery_status(company, user, delivery):
+    old_status = delivery.get('status') or ''
+    old_text = delivery.get('status_text') or ''
+    ttn = delivery.get('ttn') or ''
+
+    result = {
+        'delivery_id': delivery.get('id'),
+        'visit_id': delivery.get('visit_id'),
+        'ttn': ttn,
+        'old_status': old_status,
+        'old_status_text': old_text,
+        'status': old_status,
+        'status_text': old_text,
+        'updated': False,
+        'ok': False,
+    }
+
+    if not ttn:
+        result['error'] = 'Немає ТТН.'
+        return result
+
+    if delivery_status_is_final(old_status):
+        result['ok'] = True
+        result['skipped'] = True
+        result['error'] = 'Фінальний статус не перевіряється.'
+        return result
+
+    profile = (
+        get_profile(company.id, delivery.get('novapost_profile_id'), True)
+        or get_profile(company.id, None, True)
+    )
+
+    if not profile:
+        result['error'] = 'Немає активного профілю Нової пошти.'
+        return result
+
+    try:
+        raw = np_call(
+            profile.get('api_key'),
+            'TrackingDocument',
+            'getStatusDocuments',
+            {'Documents': [{'DocumentNumber': ttn}]},
+            timeout=20,
+        )
+    except Exception as exc:
+        result['error'] = str(exc)
+        return result
+
+    if not raw.get('success'):
+        result['error'] = '; '.join(map(str, raw.get('errors') or raw.get('warnings') or [])) or 'Не вдалося отримати статус.'
+        result['raw'] = raw
+        return result
+
+    item = (raw.get('data') or [{}])[0] or {}
+    status, text = status_map(item)
+
+    history = delivery.get('tracking_data') or {}
+    events = history.get('events') if isinstance(history, dict) else []
+
+    if not isinstance(events, list):
+        events = []
+
+    changed = status != old_status or text != old_text
+
+    if changed:
+        events.insert(
+            0,
+            {
+                'time': timezone.now().isoformat(),
+                'status': status,
+                'text': text,
+                'raw': item,
+            },
+        )
+
+    saved = save_delivery(
+        company.id,
+        delivery.get('visit_id'),
+        {
+            **delivery,
+            'status': status,
+            'status_text': text,
+            'tracking_data': {
+                'last': item,
+                'events': events[:30],
+            },
+        },
+    )
+
+    with connection.cursor() as c:
+        c.execute(
+            'UPDATE core_delivery SET last_checked_at=%s WHERE id=%s',
+            [timezone.now(), saved['id']],
+        )
+
+    saved = get_delivery(company.id, delivery.get('visit_id')) or saved
+    visit = update_visit_delivery_data(company, delivery.get('visit_id'), saved)
+
+    if changed:
+        log_activity(
+            company=company,
+            user=user,
+            visit=visit,
+            mode='store',
+            action_type='novapost_status_changed',
+            title='Оновлено статус Нової пошти',
+            description=f'ТТН {ttn}: {old_text or old_status or "—"} → {text or status}',
+            old_value=old_text or old_status,
+            new_value=text or status,
+            metadata={
+                'ttn': ttn,
+                'delivery_id': delivery.get('id'),
+                'old_status': old_status,
+                'new_status': status,
+                'old_status_text': old_text,
+                'new_status_text': text,
+                'service': 'nova_post',
+            },
+        )
+
+    result.update({
+        'ok': True,
+        'status': status,
+        'status_text': text,
+        'updated': changed,
+    })
+
+    return result
 
 
 class NovaPostProfileListCreateView(APIView):
@@ -935,3 +1152,41 @@ class NovaPostDeliveryCreateView(APIView):
             },
             status=201,
         )
+
+
+class NovaPostDeliveryRefreshActiveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        repair_legacy_account(request.user)
+        company = get_user_company(request.user)
+
+        if not company:
+            return Response({'error': 'Компанію не знайдено.'}, status=403)
+
+        limit = request.data.get('limit') or request.query_params.get('limit') or 25
+        deliveries = get_active_deliveries(company.id, limit)
+
+        results = []
+        checked = 0
+        updated = 0
+        errors = 0
+
+        for delivery in deliveries:
+            checked += 1
+            item = refresh_single_delivery_status(company, request.user, delivery)
+            results.append(item)
+
+            if item.get('updated'):
+                updated += 1
+            if not item.get('ok'):
+                errors += 1
+
+        return Response({
+            'message': f'Перевірено активні ТТН Нової пошти: {checked}. Оновлено: {updated}.',
+            'checked': checked,
+            'updated': updated,
+            'errors': errors,
+            'results': results,
+        })
+

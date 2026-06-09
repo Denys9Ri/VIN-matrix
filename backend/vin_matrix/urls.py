@@ -14,7 +14,16 @@ from apps.core.views import (
     LogoutView,
     ChangePasswordView,
 )
-from apps.core.novapost_views import NovaPostDeliveryCreateView
+from apps.core.novapost_views import (
+    NovaPostProfileListCreateView,
+    NovaPostProfileDetailView,
+    NovaPostProfileTestView,
+    NovaPostCitiesView,
+    NovaPostWarehousesView,
+    NovaPostDeliveryView,
+    NovaPostDeliveryStatusView,
+    NovaPostDeliveryCreateView,
+)
 
 router = DefaultRouter()
 router.register(r'visits', VisitViewSet, basename='visit')

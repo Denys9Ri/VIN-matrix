@@ -811,6 +811,93 @@ export default function StoreOrdersDictionaryBoard() {
     setTtnWarehouses([]);
   };
 
+  const createNovaPostTtn = async (e) => {
+    e.preventDefault();
+
+    if (!selected?.id) return;
+
+    if (!ttnForm.novapost_profile_id) {
+      setTtnError('Оберіть профіль відправника Нової пошти.');
+      return;
+    }
+
+    if (!ttnForm.recipient_city_ref) {
+      setTtnError('Оберіть місто зі списку Нової пошти.');
+      return;
+    }
+
+    if (!ttnForm.recipient_warehouse_ref) {
+      setTtnError('Оберіть відділення зі списку Нової пошти.');
+      return;
+    }
+
+    setBusy(true);
+    setTtnError('');
+
+    try {
+      const payload = {
+        ...ttnForm,
+        cost: num(ttnForm.cost),
+        declared_value: num(ttnForm.cost),
+        weight: num(ttnForm.weight) || 1,
+        seats_amount: num(ttnForm.seats_amount) || 1,
+        cod_enabled: Boolean(ttnForm.cod_enabled),
+        cod_amount: ttnForm.cod_enabled ? num(ttnForm.cod_amount) : 0,
+      };
+
+      const r = await api.post(
+        `/api/delivery/novapost/visits/${selected.id}/create-ttn/`,
+        payload
+      );
+
+      const delivery = r.data?.delivery || {};
+      const ttn = delivery.ttn || delivery.IntDocNumber || delivery.Number || '';
+
+      const nextDelivery = {
+        ...parseDelivery(selected),
+        ...payload,
+        ...delivery,
+        ttn,
+        delivery_status: 'sent',
+        mode: 'store',
+      };
+
+      const nextStatus = smartStatus(selected, {
+        delivery_status: 'sent',
+      });
+
+      setSelected((prev) => ({
+        ...prev,
+        status: nextStatus,
+        delivery_data: JSON.stringify({
+          ...parseDelivery(prev),
+          ...nextDelivery,
+        }),
+      }));
+
+      await patchOrder(
+        {
+          status: nextStatus,
+          delivery_data: JSON.stringify(nextDelivery),
+        },
+        selected.id
+      );
+
+      await refresh(selected.id);
+
+      setModal(null);
+      setMessage(ttn ? `ТТН створено: ${ttn}` : 'ТТН створено.');
+    } catch (e2) {
+      setTtnError(
+        e2.response?.data?.error ||
+          e2.response?.data?.message ||
+          'Нова пошта не створила ТТН.'
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const markPaid = async (total) => {
     await patchOrder({
       payment_status: 'paid',
@@ -964,7 +1051,7 @@ export default function StoreOrdersDictionaryBoard() {
 
       {modal === 'create-ttn' && selected && (
         <Modal title="Створити ТТН Нової пошти" onClose={() => setModal(null)}>
-          <div className="space-y-4">
+          <form onSubmit={createNovaPostTtn} className="space-y-4">
             {ttnError && (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
                 {ttnError}
@@ -972,47 +1059,49 @@ export default function StoreOrdersDictionaryBoard() {
             )}
 
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
-              Оберіть профіль відправника, місто та відділення Нової пошти. Ручна ТТН у вкладці доставки не затирається.
+              Створення ТТН через Нову пошту. Якщо Нова пошта поверне помилку, ручна ТТН у вкладці доставки не зміниться.
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black uppercase text-slate-400">
-                  Профіль відправника
-                </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                Профіль відправника
+              </span>
 
-                <select
-                  value={ttnForm.novapost_profile_id}
-                  onChange={(e) => {
-                    setTtnForm((prev) => ({
-                      ...prev,
-                      novapost_profile_id: e.target.value,
-                      recipient_city: '',
-                      recipient_city_ref: '',
-                      recipient_warehouse: '',
-                      recipient_warehouse_ref: '',
-                    }));
-                    setTtnCities([]);
-                    setTtnWarehouses([]);
-                    setTtnError('');
-                  }}
-                  className={`${field} mt-1`}
-                >
-                  <option value="">Оберіть профіль Нової пошти</option>
-                  {ttnProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.name || 'Нова пошта'}{profile.is_default ? ' • за замовчуванням' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                className={field}
+                value={ttnForm.novapost_profile_id}
+                onChange={(e) => {
+                  setTtnForm((prev) => ({
+                    ...prev,
+                    novapost_profile_id: e.target.value,
+                    recipient_city: '',
+                    recipient_city_ref: '',
+                    recipient_warehouse: '',
+                    recipient_warehouse_ref: '',
+                  }));
+                  setTtnCities([]);
+                  setTtnWarehouses([]);
+                  setTtnError('');
+                }}
+                required
+              >
+                <option value="">Оберіть профіль</option>
+                {ttnProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name || 'Нова пошта'}{profile.is_default ? ' — за замовчуванням' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">
                   Одержувач
-                </label>
+                </span>
 
                 <input
+                  className={field}
                   value={ttnForm.recipient_name}
                   onChange={(e) =>
                     setTtnForm((prev) => ({
@@ -1021,16 +1110,17 @@ export default function StoreOrdersDictionaryBoard() {
                     }))
                   }
                   placeholder="ПІБ одержувача"
-                  className={`${field} mt-1`}
+                  required
                 />
-              </div>
+              </label>
 
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">
                   Телефон
-                </label>
+                </span>
 
                 <input
+                  className={field}
                   value={ttnForm.recipient_phone}
                   onChange={(e) =>
                     setTtnForm((prev) => ({
@@ -1039,93 +1129,252 @@ export default function StoreOrdersDictionaryBoard() {
                     }))
                   }
                   placeholder="380..."
-                  className={`${field} mt-1`}
+                  required
                 />
-              </div>
+              </label>
+            </div>
 
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black uppercase text-slate-400">
-                  Місто одержувача
-                </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                Місто
+              </span>
+
+              <input
+                className={field}
+                value={ttnForm.recipient_city}
+                onChange={(e) => searchTtnCities(e.target.value)}
+                placeholder="Почніть вводити місто"
+                required
+              />
+
+              {ttnCities.length > 0 && (
+                <div className="mt-2 max-h-44 overflow-auto rounded-2xl border border-slate-200 bg-white shadow">
+                  {ttnCities.map((city) => (
+                    <button
+                      key={city.ref}
+                      type="button"
+                      className="block w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50"
+                      onClick={() => selectTtnCity(city)}
+                    >
+                      {city.description}
+                      {city.area ? `, ${city.area}` : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                Відділення
+              </span>
+
+              <input
+                className={`${field} disabled:opacity-60 disabled:cursor-not-allowed`}
+                value={ttnForm.recipient_warehouse}
+                onFocus={() => searchTtnWarehouses()}
+                onChange={(e) => searchTtnWarehouses(e.target.value)}
+                disabled={!ttnForm.recipient_city_ref}
+                placeholder={
+                  ttnForm.recipient_city_ref
+                    ? 'Оберіть відділення'
+                    : 'Спочатку оберіть місто'
+                }
+                required
+              />
+
+              {ttnWarehouses.length > 0 && (
+                <div className="mt-2 max-h-44 overflow-auto rounded-2xl border border-slate-200 bg-white shadow">
+                  {ttnWarehouses.map((warehouse) => (
+                    <button
+                      key={warehouse.ref}
+                      type="button"
+                      className="block w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50"
+                      onClick={() => selectTtnWarehouse(warehouse)}
+                    >
+                      {warehouse.description}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                Опис посилки
+              </span>
+
+              <input
+                className={field}
+                value={ttnForm.description}
+                onChange={(e) =>
+                  setTtnForm((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+                placeholder="Автозапчастини"
+                required
+              />
+            </label>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Оціночна вартість
+                </span>
 
                 <input
-                  value={ttnForm.recipient_city}
-                  onChange={(e) => searchTtnCities(e.target.value)}
-                  placeholder="Почніть вводити місто, мінімум 2 символи"
-                  className={`${field} mt-1`}
-                />
-
-                {ttnCities.length > 0 && (
-                  <div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 space-y-2">
-                    {ttnCities.map((city) => (
-                      <button
-                        key={city.ref}
-                        type="button"
-                        onClick={() => selectTtnCity(city)}
-                        className="w-full text-left rounded-xl bg-slate-50 hover:bg-blue-50 px-3 py-2 transition"
-                      >
-                        <p className="text-sm font-black text-slate-800">
-                          {city.description}
-                        </p>
-                        <p className="text-xs font-bold text-slate-400">
-                          {[city.settlement_type, city.area].filter(Boolean).join(' • ') || 'Нова пошта'}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black uppercase text-slate-400">
-                  Відділення
-                </label>
-
-                <input
-                  value={ttnForm.recipient_warehouse}
-                  onChange={(e) => searchTtnWarehouses(e.target.value)}
-                  disabled={!ttnForm.recipient_city_ref}
-                  placeholder={
-                    ttnForm.recipient_city_ref
-                      ? 'Почніть вводити номер або адресу відділення'
-                      : 'Спочатку оберіть місто'
+                  className={field}
+                  type="number"
+                  min="1"
+                  value={ttnForm.cost}
+                  onChange={(e) =>
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      cost: e.target.value,
+                    }))
                   }
-                  className={`${field} mt-1 disabled:opacity-60 disabled:cursor-not-allowed`}
+                  required
                 />
+              </label>
 
-                {ttnWarehouses.length > 0 && (
-                  <div className="mt-2 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 space-y-2">
-                    {ttnWarehouses.map((warehouse) => (
-                      <button
-                        key={warehouse.ref}
-                        type="button"
-                        onClick={() => selectTtnWarehouse(warehouse)}
-                        className="w-full text-left rounded-xl bg-slate-50 hover:bg-blue-50 px-3 py-2 transition"
-                      >
-                        <p className="text-sm font-black text-slate-800">
-                          {warehouse.description}
-                        </p>
-                        <p className="text-xs font-bold text-slate-400">
-                          {warehouse.short_address || (warehouse.number ? `№${warehouse.number}` : 'Відділення Нової пошти')}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Вага
+                </span>
+
+                <input
+                  className={field}
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={ttnForm.weight}
+                  onChange={(e) =>
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      weight: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Місць
+                </span>
+
+                <input
+                  className={field}
+                  type="number"
+                  min="1"
+                  value={ttnForm.seats_amount}
+                  onChange={(e) =>
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      seats_amount: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
             </div>
 
-            <div className="grid gap-2 text-sm">
-              <Info label="Місто" value={ttnForm.recipient_city || 'Не обрано'} />
-              <Info label="Відділення" value={ttnForm.recipient_warehouse || 'Не обрано'} />
-              <Info label="Опис" value={ttnForm.description} />
-              <Info label="Вага" value={ttnForm.weight} />
-              <Info label="Місць" value={ttnForm.seats_amount} />
-              <Info label="Платник доставки" value={ttnForm.payer_type === 'Recipient' ? 'Одержувач' : 'Відправник'} />
-              <Info label="Післяплата" value={ttnForm.cod_enabled ? `Так, ${ttnForm.cod_amount || 0} ₴` : 'Ні'} />
-              <Info label="Профілі відправника" value={`${ttnProfiles.length} завантажено`} />
+            <div className="grid gap-3 md:grid-cols-2">
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Платник доставки
+                </span>
+
+                <select
+                  className={field}
+                  value={ttnForm.payer_type}
+                  onChange={(e) =>
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      payer_type: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="Recipient">Одержувач</option>
+                  <option value="Sender">Відправник</option>
+                </select>
+              </label>
+
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Спосіб оплати
+                </span>
+
+                <select
+                  className={field}
+                  value={ttnForm.payment_method}
+                  onChange={(e) =>
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      payment_method: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="Cash">Готівка</option>
+                  <option value="NonCash">Безготівка</option>
+                </select>
+              </label>
             </div>
-          </div>
+
+            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-black">
+              <input
+                type="checkbox"
+                checked={ttnForm.cod_enabled}
+                onChange={(e) =>
+                  setTtnForm((prev) => ({
+                    ...prev,
+                    cod_enabled: e.target.checked,
+                    cod_amount: e.target.checked ? prev.cod_amount : '',
+                  }))
+                }
+              />
+              Післяплата
+            </label>
+
+            {ttnForm.cod_enabled && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Сума післяплати
+                </span>
+
+                <input
+                  className={field}
+                  type="number"
+                  min="1"
+                  value={ttnForm.cod_amount}
+                  onChange={(e) =>
+                    setTtnForm((prev) => ({
+                      ...prev,
+                      cod_amount: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+            )}
+
+            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
+              <button
+                type="button"
+                className="rounded-2xl border border-slate-200 px-5 py-3 text-xs font-black uppercase text-slate-600 hover:bg-slate-50"
+                onClick={() => setModal(null)}
+              >
+                Скасувати
+              </button>
+
+              <button type="submit" className={greenBtn} disabled={busy}>
+                <Truck size={16} />
+                {busy ? 'Створюємо...' : 'Створити ТТН'}
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

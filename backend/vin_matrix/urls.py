@@ -5,6 +5,7 @@ from django.conf import settings
 from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
+from apps.core.billing_client_link_views import BillingAdminClientLinkView
 
 from apps.core.views import (
     LogoutView,

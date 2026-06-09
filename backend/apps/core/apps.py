@@ -12,4 +12,4 @@ class CoreConfig(AppConfig):
             from .billing_client_link_views import BillingAdminClientLinkView
 
             urlconf = import_module('vin_matrix.urls')
-            route = 'api/billing/admin/client-link/'
+            route =

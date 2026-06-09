@@ -168,6 +168,9 @@ urlpatterns = [
     path('api/export/backup/', BackupExportView.as_view(), name='export-backup'),
     path('api/import/legacy-clients/', LegacyClientsImportView.as_view(), name='import-legacy-clients'),
 
+    path('api/import/clients/', LegacyClientsImportView.as_view(), name='import-clients'),
+    path('api/import/legacy-clients/', LegacyClientsImportView.as_view(), name='import-legacy-clients'),
+    
     path('api/payments/', VisitPaymentListView.as_view(), name='visit-payments'),
     path('api/visits/<int:pk>/add-payment/', VisitAddPaymentView.as_view(), name='visit-add-payment'),
     path('api/visits/<int:pk>/mark-paid/', VisitMarkPaidView.as_view(), name='visit-mark-paid'),

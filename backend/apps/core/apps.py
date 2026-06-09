@@ -7,12 +7,7 @@ class CoreConfig(AppConfig):
     verbose_name = 'Базові сутності'
 
     def ready(self):
-        try:
-            from .db_repair import repair_database_schema
-            repair_database_schema()
-        except Exception as exc:
-            print(f"DB repair startup error: {exc}")
-
-        try:
-            from .db_repair_stock import repair_stock_schema
-           
+        repair_hooks = [
+            ('db_repair', 'repair_database_schema', 'DB repair startup'),
+            ('db_repair_stock', 'repair_stock_schema', 'Stock schema check'),
+            ('db_repair_payments', 'repair_payment

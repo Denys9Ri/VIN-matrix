@@ -1,10 +1,14 @@
-from django.conf import settings
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import include, path, re_path
-from django.views.static import serve
-from rest_framework.routers import DefaultRouter
+from django.urls import path, re_path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from apps.core.novapost_views import NovaPostDeliveryCreateView
 
-from apps.core.views import ChangePasswordView, LogoutView
-from apps.core.safe_crm_views import CRMTaskViewSet, Order
+
+def api_root(request):
+    return JsonResponse({'message': 'VIN-matrix API is running!'})
+
+urlpatterns = [
+    path('', api_root),
+    path('admin/', admin.site.urls),
+   

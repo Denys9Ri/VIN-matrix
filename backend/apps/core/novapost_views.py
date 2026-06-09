@@ -16,6 +16,25 @@ from .partner_views import get_user_company, repair_legacy_account
 NP_URL = 'https://api.novaposhta.ua/v2.0/json/'
 
 
+def safe_repair_novapost_schema():
+    """
+    Безпечний repair таблиць Нової пошти.
+
+    Важливо:
+    не запускаємо repair всередині transaction.atomic.
+    Якщо repair всередині транзакції ловить SQL-помилку, PostgreSQL переводить
+    всю транзакцію в стан "current transaction is aborted", і після цього падають
+    навіть звичайні SELECT/INSERT.
+    """
+    try:
+        if connection.in_atomic_block:
+            return
+
+        repair_novapost_schema()
+    except Exception as exc:
+        print(f'NovaPost DB repair skipped safely: {exc}')
+
+
 def clean(v, limit=None):
     v = str(v or '').strip()
     return v[:limit] if limit else v
@@ -104,7 +123,7 @@ def profile_row(row, secret=False):
 
 
 def get_profile(company_id, profile_id=None, secret=False):
-    repair_novapost_schema()
+    safe_repair_novapost_schema()
 
     profile_id = int_or_none(profile_id)
 
@@ -133,7 +152,7 @@ def get_profile(company_id, profile_id=None, secret=False):
 
 
 def profiles(company_id):
-    repair_novapost_schema()
+    safe_repair_novapost_schema()
 
     with connection.cursor() as c:
         c.execute(
@@ -191,7 +210,7 @@ def delivery_row(row):
 
 
 def get_delivery(company_id, visit_id):
-    repair_novapost_schema()
+    safe_repair_novapost_schema()
 
     with connection.cursor() as c:
         c.execute(
@@ -428,7 +447,7 @@ def delivery_status_is_final(status):
 
 
 def get_active_deliveries(company_id, limit=25):
-    repair_novapost_schema()
+    safe_repair_novapost_schema()
 
     try:
         limit = min(max(int(limit or 25), 1), 50)

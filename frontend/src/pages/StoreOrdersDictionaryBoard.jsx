@@ -284,6 +284,9 @@ export default function StoreOrdersDictionaryBoard() {
   const [quick, setQuick] = useState({ ...emptyQuick });
 
   const [ttnForm, setTtnForm] = useState({ ...emptyTtnForm });
+  const [ttnProfiles, setTtnProfiles] = useState([]);
+  const [ttnCities, setTtnCities] = useState([]);
+  const [ttnWarehouses, setTtnWarehouses] = useState([]);
   const [ttnError, setTtnError] = useState('');
 
   const loadDictionaries = async () => {
@@ -637,6 +640,9 @@ export default function StoreOrdersDictionaryBoard() {
       cod_amount: d.cod_amount || '',
     });
 
+    setTtnProfiles((prev) => prev);
+    setTtnCities([]);
+    setTtnWarehouses([]);
     setTtnError('');
     setModal('create-ttn');
   };
@@ -815,6 +821,9 @@ export default function StoreOrdersDictionaryBoard() {
               <Info label="Місць" value={ttnForm.seats_amount} />
               <Info label="Платник доставки" value={ttnForm.payer_type === 'Recipient' ? 'Одержувач' : 'Відправник'} />
               <Info label="Післяплата" value={ttnForm.cod_enabled ? `Так, ${ttnForm.cod_amount || 0} ₴` : 'Ні'} />
+              <Info label="Профілі відправника" value={`${ttnProfiles.length} завантажено`} />
+              <Info label="Знайдені міста" value={`${ttnCities.length} варіантів`} />
+              <Info label="Знайдені відділення" value={`${ttnWarehouses.length} варіантів`} />
             </div>
           </div>
         </Modal>

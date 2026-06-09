@@ -5,6 +5,7 @@ from django.conf import settings
 from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
+
 from apps.core.billing_client_link_views import BillingAdminClientLinkView
 
 from apps.core.views import (
@@ -138,6 +139,12 @@ urlpatterns = [
 
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
     path('api/activity/', ActivityLogView.as_view(), name='activity-log'),
+
+    path(
+        'api/billing/admin/client-link/',
+        BillingAdminClientLinkView.as_view(),
+        name='billing-admin-client-link',
+    ),
 
     path('api/payments/', VisitPaymentListView.as_view(), name='visit-payments'),
     path('api/visits/<int:pk>/add-payment/', VisitAddPaymentView.as_view(), name='visit-add-payment'),

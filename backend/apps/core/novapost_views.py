@@ -79,6 +79,31 @@ def normalize_payment_method(v):
     return 'NonCash' if v in ['noncash', 'NonCash'] else 'Cash'
 
 
+def normalize_np_phone(v):
+    digits = ''.join(ch for ch in str(v or '') if ch.isdigit())
+
+    if len(digits) == 10 and digits.startswith('0'):
+        return f'38{digits}'
+
+    if len(digits) == 9:
+        return f'380{digits}'
+
+    return digits or clean(v, 40)
+
+
+def np_error_text(raw):
+    if not isinstance(raw, dict):
+        return ''
+
+    errors = raw.get('errors') or []
+    warnings = raw.get('warnings') or []
+    info = raw.get('info') or []
+
+    parts = [str(x) for x in [*errors, *warnings, *info] if x]
+
+    return '; '.join(parts)
+
+
 def np_call(secret, model, method, props=None, timeout=20):
     payload = {
         'api' + 'Key': clean(secret),
@@ -374,6 +399,108 @@ def first_sender(secret):
     }
 
 
+def split_person_name(full_name):
+    parts = [x for x in clean(full_name).split() if x]
+
+    if not parts:
+        return {
+            'LastName': 'Покупець',
+            'FirstName': 'Новий',
+            'MiddleName': '',
+        }
+
+    if len(parts) == 1:
+        return {
+            'LastName': parts[0],
+            'FirstName': 'Новий',
+            'MiddleName': '',
+        }
+
+    if len(parts) == 2:
+        return {
+            'LastName': parts[0],
+            'FirstName': parts[1],
+            'MiddleName': '',
+        }
+
+    return {
+        'LastName': parts[0],
+        'FirstName': parts[1],
+        'MiddleName': ' '.join(parts[2:]),
+    }
+
+
+def get_or_create_recipient(secret, full_name, phone):
+    name = split_person_name(full_name)
+    normalized_phone = normalize_np_phone(phone)
+
+    save_response = np_call(
+        secret,
+        'Counterparty',
+        'save',
+        {
+            'CounterpartyProperty': 'Recipient',
+            'CounterpartyType': 'PrivatePerson',
+            'FirstName': name['FirstName'],
+            'MiddleName': name['MiddleName'],
+            'LastName': name['LastName'],
+            'Phone': normalized_phone,
+        },
+        timeout=20,
+    )
+
+    recipient = None
+    contact = None
+
+    if save_response.get('success') and save_response.get('data'):
+        recipient = save_response['data'][0]
+        contact_person = recipient.get('ContactPerson') or {}
+        contact_rows = contact_person.get('data') or []
+        contact = contact_rows[0] if contact_rows else None
+
+    if not recipient:
+        search_response = np_call(
+            secret,
+            'Counterparty',
+            'getCounterparties',
+            {
+                'CounterpartyProperty': 'Recipient',
+                'CounterpartyType': 'PrivatePerson',
+                'FindByString': clean(full_name, 120),
+                'Page': '1',
+            },
+            timeout=20,
+        )
+
+        if search_response.get('success') and search_response.get('data'):
+            recipient = search_response['data'][0]
+    else:
+        search_response = None
+
+    if recipient and not contact:
+        contacts_response = np_call(
+            secret,
+            'Counterparty',
+            'getCounterpartyContactPersons',
+            {
+                'Ref': recipient.get('Ref'),
+                'Page': '1',
+            },
+            timeout=20,
+        )
+
+        if contacts_response.get('success') and contacts_response.get('data'):
+            contact = contacts_response['data'][0]
+    else:
+        contacts_response = None
+
+    return recipient, contact, {
+        'save_response': save_response,
+        'search_response': search_response,
+        'contacts_response': contacts_response,
+    }
+
+
 def build_ttn(secret, profile, data):
     missing = []
 
@@ -396,10 +523,32 @@ def build_ttn(secret, profile, data):
     if missing:
         return None, 'Заповніть: ' + ', '.join(missing)
 
-    sender, contact, raw = first_sender(secret)
+    sender, sender_contact, sender_raw = first_sender(secret)
 
-    if not sender or not contact:
-        return None, 'Не вдалося отримати відправника з кабінету Нової пошти. Перевірте API-ключ.'
+    if not sender or not sender_contact:
+        reason = np_error_text(sender_raw)
+        return None, (
+            'Не вдалося отримати відправника з кабінету Нової пошти. '
+            + (reason or 'Перевірте API-ключ, відправника та контактну особу.')
+        )
+
+    recipient, recipient_contact, recipient_raw = get_or_create_recipient(
+        secret,
+        data.get('recipient_name'),
+        data.get('recipient_phone'),
+    )
+
+    if not recipient or not recipient_contact:
+        reason = (
+            np_error_text(recipient_raw.get('save_response'))
+            or np_error_text(recipient_raw.get('search_response'))
+            or np_error_text(recipient_raw.get('contacts_response'))
+        )
+
+        return None, (
+            'Не вдалося створити або знайти одержувача Нової пошти. '
+            + (reason or 'Перевірте ПІБ і телефон одержувача.')
+        )
 
     payer = normalize_payer(data.get('payer_type'))
     payment_method = normalize_payment_method(data.get('payment_method'))
@@ -407,6 +556,9 @@ def build_ttn(secret, profile, data):
     declared_value = data.get('declared_value')
     if declared_value in [None, '']:
         declared_value = data.get('cost')
+
+    sender_phone = normalize_np_phone(profile.get('sender_phone') or sender_contact.get('Phones'))
+    recipient_phone = normalize_np_phone(data.get('recipient_phone'))
 
     props = {
         'PayerType': payer,
@@ -418,14 +570,18 @@ def build_ttn(secret, profile, data):
         'Description': clean(data.get('description') or 'Автозапчастини', 120),
         'Cost': str(num(declared_value, 1) or 1),
         'Weight': str(num(data.get('weight'), 1) or 1),
+
         'CitySender': profile.get('sender_city_ref'),
         'Sender': sender.get('Ref'),
         'SenderAddress': profile.get('sender_warehouse_ref'),
-        'ContactSender': contact.get('Ref'),
-        'SendersPhone': clean(profile.get('sender_phone') or contact.get('Phones'), 40),
+        'ContactSender': sender_contact.get('Ref'),
+        'SendersPhone': sender_phone,
+
         'RecipientType': 'PrivatePerson',
+        'Recipient': recipient.get('Ref'),
+        'ContactRecipient': recipient_contact.get('Ref'),
         'RecipientName': clean(data.get('recipient_name'), 255),
-        'RecipientsPhone': clean(data.get('recipient_phone'), 40),
+        'RecipientsPhone': recipient_phone,
         'CityRecipient': clean(data.get('recipient_city_ref'), 120),
         'RecipientAddress': clean(data.get('recipient_warehouse_ref'), 120),
     }
@@ -576,7 +732,7 @@ def refresh_single_delivery_status(company, user, delivery):
         return result
 
     if not raw.get('success'):
-        result['error'] = '; '.join(map(str, raw.get('errors') or raw.get('warnings') or [])) or 'Не вдалося отримати статус.'
+        result['error'] = np_error_text(raw) or 'Не вдалося отримати статус.'
         result['raw'] = raw
         return result
 
@@ -848,12 +1004,12 @@ class NovaPostProfileTestView(APIView):
                 {'Limit': 1},
             )
             ok = bool(raw.get('success'))
-            errors = raw.get('errors') or raw.get('warnings') or []
+            errors = np_error_text(raw)
 
             return Response(
                 {
                     'ok': ok,
-                    'message': 'API-ключ працює.' if ok else '; '.join(map(str, errors)) or 'Ключ не підтверджено.',
+                    'message': 'API-ключ працює.' if ok else errors or 'Ключ не підтверджено.',
                     'api_key_masked': masked(profile.get('api_key')),
                 },
                 status=200 if ok else 400,
@@ -898,7 +1054,7 @@ class NovaPostCitiesView(APIView):
         if not raw.get('success'):
             return Response(
                 {
-                    'error': '; '.join(map(str, raw.get('errors') or raw.get('warnings') or [])) or 'Помилка пошуку міст.',
+                    'error': np_error_text(raw) or 'Помилка пошуку міст.',
                 },
                 status=400,
             )
@@ -955,7 +1111,7 @@ class NovaPostWarehousesView(APIView):
         if not raw.get('success'):
             return Response(
                 {
-                    'error': '; '.join(map(str, raw.get('errors') or raw.get('warnings') or [])) or 'Помилка пошуку відділень.',
+                    'error': np_error_text(raw) or 'Помилка пошуку відділень.',
                 },
                 status=400,
             )
@@ -1065,7 +1221,7 @@ class NovaPostDeliveryCreateView(APIView):
         if not raw.get('success'):
             return Response(
                 {
-                    'error': '; '.join(map(str, raw.get('errors') or raw.get('warnings') or [])) or 'Нова пошта не створила ТТН.',
+                    'error': np_error_text(raw) or 'Нова пошта не створила ТТН.',
                     'raw': raw,
                 },
                 status=400,

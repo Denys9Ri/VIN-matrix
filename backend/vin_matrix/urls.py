@@ -23,6 +23,13 @@ from apps.core.data_exchange_views import (
     LegacyClientsImportView,
 )
 
+from apps.core.company_option_views import (
+    CompanyOptionListCreateView,
+    CompanyOptionDetailView,
+    CompanyOptionBulkView,
+    CompanyDictionariesView,
+)
+
 from apps.core.views import (
     LogoutView,
     ChangePasswordView,
@@ -114,22 +121,6 @@ def api_root(request):
     })
 
 
-def dictionaries_stub(request):
-    return JsonResponse({
-        "store_order_status": [],
-        "part_status": [],
-        "visit_status": [],
-        "payment_status": [],
-        "sto_visit_status": [],
-    })
-
-
-def settings_options_stub(request):
-    return JsonResponse({
-        "items": [],
-    })
-
-
 urlpatterns = [
     path('', api_root),
     path('admin/', admin.site.urls),
@@ -145,8 +136,26 @@ urlpatterns = [
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/profile/change-password/', ChangePasswordView.as_view(), name='change-password-alt'),
 
-    path('api/settings/dictionaries/', dictionaries_stub, name='settings-dictionaries'),
-    path('api/settings/options/', settings_options_stub, name='settings-options'),
+    path(
+        'api/settings/dictionaries/',
+        CompanyDictionariesView.as_view(),
+        name='settings-dictionaries',
+    ),
+    path(
+        'api/settings/options/',
+        CompanyOptionListCreateView.as_view(),
+        name='settings-options',
+    ),
+    path(
+        'api/settings/options/bulk/',
+        CompanyOptionBulkView.as_view(),
+        name='settings-options-bulk',
+    ),
+    path(
+        'api/settings/options/<int:pk>/',
+        CompanyOptionDetailView.as_view(),
+        name='settings-option-detail',
+    ),
 
     path('api/search-parts/', PartSearchView.as_view(), name='search-parts'),
     path('api/parts/search/', PartSearchView.as_view(), name='parts-search-alt'),
@@ -166,11 +175,9 @@ urlpatterns = [
     path('api/export/clients/', ClientsExportView.as_view(), name='export-clients'),
     path('api/export/inventory/', InventoryExportView.as_view(), name='export-inventory'),
     path('api/export/backup/', BackupExportView.as_view(), name='export-backup'),
-    path('api/import/legacy-clients/', LegacyClientsImportView.as_view(), name='import-legacy-clients'),
-
     path('api/import/clients/', LegacyClientsImportView.as_view(), name='import-clients'),
     path('api/import/legacy-clients/', LegacyClientsImportView.as_view(), name='import-legacy-clients'),
-    
+
     path('api/payments/', VisitPaymentListView.as_view(), name='visit-payments'),
     path('api/visits/<int:pk>/add-payment/', VisitAddPaymentView.as_view(), name='visit-add-payment'),
     path('api/visits/<int:pk>/mark-paid/', VisitMarkPaidView.as_view(), name='visit-mark-paid'),

@@ -87,6 +87,16 @@ const emptyTtnForm = {
 
 const arr = (v) => (Array.isArray(v) ? v : []);
 
+const optionLabel = (options, key) => {
+  const item = arr(options).find(
+    (option) =>
+      String(option.key) === String(key) ||
+      String(option.label) === String(key)
+  );
+
+  return item?.label || key || '—';
+};
+
 const num = (v) => Number(String(v || 0).replace(',', '.')) || 0;
 
 const money = (v) =>

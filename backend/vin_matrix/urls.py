@@ -4,7 +4,6 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt import views as jwt_views
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from apps.core.views import ChangePasswordView, LogoutView, PlatformClientViewSet, ProfileSettingsView, RegisterView
-from apps.core.safe_crm_views import CRMTask
+from apps.core.novapost_views import NovaPostDeliveryCreateView

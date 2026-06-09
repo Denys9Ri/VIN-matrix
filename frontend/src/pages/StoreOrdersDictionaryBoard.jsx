@@ -811,6 +811,55 @@ export default function StoreOrdersDictionaryBoard() {
     setTtnWarehouses([]);
   };
 
+  const refreshNovaPostActive = async ({ silent = false, limit = 25 } = {}) => {
+    if (!silent) {
+      setBusy(true);
+      setMessage('');
+    }
+
+    try {
+      const r = await api.post('/api/delivery/novapost/refresh-active/', {
+        limit,
+      });
+
+      const checked = r.data?.checked ?? 0;
+      const updated = r.data?.updated ?? 0;
+      const errors = r.data?.errors ?? 0;
+
+      if (selected?.id) {
+        await refresh(selected.id);
+      } else {
+        await load();
+      }
+
+      if (!silent) {
+        setMessage(
+          r.data?.message ||
+            `Статуси Нової пошти оновлено. Перевірено: ${checked}. Оновлено: ${updated}. Помилок: ${errors}.`
+        );
+      }
+
+      return r.data || null;
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Не вдалося оновити статуси Нової пошти.';
+
+      if (!silent) {
+        setMessage(errorMessage);
+      } else {
+        console.warn(errorMessage);
+      }
+
+      return null;
+    } finally {
+      if (!silent) {
+        setBusy(false);
+      }
+    }
+  };
+
   const createNovaPostTtn = async (e) => {
     e.preventDefault();
 
@@ -885,8 +934,22 @@ export default function StoreOrdersDictionaryBoard() {
 
       await refresh(selected.id);
 
+      const refreshResult = await refreshNovaPostActive({
+        silent: true,
+        limit: 10,
+      });
+
       setModal(null);
-      setMessage(ttn ? `ТТН створено: ${ttn}` : 'ТТН створено.');
+
+      if (refreshResult) {
+        setMessage(
+          ttn
+            ? `ТТН створено: ${ttn}. Статуси Нової пошти перевірено: ${refreshResult.checked || 0}. Оновлено: ${refreshResult.updated || 0}.`
+            : `ТТН створено. Статуси Нової пошти перевірено: ${refreshResult.checked || 0}. Оновлено: ${refreshResult.updated || 0}.`
+        );
+      } else {
+        setMessage(ttn ? `ТТН створено: ${ttn}` : 'ТТН створено.');
+      }
     } catch (e2) {
       setTtnError(
         e2.response?.data?.error ||
@@ -1021,6 +1084,8 @@ export default function StoreOrdersDictionaryBoard() {
           onPrepay={savePrepay}
           onUpdateDelivery={updateDelivery}
           onCreateTtn={openCreateTtn}
+          onRefreshNovaPost={refreshNovaPostActive}
+          busy={busy}
           onCancel={() => setModal('cancel')}
           partForm={partForm}
           setPartForm={setPartForm}
@@ -1561,6 +1626,8 @@ function Drawer(p) {
     onPrepay,
     onUpdateDelivery,
     onCreateTtn,
+    onRefreshNovaPost,
+    busy,
     onCancel,
     partForm,
     setPartForm,
@@ -1645,6 +1712,8 @@ function Drawer(p) {
             onPatch={onPatch}
             onUpdateDelivery={onUpdateDelivery}
             onCreateTtn={onCreateTtn}
+            onRefreshNovaPost={onRefreshNovaPost}
+            busy={busy}
           />
         )}
       </div>
@@ -1925,7 +1994,7 @@ function PartsPanel({
   );
 }
 
-function DeliveryPanel({ delivery, onPatch, onUpdateDelivery, onCreateTtn }) {
+function DeliveryPanel({ delivery, onPatch, onUpdateDelivery, onCreateTtn, onRefreshNovaPost, busy }) {
   const [ttn, setTtn] = useState(delivery.ttn || '');
 
   useEffect(() => {
@@ -1964,6 +2033,16 @@ function DeliveryPanel({ delivery, onPatch, onUpdateDelivery, onCreateTtn }) {
         <button type="button" className={primaryBtn} onClick={onCreateTtn}>
           <Truck size={16} />
           Створити ТТН
+        </button>
+
+        <button
+          type="button"
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-slate-200 px-5 py-3 text-xs font-black uppercase text-slate-700 shadow-sm transition hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => onRefreshNovaPost?.()}
+          disabled={busy}
+        >
+          <Truck size={16} />
+          {busy ? 'Оновлюємо...' : 'Оновити статуси ТТН'}
         </button>
 
         <button

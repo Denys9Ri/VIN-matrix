@@ -248,7 +248,7 @@ export default function Visits() {
   const [workPosts, setWorkPosts] = useState([]);
   const [mechanics, setMechanics] = useState([]);
   const [settings, setSettings] = useState({ role: 'owner', permissions: {}, company: {} });
-  const [stoVisitStatuses, setStoVisitStatuses] = useState(fallbackStoVisitStatuses);
+  const [stoVisitStatuses, setStoVisitStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState(dateISO());

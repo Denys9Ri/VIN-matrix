@@ -282,21 +282,200 @@ def build_empty_mechanic_row(employee=None, user=None):
         'parts_commission': Decimal('0'),
         'commission_total': Decimal('0'),
         'average_commission_percent': 0,
+        '_visit_ids': set(),
+        '_details': [],
     })
     return base
+
+
+def mechanic_is_parts_commission_eligible(employee):
+    if not employee:
+        return False
+    if not getattr(employee, 'is_salary_active', True):
+        return False
+    if getattr(employee, 'salary_scheme', '') != 'services_and_parts_profit':
+        return False
+    return money(getattr(employee, 'parts_commission_percent', 0)) > 0
+
+
+def ensure_mechanic_row(mechanics, user, employee=None):
+    if not user:
+        return None
+    if user.id not in mechanics:
+        mechanics[user.id] = build_empty_mechanic_row(employee=employee, user=user)
+    return mechanics[user.id]
+
+
+def count_mechanic_visit(row, visit_id):
+    if row is None or not visit_id:
+        return
+    if '_visit_ids' not in row:
+        row['_visit_ids'] = set()
+    if visit_id not in row['_visit_ids']:
+        row['_visit_ids'].add(visit_id)
+        row['visits_count'] += 1
+
+
+def add_parts_commission_to_row(row, parts_profit, parts_commission):
+    if row is None or parts_commission <= 0:
+        return
+    row['parts_profit'] += parts_profit
+    row['parts_commission'] += parts_commission
+    row['commission_total'] += parts_commission
+
+
+def add_detail_to_row(row, detail):
+    if row is None or not detail:
+        return
+    if '_details' not in row:
+        row['_details'] = []
+    row['_details'].append(detail)
+
+
+def detail_date_label(dt):
+    if not dt:
+        return ''
+    try:
+        return timezone.localtime(dt).strftime('%d.%m.%Y')
+    except Exception:
+        return str(dt)[:10]
+
+
+def build_visit_detail(visit, metric_dt, post, services=None, parts=None):
+    return {
+        'date': timezone.localtime(metric_dt).date().isoformat() if metric_dt else '',
+        'date_label': detail_date_label(metric_dt),
+        'created_at': metric_dt.isoformat() if metric_dt else None,
+        'visit_id': getattr(visit, 'id', None),
+        'client': getattr(visit, 'client', '') or '',
+        'phone': getattr(visit, 'phone', '') or '',
+        'plate': getattr(visit, 'plate', '') or '',
+        'status': getattr(visit, 'status', '') or '',
+        'work_post': getattr(post, 'name', None) or 'Без поста',
+        'services': services or [],
+        'parts': parts or [],
+        'services_revenue': Decimal('0'),
+        'service_commission': Decimal('0'),
+        'parts_profit': Decimal('0'),
+        'parts_commission': Decimal('0'),
+        'commission_total': Decimal('0'),
+    }
+
+
+def normalize_part_detail(part_item, ratio, employee_percent):
+    ratio = money(ratio)
+    allocated_profit = money(part_item.get('profit')) * ratio
+    commission = allocated_profit * money(employee_percent) / Decimal('100')
+    return {
+        'brand': part_item.get('brand') or '',
+        'article': part_item.get('article') or '',
+        'name': part_item.get('name') or 'Запчастина',
+        'quantity': round_number(part_item.get('quantity'), 2),
+        'revenue': round_money(part_item.get('revenue')),
+        'cost': round_money(part_item.get('cost')),
+        'profit': round_money(part_item.get('profit')),
+        'allocated_profit': round_money(allocated_profit),
+        'commission_percent': round_money(employee_percent),
+        'commission_amount': round_money(commission),
+    }
+
+
+def normalize_service_detail(service_item):
+    return {
+        'name': service_item.get('name') or 'Робота',
+        'quantity': round_number(service_item.get('quantity'), 2),
+        'revenue': round_money(service_item.get('revenue')),
+        'commission_percent': round_money(service_item.get('commission_percent')),
+        'commission_amount': round_money(service_item.get('commission_amount')),
+    }
+
+
+def normalize_visit_detail(detail):
+    services_revenue = money(detail.get('services_revenue'))
+    service_commission = money(detail.get('service_commission'))
+    parts_profit = money(detail.get('parts_profit'))
+    parts_commission = money(detail.get('parts_commission'))
+    total = service_commission + parts_commission
+    return {
+        'date': detail.get('date'),
+        'date_label': detail.get('date_label'),
+        'created_at': detail.get('created_at'),
+        'visit_id': detail.get('visit_id'),
+        'client': detail.get('client') or '',
+        'phone': detail.get('phone') or '',
+        'plate': detail.get('plate') or '',
+        'status': detail.get('status') or '',
+        'work_post': detail.get('work_post') or 'Без поста',
+        'services_revenue': round_money(services_revenue),
+        'service_commission': round_money(service_commission),
+        'parts_profit': round_money(parts_profit),
+        'parts_commission': round_money(parts_commission),
+        'commission_total': round_money(total),
+        'services': [normalize_service_detail(item) for item in detail.get('services', [])],
+        'parts': detail.get('parts', []),
+        'url': f'/visits?visit_id={detail.get("visit_id")}',
+    }
+
+
+def normalize_mechanic_history(details):
+    groups = {}
+    for raw in details or []:
+        detail = normalize_visit_detail(raw)
+        key = detail.get('date') or 'unknown'
+        if key not in groups:
+            groups[key] = {
+                'date': key,
+                'label': detail.get('date_label') or key,
+                'visits_count': 0,
+                'services_revenue': Decimal('0'),
+                'service_commission': Decimal('0'),
+                'parts_profit': Decimal('0'),
+                'parts_commission': Decimal('0'),
+                'commission_total': Decimal('0'),
+                'items': [],
+            }
+        g = groups[key]
+        g['visits_count'] += 1
+        g['services_revenue'] += money(detail.get('services_revenue'))
+        g['service_commission'] += money(detail.get('service_commission'))
+        g['parts_profit'] += money(detail.get('parts_profit'))
+        g['parts_commission'] += money(detail.get('parts_commission'))
+        g['commission_total'] += money(detail.get('commission_total'))
+        g['items'].append(detail)
+
+    normalized = []
+    for item in groups.values():
+        item['items'] = sorted(item['items'], key=lambda d: d.get('created_at') or '', reverse=True)
+        normalized.append({
+            'date': item['date'],
+            'label': item['label'],
+            'visits_count': item['visits_count'],
+            'services_revenue': round_money(item['services_revenue']),
+            'service_commission': round_money(item['service_commission']),
+            'parts_profit': round_money(item['parts_profit']),
+            'parts_commission': round_money(item['parts_commission']),
+            'commission_total': round_money(item['commission_total']),
+            'items': item['items'],
+        })
+    return sorted(normalized, key=lambda item: item.get('date') or '', reverse=True)
 
 
 def normalize_mechanic_row(row):
     service_revenue = row.get('services_revenue', Decimal('0'))
     commission_total = row.get('commission_total', Decimal('0'))
+    details = row.get('_details') or []
+    history = normalize_mechanic_history(details)
+    clean_row = {key: value for key, value in row.items() if not str(key).startswith('_')}
     return {
-        **row,
+        **clean_row,
         'services_revenue': round_money(service_revenue),
         'parts_profit': round_money(row.get('parts_profit', 0)),
         'service_commission': round_money(row.get('service_commission', 0)),
         'parts_commission': round_money(row.get('parts_commission', 0)),
         'commission_total': round_money(commission_total),
         'average_commission_percent': percent(commission_total, service_revenue) if service_revenue else round_number(row.get('commission_percent', 0), 1),
+        'history_count': len(details),
+        'history_by_date': history,
     }
 
 
@@ -502,6 +681,10 @@ class AnalyticsSummaryView(APIView):
                 work_posts[post_key]['active_count'] += 1
 
             if is_completed and not is_cancelled:
+                service_revenue_by_mechanic = defaultdict(lambda: Decimal('0'))
+                visit_parts_items = []
+                mechanic_visit_details = {}
+
                 for part in getattr(visit, 'parts', []).all():
                     qty, revenue, cost, profit = part_totals(part)
                     brand = str(getattr(part, 'brand', '') or '').strip()
@@ -515,6 +698,15 @@ class AnalyticsSummaryView(APIView):
                     products[product_key]['revenue'] += revenue
                     products[product_key]['cost'] += cost
                     products[product_key]['profit'] += profit
+                    visit_parts_items.append({
+                        'brand': brand,
+                        'article': article,
+                        'name': name or article or brand or 'Запчастина',
+                        'quantity': qty,
+                        'revenue': revenue,
+                        'cost': cost,
+                        'profit': profit,
+                    })
 
                 for service in getattr(visit, 'services', []).all():
                     service_name = str(getattr(service, 'name', '') or 'Робота').strip()
@@ -530,29 +722,93 @@ class AnalyticsSummaryView(APIView):
                     mechanic_user = getattr(service, 'mechanic', None)
                     if mechanic_user:
                         employee = employees_by_user_id.get(mechanic_user.id)
-                        if mechanic_user.id not in mechanics:
-                            mechanics[mechanic_user.id] = build_empty_mechanic_row(employee=employee, user=mechanic_user)
-                        row = mechanics[mechanic_user.id]
+                        row = ensure_mechanic_row(mechanics, mechanic_user, employee=employee)
                         row['services_count'] += 1
                         row['services_revenue'] += svc_total
                         row['service_commission'] += svc_commission
                         row['commission_total'] += svc_commission
+                        count_mechanic_visit(row, visit.id)
+                        service_revenue_by_mechanic[mechanic_user.id] += svc_total
 
-            responsible = getattr(visit, 'responsible_mechanic', None)
-            if is_completed and responsible:
-                employee = employees_by_user_id.get(responsible.id)
-                if responsible.id not in mechanics:
-                    mechanics[responsible.id] = build_empty_mechanic_row(employee=employee, user=responsible)
-                mechanics[responsible.id]['visits_count'] += 1
+                        if mechanic_user.id not in mechanic_visit_details:
+                            mechanic_visit_details[mechanic_user.id] = build_visit_detail(visit, metric_dt, post)
+                        detail = mechanic_visit_details[mechanic_user.id]
+                        detail['services_revenue'] += svc_total
+                        detail['service_commission'] += svc_commission
+                        detail['commission_total'] += svc_commission
+                        detail['services'].append({
+                            'name': service_name,
+                            'quantity': money(getattr(service, 'quantity', 1)) or Decimal('1'),
+                            'revenue': svc_total,
+                            'commission_percent': money(getattr(service, 'commission_percent', 0)),
+                            'commission_amount': svc_commission,
+                        })
 
-                if employee and getattr(employee, 'is_salary_active', True) and getattr(employee, 'salary_scheme', '') == 'services_and_parts_profit':
-                    parts_commission = totals['parts_profit'] * money(getattr(employee, 'parts_commission_percent', 0)) / Decimal('100')
-                    mechanics[responsible.id]['parts_profit'] += totals['parts_profit']
-                    mechanics[responsible.id]['parts_commission'] += parts_commission
-                    mechanics[responsible.id]['commission_total'] += parts_commission
-                    summary['mechanic_commission'] += parts_commission
-                    chart[key]['mechanic_commission'] += parts_commission
-                    work_posts[post_key]['mechanic_commission'] += parts_commission
+                responsible = getattr(visit, 'responsible_mechanic', None)
+                responsible_employee = employees_by_user_id.get(responsible.id) if responsible else None
+                responsible_row = ensure_mechanic_row(mechanics, responsible, employee=responsible_employee) if responsible else None
+                if responsible_row:
+                    count_mechanic_visit(responsible_row, visit.id)
+
+                parts_commission_total = Decimal('0')
+
+                # Пріоритет 1: якщо у візиті обраний відповідальний майстер і в нього ввімкнено
+                # схему "роботи + маржа запчастин", увесь відсоток від маржі запчастин іде йому.
+                if mechanic_is_parts_commission_eligible(responsible_employee):
+                    employee_percent = money(getattr(responsible_employee, 'parts_commission_percent', 0))
+                    parts_commission = totals['parts_profit'] * employee_percent / Decimal('100')
+                    add_parts_commission_to_row(responsible_row, totals['parts_profit'], parts_commission)
+                    parts_commission_total += parts_commission
+
+                    if responsible.id not in mechanic_visit_details:
+                        mechanic_visit_details[responsible.id] = build_visit_detail(visit, metric_dt, post)
+                    detail = mechanic_visit_details[responsible.id]
+                    detail['parts_profit'] += totals['parts_profit']
+                    detail['parts_commission'] += parts_commission
+                    detail['commission_total'] += parts_commission
+                    detail['parts'].extend([normalize_part_detail(part_item, Decimal('1'), employee_percent) for part_item in visit_parts_items])
+
+                # Пріоритет 2: якщо відповідальний майстер не заданий або в нього немає такої схеми,
+                # відсоток від запчастин отримують майстри, які фактично виконували роботи у цьому візиті.
+                # Якщо робіт кілька — маржу запчастин ділимо пропорційно сумі робіт кожного майстра.
+                elif totals['parts_profit'] > 0 and service_revenue_by_mechanic:
+                    eligible_ids = [
+                        user_id for user_id in service_revenue_by_mechanic.keys()
+                        if mechanic_is_parts_commission_eligible(employees_by_user_id.get(user_id))
+                    ]
+                    eligible_revenue_total = sum((service_revenue_by_mechanic[user_id] for user_id in eligible_ids), Decimal('0'))
+                    split_count = Decimal(len(eligible_ids) or 1)
+
+                    for user_id in eligible_ids:
+                        employee = employees_by_user_id.get(user_id)
+                        row = mechanics.get(user_id)
+                        if eligible_revenue_total > 0:
+                            allocated_parts_profit = totals['parts_profit'] * service_revenue_by_mechanic[user_id] / eligible_revenue_total
+                        else:
+                            allocated_parts_profit = totals['parts_profit'] / split_count
+
+                        employee_percent = money(getattr(employee, 'parts_commission_percent', 0))
+                        parts_commission = allocated_parts_profit * employee_percent / Decimal('100')
+                        add_parts_commission_to_row(row, allocated_parts_profit, parts_commission)
+                        parts_commission_total += parts_commission
+
+                        if user_id not in mechanic_visit_details:
+                            mechanic_visit_details[user_id] = build_visit_detail(visit, metric_dt, post)
+                        detail = mechanic_visit_details[user_id]
+                        detail['parts_profit'] += allocated_parts_profit
+                        detail['parts_commission'] += parts_commission
+                        detail['commission_total'] += parts_commission
+                        ratio = (allocated_parts_profit / totals['parts_profit']) if totals['parts_profit'] else Decimal('0')
+                        detail['parts'].extend([normalize_part_detail(part_item, ratio, employee_percent) for part_item in visit_parts_items])
+
+                for user_id, detail in mechanic_visit_details.items():
+                    if money(detail.get('commission_total')) > 0:
+                        add_detail_to_row(mechanics.get(user_id), detail)
+
+                if parts_commission_total > 0:
+                    summary['mechanic_commission'] += parts_commission_total
+                    chart[key]['mechanic_commission'] += parts_commission_total
+                    work_posts[post_key]['mechanic_commission'] += parts_commission_total
 
         summary['net_profit'] = summary['gross_profit'] - summary['mechanic_commission']
         summary['average_check'] = summary['revenue'] / summary['completed_orders_count'] if summary['completed_orders_count'] else Decimal('0')

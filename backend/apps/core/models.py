@@ -71,6 +71,87 @@ class WorkPost(models.Model):
     def __str__(self):
         return f"{self.company_id}: {self.name}"
 
+class StoExpense(models.Model):
+    CATEGORY_RENT = 'rent'
+    CATEGORY_UTILITIES = 'utilities'
+    CATEGORY_ADMIN_SALARY = 'admin_salary'
+    CATEGORY_TOOLS = 'tools'
+    CATEGORY_EQUIPMENT = 'equipment'
+    CATEGORY_EQUIPMENT_REPAIR = 'equipment_repair'
+    CATEGORY_CONSUMABLES = 'consumables'
+    CATEGORY_MARKETING = 'marketing'
+    CATEGORY_TAXES = 'taxes'
+    CATEGORY_BANK_FEES = 'bank_fees'
+    CATEGORY_DELIVERY = 'delivery'
+    CATEGORY_FUEL = 'fuel'
+    CATEGORY_SOFTWARE = 'software'
+    CATEGORY_CLEANING = 'cleaning'
+    CATEGORY_OTHER = 'other'
+
+    CATEGORY_CHOICES = [
+        (CATEGORY_RENT, 'Оренда'),
+        (CATEGORY_UTILITIES, 'Комунальні'),
+        (CATEGORY_ADMIN_SALARY, 'Зарплата адміністратора / персоналу'),
+        (CATEGORY_TOOLS, 'Інструмент'),
+        (CATEGORY_EQUIPMENT, 'Обладнання'),
+        (CATEGORY_EQUIPMENT_REPAIR, 'Ремонт обладнання'),
+        (CATEGORY_CONSUMABLES, 'Витратні матеріали'),
+        (CATEGORY_MARKETING, 'Маркетинг / реклама'),
+        (CATEGORY_TAXES, 'Податки'),
+        (CATEGORY_BANK_FEES, 'Банківські комісії'),
+        (CATEGORY_DELIVERY, 'Доставка / логістика'),
+        (CATEGORY_FUEL, 'Пальне'),
+        (CATEGORY_SOFTWARE, 'Програми / підписки'),
+        (CATEGORY_CLEANING, 'Прибирання / господарські витрати'),
+        (CATEGORY_OTHER, 'Інше'),
+    ]
+
+    PAYMENT_CASH = 'cash'
+    PAYMENT_CARD = 'card'
+    PAYMENT_BANK = 'bank'
+    PAYMENT_OTHER = 'other'
+    PAYMENT_METHOD_CHOICES = [
+        (PAYMENT_CASH, 'Готівка'),
+        (PAYMENT_CARD, 'Картка'),
+        (PAYMENT_BANK, 'Рахунок / банк'),
+        (PAYMENT_OTHER, 'Інше'),
+    ]
+
+    RECURRING_NONE = 'none'
+    RECURRING_MONTHLY = 'monthly'
+    RECURRING_WEEKLY = 'weekly'
+    RECURRING_YEARLY = 'yearly'
+    RECURRING_CHOICES = [
+        (RECURRING_NONE, 'Разова витрата'),
+        (RECURRING_WEEKLY, 'Щотижня'),
+        (RECURRING_MONTHLY, 'Щомісяця'),
+        (RECURRING_YEARLY, 'Щороку'),
+    ]
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='sto_expenses')
+    date = models.DateField()
+    category = models.CharField(max_length=60, choices=CATEGORY_CHOICES, default=CATEGORY_OTHER)
+    title = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_method = models.CharField(max_length=40, choices=PAYMENT_METHOD_CHOICES, default=PAYMENT_CASH)
+    comment = models.TextField(blank=True, null=True)
+    is_recurring = models.BooleanField(default=False)
+    recurring_period = models.CharField(max_length=20, choices=RECURRING_CHOICES, default=RECURRING_NONE)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_sto_expenses')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-id']
+        indexes = [
+            models.Index(fields=['company', 'date']),
+            models.Index(fields=['company', 'category', 'date']),
+        ]
+
+    def __str__(self):
+        return f"{self.company_id}: {self.date} — {self.title} — {self.amount}"
+
+
 class Visit(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='visits')
     plate = models.CharField(max_length=20)

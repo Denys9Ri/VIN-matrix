@@ -221,6 +221,49 @@ def part_totals(part):
     return qty, revenue, cost, profit
 
 
+def normalize_supplier_name(value):
+    """
+    Групуємо оборот саме по постачальнику, а не по складу.
+    Приклади:
+    - Vesna-auto (Київ) -> Vesna-auto
+    - Vesna-auto (Закарпаття) -> Vesna-auto
+    - Техномир (METR (2 дн.)) -> Техномир
+    - Мій склад (Мій склад) -> Мій склад
+    """
+    raw = str(value or '').strip()
+    if not raw:
+        return 'Без постачальника'
+
+    name = ' '.join(raw.replace('\n', ' ').split()).strip()
+    lowered = name.lower()
+
+    if 'мій склад' in lowered or 'мой склад' in lowered:
+        return 'Мій склад'
+
+    # Забираємо склад/місто/термін доставки у дужках в кінці назви.
+    # Працює і для вкладених дужок: "Техномир (METR (2 дн.))".
+    while name.endswith(')') and '(' in name:
+        start = name.find('(')
+        if start <= 0:
+            break
+        name = name[:start].strip()
+        lowered = name.lower()
+
+    # Невелика канонізація популярних назв, щоб різні регістри не дробили статистику.
+    if lowered.startswith('vesna') or 'весна' in lowered:
+        return 'Vesna-auto'
+    if 'omega' in lowered or 'омега' in lowered:
+        return 'Omega'
+    if 'техномир' in lowered or 'tehnomir' in lowered or 'technomir' in lowered:
+        return 'Техномир'
+
+    return name or raw or 'Без постачальника'
+
+
+def supplier_group_key(value):
+    return normalize_supplier_name(value).casefold()
+
+
 def visit_totals(visit):
     parts_revenue = Decimal('0')
     parts_cost = Decimal('0')
@@ -575,6 +618,7 @@ class AnalyticsSummaryView(APIView):
         })
         suppliers = defaultdict(lambda: {
             'name': 'Без постачальника',
+            'raw_names': set(),
             'quantity': Decimal('0'),
             'parts_count': 0,
             'visits': set(),
@@ -745,9 +789,11 @@ class AnalyticsSummaryView(APIView):
                     products[product_key]['cost'] += cost
                     products[product_key]['profit'] += profit
 
-                    supplier_name = str(getattr(part, 'supplier', '') or '').strip() or 'Без постачальника'
-                    supplier_key = supplier_name.lower()
+                    supplier_raw_name = str(getattr(part, 'supplier', '') or '').strip() or 'Без постачальника'
+                    supplier_name = normalize_supplier_name(supplier_raw_name)
+                    supplier_key = supplier_group_key(supplier_raw_name)
                     suppliers[supplier_key]['name'] = supplier_name
+                    suppliers[supplier_key]['raw_names'].add(supplier_raw_name)
                     suppliers[supplier_key]['quantity'] += qty
                     suppliers[supplier_key]['parts_count'] += 1
                     suppliers[supplier_key]['visits'].add(visit.id)
@@ -944,6 +990,8 @@ class AnalyticsSummaryView(APIView):
         for item in suppliers.values():
             supplier_rows.append({
                 'name': item['name'] or 'Без постачальника',
+                'variants_count': len(item.get('raw_names') or []),
+                'raw_names': sorted(list(item.get('raw_names') or []))[:8],
                 'quantity': round_number(item['quantity'], 2),
                 'parts_count': item['parts_count'],
                 'visits_count': len(item['visits']),

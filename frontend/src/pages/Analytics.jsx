@@ -1,198 +1,409 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { TrendingUp, DollarSign, Activity, Calendar, Package, Wrench, Wallet, BarChart, Loader2 } from 'lucide-react';
+import {
+  TrendingUp,
+  DollarSign,
+  Activity,
+  Calendar,
+  Package,
+  Wrench,
+  Wallet,
+  BarChart,
+  Loader2,
+  Users,
+  Building2,
+  AlertTriangle,
+  Clock3,
+  CheckCircle2,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CopyButton from '../components/common/CopyButton';
 
+const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
+
+const PERIODS = [
+  { key: 'today', label: 'Сьогодні' },
+  { key: '7d', label: '7 днів' },
+  { key: '30d', label: '30 днів' },
+  { key: 'this_month', label: 'Цей місяць' },
+  { key: 'last_month', label: 'Минулий' },
+  { key: 'all', label: 'Весь час' },
+  { key: 'custom', label: 'Свій' },
+];
+
+const money = (value) => Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
+const decimalMoney = (value) => Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 });
+const percent = (value) => `${Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 1 })}%`;
+const listOf = (value) => (Array.isArray(value) ? value : []);
+
 const Analytics = () => {
   const navigate = useNavigate();
-  const [visits, setVisits] = useState([]);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [companyInfo, setCompanyInfo] = useState(null);
-  const [timeFilter, setTimeFilter] = useState('week');
+  const [error, setError] = useState('');
+  const [timeFilter, setTimeFilter] = useState('30d');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
-  const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
   const token = localStorage.getItem('access_token');
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+      setError('');
       try {
-        const [visitsRes, settingsRes] = await Promise.all([
-          axios.get(`${API_BASE}/api/visits/?history=true`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } })
-        ]);
-        const data = Array.isArray(visitsRes.data) ? visitsRes.data : [];
-        const completedVisits = data.filter(v => v.status === 'DONE' || v.status === 'COMPLETED');
-        setVisits(completedVisits);
-        setCompanyInfo(settingsRes.data.company);
-      } catch (error) {
-        if (error.response?.status === 401) navigate('/login');
+        const params = new URLSearchParams({ period: timeFilter });
+        if (timeFilter === 'custom') {
+          if (dateFrom) params.set('date_from', dateFrom);
+          if (dateTo) params.set('date_to', dateTo);
+        }
+
+        const res = await axios.get(`${API_BASE}/api/analytics/summary/?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setData(res.data || {});
+      } catch (err) {
+        if (err.response?.status === 401) {
+          navigate('/login');
+          return;
+        }
+        setError(err.response?.data?.error || 'Не вдалося завантажити аналітику. Перевірте backend endpoint /api/analytics/summary/.');
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
-  }, [token, navigate]);
+  }, [token, navigate, timeFilter, dateFrom, dateTo]);
 
-  const stats = useMemo(() => {
-    const now = new Date();
-    const filteredVisits = visits.filter(v => {
-      const vDate = new Date(v.updated_at || v.created_at);
-      if (timeFilter === 'today') return vDate.toDateString() === now.toDateString();
-      if (timeFilter === 'week') {
-        const weekAgo = new Date();
-        weekAgo.setDate(now.getDate() - 7);
-        return vDate >= weekAgo;
-      }
-      if (timeFilter === 'month') return vDate.getMonth() === now.getMonth() && vDate.getFullYear() === now.getFullYear();
-      return true;
-    });
+  const summary = data?.summary || {};
+  const chart = listOf(data?.chart);
+  const products = data?.products || {};
+  const services = data?.services || {};
+  const clients = data?.clients || {};
+  const debts = data?.debts || {};
+  const mechanics = data?.mechanics || {};
+  const workPosts = data?.work_posts || {};
+  const isStore = data?.business_type === 'store' || data?.company?.business_type === 'store';
 
-    let totalRevenue = 0;
-    let totalCost = 0;
-    const partsSales = {};
-    const servicesSales = {};
-    const chartDataMap = {};
+  const maxChartValue = useMemo(() => {
+    const values = chart.map((item) => Math.max(Number(item.revenue || 0), Number(item.net_profit || 0), 0));
+    return Math.max(...values, 1);
+  }, [chart]);
 
-    filteredVisits.forEach(visit => {
-      const vDate = new Date(visit.updated_at || visit.created_at);
-      const sortKey = timeFilter === 'all'
-        ? `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}`
-        : `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}-${String(vDate.getDate()).padStart(2, '0')}`;
-      const displayLabel = timeFilter === 'all'
-        ? vDate.toLocaleDateString('uk-UA', { month: 'short', year: 'numeric' })
-        : vDate.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short' });
-
-      if (!chartDataMap[sortKey]) chartDataMap[sortKey] = { label: displayLabel, value: 0 };
-
-      let visitRevenue = 0;
-      let visitCost = 0;
-
-      if (Array.isArray(visit.services)) {
-        visit.services.forEach(s => {
-          const price = parseFloat(s.price) || 0;
-          visitRevenue += price;
-          if (!servicesSales[s.name]) servicesSales[s.name] = { count: 0, revenue: 0 };
-          servicesSales[s.name].count += 1;
-          servicesSales[s.name].revenue += price;
-        });
-      }
-
-      if (Array.isArray(visit.parts)) {
-        visit.parts.forEach(p => {
-          const sellPrice = parseFloat(p.sell_price) || 0;
-          const buyPrice = parseFloat(p.buy_price) || 0;
-          visitRevenue += sellPrice;
-          visitCost += buyPrice;
-          const uniqueKey = `${p.article}_${p.brand}_${p.name}`;
-          if (!partsSales[uniqueKey]) {
-            partsSales[uniqueKey] = {
-              name: p.name || 'Деталь',
-              brand: p.brand || 'Без бренду',
-              article: p.article || 'Без артикулу',
-              count: 0,
-              revenue: 0
-            };
-          }
-          partsSales[uniqueKey].count += 1;
-          partsSales[uniqueKey].revenue += sellPrice;
-        });
-      }
-
-      totalRevenue += visitRevenue;
-      totalCost += visitCost;
-      chartDataMap[sortKey].value += visitRevenue;
-    });
-
-    const netProfit = totalRevenue - totalCost;
-    const marginPercent = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : 0;
-    const averageCheck = filteredVisits.length > 0 ? (totalRevenue / filteredVisits.length).toFixed(0) : 0;
-    const sortedKeys = Object.keys(chartDataMap).sort();
-    const chartData = sortedKeys.map(key => chartDataMap[key]);
-    const topParts = Object.values(partsSales).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-    const topServices = Object.entries(servicesSales).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-
-    return { totalRevenue, netProfit, marginPercent, averageCheck, totalOrders: filteredVisits.length, chartData, topParts, topServices };
-  }, [visits, timeFilter]);
-
-  const maxChartValue = Math.max(...stats.chartData.map(d => d.value), 1);
-
-  if (loading) return <div className="flex items-center justify-center min-h-screen font-black italic text-blue-600"><Loader2 className="animate-spin mr-2"/> ЗАВАНТАЖЕННЯ АНАЛІТИКИ...</div>;
-
-  const isStore = companyInfo?.business_type === 'store';
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen font-black italic text-blue-600">
+        <Loader2 className="animate-spin mr-2" /> ЗАВАНТАЖЕННЯ АНАЛІТИКИ...
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col w-full overflow-x-hidden pb-24">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
         <div>
-          <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 flex items-center gap-2"><BarChart className="text-blue-600"/> Аналітика</h1>
-          <p className="text-slate-500 font-bold text-xs md:text-sm mt-1">Фінансові показники вашого бізнесу</p>
+          <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 flex items-center gap-2">
+            <BarChart className="text-blue-600" /> Аналітика
+          </h1>
+          <p className="text-slate-500 font-bold text-xs md:text-sm mt-1">
+            Backend-аналітика: каса, прибуток, борги, майстри, пости і товари
+          </p>
+          {data?.period?.label && (
+            <p className="text-[10px] font-black uppercase text-blue-600 mt-2 tracking-widest">
+              Період: {data.period.label}{data.period.date_from ? ` • ${data.period.date_from} — ${data.period.date_to}` : ''}
+            </p>
+          )}
         </div>
-        <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 w-full md:w-auto overflow-x-auto">
-          <button onClick={() => setTimeFilter('today')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${timeFilter === 'today' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Сьогодні</button>
-          <button onClick={() => setTimeFilter('week')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${timeFilter === 'week' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Тиждень</button>
-          <button onClick={() => setTimeFilter('month')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${timeFilter === 'month' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Місяць</button>
-          <button onClick={() => setTimeFilter('all')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${timeFilter === 'all' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>За весь час</button>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
-        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden group"><div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-50 rounded-full group-hover:scale-150 transition-transform duration-500 z-0"></div><div className="relative z-10"><p className="text-[10px] md:text-xs font-black uppercase text-slate-400 mb-1 flex items-center gap-1.5"><Wallet size={14}/> Загальна каса</p><h3 className="text-2xl md:text-3xl font-black text-slate-800">{stats.totalRevenue.toLocaleString()} <span className="text-lg md:text-xl text-slate-500">₴</span></h3></div></div>
-        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden group"><div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 rounded-full group-hover:scale-150 transition-transform duration-500 z-0"></div><div className="relative z-10"><p className="text-[10px] md:text-xs font-black uppercase text-slate-400 mb-1 flex items-center gap-1.5"><TrendingUp size={14} className="text-emerald-500"/> Чистий прибуток</p><h3 className="text-2xl md:text-3xl font-black text-emerald-600">{stats.netProfit.toLocaleString()} <span className="text-lg md:text-xl text-emerald-400">₴</span></h3><p className="text-[10px] font-bold text-emerald-600 mt-2 bg-emerald-50 inline-block px-2 py-1 rounded-md">Маржа: {stats.marginPercent}%</p></div></div>
-        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden group"><div className="absolute -right-4 -top-4 w-24 h-24 bg-purple-50 rounded-full group-hover:scale-150 transition-transform duration-500 z-0"></div><div className="relative z-10"><p className="text-[10px] md:text-xs font-black uppercase text-slate-400 mb-1 flex items-center gap-1.5"><DollarSign size={14}/> Середній чек</p><h3 className="text-2xl md:text-3xl font-black text-slate-800">{stats.averageCheck.toLocaleString()} <span className="text-lg md:text-xl text-slate-500">₴</span></h3></div></div>
-        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden group"><div className="absolute -right-4 -top-4 w-24 h-24 bg-orange-50 rounded-full group-hover:scale-150 transition-transform duration-500 z-0"></div><div className="relative z-10"><p className="text-[10px] md:text-xs font-black uppercase text-slate-400 mb-1 flex items-center gap-1.5"><Activity size={14}/> Успішні {isStore ? 'замовлення' : 'візити'}</p><h3 className="text-2xl md:text-3xl font-black text-slate-800">{stats.totalOrders}</h3></div></div>
-      </div>
-
-      <div className="w-full bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col mb-6 md:mb-8">
-        <h3 className="font-black uppercase text-slate-800 mb-2 flex items-center gap-2 text-sm"><Calendar size={16} className="text-blue-500"/> Динаміка доходу</h3>
-        {stats.chartData.length > 0 ? (
-          <div className="h-[250px] md:h-[300px] w-full flex items-end justify-center gap-4 md:gap-6 pt-10">
-            {stats.chartData.map((data, idx) => (
-              <div key={idx} className="flex-1 max-w-[80px] flex flex-col items-center group relative h-full justify-end">
-                <div className="absolute -top-10 bg-slate-800 text-white text-[10px] font-black uppercase px-2 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none mb-2">{data.value.toLocaleString()} ₴<div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div></div>
-                <div className="w-full bg-blue-100 group-hover:bg-blue-200 rounded-t-lg transition-all duration-500 ease-out relative overflow-hidden flex items-end justify-center pb-2" style={{ height: `${Math.max((data.value / maxChartValue) * 100, 2)}%` }}><div className="absolute bottom-0 w-full bg-blue-500 rounded-t-lg transition-all duration-500" style={{ height: '100%' }}></div></div>
-                <span className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-2 truncate w-full text-center">{data.label}</span>
-              </div>
+        <div className="w-full xl:w-auto space-y-2">
+          <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 w-full xl:w-auto overflow-x-auto">
+            {PERIODS.map((periodItem) => (
+              <button
+                key={periodItem.key}
+                onClick={() => setTimeFilter(periodItem.key)}
+                className={`flex-1 xl:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${
+                  timeFilter === periodItem.key ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {periodItem.label}
+              </button>
             ))}
           </div>
-        ) : (
-          <div className="h-[250px] md:h-[300px] w-full flex flex-col items-center justify-center text-slate-300"><BarChart size={48} className="mb-3 opacity-50"/><p className="text-xs font-black uppercase tracking-widest">Немає даних за цей період</p></div>
+          {timeFilter === 'custom' && (
+            <div className="grid grid-cols-2 gap-2">
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700" />
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-100 text-red-700 rounded-3xl p-4 flex items-start gap-3">
+          <AlertTriangle className="shrink-0 mt-0.5" size={18} />
+          <div>
+            <p className="font-black text-sm uppercase">Помилка аналітики</p>
+            <p className="text-sm font-semibold mt-1">{error}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 md:gap-5 mb-6 md:mb-8">
+        <MetricCard icon={<Wallet size={15} />} label="Виручка" value={`${money(summary.revenue)} ₴`} tone="blue" />
+        <MetricCard icon={<TrendingUp size={15} />} label="Валовий прибуток" value={`${money(summary.gross_profit)} ₴`} sub={`Маржа ${percent(summary.margin_percent)}`} tone="emerald" />
+        <MetricCard icon={<CheckCircle2 size={15} />} label="Чистий прибуток" value={`${money(summary.net_profit)} ₴`} sub={`Після зарплат ${percent(summary.net_margin_percent)}`} tone="green" />
+        <MetricCard icon={<Wrench size={15} />} label="Майстрам" value={`${money(summary.mechanic_commission)} ₴`} tone="purple" />
+        <MetricCard icon={<DollarSign size={15} />} label="Борги" value={`${money(summary.debt_total)} ₴`} sub={`${summary.debt_orders_count || 0} зам.`} tone="red" />
+        <MetricCard icon={<Activity size={15} />} label={`Закриті ${isStore ? 'замовлення' : 'візити'}`} value={summary.completed_orders_count || 0} sub={`Сер. чек ${money(summary.average_check)} ₴`} tone="orange" />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6 md:mb-8">
+        <div className="xl:col-span-2 bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+            <h3 className="font-black uppercase text-slate-800 flex items-center gap-2 text-sm"><Calendar size={16} className="text-blue-500" /> Динаміка</h3>
+            <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase">
+              <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700">Виручка</span>
+              <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">Чистий прибуток</span>
+            </div>
+          </div>
+
+          {chart.length > 0 ? (
+            <div className="h-[280px] md:h-[330px] w-full flex items-end justify-center gap-3 md:gap-5 pt-10 overflow-x-auto">
+              {chart.map((item, idx) => {
+                const revenueHeight = Math.max((Number(item.revenue || 0) / maxChartValue) * 100, 2);
+                const netHeight = Math.max((Number(item.net_profit || 0) / maxChartValue) * 100, 2);
+                return (
+                  <div key={`${item.date || idx}`} className="min-w-[46px] flex-1 max-w-[80px] flex flex-col items-center group relative h-full justify-end">
+                    <div className="absolute -top-10 bg-slate-800 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                      {money(item.revenue)} ₴ / {money(item.net_profit)} ₴
+                    </div>
+                    <div className="w-full h-full flex items-end gap-1 justify-center">
+                      <div className="w-1/2 bg-blue-500 rounded-t-lg transition-all duration-500" style={{ height: `${revenueHeight}%` }} />
+                      <div className="w-1/2 bg-emerald-500 rounded-t-lg transition-all duration-500" style={{ height: `${netHeight}%` }} />
+                    </div>
+                    <span className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-2 truncate w-full text-center">{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState icon={<BarChart size={42} />} title="Немає даних за цей період" />
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
+          <SmallStat label="Активні в роботі" value={summary.active_orders_count || 0} icon={<Clock3 size={16} />} />
+          <SmallStat label="Воронка / незакрита сума" value={`${money(summary.pipeline_revenue)} ₴`} icon={<Activity size={16} />} />
+          <SmallStat label="Оплачено" value={`${money(summary.paid_total)} ₴`} icon={<CheckCircle2 size={16} />} />
+          <SmallStat label="Собівартість запчастин" value={`${money(summary.cost)} ₴`} icon={<Package size={16} />} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+        <ListCard title="Топ запчастин за виручкою" icon={<Package size={16} className="text-amber-500" />} empty="Немає проданих запчастин">
+          {listOf(products.top_by_revenue).slice(0, 8).map((part, idx) => <ProductRow key={`${part.article}-${idx}`} item={part} />)}
+        </ListCard>
+
+        {!isStore && (
+          <ListCard title="Топ робіт" icon={<Wrench size={16} className="text-purple-500" />} empty="Немає виконаних робіт">
+            {listOf(services.top_by_revenue).slice(0, 8).map((service, idx) => <ServiceRow key={`${service.name}-${idx}`} item={service} />)}
+          </ListCard>
         )}
       </div>
 
-      <div className={`grid grid-cols-1 ${!isStore ? 'lg:grid-cols-2' : ''} gap-6`}>
-        <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm"><Package size={16} className="text-amber-500"/> Топ запчастин</h3>
-          <div className="space-y-3">
-            {stats.topParts.length > 0 ? stats.topParts.map((part, idx) => (
-              <div key={idx} className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
-                <div className="flex-1">
-                  <p className="text-xs font-bold text-slate-700 leading-snug mb-1.5">{part.name}</p>
-                  <div className="flex items-center flex-wrap gap-1.5">
-                    <span className="text-[9px] font-black uppercase text-slate-400 bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm">{part.brand}</span>
-                    <CopyButton value={part.article} label={part.article} copiedLabel="Скопійовано" title="Копіювати артикул" compact />
-                    <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded ml-auto">{part.count} шт</span>
-                  </div>
-                </div>
-                <div className="text-sm font-black text-slate-800 shrink-0 mt-0.5">{part.revenue.toLocaleString()} ₴</div>
-              </div>
-            )) : <p className="text-[10px] font-black uppercase text-center text-slate-400 py-4">Немає проданих запчастин</p>}
-          </div>
-        </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+        {!isStore && (
+          <ListCard title="Майстри і зарплата" icon={<Users size={16} className="text-blue-500" />} empty="Немає даних по майстрах">
+            {listOf(mechanics.items).slice(0, 10).map((mechanic, idx) => <MechanicRow key={`${mechanic.id || idx}`} item={mechanic} />)}
+          </ListCard>
+        )}
 
         {!isStore && (
-          <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm"><Wrench size={16} className="text-purple-500"/> Топ послуг</h3>
-            <div className="space-y-3">
-              {stats.topServices.length > 0 ? stats.topServices.map((service, idx) => (
-                <div key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100"><div className="overflow-hidden pr-2 flex-1"><p className="text-xs font-bold text-slate-700 truncate">{service.name}</p><p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{service.count} разів</p></div><div className="text-sm font-black text-slate-800 shrink-0">{service.revenue.toLocaleString()} ₴</div></div>
-              )) : <p className="text-[10px] font-black uppercase text-center text-slate-400 py-4">Немає виконаних послуг</p>}
-            </div>
-          </div>
+          <ListCard title="Пости / підйомники" icon={<Building2 size={16} className="text-cyan-500" />} empty="Немає даних по постах">
+            {listOf(workPosts.items).slice(0, 10).map((post, idx) => <WorkPostRow key={`${post.id || idx}`} item={post} />)}
+          </ListCard>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <ListCard title="Топ клієнтів" icon={<Users size={16} className="text-emerald-500" />} empty="Немає клієнтів за період">
+          {listOf(clients.top_by_revenue).slice(0, 8).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
+        </ListCard>
+
+        <ListCard title="Борги" icon={<AlertTriangle size={16} className="text-red-500" />} empty="Боргів немає">
+          {listOf(debts.items).slice(0, 8).map((debt, idx) => <DebtRow key={`${debt.visit_id || idx}`} item={debt} />)}
+        </ListCard>
+
+        <ListCard title="Низька маржа" icon={<TrendingUp size={16} className="text-orange-500" />} empty="Позицій з низькою маржею немає">
+          {listOf(products.low_margin).slice(0, 8).map((part, idx) => <LowMarginRow key={`${part.article}-${idx}`} item={part} />)}
+        </ListCard>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+        <ListCard title="Залежаний склад" icon={<Package size={16} className="text-slate-500" />} empty="Залежаного складу немає або немає залишків">
+          {listOf(products.dead_stock).slice(0, 8).map((item, idx) => <DeadStockRow key={`${item.id || idx}`} item={item} />)}
+        </ListCard>
+
+        <ListCard title="Сплячі клієнти" icon={<Clock3 size={16} className="text-slate-500" />} empty="Сплячих клієнтів немає">
+          {listOf(clients.sleeping).slice(0, 8).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
+        </ListCard>
       </div>
     </div>
   );
 };
+
+const MetricCard = ({ icon, label, value, sub, tone = 'blue' }) => {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    green: 'bg-green-50 text-green-600',
+    purple: 'bg-purple-50 text-purple-600',
+    red: 'bg-red-50 text-red-600',
+    orange: 'bg-orange-50 text-orange-600',
+  };
+  return (
+    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
+      <div className={`w-10 h-10 rounded-2xl ${tones[tone] || tones.blue} flex items-center justify-center mb-4`}>{icon}</div>
+      <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{label}</p>
+      <h3 className="text-2xl font-black text-slate-800 leading-tight">{value}</h3>
+      {sub && <p className="text-[10px] font-bold text-slate-500 mt-2">{sub}</p>}
+    </div>
+  );
+};
+
+const SmallStat = ({ icon, label, value }) => (
+  <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+    <div className="w-11 h-11 rounded-2xl bg-slate-50 text-slate-600 flex items-center justify-center shrink-0">{icon}</div>
+    <div className="min-w-0">
+      <p className="text-[10px] font-black uppercase text-slate-400 truncate">{label}</p>
+      <p className="text-xl font-black text-slate-800 truncate">{value}</p>
+    </div>
+  </div>
+);
+
+const ListCard = ({ title, icon, empty, children }) => {
+  const count = React.Children.count(children);
+  return (
+    <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
+      <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm">{icon} {title}</h3>
+      <div className="space-y-3">
+        {count > 0 ? children : <p className="text-[10px] font-black uppercase text-center text-slate-400 py-6">{empty}</p>}
+      </div>
+    </div>
+  );
+};
+
+const EmptyState = ({ icon, title }) => (
+  <div className="h-[250px] w-full flex flex-col items-center justify-center text-slate-300">
+    <div className="mb-3 opacity-60">{icon}</div>
+    <p className="text-xs font-black uppercase tracking-widest">{title}</p>
+  </div>
+);
+
+const ProductRow = ({ item }) => (
+  <div className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+    <div className="flex-1 min-w-0">
+      <p className="text-xs font-bold text-slate-700 leading-snug mb-1.5 break-words">{item.name || 'Деталь'}</p>
+      <div className="flex items-center flex-wrap gap-1.5">
+        <span className="text-[9px] font-black uppercase text-slate-400 bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm">{item.brand || 'Без бренду'}</span>
+        {item.article ? <CopyButton value={item.article} label={item.article} copiedLabel="Скопійовано" title="Копіювати артикул" compact /> : null}
+        <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">{decimalMoney(item.quantity)} шт</span>
+      </div>
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
+      <div className="text-[10px] font-bold text-emerald-600">+{money(item.profit)} ₴</div>
+    </div>
+  </div>
+);
+
+const ServiceRow = ({ item }) => (
+  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+    <div className="overflow-hidden pr-2 flex-1">
+      <p className="text-xs font-bold text-slate-700 truncate">{item.name || 'Робота'}</p>
+      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{decimalMoney(item.quantity)} разів • майстрам {money(item.commission_total)} ₴</p>
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
+      <div className="text-[10px] font-bold text-emerald-600">{money(item.profit_after_commission)} ₴ після ЗП</div>
+    </div>
+  </div>
+);
+
+const MechanicRow = ({ item }) => (
+  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-black text-slate-800 truncate">{item.name || 'Майстер'}</p>
+      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.services_count || 0} робіт • {item.visits_count || 0} візитів • {percent(item.average_commission_percent)}</p>
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-sm font-black text-purple-600">{money(item.commission_total)} ₴</div>
+      <div className="text-[10px] font-bold text-slate-400">робіт {money(item.services_revenue)} ₴</div>
+    </div>
+  </div>
+);
+
+const WorkPostRow = ({ item }) => (
+  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-black text-slate-800 truncate">{item.name || 'Без поста'}</p>
+      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.completed_count || 0} закрито • {item.active_count || 0} активні</p>
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
+      <div className="text-[10px] font-bold text-emerald-600">{money(item.net_profit)} ₴ чистими</div>
+    </div>
+  </div>
+);
+
+const ClientRow = ({ item }) => (
+  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-black text-slate-800 truncate">{item.client || 'Клієнт'}</p>
+      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.phone || 'без телефону'} • {item.orders_count || 0} зам.</p>
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
+      {Number(item.debt || 0) > 0 && <div className="text-[10px] font-bold text-red-600">борг {money(item.debt)} ₴</div>}
+    </div>
+  </div>
+);
+
+const DebtRow = ({ item }) => (
+  <div className="flex justify-between items-center bg-red-50 p-3 rounded-xl border border-red-100 gap-3">
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-black text-slate-800 truncate">{item.client || 'Клієнт'} • {item.plate || 'Авто'}</p>
+      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.phone || 'без телефону'} • зам. #{item.visit_id}</p>
+    </div>
+    <div className="text-sm font-black text-red-600 shrink-0">{money(item.amount)} ₴</div>
+  </div>
+);
+
+const LowMarginRow = ({ item }) => (
+  <div className="flex justify-between items-center bg-orange-50 p-3 rounded-xl border border-orange-100 gap-3">
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-black text-slate-800 truncate">{item.name || 'Товар'}</p>
+      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.brand || ''} {item.article || ''}</p>
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-sm font-black text-orange-600">{percent(item.margin_percent)}</div>
+      <div className="text-[10px] font-bold text-slate-500">{money(item.profit)} ₴</div>
+    </div>
+  </div>
+);
+
+const DeadStockRow = ({ item }) => (
+  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-black text-slate-800 truncate">{item.name || 'Товар'}</p>
+      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.brand || ''} {item.article || ''} • {item.quantity || 0} шт</p>
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-sm font-black text-slate-800">{money(item.sell_value)} ₴</div>
+      <div className="text-[10px] font-bold text-slate-400">без продажів {item.days_without_sales || 60} дн.</div>
+    </div>
+  </div>
+);
 
 export default Analytics;

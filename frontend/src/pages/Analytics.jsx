@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   Clock3,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CopyButton from '../components/common/CopyButton';
@@ -36,6 +38,20 @@ const decimalMoney = (value) => Number(value || 0).toLocaleString('uk-UA', { max
 const percent = (value) => `${Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 1 })}%`;
 const listOf = (value) => (Array.isArray(value) ? value : []);
 
+const salarySchemeLabel = (value) => ({
+  services_only: 'тільки роботи',
+  services_and_parts_profit: 'роботи + запчастини',
+  order_profit: 'прибуток замовлення',
+  fixed: 'фіксовано',
+}[value] || 'схема не вказана');
+
+const payoutLabel = (value) => ({
+  daily: 'щодня',
+  weekly: 'щотижня',
+  monthly: 'щомісяця',
+  custom: 'довільно',
+}[value] || 'щомісяця');
+
 const Analytics = () => {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -44,6 +60,7 @@ const Analytics = () => {
   const [timeFilter, setTimeFilter] = useState('30d');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [expandedMechanicId, setExpandedMechanicId] = useState(null);
 
   const token = localStorage.getItem('access_token');
 
@@ -85,6 +102,8 @@ const Analytics = () => {
   const mechanics = data?.mechanics || {};
   const workPosts = data?.work_posts || {};
   const isStore = data?.business_type === 'store' || data?.company?.business_type === 'store';
+  const mechanicItems = listOf(mechanics.items).filter((item) => item && (item.id || item.employee_id || item.name));
+  const hasMechanics = !isStore && mechanicItems.length > 0;
 
   const maxChartValue = useMemo(() => {
     const values = chart.map((item) => Math.max(Number(item.revenue || 0), Number(item.net_profit || 0), 0));
@@ -139,6 +158,23 @@ const Analytics = () => {
         </div>
       </div>
 
+      {hasMechanics && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <button
+            onClick={() => document.getElementById('mechanics-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="bg-purple-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-purple-100 flex items-center gap-2"
+          >
+            <Users size={16} /> Майстри
+          </button>
+          <button
+            onClick={() => document.getElementById('overview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="bg-white border border-slate-200 text-slate-700 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2"
+          >
+            <BarChart size={16} /> Огляд
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="mb-6 bg-red-50 border border-red-100 text-red-700 rounded-3xl p-4 flex items-start gap-3">
           <AlertTriangle className="shrink-0 mt-0.5" size={18} />
@@ -149,7 +185,7 @@ const Analytics = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 md:gap-5 mb-6 md:mb-8">
+      <div id="overview-section" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 md:gap-5 mb-6 md:mb-8 scroll-mt-24">
         <MetricCard icon={<Wallet size={15} />} label="Виручка" value={`${money(summary.revenue)} ₴`} tone="blue" />
         <MetricCard icon={<TrendingUp size={15} />} label="Валовий прибуток" value={`${money(summary.gross_profit)} ₴`} sub={`Маржа ${percent(summary.margin_percent)}`} tone="emerald" />
         <MetricCard icon={<CheckCircle2 size={15} />} label="Чистий прибуток" value={`${money(summary.net_profit)} ₴`} sub={`Після зарплат ${percent(summary.net_margin_percent)}`} tone="green" />
@@ -200,6 +236,14 @@ const Analytics = () => {
         </div>
       </div>
 
+      {hasMechanics && (
+        <MechanicsSection
+          items={mechanicItems}
+          expandedId={expandedMechanicId}
+          onToggle={(id) => setExpandedMechanicId(expandedMechanicId === id ? null : id)}
+        />
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
         <ListCard title="Топ запчастин за виручкою" icon={<Package size={16} className="text-amber-500" />} empty="Немає проданих запчастин">
           {listOf(products.top_by_revenue).slice(0, 8).map((part, idx) => <ProductRow key={`${part.article}-${idx}`} item={part} />)}
@@ -212,19 +256,13 @@ const Analytics = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-        {!isStore && (
-          <ListCard title="Майстри і зарплата" icon={<Users size={16} className="text-blue-500" />} empty="Немає даних по майстрах">
-            {listOf(mechanics.items).slice(0, 10).map((mechanic, idx) => <MechanicRow key={`${mechanic.id || idx}`} item={mechanic} />)}
-          </ListCard>
-        )}
-
-        {!isStore && (
+      {!isStore && listOf(workPosts.items).length > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
           <ListCard title="Пости / підйомники" icon={<Building2 size={16} className="text-cyan-500" />} empty="Немає даних по постах">
             {listOf(workPosts.items).slice(0, 10).map((post, idx) => <WorkPostRow key={`${post.id || idx}`} item={post} />)}
           </ListCard>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <ListCard title="Топ клієнтів" icon={<Users size={16} className="text-emerald-500" />} empty="Немає клієнтів за період">
@@ -301,6 +339,165 @@ const EmptyState = ({ icon, title }) => (
   </div>
 );
 
+const MechanicsSection = ({ items, expandedId, onToggle }) => {
+  const totalCommission = items.reduce((sum, item) => sum + Number(item.commission_total || 0), 0);
+  const totalPartsCommission = items.reduce((sum, item) => sum + Number(item.parts_commission || 0), 0);
+  const totalServiceCommission = items.reduce((sum, item) => sum + Number(item.service_commission || 0), 0);
+
+  return (
+    <div id="mechanics-section" className="scroll-mt-24 mb-6 bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+      <div className="p-5 md:p-6 bg-gradient-to-r from-purple-700 via-blue-700 to-cyan-600 text-white">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-white/75 text-[10px] font-black uppercase tracking-widest"><Users size={15}/> Окрема аналітика</div>
+            <h2 className="text-2xl md:text-3xl font-black uppercase italic mt-2">Майстри</h2>
+            <p className="text-sm font-bold text-white/80 mt-2 max-w-2xl">Заробіток по кожному майстру: роботи, відсоток від запчастин і прихована історія по датах.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
+            <MiniTotal label="Всього" value={`${money(totalCommission)} ₴`} />
+            <MiniTotal label="Роботи" value={`${money(totalServiceCommission)} ₴`} />
+            <MiniTotal label="Запчастини" value={`${money(totalPartsCommission)} ₴`} />
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 md:p-5 space-y-3">
+        {items.map((item, idx) => {
+          const id = item.id || item.employee_id || item.name || idx;
+          return <MechanicDetailCard key={id} item={item} expanded={expandedId === id} onToggle={() => onToggle(id)} />;
+        })}
+      </div>
+    </div>
+  );
+};
+
+const MiniTotal = ({ label, value }) => (
+  <div className="bg-white/15 border border-white/20 rounded-2xl p-3 min-w-0">
+    <p className="text-[9px] font-black uppercase text-white/70 truncate">{label}</p>
+    <p className="text-lg font-black text-white truncate">{value}</p>
+  </div>
+);
+
+const MechanicDetailCard = ({ item, expanded, onToggle }) => {
+  const history = listOf(item.history_by_date);
+  return (
+    <div className="border border-slate-200 rounded-3xl overflow-hidden bg-slate-50/60">
+      <button onClick={onToggle} className="w-full p-4 bg-white hover:bg-slate-50 transition flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 text-left">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {expanded ? <ChevronDown size={18} className="text-purple-600" /> : <ChevronRight size={18} className="text-slate-400" />}
+            <p className="text-sm font-black text-slate-900 truncate">{item.name || 'Майстер'}</p>
+          </div>
+          <p className="text-[10px] font-black uppercase text-slate-400 mt-1 ml-6">
+            {item.services_count || 0} робіт • {item.visits_count || 0} візитів • {salarySchemeLabel(item.salary_scheme)} • виплата {payoutLabel(item.payout_period)}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto">
+          <MechanicPill label="Заробив" value={`${money(item.commission_total)} ₴`} tone="purple" />
+          <MechanicPill label="За роботи" value={`${money(item.service_commission)} ₴`} />
+          <MechanicPill label="Із запчастин" value={`${money(item.parts_commission)} ₴`} />
+          <MechanicPill label="Робіт на суму" value={`${money(item.services_revenue)} ₴`} />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="p-4 md:p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <SmallInfo label="Маржа запчастин, що бралась у розрахунок" value={`${money(item.parts_profit)} ₴`} />
+            <SmallInfo label="Середній % нарахування" value={percent(item.average_commission_percent)} />
+            <SmallInfo label="Записів в історії" value={item.history_count || 0} />
+          </div>
+
+          {history.length > 0 ? history.map((day) => <MechanicDayGroup key={day.date} day={day} />) : (
+            <div className="p-6 text-center bg-white rounded-2xl border border-dashed border-slate-200">
+              <p className="text-xs font-black uppercase text-slate-400">По цьому майстру ще немає нарахувань за обраний період</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MechanicPill = ({ label, value, tone }) => (
+  <div className={`rounded-2xl p-3 border ${tone === 'purple' ? 'bg-purple-50 border-purple-100 text-purple-700' : 'bg-slate-50 border-slate-100 text-slate-700'}`}>
+    <p className="text-[9px] font-black uppercase opacity-60 truncate">{label}</p>
+    <p className="text-sm font-black truncate">{value}</p>
+  </div>
+);
+
+const SmallInfo = ({ label, value }) => (
+  <div className="bg-white rounded-2xl border border-slate-100 p-3">
+    <p className="text-[9px] font-black uppercase text-slate-400">{label}</p>
+    <p className="text-lg font-black text-slate-800 mt-1">{value}</p>
+  </div>
+);
+
+const MechanicDayGroup = ({ day }) => (
+  <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
+    <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <div>
+        <p className="text-sm font-black text-slate-900">{day.label || day.date}</p>
+        <p className="text-[10px] font-black uppercase text-slate-400">{day.visits_count || 0} візитів • роботи {money(day.service_commission)} ₴ • запчастини {money(day.parts_commission)} ₴</p>
+      </div>
+      <div className="text-lg font-black text-purple-600">{money(day.commission_total)} ₴</div>
+    </div>
+    <div className="p-3 space-y-3">
+      {listOf(day.items).map((item, idx) => <MechanicVisitDetail key={`${item.visit_id}-${idx}`} item={item} />)}
+    </div>
+  </div>
+);
+
+const MechanicVisitDetail = ({ item }) => (
+  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-xs font-black text-slate-900">Візит #{item.visit_id} • {item.plate || 'Авто'}</p>
+        <p className="text-[10px] font-bold text-slate-500 mt-1">{item.client || 'Клієнт'} • {item.phone || 'без телефону'} • {item.work_post || 'Без поста'}</p>
+      </div>
+      <div className="text-right shrink-0">
+        <p className="text-sm font-black text-purple-600">{money(item.commission_total)} ₴</p>
+        <p className="text-[10px] font-bold text-slate-400">роботи {money(item.service_commission)} ₴ / запчастини {money(item.parts_commission)} ₴</p>
+      </div>
+    </div>
+
+    {listOf(item.services).length > 0 && (
+      <div className="mt-4">
+        <p className="text-[10px] font-black uppercase text-slate-400 mb-2">За які роботи нараховано</p>
+        <div className="space-y-2">
+          {listOf(item.services).map((service, idx) => (
+            <div key={`${service.name}-${idx}`} className="flex justify-between gap-3 bg-white rounded-xl border border-slate-100 p-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-800 truncate">{service.name}</p>
+                <p className="text-[9px] font-black uppercase text-slate-400">{decimalMoney(service.quantity)} × {money(service.revenue)} ₴ • {percent(service.commission_percent)}</p>
+              </div>
+              <p className="text-xs font-black text-purple-600 shrink-0">{money(service.commission_amount)} ₴</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {listOf(item.parts).length > 0 && (
+      <div className="mt-4">
+        <p className="text-[10px] font-black uppercase text-slate-400 mb-2">З яких запчастин накапало</p>
+        <div className="space-y-2">
+          {listOf(item.parts).map((part, idx) => (
+            <div key={`${part.article}-${idx}`} className="flex justify-between gap-3 bg-white rounded-xl border border-slate-100 p-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-800 truncate">{part.name || 'Запчастина'}</p>
+                <p className="text-[9px] font-black uppercase text-slate-400">{part.brand || ''} {part.article || ''} • маржа {money(part.allocated_profit)} ₴ • {percent(part.commission_percent)}</p>
+              </div>
+              <p className="text-xs font-black text-purple-600 shrink-0">{money(part.commission_amount)} ₴</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 const ProductRow = ({ item }) => (
   <div className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
     <div className="flex-1 min-w-0">
@@ -327,19 +524,6 @@ const ServiceRow = ({ item }) => (
     <div className="text-right shrink-0">
       <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
       <div className="text-[10px] font-bold text-emerald-600">{money(item.profit_after_commission)} ₴ після ЗП</div>
-    </div>
-  </div>
-);
-
-const MechanicRow = ({ item }) => (
-  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-black text-slate-800 truncate">{item.name || 'Майстер'}</p>
-      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.services_count || 0} робіт • {item.visits_count || 0} візитів • {percent(item.average_commission_percent)}</p>
-    </div>
-    <div className="text-right shrink-0">
-      <div className="text-sm font-black text-purple-600">{money(item.commission_total)} ₴</div>
-      <div className="text-[10px] font-bold text-slate-400">робіт {money(item.services_revenue)} ₴</div>
     </div>
   </div>
 );

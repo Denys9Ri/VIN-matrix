@@ -363,6 +363,20 @@ const ErrorBox = ({ message }) => (
   </div>
 );
 
+
+const SectionTitle = ({ icon, title, subtitle, action }) => (
+  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+    <div>
+      <h3 className="font-black uppercase text-slate-900 flex items-center gap-2 text-sm">
+        {icon}
+        {title}
+      </h3>
+      {subtitle && <p className="text-xs font-semibold text-slate-500 mt-1 max-w-3xl">{subtitle}</p>}
+    </div>
+    {action}
+  </div>
+);
+
 const StoreAnalytics = ({ summary, chart, maxChartValue, products, topProductsByRevenue, topProductsByProfit, lowMarginProducts, deadStockItems, suppliers, supplierItems, clients, topClients, sleepingClients, debts, expenses, expenseCategories, expenseItems, onOpenExpense }) => (
   <>
     <div id="overview-section" className="scroll-mt-28 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8 gap-4 mb-6">

@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db import connection
 from .models import (
-    Company, Employee, Visit, ServiceCatalog, OrderPart, OrderService,
+    Company, Employee, WorkPost, Visit, ServiceCatalog, OrderPart, OrderService,
     Category, InventoryItem, Supplier, PlatformClient,
     ServiceComplex, ComplexServiceItem, ComplexPartItem, VehicleRecommendation, StockMovement
 )
@@ -18,6 +18,12 @@ class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
         fields = '__all__'
+
+class WorkPostSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkPost
+        fields = '__all__'
+        read_only_fields = ['company', 'created_at', 'updated_at']
 
 class ServiceCatalogSerializer(serializers.ModelSerializer):
     class Meta:
@@ -70,10 +76,39 @@ class OrderPartSerializer(serializers.ModelSerializer):
         return instance
 
 class OrderServiceSerializer(serializers.ModelSerializer):
+    mechanic_name = serializers.SerializerMethodField()
+    mechanic_username = serializers.SerializerMethodField()
+    service_total = serializers.SerializerMethodField()
+    commission_label = serializers.SerializerMethodField()
+
     class Meta:
         model = OrderService
         fields = '__all__'
-        read_only_fields = ['visit']
+        read_only_fields = ['visit', 'commission_amount', 'mechanic_name', 'mechanic_username', 'service_total', 'commission_label']
+
+    def get_mechanic_name(self, obj):
+        user = getattr(obj, 'mechanic', None)
+        if not user:
+            return ''
+        return user.first_name or user.username
+
+    def get_mechanic_username(self, obj):
+        user = getattr(obj, 'mechanic', None)
+        return user.username if user else ''
+
+    def get_service_total(self, obj):
+        try:
+            return round(float(obj.price or 0) * float(obj.quantity or 1), 2)
+        except Exception:
+            return 0
+
+    def get_commission_label(self, obj):
+        if not getattr(obj, 'mechanic_id', None):
+            return ''
+        try:
+            return f"{float(obj.commission_percent or 0):g}% · {float(obj.commission_amount or 0):.2f} ₴"
+        except Exception:
+            return ''
 
 def _visit_payment_rows(visit_id):
     try:
@@ -89,18 +124,20 @@ def _visit_finance(obj):
         parts_total = sum(float(p.sell_price or 0) * float(p.quantity or 1) for p in obj.parts.all())
         parts_cost = sum(float(p.buy_price or 0) * float(p.quantity or 1) for p in obj.parts.all())
         services_total = sum(float(s.price or 0) * float(s.quantity or 1) for s in obj.services.all())
+        mechanic_commission_total = sum(float(getattr(s, 'commission_amount', 0) or 0) for s in obj.services.all())
         with connection.cursor() as cursor:
             cursor.execute('SELECT COALESCE(SUM(amount), 0) FROM core_visitpayment WHERE visit_id=%s', [obj.id])
             paid = float(cursor.fetchone()[0] or 0)
     except Exception:
-        parts_total = parts_cost = services_total = 0
+        parts_total = parts_cost = services_total = mechanic_commission_total = 0
         paid = float(obj.prepayment_amount or 0)
     if paid <= 0:
         paid = float(obj.prepayment_amount or 0)
     total = parts_total + services_total
     debt = max(total - paid, 0)
     profit = parts_total - parts_cost + services_total
-    return {'parts_total': round(parts_total, 2), 'services_total': round(services_total, 2), 'grand_total': round(total, 2), 'paid_amount': round(paid, 2), 'debt_amount': round(debt, 2), 'profit': round(profit, 2), 'margin': round((profit / total * 100) if total else 0, 1)}
+    profit_after_mechanics = profit - mechanic_commission_total
+    return {'parts_total': round(parts_total, 2), 'services_total': round(services_total, 2), 'grand_total': round(total, 2), 'paid_amount': round(paid, 2), 'debt_amount': round(debt, 2), 'profit': round(profit, 2), 'mechanic_commission_total': round(mechanic_commission_total, 2), 'profit_after_mechanics': round(profit_after_mechanics, 2), 'margin': round((profit / total * 100) if total else 0, 1)}
 
 class VisitSerializer(serializers.ModelSerializer):
     services = OrderServiceSerializer(many=True, read_only=True)
@@ -110,16 +147,26 @@ class VisitSerializer(serializers.ModelSerializer):
     paid_amount = serializers.SerializerMethodField()
     debt_amount = serializers.SerializerMethodField()
     grand_total = serializers.SerializerMethodField()
+    work_post_name = serializers.SerializerMethodField()
+    responsible_mechanic_name = serializers.SerializerMethodField()
+    responsible_mechanic_username = serializers.SerializerMethodField()
 
     class Meta:
         model = Visit
         fields = '__all__'
-        read_only_fields = ['company', 'created_at', 'updated_at', 'finance', 'payments', 'paid_amount', 'debt_amount', 'grand_total']
+        read_only_fields = ['company', 'created_at', 'updated_at', 'finance', 'payments', 'paid_amount', 'debt_amount', 'grand_total', 'work_post_name', 'responsible_mechanic_name', 'responsible_mechanic_username']
     def get_finance(self, obj): return _visit_finance(obj)
     def get_payments(self, obj): return _visit_payment_rows(obj.id)
     def get_paid_amount(self, obj): return _visit_finance(obj)['paid_amount']
     def get_debt_amount(self, obj): return _visit_finance(obj)['debt_amount']
     def get_grand_total(self, obj): return _visit_finance(obj)['grand_total']
+    def get_work_post_name(self, obj): return obj.work_post.name if getattr(obj, 'work_post_id', None) and obj.work_post else ''
+    def get_responsible_mechanic_name(self, obj):
+        user = getattr(obj, 'responsible_mechanic', None)
+        return (user.first_name or user.username) if user else ''
+    def get_responsible_mechanic_username(self, obj):
+        user = getattr(obj, 'responsible_mechanic', None)
+        return user.username if user else ''
 
 class ComplexServiceItemSerializer(serializers.ModelSerializer):
     class Meta:

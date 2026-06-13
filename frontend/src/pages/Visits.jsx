@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   AlertTriangle,
@@ -189,6 +189,45 @@ const recommendationUrgency = (rec) => {
   return { label: 'Планово', cls: 'bg-emerald-50 text-emerald-700 border-emerald-100' };
 };
 
+
+const STO_DICTIONARY_PATCH = true;
+const fallbackStoVisitStatuses = [
+  { key: 'SELECTION', label: 'В черзі / Підбір', semantic_role: 'new', color: 'amber', icon: 'clock', sort_order: 10, metadata: { show_on_board: true } },
+  { key: 'ORDERED', label: 'В роботі', semantic_role: 'in_progress', color: 'blue', icon: 'wrench', sort_order: 20, metadata: { show_on_board: true } },
+  { key: 'WAITING_PARTS', label: 'Чекаємо запчастини', semantic_role: 'waiting', color: 'amber', icon: 'clock', sort_order: 30, metadata: { show_on_board: true } },
+  { key: 'DONE', label: 'Готово', semantic_role: 'ready', color: 'emerald', icon: 'check-circle', sort_order: 40, metadata: { show_on_board: true } },
+];
+const stoStatusAliases = {
+  new: ['SELECTION', 'PENDING', 'DRAFT'],
+  in_progress: ['ORDERED', 'IN_PROGRESS'],
+  waiting: ['WAITING_PARTS'],
+  ready: ['DONE'],
+  done: ['COMPLETED', 'ISSUED'],
+  cancelled: ['CANCELLED'],
+};
+const stoColumnVariant = (status) => {
+  const role = status?.semantic_role;
+  const color = status?.color;
+  if (['ready', 'done'].includes(role) || color === 'emerald') return 'done';
+  if (['in_progress', 'waiting'].includes(role) || ['blue', 'indigo', 'cyan'].includes(color)) return 'progress';
+  return 'pending';
+};
+const stoColumnIcon = (status) => {
+  const role = status?.semantic_role;
+  const icon = status?.icon;
+  if (['ready', 'done'].includes(role) || ['check-circle', 'badge-check'].includes(icon)) return <CheckCircle2 size={18} />;
+  if (role === 'in_progress' || icon === 'wrench') return <Wrench size={18} />;
+  return <Clock size={18} />;
+};
+const stoStatusMatches = (visitStatus, option) => {
+  const aliases = [...(stoStatusAliases[option?.semantic_role] || []), option?.key].filter(Boolean);
+  return aliases.includes(visitStatus);
+};
+const stoStatusLabel = (statuses, key) => {
+  const all = [...(Array.isArray(statuses) ? statuses : []), ...fallbackStoVisitStatuses];
+  return all.find((status) => status.key === key)?.label || key || 'SELECTION';
+};
+
 const workflowFilled = (data, type) => {
   if (!data || !data.id) return false;
   if (type === 'acceptance') return ['mileage', 'fuel_level', 'exterior_note', 'interior_note', 'damages', 'customer_complaint', 'note'].some((k) => hasText(data[k]));
@@ -209,6 +248,7 @@ export default function Visits() {
   const [workPosts, setWorkPosts] = useState([]);
   const [mechanics, setMechanics] = useState([]);
   const [settings, setSettings] = useState({ role: 'owner', permissions: {}, company: {} });
+  const [stoVisitStatuses, setStoVisitStatuses] = useState(fallbackStoVisitStatuses);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState(dateISO());
@@ -239,6 +279,17 @@ export default function Visits() {
   const headers = { Authorization: `Bearer ${token}` };
   const isStore = settings.company?.business_type === 'store';
 
+
+  const fetchStoVisitStatuses = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/settings/dictionaries/?mode=sto`, { headers });
+      const list = Array.isArray(res.data?.sto_visit_status) ? res.data.sto_visit_status : [];
+      setStoVisitStatuses(list.length ? list : fallbackStoVisitStatuses);
+    } catch {
+      setStoVisitStatuses(fallbackStoVisitStatuses);
+    }
+  };
+
   const fetchData = async () => {
     try {
       const params = new URLSearchParams();
@@ -265,6 +316,7 @@ export default function Visits() {
   };
 
   useEffect(() => { const t = setTimeout(fetchData, 300); return () => clearTimeout(t); }, [searchQuery, filterDate]);
+  useEffect(() => { fetchStoVisitStatuses(); }, []);
   useEffect(() => {
     const data = location.state?.scannedData || location.state?.repeatVisitData;
     if (data) {
@@ -540,12 +592,22 @@ export default function Visits() {
   const cancelVisit = async () => { if (!window.confirm('Скасувати запис?')) return; await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers }); setSelectedVisit(null); fetchData(); };
 
   const boardVisits = listOf(visits);
-  const grouped = {
-    pending: boardVisits.filter((v) => ['PENDING', 'SELECTION', 'DRAFT'].includes(v.status)),
-    progress: boardVisits.filter((v) => ['IN_PROGRESS', 'ORDERED'].includes(v.status)),
-    done: boardVisits.filter((v) => v.status === 'DONE'),
-    completed: boardVisits.filter((v) => v.status === 'COMPLETED'),
-  };
+  const boardStatuses = useMemo(() => {
+    const active = listOf(stoVisitStatuses)
+      .filter((status) => status.is_active !== false)
+      .filter((status) => status.metadata?.show_on_board !== false)
+      .filter((status) => !['cancelled'].includes(status.semantic_role));
+    const source = active.length ? active : fallbackStoVisitStatuses;
+    return [...source].sort((a, b) => (a.sort_order || 100) - (b.sort_order || 100));
+  }, [stoVisitStatuses]);
+
+  const grouped = useMemo(() => boardStatuses.map((status) => ({
+    key: status.key,
+    title: status.label || status.key,
+    variant: stoColumnVariant(status),
+    icon: stoColumnIcon(status),
+    items: boardVisits.filter((visit) => stoStatusMatches(visit.status, status)),
+  })), [boardStatuses, boardVisits]);
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
@@ -559,14 +621,14 @@ export default function Visits() {
         </div>
         <button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-5 py-3.5 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-100 leading-none"><Plus size={16} className="shrink-0" /> <span>Новий візит</span></button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <Column variant="pending" title="В черзі / Підбір" items={grouped.pending} icon={<Clock size={18} />} onOpen={setSelectedVisit} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />
-        <Column variant="progress" title="В роботі" items={grouped.progress} icon={<Wrench size={18} />} onOpen={setSelectedVisit} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />
-        <Column variant="done" title="Готово" items={isStore ? [...grouped.done, ...grouped.completed] : grouped.done} icon={<CheckCircle2 size={18} />} onOpen={setSelectedVisit} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+        {grouped.map((column) => (
+          <Column key={column.key} variant={column.variant} title={column.title} items={column.items} icon={column.icon} onOpen={setSelectedVisit} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />
+        ))}
       </div>
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] bg-slate-900 text-white px-4 py-3 rounded-2xl text-xs font-black shadow-xl">{toast}</div>}
       {isCreatingVisit && <CreateVisitModal data={newVisitData} setData={setNewVisitData} onClose={() => { setIsCreatingVisit(false); setScanDraft(null); }} onSubmit={createVisit} onPlateBlur={handlePlateBlur} foundExisting={foundExisting} isScanning={isScanning} cameraRef={cameraInputRef} galleryRef={galleryInputRef} onScan={scanNewVisit} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={acceptNewScan} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
-      {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} workflowInfo={workflowInfo} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
+      {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
     </div>
   );
 }
@@ -698,13 +760,13 @@ function CreateVisitModal({
   );
 }
 
-function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, onCopy, isStore, workPosts, mechanics }) {
+function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
   const tabs = [['overview','Огляд',Info],['passport','Техпаспорт',CarFront],['acceptance','Акт',FileText],['diagnostic','Діагностика',ClipboardCheck],['works','Роботи',Wrench],['parts','Запчастини',Package],['recommendations','Рекомендації',ClipboardList],['summary','Підсумок',Calculator]];
   const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate };
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [reschedule, setReschedule] = useState(timeParts(visit.scheduled_datetime));
   const saveReschedule = async () => { if (!reschedule.date || !reschedule.time) return; await onPatch('scheduled_datetime', new Date(`${reschedule.date}T${reschedule.time}`).toISOString()); setRescheduleOpen(false); };
-  return <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 overflow-y-auto sm:overflow-hidden flex items-stretch sm:items-start justify-center sm:p-4"><div className="bg-white w-full sm:max-w-5xl sm:rounded-3xl shadow-2xl flex flex-col min-h-[100dvh] sm:min-h-0 sm:max-h-[calc(100dvh-3rem)] relative overflow-y-visible sm:overflow-hidden">{isScanning && <ScanOverlay />}<div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50 shrink-0"><div className="flex justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap gap-2 mb-2"><span className="bg-blue-600 text-white rounded-xl px-3 py-1 text-xs font-black uppercase flex items-center gap-1"><Hash size={13}/> Візит №{visitId(visit)}</span><span className="bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-black uppercase text-slate-500">{visit.status || 'SELECTION'}</span></div><h2 className="text-2xl font-black uppercase break-words">{visit.plate}</h2><p className="text-slate-500 text-sm font-bold break-words">{visit.client} · {visit.phone}</p></div><div className="flex gap-2 shrink-0"><MacAction title="Друк" color="bg-blue-400" onClick={onPrint}><Printer size={16}/></MacAction><MacAction title="Видалити" color="bg-red-400" onClick={onCancel}><Trash2 size={16}/></MacAction><MacAction title="Закрити" color="bg-slate-300" onClick={() => setVisit(null)}><X size={16}/></MacAction></div></div><div className="mt-4 grid grid-cols-3 gap-2"><StatusBtn active={['PENDING','DRAFT','SELECTION'].includes(visit.status)} onClick={() => onPatch('status','PENDING')} label="В черзі"/><StatusBtn active={['IN_PROGRESS','ORDERED'].includes(visit.status)} onClick={() => onPatch('status','IN_PROGRESS')} label="В роботі"/><StatusBtn active={visit.status === 'DONE'} onClick={() => onPatch('status','DONE')} label="Готово"/></div><div className="mt-3 bg-white border border-slate-200 rounded-2xl p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-black uppercase text-slate-400">Запис</p><p className="font-black text-slate-800 text-sm flex items-center gap-2"><Clock size={15} className="text-blue-600"/> {visitDate(visit)}</p></div></div>{rescheduleOpen && <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2"><LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/><LabeledInput label="Новий час" type="time" value={reschedule.time} onChange={(v)=>setReschedule({...reschedule,time:v})}/><button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase self-end">Зберегти</button></div>}</div>{!isStore && <StoAssignmentPanel visit={visit} workPosts={workPosts} mechanics={mechanics} onPatch={onPatch} />}<QuickActions visit={visit} onPrint={onPrint} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} /></div><div className="px-4 md:px-6 pt-3 bg-white border-b border-slate-100 overflow-x-auto shrink-0"><div className="flex gap-2 min-w-max pb-3">{tabs.map(([key,label,Icon])=><button key={key} onClick={()=>setTab(key)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase whitespace-nowrap ${tab===key?'bg-blue-600 text-white':'bg-slate-50 text-slate-500'}`}><Icon size={15}/>{label}</button>)}</div></div><div className="p-4 md:p-6 sm:overflow-y-auto sm:flex-1">{tab==='overview'&&<Overview visit={visit} carData={carData} workPosts={workPosts} mechanics={mechanics} isStore={isStore}/>} {tab==='passport'&&<Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>} {tab==='acceptance'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>} {tab==='diagnostic'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>} {tab==='works'&&<Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService} mechanics={mechanics} isStore={isStore}/>} {tab==='parts'&&<Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>} {tab==='recommendations'&&<Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>} {tab==='summary'&&<Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />}</div></div></div>;
+  return <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 overflow-y-auto sm:overflow-hidden flex items-stretch sm:items-start justify-center sm:p-4"><div className="bg-white w-full sm:max-w-5xl sm:rounded-3xl shadow-2xl flex flex-col min-h-[100dvh] sm:min-h-0 sm:max-h-[calc(100dvh-3rem)] relative overflow-y-visible sm:overflow-hidden">{isScanning && <ScanOverlay />}<div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50 shrink-0"><div className="flex justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap gap-2 mb-2"><span className="bg-blue-600 text-white rounded-xl px-3 py-1 text-xs font-black uppercase flex items-center gap-1"><Hash size={13}/> Візит №{visitId(visit)}</span><span className="bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-black uppercase text-slate-500">{stoStatusLabel(visit.status)}</span></div><h2 className="text-2xl font-black uppercase break-words">{visit.plate}</h2><p className="text-slate-500 text-sm font-bold break-words">{visit.client} · {visit.phone}</p></div><div className="flex gap-2 shrink-0"><MacAction title="Друк" color="bg-blue-400" onClick={onPrint}><Printer size={16}/></MacAction><MacAction title="Видалити" color="bg-red-400" onClick={onCancel}><Trash2 size={16}/></MacAction><MacAction title="Закрити" color="bg-slate-300" onClick={() => setVisit(null)}><X size={16}/></MacAction></div></div><div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">{listOf(stoVisitStatuses).map((status) => <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>)}</div><div className="mt-3 bg-white border border-slate-200 rounded-2xl p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-black uppercase text-slate-400">Запис</p><p className="font-black text-slate-800 text-sm flex items-center gap-2"><Clock size={15} className="text-blue-600"/> {visitDate(visit)}</p></div></div>{rescheduleOpen && <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2"><LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/><LabeledInput label="Новий час" type="time" value={reschedule.time} onChange={(v)=>setReschedule({...reschedule,time:v})}/><button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase self-end">Зберегти</button></div>}</div>{!isStore && <StoAssignmentPanel visit={visit} workPosts={workPosts} mechanics={mechanics} onPatch={onPatch} />}<QuickActions visit={visit} onPrint={onPrint} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} /></div><div className="px-4 md:px-6 pt-3 bg-white border-b border-slate-100 overflow-x-auto shrink-0"><div className="flex gap-2 min-w-max pb-3">{tabs.map(([key,label,Icon])=><button key={key} onClick={()=>setTab(key)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase whitespace-nowrap ${tab===key?'bg-blue-600 text-white':'bg-slate-50 text-slate-500'}`}><Icon size={15}/>{label}</button>)}</div></div><div className="p-4 md:p-6 sm:overflow-y-auto sm:flex-1">{tab==='overview'&&<Overview visit={visit} carData={carData} workPosts={workPosts} mechanics={mechanics} isStore={isStore}/>} {tab==='passport'&&<Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>} {tab==='acceptance'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>} {tab==='diagnostic'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>} {tab==='works'&&<Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService} mechanics={mechanics} isStore={isStore}/>} {tab==='parts'&&<Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>} {tab==='recommendations'&&<Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>} {tab==='summary'&&<Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />}</div></div></div>;
 }
 
 function MacAction({ title, color, onClick, children }) { return <button type="button" title={title} aria-label={title} onClick={onClick} className={`w-10 h-10 rounded-full ${color} text-white flex items-center justify-center shadow-sm hover:scale-105 transition-transform`}>{children}</button>; }

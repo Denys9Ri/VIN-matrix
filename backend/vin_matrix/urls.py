@@ -66,6 +66,7 @@ from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClient
 from apps.core.notification_views import NotificationsSummaryView
 from apps.core.dashboard_views import DashboardSummaryView
 from apps.core.analytics_views import AnalyticsSummaryView
+from apps.core.expense_views import StoExpenseViewSet
 from apps.core.activity_views import ActivityLogView
 from apps.core.payment_views import (
     VisitAddPaymentView,
@@ -115,6 +116,7 @@ router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'inventory', InventoryItemViewSet, basename='inventory')
 router.register(r'suppliers', SupplierViewSet, basename='supplier')
 router.register(r'stock-movements', StockMovementViewSet, basename='stock-movement')
+router.register(r'expenses', StoExpenseViewSet, basename='expense')
 router.register(r'platform-clients', SecurePlatformClientViewSet, basename='platform-client')
 router.register(r'partners', PartnerManagementViewSet, basename='partner')
 

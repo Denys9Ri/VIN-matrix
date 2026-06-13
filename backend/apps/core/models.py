@@ -17,13 +17,59 @@ class Company(models.Model):
     def __str__(self): return self.name
 
 class Employee(models.Model):
+    SALARY_SERVICES_ONLY = 'services_only'
+    SALARY_SERVICES_AND_PARTS_PROFIT = 'services_and_parts_profit'
+    SALARY_ORDER_PROFIT = 'order_profit'
+    SALARY_FIXED = 'fixed'
+    SALARY_SCHEME_CHOICES = [
+        (SALARY_SERVICES_ONLY, 'Відсоток тільки від робіт'),
+        (SALARY_SERVICES_AND_PARTS_PROFIT, 'Відсоток від робіт + маржі запчастин'),
+        (SALARY_ORDER_PROFIT, 'Відсоток від прибутку замовлення'),
+        (SALARY_FIXED, 'Фіксована сума'),
+    ]
+
+    PAYOUT_DAILY = 'daily'
+    PAYOUT_WEEKLY = 'weekly'
+    PAYOUT_MONTHLY = 'monthly'
+    PAYOUT_CUSTOM = 'custom'
+    PAYOUT_PERIOD_CHOICES = [
+        (PAYOUT_DAILY, 'Щодня'),
+        (PAYOUT_WEEKLY, 'Щотижня'),
+        (PAYOUT_MONTHLY, 'Щомісяця'),
+        (PAYOUT_CUSTOM, 'Довільний період'),
+    ]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employee_profile')
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='employees')
     role = models.CharField(max_length=20, default='mechanic')
     can_create_visits = models.BooleanField(default=False)
     can_view_finances = models.BooleanField(default=False)
     partner_code = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=40.00)
+    parts_commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    salary_scheme = models.CharField(max_length=40, choices=SALARY_SCHEME_CHOICES, default=SALARY_SERVICES_ONLY)
+    payout_period = models.CharField(max_length=20, choices=PAYOUT_PERIOD_CHOICES, default=PAYOUT_MONTHLY)
+    is_salary_active = models.BooleanField(default=True)
     def __str__(self): return f"{self.user.username} - {self.company.name}"
+
+
+
+class WorkPost(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='work_posts')
+    name = models.CharField(max_length=120)
+    number = models.PositiveIntegerField(default=1)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'number', 'id']
+        indexes = [models.Index(fields=['company', 'is_active', 'sort_order'])]
+
+    def __str__(self):
+        return f"{self.company_id}: {self.name}"
 
 class Visit(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='visits')
@@ -40,6 +86,8 @@ class Visit(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     scheduled_datetime = models.DateTimeField(null=True, blank=True)
     comment = models.TextField(blank=True, null=True)
+    work_post = models.ForeignKey(WorkPost, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits')
+    responsible_mechanic = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='responsible_visits')
 
 class ServiceCatalog(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
@@ -95,10 +143,25 @@ class OrderPart(models.Model):
     status = models.CharField(max_length=20, default='WAITING')
 
 class OrderService(models.Model):
+    COMMISSION_SERVICES_ONLY = 'services_only'
+    COMMISSION_SERVICES_AND_PARTS_PROFIT = 'services_and_parts_profit'
+    COMMISSION_ORDER_PROFIT = 'order_profit'
+    COMMISSION_FIXED = 'fixed'
+    COMMISSION_BASE_CHOICES = [
+        (COMMISSION_SERVICES_ONLY, 'Тільки роботи'),
+        (COMMISSION_SERVICES_AND_PARTS_PROFIT, 'Роботи + маржа запчастин'),
+        (COMMISSION_ORDER_PROFIT, 'Прибуток замовлення'),
+        (COMMISSION_FIXED, 'Фіксована сума'),
+    ]
+
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, related_name='services')
+    mechanic = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='performed_services')
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.DecimalField(max_digits=8, decimal_places=2, default=1)
+    commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    commission_base = models.CharField(max_length=40, choices=COMMISSION_BASE_CHOICES, default=COMMISSION_SERVICES_ONLY)
+    commission_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     status = models.CharField(max_length=20, default='PENDING')
 
 class VehicleRecommendation(models.Model):

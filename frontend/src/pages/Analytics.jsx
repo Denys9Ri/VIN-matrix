@@ -1,22 +1,28 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
-  TrendingUp,
-  DollarSign,
   Activity,
-  Calendar,
-  Package,
-  Wrench,
-  Wallet,
-  BarChart,
-  Loader2,
-  Users,
-  Building2,
   AlertTriangle,
-  Clock3,
+  BarChart,
+  Building2,
+  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Clock3,
+  DollarSign,
+  Loader2,
+  Package,
+  PieChart,
+  Plus,
+  Save,
+  ShoppingCart,
+  TrendingUp,
+  Truck,
+  Users,
+  Wallet,
+  Wrench,
+  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CopyButton from '../components/common/CopyButton';
@@ -33,33 +39,41 @@ const PERIODS = [
   { key: 'custom', label: 'Свій' },
 ];
 
+const DEFAULT_EXPENSE = {
+  date: new Date().toISOString().slice(0, 10),
+  category: 'other',
+  title: '',
+  amount: '',
+  payment_method: 'cash',
+  comment: '',
+  is_recurring: false,
+  recurring_period: 'none',
+};
+
 const EXPENSE_CATEGORIES = [
-  { key: 'rent', label: 'Оренда' },
-  { key: 'utilities', label: 'Комунальні' },
-  { key: 'admin_salary', label: 'Зарплата адміністратора / персоналу' },
-  { key: 'tools', label: 'Інструмент' },
-  { key: 'equipment', label: 'Обладнання' },
-  { key: 'equipment_repair', label: 'Ремонт обладнання' },
-  { key: 'consumables', label: 'Витратні матеріали' },
-  { key: 'marketing', label: 'Маркетинг / реклама' },
-  { key: 'taxes', label: 'Податки' },
-  { key: 'bank_fees', label: 'Банківські комісії' },
-  { key: 'delivery', label: 'Доставка / логістика' },
-  { key: 'fuel', label: 'Пальне' },
-  { key: 'software', label: 'Програми / підписки' },
-  { key: 'cleaning', label: 'Прибирання / господарські витрати' },
-  { key: 'other', label: 'Інше' },
+  ['rent', 'Оренда'],
+  ['utilities', 'Комунальні'],
+  ['admin_salary', 'Зарплата персоналу'],
+  ['tools', 'Інструмент'],
+  ['equipment', 'Обладнання'],
+  ['equipment_repair', 'Ремонт обладнання'],
+  ['consumables', 'Витратні матеріали'],
+  ['marketing', 'Маркетинг'],
+  ['taxes', 'Податки'],
+  ['bank_fees', 'Банківські комісії'],
+  ['delivery', 'Доставка / логістика'],
+  ['fuel', 'Пальне'],
+  ['software', 'Програми / підписки'],
+  ['cleaning', 'Прибирання'],
+  ['other', 'Інше'],
 ];
 
 const PAYMENT_METHODS = [
-  { key: 'cash', label: 'Готівка' },
-  { key: 'card', label: 'Картка' },
-  { key: 'bank', label: 'Рахунок / банк' },
-  { key: 'other', label: 'Інше' },
+  ['cash', 'Готівка'],
+  ['card', 'Картка'],
+  ['bank', 'Банк'],
+  ['other', 'Інше'],
 ];
-
-const todayIso = () => new Date().toISOString().slice(0, 10);
-
 
 const money = (value) => Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
 const decimalMoney = (value) => Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 });
@@ -80,6 +94,11 @@ const payoutLabel = (value) => ({
   custom: 'довільно',
 }[value] || 'щомісяця');
 
+const scrollToSection = (id) => {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
 const Analytics = () => {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -90,22 +109,13 @@ const Analytics = () => {
   const [dateTo, setDateTo] = useState('');
   const [expandedMechanicId, setExpandedMechanicId] = useState(null);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
-  const [savingExpense, setSavingExpense] = useState(false);
-  const [expenseForm, setExpenseForm] = useState({
-    date: todayIso(),
-    category: 'other',
-    title: '',
-    amount: '',
-    payment_method: 'cash',
-    comment: '',
-    is_recurring: false,
-    recurring_period: 'none',
-  });
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const [expenseForm, setExpenseForm] = useState(DEFAULT_EXPENSE);
 
   const token = localStorage.getItem('access_token');
 
-  const loadAnalytics = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  const fetchData = async () => {
+    setLoading(true);
     setError('');
     try {
       const params = new URLSearchParams({ period: timeFilter });
@@ -113,7 +123,6 @@ const Analytics = () => {
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo) params.set('date_to', dateTo);
       }
-
       const res = await axios.get(`${API_BASE}/api/analytics/summary/?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -125,45 +134,32 @@ const Analytics = () => {
       }
       setError(err.response?.data?.error || 'Не вдалося завантажити аналітику. Перевірте backend endpoint /api/analytics/summary/.');
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
-  }, [token, navigate, timeFilter, dateFrom, dateTo]);
+  };
 
-  useEffect(() => {
-    loadAnalytics();
-  }, [loadAnalytics]);
+  useEffect(() => { fetchData(); }, [token, navigate, timeFilter, dateFrom, dateTo]);
 
-  const handleCreateExpense = async (e) => {
-    e.preventDefault();
+  const handleAddExpense = async (event) => {
+    event.preventDefault();
     const amount = Number(expenseForm.amount || 0);
     if (!expenseForm.title.trim()) return alert('Вкажіть назву витрати.');
     if (!amount || amount <= 0) return alert('Вкажіть суму витрати.');
 
-    setSavingExpense(true);
+    setExpenseSaving(true);
     try {
       await axios.post(`${API_BASE}/api/expenses/`, {
         ...expenseForm,
         title: expenseForm.title.trim(),
         amount,
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      }, { headers: { Authorization: `Bearer ${token}` } });
       setExpenseModalOpen(false);
-      setExpenseForm({
-        date: todayIso(),
-        category: 'other',
-        title: '',
-        amount: '',
-        payment_method: 'cash',
-        comment: '',
-        is_recurring: false,
-        recurring_period: 'none',
-      });
-      await loadAnalytics(true);
+      setExpenseForm(DEFAULT_EXPENSE);
+      await fetchData();
     } catch (err) {
       alert(err.response?.data?.error || 'Не вдалося додати витрату.');
     } finally {
-      setSavingExpense(false);
+      setExpenseSaving(false);
     }
   };
 
@@ -178,12 +174,18 @@ const Analytics = () => {
   const suppliers = data?.suppliers || {};
   const expenses = data?.expenses || {};
   const isStore = data?.business_type === 'store' || data?.company?.business_type === 'store';
+
   const mechanicItems = listOf(mechanics.items).filter((item) => item && (item.id || item.employee_id || item.name));
   const hasMechanics = !isStore && mechanicItems.length > 0;
   const supplierItems = listOf(suppliers.items);
-  const hasSuppliers = supplierItems.length > 0;
   const expenseCategories = listOf(expenses.categories);
   const expenseItems = listOf(expenses.items);
+  const topProductsByRevenue = listOf(products.top_by_revenue);
+  const topProductsByProfit = listOf(products.top_by_profit);
+  const deadStockItems = listOf(products.dead_stock);
+  const lowMarginProducts = listOf(products.low_margin);
+  const topClients = listOf(clients.top_by_revenue);
+  const sleepingClients = listOf(clients.sleeping);
 
   const maxChartValue = useMemo(() => {
     const values = chart.map((item) => Math.max(Number(item.revenue || 0), Number(item.net_profit || 0), 0));
@@ -198,255 +200,373 @@ const Analytics = () => {
     );
   }
 
+  const modeTitle = isStore ? 'Аналітика магазину автозапчастин' : 'Аналітика СТО';
+  const modeSubtitle = isStore
+    ? 'Товари, оборот, постачальники, склад, клієнти, борги та витрати магазину'
+    : 'Каса, прибуток, борги, майстри, пости, постачальники та витрати СТО';
+
   return (
-    <div className="w-full max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen flex flex-col overflow-x-hidden pb-24">
-      <div className="bg-white border border-slate-200 shadow-sm rounded-[28px] p-5 md:p-6 flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center mb-6 gap-5">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 flex items-center gap-2">
-            <BarChart className="text-blue-600" /> Аналітика
-          </h1>
-          <p className="text-slate-500 font-bold text-xs md:text-sm mt-1">
-            Backend-аналітика: каса, прибуток, борги, майстри, пости і товари
-          </p>
-          {data?.period?.label && (
-            <p className="text-[10px] font-black uppercase text-blue-600 mt-2 tracking-widest">
-              Період: {data.period.label}{data.period.date_from ? ` • ${data.period.date_from} — ${data.period.date_to}` : ''}
-            </p>
-          )}
-        </div>
+    <div className="w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen flex flex-col overflow-x-hidden pb-24">
+      <Header
+        title={modeTitle}
+        subtitle={modeSubtitle}
+        period={data?.period}
+        timeFilter={timeFilter}
+        setTimeFilter={setTimeFilter}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+      />
 
-        <div className="w-full 2xl:w-auto space-y-2">
-          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 w-full 2xl:w-auto overflow-x-auto">
-            {PERIODS.map((periodItem) => (
-              <button
-                key={periodItem.key}
-                onClick={() => setTimeFilter(periodItem.key)}
-                className={`flex-1 2xl:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${
-                  timeFilter === periodItem.key ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {periodItem.label}
-              </button>
-            ))}
-          </div>
-          {timeFilter === 'custom' && (
-            <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700" />
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700" />
-            </div>
-          )}
-        </div>
-      </div>
+      <SectionNav isStore={isStore} hasMechanics={hasMechanics} hasWorkPosts={listOf(workPosts.items).length > 0} />
 
-      {(hasMechanics || hasSuppliers || !isStore) && (
-        <div className="mb-6 bg-white border border-slate-200 rounded-[24px] p-2 shadow-sm flex flex-wrap gap-2">
-          <button
-            onClick={() => document.getElementById('overview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            className="bg-slate-900 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2 shadow-sm"
-          >
-            <BarChart size={16} /> Огляд
-          </button>
-          {hasMechanics && (
-            <button
-              onClick={() => document.getElementById('mechanics-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="bg-purple-50 text-purple-700 border border-purple-100 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2 hover:bg-purple-100"
-            >
-              <Users size={16} /> Майстри
-            </button>
-          )}
-          {hasSuppliers && (
-            <button
-              onClick={() => document.getElementById('suppliers-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="bg-amber-50 text-amber-700 border border-amber-100 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2 hover:bg-amber-100"
-            >
-              <Package size={16} /> Постачальники
-            </button>
-          )}
-          {!isStore && (
-            <button
-              onClick={() => document.getElementById('expenses-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="bg-rose-50 text-rose-700 border border-rose-100 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2 hover:bg-rose-100"
-            >
-              <DollarSign size={16} /> Витрати
-            </button>
-          )}
-        </div>
-      )}
+      {error && <ErrorBox message={error} />}
 
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-100 text-red-700 rounded-3xl p-4 flex items-start gap-3">
-          <AlertTriangle className="shrink-0 mt-0.5" size={18} />
-          <div>
-            <p className="font-black text-sm uppercase">Помилка аналітики</p>
-            <p className="text-sm font-semibold mt-1">{error}</p>
-          </div>
-        </div>
-      )}
-
-      <div id="overview-section" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7 gap-4 md:gap-5 mb-6 md:mb-8 scroll-mt-24">
-        <MetricCard icon={<Wallet size={15} />} label="Виручка" value={`${money(summary.revenue)} ₴`} tone="blue" />
-        <MetricCard icon={<TrendingUp size={15} />} label="Валовий прибуток" value={`${money(summary.gross_profit)} ₴`} sub={`Маржа ${percent(summary.margin_percent)}`} tone="emerald" />
-        <MetricCard icon={<CheckCircle2 size={15} />} label="Чистий прибуток" value={`${money(summary.net_profit)} ₴`} sub={`Після зарплат ${percent(summary.net_margin_percent)}`} tone="green" />
-        <MetricCard icon={<Wrench size={15} />} label="Майстрам" value={`${money(summary.mechanic_commission)} ₴`} tone="purple" />
-        <MetricCard icon={<DollarSign size={15} />} label="Витрати СТО" value={`${money(summary.operating_expenses)} ₴`} tone="red" />
-        <MetricCard icon={<DollarSign size={15} />} label="Борги" value={`${money(summary.debt_total)} ₴`} sub={`${summary.debt_orders_count || 0} зам.`} tone="red" />
-        <MetricCard icon={<Activity size={15} />} label={`Закриті ${isStore ? 'замовлення' : 'візити'}`} value={summary.completed_orders_count || 0} sub={`Сер. чек ${money(summary.average_check)} ₴`} tone="orange" />
-      </div>
-
-      <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,2fr)_360px] gap-6 mb-6 md:mb-8">
-        <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-            <h3 className="font-black uppercase text-slate-800 flex items-center gap-2 text-sm"><Calendar size={16} className="text-blue-500" /> Динаміка</h3>
-            <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase">
-              <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700">Виручка</span>
-              <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">Чистий прибуток</span>
-            </div>
-          </div>
-
-          {chart.length > 0 ? (
-            <div className="h-[280px] md:h-[330px] w-full flex items-end justify-center gap-3 md:gap-5 pt-10 overflow-x-auto">
-              {chart.map((item, idx) => {
-                const revenueHeight = Math.max((Number(item.revenue || 0) / maxChartValue) * 100, 2);
-                const netHeight = Math.max((Number(item.net_profit || 0) / maxChartValue) * 100, 2);
-                return (
-                  <div key={`${item.date || idx}`} className="min-w-[46px] flex-1 max-w-[80px] flex flex-col items-center group relative h-full justify-end">
-                    <div className="absolute -top-10 bg-slate-800 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-                      {money(item.revenue)} ₴ / чистий {money(item.net_profit)} ₴ / витрати {money(item.operating_expenses)} ₴
-                    </div>
-                    <div className="w-full h-full flex items-end gap-1 justify-center">
-                      <div className="w-1/2 bg-blue-500 rounded-t-lg transition-all duration-500" style={{ height: `${revenueHeight}%` }} />
-                      <div className="w-1/2 bg-emerald-500 rounded-t-lg transition-all duration-500" style={{ height: `${netHeight}%` }} />
-                    </div>
-                    <span className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-2 truncate w-full text-center">{item.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState icon={<BarChart size={42} />} title="Немає даних за цей період" />
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-1 gap-4">
-          <SmallStat label="Активні в роботі" value={summary.active_orders_count || 0} icon={<Clock3 size={16} />} />
-          <SmallStat label="Воронка / незакрита сума" value={`${money(summary.pipeline_revenue)} ₴`} icon={<Activity size={16} />} />
-          <SmallStat label="Оплачено" value={`${money(summary.paid_total)} ₴`} icon={<CheckCircle2 size={16} />} />
-          <SmallStat label="Собівартість запчастин" value={`${money(summary.cost)} ₴`} icon={<Package size={16} />} />
-        </div>
-      </div>
-
-      {hasMechanics && (
-        <MechanicsSection
-          items={mechanicItems}
-          expandedId={expandedMechanicId}
-          onToggle={(id) => setExpandedMechanicId(expandedMechanicId === id ? null : id)}
+      {isStore ? (
+        <StoreAnalytics
+          summary={summary}
+          chart={chart}
+          maxChartValue={maxChartValue}
+          products={products}
+          topProductsByRevenue={topProductsByRevenue}
+          topProductsByProfit={topProductsByProfit}
+          lowMarginProducts={lowMarginProducts}
+          deadStockItems={deadStockItems}
+          suppliers={suppliers}
+          supplierItems={supplierItems}
+          clients={clients}
+          topClients={topClients}
+          sleepingClients={sleepingClients}
+          debts={debts}
+          expenses={expenses}
+          expenseCategories={expenseCategories}
+          expenseItems={expenseItems}
+          onOpenExpense={() => setExpenseModalOpen(true)}
+        />
+      ) : (
+        <StoAnalytics
+          summary={summary}
+          chart={chart}
+          maxChartValue={maxChartValue}
+          products={products}
+          services={services}
+          workPosts={workPosts}
+          suppliers={suppliers}
+          supplierItems={supplierItems}
+          clients={clients}
+          debts={debts}
+          expenses={expenses}
+          expenseCategories={expenseCategories}
+          expenseItems={expenseItems}
+          mechanics={mechanics}
+          mechanicItems={mechanicItems}
+          hasMechanics={hasMechanics}
+          expandedMechanicId={expandedMechanicId}
+          onToggleMechanic={(id) => setExpandedMechanicId(expandedMechanicId === id ? null : id)}
+          onOpenExpense={() => setExpenseModalOpen(true)}
         />
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-        <ListCard title="Топ запчастин за виручкою" icon={<Package size={16} className="text-amber-500" />} empty="Немає проданих запчастин">
-          {listOf(products.top_by_revenue).slice(0, 8).map((part, idx) => <ProductRow key={`${part.article}-${idx}`} item={part} />)}
-        </ListCard>
-
-        {!isStore && (
-          <ListCard title="Топ робіт" icon={<Wrench size={16} className="text-purple-500" />} empty="Немає виконаних робіт">
-            {listOf(services.top_by_revenue).slice(0, 8).map((service, idx) => <ServiceRow key={`${service.name}-${idx}`} item={service} />)}
-          </ListCard>
-        )}
-      </div>
-
-      {!isStore && listOf(workPosts.items).length > 0 && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-          <ListCard title="Пости / підйомники" icon={<Building2 size={16} className="text-cyan-500" />} empty="Немає даних по постах">
-            {listOf(workPosts.items).slice(0, 10).map((post, idx) => <WorkPostRow key={`${post.id || idx}`} item={post} />)}
-          </ListCard>
-        </div>
-      )}
-
-      {hasSuppliers && (
-        <div id="suppliers-section" className="scroll-mt-24 grid grid-cols-1 2xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)] gap-6 mb-6">
-          <ListCard title="Оборот по постачальниках" icon={<Package size={16} className="text-amber-500" />} empty="Немає даних по постачальниках">
-            {supplierItems.slice(0, 12).map((supplier, idx) => <SupplierRow key={`${supplier.name || idx}`} item={supplier} />)}
-          </ListCard>
-          <ListCard title="Постачальники з низькою маржею" icon={<AlertTriangle size={16} className="text-orange-500" />} empty="Низької маржі по постачальниках немає">
-            {listOf(suppliers.low_margin).slice(0, 12).map((supplier, idx) => <SupplierRow key={`${supplier.name || idx}`} item={supplier} compact />)}
-          </ListCard>
-        </div>
-      )}
-
-      {!isStore && (
-        <div id="expenses-section" className="scroll-mt-24 mb-6">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-5 md:p-6 bg-slate-50/70 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <h3 className="font-black uppercase text-slate-800 flex items-center gap-2 text-sm">
-                  <DollarSign size={16} className="text-rose-600" /> Витрати СТО
-                </h3>
-                <p className="text-xs font-semibold text-slate-500 mt-1">
-                  Сюди вносимо операційні витрати: оренда, комунальні, інструмент, реклама, податки. Закупку запчастин сюди не дублюємо.
-                </p>
-              </div>
-              <button
-                onClick={() => setExpenseModalOpen(true)}
-                className="bg-rose-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-rose-100"
-              >
-                Додати витрату
-              </button>
-            </div>
-            <div className="p-5 grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <SmallStat label="Витрати за період" value={`${money(expenses.summary?.total)} ₴`} icon={<DollarSign size={16} />} />
-              <SmallStat label="Разові витрати" value={`${money(expenses.summary?.one_time_total)} ₴`} icon={<Activity size={16} />} />
-              <SmallStat label="Постійні витрати" value={`${money(expenses.summary?.recurring_total)} ₴`} icon={<Clock3 size={16} />} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
-            <ListCard title="Витрати по категоріях" icon={<DollarSign size={16} className="text-rose-500" />} empty="Витрат за період немає">
-              {expenseCategories.slice(0, 12).map((item, idx) => <ExpenseCategoryRow key={`${item.category || idx}`} item={item} />)}
-            </ListCard>
-            <ListCard title="Останні витрати" icon={<Clock3 size={16} className="text-slate-500" />} empty="Витрат ще немає">
-              {expenseItems.slice(0, 12).map((item, idx) => <ExpenseItemRow key={`${item.id || idx}`} item={item} />)}
-            </ListCard>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <ListCard title="Топ клієнтів" icon={<Users size={16} className="text-emerald-500" />} empty="Немає клієнтів за період">
-          {listOf(clients.top_by_revenue).slice(0, 8).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
-        </ListCard>
-
-        <ListCard title="Борги" icon={<AlertTriangle size={16} className="text-red-500" />} empty="Боргів немає">
-          {listOf(debts.items).slice(0, 8).map((debt, idx) => <DebtRow key={`${debt.visit_id || idx}`} item={debt} />)}
-        </ListCard>
-
-        <ListCard title="Низька маржа" icon={<TrendingUp size={16} className="text-orange-500" />} empty="Позицій з низькою маржею немає">
-          {listOf(products.low_margin).slice(0, 8).map((part, idx) => <LowMarginRow key={`${part.article}-${idx}`} item={part} />)}
-        </ListCard>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
-        <ListCard title="Залежаний склад" icon={<Package size={16} className="text-slate-500" />} empty="Залежаного складу немає або немає залишків">
-          {listOf(products.dead_stock).slice(0, 8).map((item, idx) => <DeadStockRow key={`${item.id || idx}`} item={item} />)}
-        </ListCard>
-
-        <ListCard title="Сплячі клієнти" icon={<Clock3 size={16} className="text-slate-500" />} empty="Сплячих клієнтів немає">
-          {listOf(clients.sleeping).slice(0, 8).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
-        </ListCard>
-      </div>
       {expenseModalOpen && (
         <ExpenseModal
           data={expenseForm}
           setData={setExpenseForm}
-          saving={savingExpense}
-          onSubmit={handleCreateExpense}
+          saving={expenseSaving}
+          onSubmit={handleAddExpense}
           onClose={() => setExpenseModalOpen(false)}
         />
       )}
-
     </div>
   );
 };
+
+const Header = ({ title, subtitle, period, timeFilter, setTimeFilter, dateFrom, setDateFrom, dateTo, setDateTo }) => (
+  <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm px-5 md:px-7 py-5 mb-5">
+    <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-5">
+      <div className="min-w-0">
+        <h1 className="text-2xl md:text-4xl font-black uppercase italic text-slate-900 flex items-center gap-3">
+          <BarChart className="text-blue-600 shrink-0" /> Аналітика
+        </h1>
+        <p className="text-slate-500 font-bold text-sm mt-2 max-w-3xl">{subtitle}</p>
+        {period?.label && (
+          <p className="text-[10px] md:text-xs font-black uppercase text-blue-600 mt-3 tracking-widest">
+            Період: {period.label}{period.date_from ? ` • ${period.date_from} — ${period.date_to}` : ''}
+          </p>
+        )}
+      </div>
+      <div className="w-full 2xl:w-auto space-y-2">
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 w-full 2xl:w-auto overflow-x-auto">
+          {PERIODS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setTimeFilter(item.key)}
+              className={`flex-1 2xl:flex-none px-4 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${timeFilter === item.key ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        {timeFilter === 'custom' && (
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700" />
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700" />
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+const SectionNav = ({ isStore, hasMechanics, hasWorkPosts }) => {
+  const items = isStore
+    ? [
+        ['overview-section', <BarChart size={15} />, 'Огляд'],
+        ['orders-section', <ShoppingCart size={15} />, 'Замовлення'],
+        ['products-section', <Package size={15} />, 'Товари'],
+        ['suppliers-section', <Package size={15} />, 'Постачальники'],
+        ['stock-section', <Building2 size={15} />, 'Склад'],
+        ['clients-section', <Users size={15} />, 'Клієнти'],
+        ['expenses-section', <DollarSign size={15} />, 'Витрати'],
+      ]
+    : [
+        ['overview-section', <BarChart size={15} />, 'Огляд'],
+        ...(hasMechanics ? [['mechanics-section', <Users size={15} />, 'Майстри']] : []),
+        ...(hasWorkPosts ? [['posts-section', <Building2 size={15} />, 'Пости']] : []),
+        ['suppliers-section', <Package size={15} />, 'Постачальники'],
+        ['expenses-section', <DollarSign size={15} />, 'Витрати'],
+        ['clients-section', <Users size={15} />, 'Клієнти'],
+        ['products-section', <Package size={15} />, 'Товари / роботи'],
+      ];
+
+  return (
+    <div className="sticky top-2 z-20 bg-white/90 backdrop-blur rounded-[26px] border border-slate-200 shadow-sm p-2 mb-5 overflow-x-auto">
+      <div className="flex gap-2 min-w-max">
+        {items.map(([id, icon, label], idx) => (
+          <button
+            key={id}
+            onClick={() => scrollToSection(id)}
+            className={`rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center gap-2 transition ${idx === 0 ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-blue-50 hover:text-blue-700'}`}
+          >
+            {icon} {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ErrorBox = ({ message }) => (
+  <div className="mb-6 bg-red-50 border border-red-100 text-red-700 rounded-3xl p-4 flex items-start gap-3">
+    <AlertTriangle className="shrink-0 mt-0.5" size={18} />
+    <div><p className="font-black text-sm uppercase">Помилка аналітики</p><p className="text-sm font-semibold mt-1">{message}</p></div>
+  </div>
+);
+
+const StoreAnalytics = ({ summary, chart, maxChartValue, products, topProductsByRevenue, topProductsByProfit, lowMarginProducts, deadStockItems, suppliers, supplierItems, clients, topClients, sleepingClients, debts, expenses, expenseCategories, expenseItems, onOpenExpense }) => (
+  <>
+    <div id="overview-section" className="scroll-mt-28 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8 gap-4 mb-6">
+      <MetricCard icon={<Wallet size={15} />} label="Виручка" value={`${money(summary.revenue)} ₴`} tone="blue" />
+      <MetricCard icon={<Package size={15} />} label="Закупка проданого" value={`${money(summary.cost)} ₴`} tone="slate" />
+      <MetricCard icon={<TrendingUp size={15} />} label="Валовий прибуток" value={`${money(summary.gross_profit)} ₴`} sub={`Маржа ${percent(summary.margin_percent)}`} tone="emerald" />
+      <MetricCard icon={<CheckCircle2 size={15} />} label="Чистий прибуток" value={`${money(summary.net_profit)} ₴`} sub={`Після витрат ${percent(summary.net_margin_percent)}`} tone="green" />
+      <MetricCard icon={<DollarSign size={15} />} label="Витрати магазину" value={`${money(summary.operating_expenses)} ₴`} tone="red" />
+      <MetricCard icon={<ShoppingCart size={15} />} label="Закриті замовлення" value={summary.completed_orders_count || 0} sub={`Сер. чек ${money(summary.average_check)} ₴`} tone="orange" />
+      <MetricCard icon={<AlertTriangle size={15} />} label="Борги" value={`${money(summary.debt_total)} ₴`} sub={`${summary.debt_orders_count || 0} зам.`} tone="red" />
+      <MetricCard icon={<Activity size={15} />} label="Активні" value={summary.active_orders_count || 0} sub={`Воронка ${money(summary.pipeline_revenue)} ₴`} tone="purple" />
+    </div>
+
+    <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 mb-6">
+      <ChartPanel chart={chart} maxChartValue={maxChartValue} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-1 gap-4">
+        <SmallStat label="Оплачено" value={`${money(summary.paid_total)} ₴`} icon={<CheckCircle2 size={16} />} />
+        <SmallStat label="Незакрита сума" value={`${money(summary.pipeline_revenue)} ₴`} icon={<Activity size={16} />} />
+        <SmallStat label="Собівартість проданого" value={`${money(summary.cost)} ₴`} icon={<Package size={16} />} />
+        <SmallStat label="Скасовані замовлення" value={summary.cancelled_orders_count || 0} icon={<AlertTriangle size={16} />} />
+      </div>
+    </div>
+
+    <div id="orders-section" className="scroll-mt-28 mb-6">
+      <SectionTitle icon={<ShoppingCart size={17} className="text-blue-600" />} title="Замовлення магазину" subtitle="Де зависають гроші: активні, виконані, борги і скасування." />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <BigMiniCard title="Всі за період" value={summary.orders_count || 0} subtitle="створені / оновлені замовлення" />
+        <BigMiniCard title="Виконані" value={summary.completed_orders_count || 0} subtitle={`виручка ${money(summary.revenue)} ₴`} />
+        <BigMiniCard title="Активні" value={summary.active_orders_count || 0} subtitle={`у роботі на ${money(summary.pipeline_revenue)} ₴`} />
+        <BigMiniCard title="Проблемні" value={summary.debt_orders_count || 0} subtitle={`борг ${money(summary.debt_total)} ₴`} danger />
+      </div>
+    </div>
+
+    <div id="products-section" className="scroll-mt-28 grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+      <ListCard title="Топ товарів за виручкою" icon={<Package size={16} className="text-amber-500" />} empty="Немає проданих товарів">
+        {topProductsByRevenue.slice(0, 10).map((part, idx) => <ProductRow key={`${part.article}-${idx}`} item={part} />)}
+      </ListCard>
+      <ListCard title="Топ товарів за прибутком" icon={<TrendingUp size={16} className="text-emerald-500" />} empty="Немає прибуткових товарів">
+        {topProductsByProfit.slice(0, 10).map((part, idx) => <ProductRow key={`${part.article}-${idx}`} item={part} showProfit />)}
+      </ListCard>
+    </div>
+
+    <SuppliersSection suppliers={suppliers} supplierItems={supplierItems} />
+
+    <div id="stock-section" className="scroll-mt-28 grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+      <ListCard title="Залежаний склад" icon={<Building2 size={16} className="text-slate-500" />} empty="Залежаного складу немає або немає залишків">
+        {deadStockItems.slice(0, 10).map((item, idx) => <DeadStockRow key={`${item.id || idx}`} item={item} />)}
+      </ListCard>
+      <ListCard title="Низька маржа товарів" icon={<AlertTriangle size={16} className="text-orange-500" />} empty="Позицій з низькою маржею немає">
+        {lowMarginProducts.slice(0, 10).map((part, idx) => <LowMarginRow key={`${part.article}-${idx}`} item={part} />)}
+      </ListCard>
+      <Panel title="Коротко по складу" icon={<Package size={16} className="text-blue-500" />}>
+        <div className="grid grid-cols-1 gap-3">
+          <SmallStat label="Собівартість проданого" value={`${money(summary.cost)} ₴`} icon={<Package size={16} />} />
+          <SmallStat label="Потенційно залежало" value={`${deadStockItems.length} поз.`} icon={<Clock3 size={16} />} />
+          <SmallStat label="Низька маржа" value={`${lowMarginProducts.length} поз.`} icon={<AlertTriangle size={16} />} />
+        </div>
+      </Panel>
+    </div>
+
+    <div id="clients-section" className="scroll-mt-28 grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+      <ListCard title="Топ клієнтів" icon={<Users size={16} className="text-emerald-500" />} empty="Немає клієнтів за період">
+        {topClients.slice(0, 10).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
+      </ListCard>
+      <ListCard title="Борги / неоплачені" icon={<AlertTriangle size={16} className="text-red-500" />} empty="Боргів немає">
+        {listOf(debts.items).slice(0, 10).map((debt, idx) => <DebtRow key={`${debt.visit_id || idx}`} item={debt} />)}
+      </ListCard>
+      <ListCard title="Сплячі клієнти" icon={<Clock3 size={16} className="text-slate-500" />} empty="Сплячих клієнтів немає">
+        {sleepingClients.slice(0, 10).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
+      </ListCard>
+    </div>
+
+    <ExpensesSection expenses={expenses} categories={expenseCategories} items={expenseItems} onOpen={onOpenExpense} title="Витрати магазину" />
+  </>
+);
+
+const StoAnalytics = ({ summary, chart, maxChartValue, products, services, workPosts, suppliers, supplierItems, clients, debts, expenses, expenseCategories, expenseItems, mechanicItems, hasMechanics, expandedMechanicId, onToggleMechanic, onOpenExpense }) => (
+  <>
+    <div id="overview-section" className="scroll-mt-28 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8 gap-4 mb-6">
+      <MetricCard icon={<Wallet size={15} />} label="Виручка" value={`${money(summary.revenue)} ₴`} tone="blue" />
+      <MetricCard icon={<TrendingUp size={15} />} label="Валовий прибуток" value={`${money(summary.gross_profit)} ₴`} sub={`Маржа ${percent(summary.margin_percent)}`} tone="emerald" />
+      <MetricCard icon={<CheckCircle2 size={15} />} label="Чистий прибуток" value={`${money(summary.net_profit)} ₴`} sub={`Після зарплат і витрат`} tone="green" />
+      <MetricCard icon={<Wrench size={15} />} label="Майстрам" value={`${money(summary.mechanic_commission)} ₴`} tone="purple" />
+      <MetricCard icon={<DollarSign size={15} />} label="Витрати СТО" value={`${money(summary.operating_expenses)} ₴`} tone="red" />
+      <MetricCard icon={<DollarSign size={15} />} label="Борги" value={`${money(summary.debt_total)} ₴`} sub={`${summary.debt_orders_count || 0} зам.`} tone="red" />
+      <MetricCard icon={<Activity size={15} />} label="Закриті візити" value={summary.completed_orders_count || 0} sub={`Сер. чек ${money(summary.average_check)} ₴`} tone="orange" />
+      <MetricCard icon={<Package size={15} />} label="Собівартість" value={`${money(summary.cost)} ₴`} tone="slate" />
+    </div>
+
+    <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 mb-6">
+      <ChartPanel chart={chart} maxChartValue={maxChartValue} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-1 gap-4">
+        <SmallStat label="Активні в роботі" value={summary.active_orders_count || 0} icon={<Clock3 size={16} />} />
+        <SmallStat label="Воронка / незакрита сума" value={`${money(summary.pipeline_revenue)} ₴`} icon={<Activity size={16} />} />
+        <SmallStat label="Оплачено" value={`${money(summary.paid_total)} ₴`} icon={<CheckCircle2 size={16} />} />
+        <SmallStat label="Собівартість запчастин" value={`${money(summary.cost)} ₴`} icon={<Package size={16} />} />
+      </div>
+    </div>
+
+    {hasMechanics && <MechanicsSection items={mechanicItems} expandedId={expandedMechanicId} onToggle={onToggleMechanic} />}
+
+    <div id="products-section" className="scroll-mt-28 grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+      <ListCard title="Топ запчастин за виручкою" icon={<Package size={16} className="text-amber-500" />} empty="Немає проданих запчастин">
+        {listOf(products.top_by_revenue).slice(0, 10).map((part, idx) => <ProductRow key={`${part.article}-${idx}`} item={part} />)}
+      </ListCard>
+      <ListCard title="Топ робіт" icon={<Wrench size={16} className="text-purple-500" />} empty="Немає виконаних робіт">
+        {listOf(services.top_by_revenue).slice(0, 10).map((service, idx) => <ServiceRow key={`${service.name}-${idx}`} item={service} />)}
+      </ListCard>
+    </div>
+
+    {listOf(workPosts.items).length > 0 && (
+      <div id="posts-section" className="scroll-mt-28 grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+        <ListCard title="Пости / підйомники" icon={<Building2 size={16} className="text-cyan-500" />} empty="Немає даних по постах">
+          {listOf(workPosts.items).slice(0, 12).map((post, idx) => <WorkPostRow key={`${post.id || idx}`} item={post} />)}
+        </ListCard>
+      </div>
+    )}
+
+    <SuppliersSection suppliers={suppliers} supplierItems={supplierItems} />
+    <ExpensesSection expenses={expenses} categories={expenseCategories} items={expenseItems} onOpen={onOpenExpense} title="Витрати СТО" />
+
+    <div id="clients-section" className="scroll-mt-28 grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+      <ListCard title="Топ клієнтів" icon={<Users size={16} className="text-emerald-500" />} empty="Немає клієнтів за період">
+        {listOf(clients.top_by_revenue).slice(0, 10).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
+      </ListCard>
+      <ListCard title="Борги" icon={<AlertTriangle size={16} className="text-red-500" />} empty="Боргів немає">
+        {listOf(debts.items).slice(0, 10).map((debt, idx) => <DebtRow key={`${debt.visit_id || idx}`} item={debt} />)}
+      </ListCard>
+      <ListCard title="Низька маржа" icon={<TrendingUp size={16} className="text-orange-500" />} empty="Позицій з низькою маржею немає">
+        {listOf(products.low_margin).slice(0, 10).map((part, idx) => <LowMarginRow key={`${part.article}-${idx}`} item={part} />)}
+      </ListCard>
+    </div>
+
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <ListCard title="Залежаний склад" icon={<Package size={16} className="text-slate-500" />} empty="Залежаного складу немає або немає залишків">
+        {listOf(products.dead_stock).slice(0, 10).map((item, idx) => <DeadStockRow key={`${item.id || idx}`} item={item} />)}
+      </ListCard>
+      <ListCard title="Сплячі клієнти" icon={<Clock3 size={16} className="text-slate-500" />} empty="Сплячих клієнтів немає">
+        {listOf(clients.sleeping).slice(0, 10).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
+      </ListCard>
+    </div>
+  </>
+);
+
+const SuppliersSection = ({ suppliers, supplierItems }) => (
+  <div id="suppliers-section" className="scroll-mt-28 grid grid-cols-1 2xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)] gap-6 mb-6">
+    <Panel title="Оборот по постачальниках" icon={<Package size={16} className="text-amber-500" />} subtitle={`${supplierItems.length || 0} постачальників · продаж ${money(suppliers.summary?.revenue)} ₴ · прибуток ${money(suppliers.summary?.profit)} ₴`}>
+      {supplierItems.length ? supplierItems.slice(0, 14).map((supplier, idx) => <SupplierRow key={`${supplier.name || idx}`} item={supplier} />) : <EmptyState title="Немає даних по постачальниках" />}
+    </Panel>
+    <Panel title="Постачальники з низькою маржею" icon={<AlertTriangle size={16} className="text-orange-500" />}>
+      {listOf(suppliers.low_margin).length ? listOf(suppliers.low_margin).slice(0, 12).map((supplier, idx) => <SupplierRow key={`${supplier.name || idx}`} item={supplier} compact />) : <EmptyState title="Низької маржі по постачальниках немає" />}
+    </Panel>
+  </div>
+);
+
+const ExpensesSection = ({ expenses, categories, items, onOpen, title }) => (
+  <div id="expenses-section" className="scroll-mt-28 mb-6">
+    <Panel
+      title={title}
+      icon={<DollarSign size={16} className="text-rose-500" />}
+      subtitle="Оренда, реклама, комунальні, доставка, програми, податки та інші операційні витрати."
+      action={<button onClick={onOpen} className="bg-rose-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center gap-2 hover:bg-rose-700"><Plus size={16} /> Додати витрату</button>}
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+        <SmallStat label="Витрати за період" value={`${money(expenses.summary?.total)} ₴`} icon={<DollarSign size={16} />} />
+        <SmallStat label="Разові витрати" value={`${money(expenses.summary?.one_time_total)} ₴`} icon={<Activity size={16} />} />
+        <SmallStat label="Постійні витрати" value={`${money(expenses.summary?.recurring_total)} ₴`} icon={<Clock3 size={16} />} />
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <ListCard title="Витрати по категоріях" icon={<PieChart size={16} className="text-rose-500" />} empty="Витрат за період немає" inner>
+          {categories.slice(0, 12).map((item, idx) => <ExpenseCategoryRow key={`${item.category || idx}`} item={item} />)}
+        </ListCard>
+        <ListCard title="Останні витрати" icon={<Clock3 size={16} className="text-slate-500" />} empty="Витрат ще немає" inner>
+          {items.slice(0, 12).map((item, idx) => <ExpenseItemRow key={`${item.id || idx}`} item={item} />)}
+        </ListCard>
+      </div>
+    </Panel>
+  </div>
+);
+
+const ChartPanel = ({ chart, maxChartValue }) => (
+  <Panel title="Динаміка" icon={<Calendar size={16} className="text-blue-500" />} subtitle="Синій — виручка, зелений — чистий прибуток.">
+    {chart.length > 0 ? (
+      <div className="h-[320px] w-full flex items-end justify-center gap-3 md:gap-5 pt-10 overflow-x-auto">
+        {chart.map((item, idx) => {
+          const revenueHeight = Math.max((Number(item.revenue || 0) / maxChartValue) * 100, 2);
+          const netHeight = Math.max((Number(item.net_profit || 0) / maxChartValue) * 100, 2);
+          return (
+            <div key={`${item.date || idx}`} className="min-w-[46px] flex-1 max-w-[85px] flex flex-col items-center group relative h-full justify-end">
+              <div className="absolute -top-10 bg-slate-900 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                {money(item.revenue)} ₴ / чистий {money(item.net_profit)} ₴
+              </div>
+              <div className="w-full h-full flex items-end gap-1.5 justify-center">
+                <div className="w-1/2 bg-blue-500 rounded-t-xl transition-all duration-500" style={{ height: `${revenueHeight}%` }} />
+                <div className="w-1/2 bg-emerald-500 rounded-t-xl transition-all duration-500" style={{ height: `${netHeight}%` }} />
+              </div>
+              <span className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-2 truncate w-full text-center">{item.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    ) : <EmptyState icon={<BarChart size={42} />} title="Немає даних за цей період" />}
+  </Panel>
+);
 
 const MetricCard = ({ icon, label, value, sub, tone = 'blue' }) => {
   const tones = {
@@ -456,431 +576,213 @@ const MetricCard = ({ icon, label, value, sub, tone = 'blue' }) => {
     purple: 'bg-purple-50 text-purple-600',
     red: 'bg-red-50 text-red-600',
     orange: 'bg-orange-50 text-orange-600',
+    slate: 'bg-slate-100 text-slate-600',
   };
   return (
-    <div className="bg-white p-5 rounded-[28px] border border-slate-200 shadow-sm relative overflow-hidden hover:shadow-md transition-shadow">
-      <div className={`w-10 h-10 rounded-2xl ${tones[tone] || tones.blue} flex items-center justify-center mb-4`}>{icon}</div>
-      <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{label}</p>
-      <h3 className="text-[26px] font-black text-slate-900 leading-tight tracking-tight">{value}</h3>
-      {sub && <p className="text-[10px] font-bold text-slate-500 mt-2">{sub}</p>}
-    </div>
-  );
-};
-
-const SmallStat = ({ icon, label, value }) => (
-  <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-    <div className="w-11 h-11 rounded-2xl bg-slate-50 text-slate-600 flex items-center justify-center shrink-0">{icon}</div>
-    <div className="min-w-0">
-      <p className="text-[10px] font-black uppercase text-slate-400 truncate">{label}</p>
-      <p className="text-xl font-black text-slate-800 truncate">{value}</p>
-    </div>
-  </div>
-);
-
-const ListCard = ({ title, icon, empty, children }) => {
-  const count = React.Children.count(children);
-  return (
-    <div className="bg-white p-5 md:p-6 rounded-[28px] border border-slate-200 shadow-sm">
-      <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm">{icon} {title}</h3>
-      <div className="space-y-3">
-        {count > 0 ? children : <p className="text-[10px] font-black uppercase text-center text-slate-400 py-6">{empty}</p>}
+    <div className="bg-white p-4 rounded-[26px] border border-slate-200 shadow-sm min-h-[148px] flex flex-col justify-between">
+      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${tones[tone] || tones.blue}`}>{icon}</div>
+      <div>
+        <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{label}</p>
+        <h3 className="text-2xl font-black text-slate-900 leading-tight break-words">{value}</h3>
+        {sub && <p className="text-[10px] font-bold text-slate-500 mt-2">{sub}</p>}
       </div>
     </div>
   );
 };
+
+const Panel = ({ title, subtitle, icon, children, action }) => (
+  <div className="bg-white p-5 md:p-6 rounded-[30px] border border-slate-200 shadow-sm">
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+      <div>
+        <h3 className="font-black uppercase text-slate-900 flex items-center gap-2 text-sm">{icon}{title}</h3>
+        {subtitle && <p className="text-xs font-semibold text-slate-500 mt-1 max-w-2xl">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+    {children}
+  </div>
+);
+
+const ListCard = ({ title, icon, empty, children, inner = false }) => (
+  <div className={`${inner ? 'bg-slate-50/70' : 'bg-white'} p-5 md:p-6 rounded-[30px] border border-slate-200 shadow-sm`}>
+    <h3 className="font-black uppercase text-slate-900 mb-4 flex items-center gap-2 text-sm">{icon}{title}</h3>
+    <div className="space-y-3">
+      {React.Children.count(children) > 0 ? children : <EmptyState title={empty} />}
+    </div>
+  </div>
+);
 
 const EmptyState = ({ icon, title }) => (
-  <div className="h-[250px] w-full flex flex-col items-center justify-center text-slate-300">
-    <div className="mb-3 opacity-60">{icon}</div>
-    <p className="text-xs font-black uppercase tracking-widest">{title}</p>
+  <div className="min-h-[130px] flex flex-col items-center justify-center text-slate-300 text-center p-6">
+    {icon || <BarChart size={34} className="mb-2 opacity-50" />}
+    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{title}</p>
   </div>
 );
 
-const MechanicsSection = ({ items, expandedId, onToggle }) => {
-  const totalCommission = items.reduce((sum, item) => sum + Number(item.commission_total || 0), 0);
-  const totalPartsCommission = items.reduce((sum, item) => sum + Number(item.parts_commission || 0), 0);
-  const totalServiceCommission = items.reduce((sum, item) => sum + Number(item.service_commission || 0), 0);
-
-  return (
-    <div id="mechanics-section" className="scroll-mt-24 mb-6 bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-      <div className="p-5 md:p-6 bg-gradient-to-r from-purple-700 via-blue-700 to-cyan-600 text-white">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-white/75 text-[10px] font-black uppercase tracking-widest"><Users size={15}/> Окрема аналітика</div>
-            <h2 className="text-2xl md:text-3xl font-black uppercase italic mt-2">Майстри</h2>
-            <p className="text-sm font-bold text-white/80 mt-2 max-w-2xl">Заробіток по кожному майстру: роботи, відсоток від запчастин і прихована історія по датах.</p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
-            <MiniTotal label="Всього" value={`${money(totalCommission)} ₴`} />
-            <MiniTotal label="Роботи" value={`${money(totalServiceCommission)} ₴`} />
-            <MiniTotal label="Запчастини" value={`${money(totalPartsCommission)} ₴`} />
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4 md:p-5 space-y-3">
-        {items.map((item, idx) => {
-          const id = item.id || item.employee_id || item.name || idx;
-          return <MechanicDetailCard key={id} item={item} expanded={expandedId === id} onToggle={() => onToggle(id)} />;
-        })}
-      </div>
-    </div>
-  );
-};
-
-const MiniTotal = ({ label, value }) => (
-  <div className="bg-white/15 border border-white/20 rounded-2xl p-3 min-w-0">
-    <p className="text-[9px] font-black uppercase text-white/70 truncate">{label}</p>
-    <p className="text-lg font-black text-white truncate">{value}</p>
+const SmallStat = ({ label, value, icon }) => (
+  <div className="bg-white border border-slate-200 rounded-[24px] p-4 shadow-sm flex items-center gap-4 min-h-[92px]">
+    <div className="w-11 h-11 rounded-2xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0">{icon}</div>
+    <div className="min-w-0"><p className="text-[10px] font-black uppercase text-slate-400">{label}</p><p className="text-xl font-black text-slate-900 truncate">{value}</p></div>
   </div>
 );
 
-const MechanicDetailCard = ({ item, expanded, onToggle }) => {
-  const history = listOf(item.history_by_date);
-  return (
-    <div className="border border-slate-200 rounded-3xl overflow-hidden bg-slate-50/60">
-      <button onClick={onToggle} className="w-full p-4 bg-white hover:bg-slate-50 transition flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 text-left">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {expanded ? <ChevronDown size={18} className="text-purple-600" /> : <ChevronRight size={18} className="text-slate-400" />}
-            <p className="text-sm font-black text-slate-900 truncate">{item.name || 'Майстер'}</p>
-          </div>
-          <p className="text-[10px] font-black uppercase text-slate-400 mt-1 ml-6">
-            {item.services_count || 0} робіт • {item.visits_count || 0} візитів • {salarySchemeLabel(item.salary_scheme)} • виплата {payoutLabel(item.payout_period)}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto">
-          <MechanicPill label="Заробив" value={`${money(item.commission_total)} ₴`} tone="purple" />
-          <MechanicPill label="За роботи" value={`${money(item.service_commission)} ₴`} />
-          <MechanicPill label="Із запчастин" value={`${money(item.parts_commission)} ₴`} />
-          <MechanicPill label="Робіт на суму" value={`${money(item.services_revenue)} ₴`} />
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="p-4 md:p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <SmallInfo label="Маржа запчастин, що бралась у розрахунок" value={`${money(item.parts_profit)} ₴`} />
-            <SmallInfo label="Середній % нарахування" value={percent(item.average_commission_percent)} />
-            <SmallInfo label="Записів в історії" value={item.history_count || 0} />
-          </div>
-
-          {history.length > 0 ? history.map((day) => <MechanicDayGroup key={day.date} day={day} />) : (
-            <div className="p-6 text-center bg-white rounded-2xl border border-dashed border-slate-200">
-              <p className="text-xs font-black uppercase text-slate-400">По цьому майстру ще немає нарахувань за обраний період</p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const MechanicPill = ({ label, value, tone }) => (
-  <div className={`rounded-2xl p-3 border ${tone === 'purple' ? 'bg-purple-50 border-purple-100 text-purple-700' : 'bg-slate-50 border-slate-100 text-slate-700'}`}>
-    <p className="text-[9px] font-black uppercase opacity-60 truncate">{label}</p>
-    <p className="text-sm font-black truncate">{value}</p>
+const BigMiniCard = ({ title, value, subtitle, danger }) => (
+  <div className="bg-white border border-slate-200 rounded-[26px] p-5 shadow-sm">
+    <p className={`text-[10px] font-black uppercase ${danger ? 'text-red-500' : 'text-slate-400'}`}>{title}</p>
+    <p className="text-3xl font-black text-slate-900 mt-2">{value}</p>
+    <p className="text-xs font-bold text-slate-500 mt-2">{subtitle}</p>
   </div>
 );
 
-const SmallInfo = ({ label, value }) => (
-  <div className="bg-white rounded-2xl border border-slate-100 p-3">
-    <p className="text-[9px] font-black uppercase text-slate-400">{label}</p>
-    <p className="text-lg font-black text-slate-800 mt-1">{value}</p>
-  </div>
-);
-
-const MechanicDayGroup = ({ day }) => (
-  <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
-    <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-      <div>
-        <p className="text-sm font-black text-slate-900">{day.label || day.date}</p>
-        <p className="text-[10px] font-black uppercase text-slate-400">{day.visits_count || 0} візитів • роботи {money(day.service_commission)} ₴ • запчастини {money(day.parts_commission)} ₴</p>
-      </div>
-      <div className="text-lg font-black text-purple-600">{money(day.commission_total)} ₴</div>
-    </div>
-    <div className="p-3 space-y-3">
-      {listOf(day.items).map((item, idx) => <MechanicVisitDetail key={`${item.visit_id}-${idx}`} item={item} />)}
-    </div>
-  </div>
-);
-
-const MechanicVisitDetail = ({ item }) => (
-  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-xs font-black text-slate-900">Візит #{item.visit_id} • {item.plate || 'Авто'}</p>
-        <p className="text-[10px] font-bold text-slate-500 mt-1">{item.client || 'Клієнт'} • {item.phone || 'без телефону'} • {item.work_post || 'Без поста'}</p>
-      </div>
-      <div className="text-right shrink-0">
-        <p className="text-sm font-black text-purple-600">{money(item.commission_total)} ₴</p>
-        <p className="text-[10px] font-bold text-slate-400">роботи {money(item.service_commission)} ₴ / запчастини {money(item.parts_commission)} ₴</p>
-      </div>
-    </div>
-
-    {listOf(item.services).length > 0 && (
-      <div className="mt-4">
-        <p className="text-[10px] font-black uppercase text-slate-400 mb-2">За які роботи нараховано</p>
-        <div className="space-y-2">
-          {listOf(item.services).map((service, idx) => (
-            <div key={`${service.name}-${idx}`} className="flex justify-between gap-3 bg-white rounded-xl border border-slate-100 p-3">
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-800 truncate">{service.name}</p>
-                <p className="text-[9px] font-black uppercase text-slate-400">{decimalMoney(service.quantity)} × {money(service.revenue)} ₴ • {percent(service.commission_percent)}</p>
-              </div>
-              <p className="text-xs font-black text-purple-600 shrink-0">{money(service.commission_amount)} ₴</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    )}
-
-    {listOf(item.parts).length > 0 && (
-      <div className="mt-4">
-        <p className="text-[10px] font-black uppercase text-slate-400 mb-2">З яких запчастин накапало</p>
-        <div className="space-y-2">
-          {listOf(item.parts).map((part, idx) => (
-            <div key={`${part.article}-${idx}`} className="flex justify-between gap-3 bg-white rounded-xl border border-slate-100 p-3">
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-800 truncate">{part.name || 'Запчастина'}</p>
-                <p className="text-[9px] font-black uppercase text-slate-400">{part.brand || ''} {part.article || ''} • маржа {money(part.allocated_profit)} ₴ • {percent(part.commission_percent)}</p>
-              </div>
-              <p className="text-xs font-black text-purple-600 shrink-0">{money(part.commission_amount)} ₴</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-const ProductRow = ({ item }) => (
-  <div className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+const ProductRow = ({ item, showProfit = false }) => (
+  <div className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl border border-slate-100 gap-3">
     <div className="flex-1 min-w-0">
-      <p className="text-xs font-bold text-slate-700 leading-snug mb-1.5 break-words">{item.name || 'Деталь'}</p>
+      <p className="text-sm font-black text-slate-800 leading-snug mb-2 break-words">{item.name || 'Деталь'}</p>
       <div className="flex items-center flex-wrap gap-1.5">
-        <span className="text-[9px] font-black uppercase text-slate-400 bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm">{item.brand || 'Без бренду'}</span>
-        {item.article ? <CopyButton value={item.article} label={item.article} copiedLabel="Скопійовано" title="Копіювати артикул" compact /> : null}
-        <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">{decimalMoney(item.quantity)} шт</span>
+        <span className="text-[9px] font-black uppercase text-slate-400 bg-white border border-slate-200 px-2 py-1 rounded-lg">{item.brand || 'Без бренду'}</span>
+        {item.article && <CopyButton value={item.article} label={item.article} copiedLabel="Скопійовано" title="Копіювати артикул" compact />}
+        <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-200 px-2 py-1 rounded-lg">{decimalMoney(item.quantity)} шт</span>
       </div>
     </div>
-    <div className="text-right shrink-0">
-      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
-      <div className="text-[10px] font-bold text-emerald-600">+{money(item.profit)} ₴</div>
-    </div>
+    <div className="text-right shrink-0"><p className="text-lg font-black text-slate-900">{money(item.revenue)} ₴</p><p className="text-[10px] font-black text-emerald-600">+{money(showProfit ? item.profit : item.profit)} ₴</p></div>
   </div>
 );
 
 const ServiceRow = ({ item }) => (
-  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
-    <div className="overflow-hidden pr-2 flex-1">
-      <p className="text-xs font-bold text-slate-700 truncate">{item.name || 'Робота'}</p>
-      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{decimalMoney(item.quantity)} разів • майстрам {money(item.commission_total)} ₴</p>
-    </div>
-    <div className="text-right shrink-0">
-      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
-      <div className="text-[10px] font-bold text-emerald-600">{money(item.profit_after_commission)} ₴ після ЗП</div>
-    </div>
+  <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 gap-3">
+    <div className="min-w-0"><p className="text-sm font-black text-slate-800 truncate">{item.name}</p><p className="text-[10px] font-bold text-slate-400">{decimalMoney(item.quantity)} шт · майстрам {money(item.commission_total)} ₴</p></div>
+    <div className="text-right shrink-0"><p className="text-lg font-black text-slate-900">{money(item.revenue)} ₴</p><p className="text-[10px] font-black text-emerald-600">після зарпл. {money(item.profit_after_commission)} ₴</p></div>
   </div>
 );
 
-const WorkPostRow = ({ item }) => (
-  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-black text-slate-800 truncate">{item.name || 'Без поста'}</p>
-      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.completed_count || 0} закрито • {item.active_count || 0} активні</p>
+const SupplierRow = ({ item, compact }) => (
+  <div className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl border border-slate-100 gap-3">
+    <div className="min-w-0">
+      <p className="text-sm font-black text-slate-900 truncate">{item.name || 'Без постачальника'}</p>
+      <p className="text-[10px] font-bold text-slate-400 mt-1">{item.parts_count || 0} позицій · {item.visits_count || 0} замовл. · маржа {percent(item.margin_percent)}{item.variants_count ? ` · складів: ${item.variants_count}` : ''}</p>
+      {!compact && <p className="text-[10px] font-bold text-slate-500 mt-1">Закупка {money(item.cost)} ₴ · прибуток {money(item.profit)} ₴</p>}
     </div>
-    <div className="text-right shrink-0">
-      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
-      <div className="text-[10px] font-bold text-emerald-600">{money(item.net_profit)} ₴ чистими</div>
-    </div>
+    <div className="text-right shrink-0"><p className="text-lg font-black text-slate-900">{money(item.revenue)} ₴</p><p className="text-[10px] font-black text-emerald-600">+{money(item.profit)} ₴</p></div>
   </div>
 );
 
 const ClientRow = ({ item }) => (
-  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-black text-slate-800 truncate">{item.client || 'Клієнт'}</p>
-      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.phone || 'без телефону'} • {item.orders_count || 0} зам.</p>
-    </div>
-    <div className="text-right shrink-0">
-      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
-      {Number(item.debt || 0) > 0 && <div className="text-[10px] font-bold text-red-600">борг {money(item.debt)} ₴</div>}
-    </div>
+  <div className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl border border-slate-100 gap-3">
+    <div className="min-w-0"><p className="text-sm font-black text-slate-800 truncate">{item.client || 'Клієнт'}</p><p className="text-[10px] font-bold text-slate-400">{item.phone || 'без телефону'} · {item.orders_count || 0} зам.</p>{Number(item.debt || 0) > 0 && <p className="text-[10px] font-black text-red-500 mt-1">борг {money(item.debt)} ₴</p>}</div>
+    <p className="text-lg font-black text-slate-900 shrink-0">{money(item.revenue)} ₴</p>
   </div>
 );
 
 const DebtRow = ({ item }) => (
-  <div className="flex justify-between items-center bg-red-50 p-3 rounded-xl border border-red-100 gap-3">
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-black text-slate-800 truncate">{item.client || 'Клієнт'} • {item.plate || 'Авто'}</p>
-      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.phone || 'без телефону'} • зам. #{item.visit_id}</p>
-    </div>
-    <div className="text-sm font-black text-red-600 shrink-0">{money(item.amount)} ₴</div>
+  <div className="flex justify-between items-start bg-red-50 p-4 rounded-2xl border border-red-100 gap-3">
+    <div className="min-w-0"><p className="text-sm font-black text-slate-800 truncate">{item.client || 'Клієнт'}</p><p className="text-[10px] font-bold text-slate-400">{item.phone || ''} · {item.plate || ''}</p></div>
+    <p className="text-lg font-black text-red-600 shrink-0">{money(item.amount)} ₴</p>
   </div>
 );
 
 const LowMarginRow = ({ item }) => (
-  <div className="flex justify-between items-center bg-orange-50 p-3 rounded-xl border border-orange-100 gap-3">
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-black text-slate-800 truncate">{item.name || 'Товар'}</p>
-      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.brand || ''} {item.article || ''}</p>
-    </div>
-    <div className="text-right shrink-0">
-      <div className="text-sm font-black text-orange-600">{percent(item.margin_percent)}</div>
-      <div className="text-[10px] font-bold text-slate-500">{money(item.profit)} ₴</div>
-    </div>
+  <div className="flex justify-between items-start bg-orange-50 p-4 rounded-2xl border border-orange-100 gap-3">
+    <div className="min-w-0"><p className="text-sm font-black text-slate-800 truncate">{item.name || item.article}</p><p className="text-[10px] font-bold text-slate-500">{item.brand || ''} {item.article || ''}</p></div>
+    <div className="text-right shrink-0"><p className="text-lg font-black text-orange-600">{percent(item.margin_percent)}</p><p className="text-[10px] font-bold text-slate-500">+{money(item.profit)} ₴</p></div>
   </div>
 );
 
 const DeadStockRow = ({ item }) => (
-  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-black text-slate-800 truncate">{item.name || 'Товар'}</p>
-      <p className="text-[9px] font-black uppercase text-slate-400 mt-0.5">{item.brand || ''} {item.article || ''} • {item.quantity || 0} шт</p>
-    </div>
-    <div className="text-right shrink-0">
-      <div className="text-sm font-black text-slate-800">{money(item.sell_value)} ₴</div>
-      <div className="text-[10px] font-bold text-slate-400">без продажів {item.days_without_sales || 60} дн.</div>
-    </div>
+  <div className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl border border-slate-100 gap-3">
+    <div className="min-w-0"><p className="text-sm font-black text-slate-800 break-words">{item.name || item.article}</p><p className="text-[10px] font-bold text-slate-400">{item.brand || ''} {item.article || ''} · {item.quantity || 0} шт</p></div>
+    <div className="text-right shrink-0"><p className="text-sm font-black text-slate-900">{money(item.buy_value)} ₴</p><p className="text-[10px] font-bold text-slate-400">закупка</p></div>
   </div>
 );
 
-
-const SupplierRow = ({ item, compact }) => (
-  <div className="flex justify-between items-start bg-slate-50/80 hover:bg-white p-4 rounded-2xl border border-slate-100 gap-4 transition-colors">
-    <div className="min-w-0 flex-1">
-      <p className="text-sm font-black text-slate-800 truncate">{item.name || 'Без постачальника'}</p>
-      <p className="text-[10px] font-bold text-slate-400 mt-1">
-        {item.parts_count || 0} позицій · {item.visits_count || 0} візитів · маржа {percent(item.margin_percent)}
-        {Number(item.variants_count || 0) > 1 ? ` · складів: ${item.variants_count}` : ''}
-      </p>
-      {!compact && (
-        <p className="text-[10px] font-bold text-slate-500 mt-1">
-          Закупка {money(item.cost)} ₴ · прибуток {money(item.profit)} ₴
-        </p>
-      )}
-    </div>
-    <div className="text-right shrink-0">
-      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
-      <div className="text-[10px] font-bold text-emerald-600">+{money(item.profit)} ₴</div>
-    </div>
+const WorkPostRow = ({ item }) => (
+  <div className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl border border-slate-100 gap-3">
+    <div className="min-w-0"><p className="text-sm font-black text-slate-800 truncate">{item.name}</p><p className="text-[10px] font-bold text-slate-400">{item.completed_count || 0} закрито · {item.active_count || 0} активні</p></div>
+    <div className="text-right shrink-0"><p className="text-lg font-black text-slate-900">{money(item.revenue)} ₴</p><p className="text-[10px] font-black text-emerald-600">{money(item.net_profit)} ₴ чистими</p></div>
   </div>
 );
 
 const ExpenseCategoryRow = ({ item }) => (
-  <div className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
-    <div className="min-w-0">
-      <p className="text-sm font-black text-slate-800 truncate">{item.label || item.category || 'Витрати'}</p>
-      <p className="text-[10px] font-bold text-slate-400 mt-1">
-        {item.count || 0} записів · {percent(item.share_percent)} від витрат
-      </p>
-      <p className="text-[10px] font-bold text-slate-500 mt-1">
-        Разові {money(item.one_time_total)} ₴ · постійні {money(item.recurring_total)} ₴
-      </p>
-    </div>
-    <div className="text-sm font-black text-rose-600 shrink-0">{money(item.total)} ₴</div>
+  <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 gap-3">
+    <div><p className="text-sm font-black text-slate-800">{item.label || item.category}</p><p className="text-[10px] font-bold text-slate-400">{item.count || 0} витрат · {percent(item.share_percent)} від усіх</p></div>
+    <p className="text-lg font-black text-rose-600 shrink-0">{money(item.total)} ₴</p>
   </div>
 );
 
 const ExpenseItemRow = ({ item }) => (
-  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-    <div className="flex justify-between items-start gap-3">
-      <div className="min-w-0">
-        <p className="text-sm font-black text-slate-800 truncate">{item.title || 'Витрата'}</p>
-        <p className="text-[10px] font-bold text-slate-400 mt-1">
-          {item.date || '—'} · {item.category_label || item.category || 'Інше'} · {item.payment_method_label || ''}
-        </p>
+  <div className="flex justify-between items-start bg-white p-4 rounded-2xl border border-slate-100 gap-3">
+    <div className="min-w-0"><p className="text-sm font-black text-slate-800 truncate">{item.title}</p><p className="text-[10px] font-bold text-slate-400">{item.date || ''} · {item.category_label || ''}</p>{item.comment && <p className="text-[10px] font-semibold text-slate-500 mt-1 break-words">{item.comment}</p>}</div>
+    <p className="text-lg font-black text-rose-600 shrink-0">{money(item.amount)} ₴</p>
+  </div>
+);
+
+const MechanicsSection = ({ items, expandedId, onToggle }) => (
+  <div id="mechanics-section" className="scroll-mt-28 mb-6">
+    <Panel title="Майстри" icon={<Users size={17} className="text-purple-600" />} subtitle="Заробіток по кожному майстру: роботи, відсоток від запчастин і прихована історія по датах.">
+      <div className="space-y-4">
+        {items.map((item) => {
+          const id = item.id || item.employee_id || item.name;
+          const open = expandedId === id;
+          return <MechanicCard key={id} item={item} open={open} onToggle={() => onToggle(id)} />;
+        })}
       </div>
-      <div className="text-sm font-black text-rose-600 shrink-0">{money(item.amount)} ₴</div>
+    </Panel>
+  </div>
+);
+
+const MechanicCard = ({ item, open, onToggle }) => (
+  <div className="bg-slate-50 border border-slate-100 rounded-[24px] overflow-hidden">
+    <button onClick={onToggle} className="w-full p-4 md:p-5 flex items-start justify-between gap-4 text-left hover:bg-slate-100/70 transition">
+      <div className="min-w-0"><p className="text-base font-black text-slate-900 truncate">{item.name}</p><p className="text-[10px] font-black uppercase text-slate-400 mt-1">{salarySchemeLabel(item.salary_scheme)} · {payoutLabel(item.payout_period)} · роботи {percent(item.commission_percent)} · запчастини {percent(item.parts_commission_percent)}</p></div>
+      <div className="flex items-center gap-4 shrink-0"><div className="text-right"><p className="text-xl font-black text-slate-900">{money(item.commission_total)} ₴</p><p className="text-[10px] font-black text-slate-400">{item.history_count || 0} записів</p></div>{open ? <ChevronDown size={20} /> : <ChevronRight size={20} />}</div>
+    </button>
+    {open && <MechanicHistory item={item} />}
+  </div>
+);
+
+const MechanicHistory = ({ item }) => (
+  <div className="px-4 md:px-5 pb-5 space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <SmallStat label="З робіт" value={`${money(item.service_commission)} ₴`} icon={<Wrench size={16} />} />
+      <SmallStat label="Із запчастин" value={`${money(item.parts_commission)} ₴`} icon={<Package size={16} />} />
+      <SmallStat label="Сума робіт" value={`${money(item.services_revenue)} ₴`} icon={<Wallet size={16} />} />
+      <SmallStat label="Маржа запчастин" value={`${money(item.parts_profit)} ₴`} icon={<TrendingUp size={16} />} />
     </div>
-    {item.comment && <p className="text-xs font-semibold text-slate-500 mt-2 break-words">{item.comment}</p>}
+    {listOf(item.history_by_date).length ? listOf(item.history_by_date).map((day) => <MechanicDay key={day.date} day={day} />) : <EmptyState title="Історії по майстру ще немає" />}
+  </div>
+);
+
+const MechanicDay = ({ day }) => (
+  <div className="bg-white border border-slate-100 rounded-[22px] p-4">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3"><p className="font-black text-slate-900">{day.label}</p><p className="text-xs font-black text-purple-600">{money(day.commission_total)} ₴ · {day.visits_count} віз.</p></div>
+    <div className="space-y-3">{listOf(day.items).map((visit) => <MechanicVisitDetail key={`${visit.visit_id}-${visit.created_at}`} visit={visit} />)}</div>
+  </div>
+);
+
+const MechanicVisitDetail = ({ visit }) => (
+  <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+    <div className="flex flex-col sm:flex-row sm:justify-between gap-2"><div><p className="font-black text-sm text-slate-900">Візит #{visit.visit_id} · {visit.plate || 'Авто'}</p><p className="text-[10px] font-bold text-slate-400">{visit.client || 'Клієнт'} · {visit.work_post || 'Без поста'}</p></div><p className="font-black text-emerald-600">{money(visit.commission_total)} ₴</p></div>
+    {listOf(visit.services).length > 0 && <div className="mt-3"><p className="text-[10px] font-black uppercase text-slate-400 mb-2">Роботи</p>{listOf(visit.services).map((svc, idx) => <div key={idx} className="flex justify-between text-xs py-1"><span className="font-bold text-slate-600">{svc.name}</span><span className="font-black text-slate-900">{money(svc.commission_amount)} ₴</span></div>)}</div>}
+    {listOf(visit.parts).length > 0 && <div className="mt-3"><p className="text-[10px] font-black uppercase text-slate-400 mb-2">Запчастини, з яких накапало</p>{listOf(visit.parts).map((part, idx) => <div key={idx} className="flex justify-between text-xs py-1 gap-3"><span className="font-bold text-slate-600 truncate">{part.name} {part.article ? `· ${part.article}` : ''}</span><span className="font-black text-emerald-600 shrink-0">{money(part.commission_amount)} ₴</span></div>)}</div>}
   </div>
 );
 
 const ExpenseModal = ({ data, setData, saving, onSubmit, onClose }) => (
   <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <form onSubmit={onSubmit} className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-black uppercase italic text-slate-900">Нова витрата СТО</h2>
-        <button type="button" onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 font-black">×</button>
-      </div>
-
+      <div className="flex items-center justify-between mb-6"><h2 className="text-xl font-black uppercase italic text-slate-900">Нова витрата</h2><button type="button" onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-500"><X size={20} /></button></div>
       <div className="space-y-4">
-        <label className="block">
-          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Дата</span>
-          <input type="date" className="input" value={data.date || todayIso()} onChange={(e) => setData({ ...data, date: e.target.value })} />
-        </label>
-
-        <label className="block">
-          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Категорія</span>
-          <select className="input" value={data.category || 'other'} onChange={(e) => setData({ ...data, category: e.target.value })}>
-            {EXPENSE_CATEGORIES.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-          </select>
-        </label>
-
-        <input
-          required
-          placeholder="Назва: оренда боксу, реклама, набір ключів..."
-          className="input"
-          value={data.title || ''}
-          onChange={(e) => setData({ ...data, title: e.target.value })}
-        />
-
-        <input
-          required
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="Сума"
-          className="input"
-          value={data.amount || ''}
-          onChange={(e) => setData({ ...data, amount: e.target.value })}
-        />
-
-        <label className="block">
-          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Спосіб оплати</span>
-          <select className="input" value={data.payment_method || 'cash'} onChange={(e) => setData({ ...data, payment_method: e.target.value })}>
-            {PAYMENT_METHODS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-          </select>
-        </label>
-
-        <textarea
-          placeholder="Коментар"
-          className="input h-24"
-          value={data.comment || ''}
-          onChange={(e) => setData({ ...data, comment: e.target.value })}
-        />
-
-        <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm">
-          <input
-            type="checkbox"
-            checked={Boolean(data.is_recurring)}
-            onChange={(e) => setData({ ...data, is_recurring: e.target.checked, recurring_period: e.target.checked ? 'monthly' : 'none' })}
-          />
-          Постійна витрата
-        </label>
-
-        {data.is_recurring && (
-          <select className="input" value={data.recurring_period || 'monthly'} onChange={(e) => setData({ ...data, recurring_period: e.target.value })}>
-            <option value="weekly">Щотижня</option>
-            <option value="monthly">Щомісяця</option>
-            <option value="yearly">Щороку</option>
-          </select>
-        )}
-
-        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 text-xs font-bold text-amber-700">
-          Закупку запчастин сюди не додаємо — вона вже врахована як собівартість товарів.
-        </div>
-
-        <button disabled={saving} className="w-full bg-rose-600 text-white py-4 rounded-2xl font-black uppercase disabled:opacity-60">
-          {saving ? 'Зберігаю...' : 'Зберегти витрату'}
-        </button>
+        <input type="date" value={data.date} onChange={(e) => setData({ ...data, date: e.target.value })} className="input" />
+        <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })} className="input">{EXPENSE_CATEGORIES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+        <input required value={data.title} onChange={(e) => setData({ ...data, title: e.target.value })} placeholder="Назва витрати" className="input" />
+        <input required type="number" min="0" step="0.01" value={data.amount} onChange={(e) => setData({ ...data, amount: e.target.value })} placeholder="Сума" className="input" />
+        <select value={data.payment_method} onChange={(e) => setData({ ...data, payment_method: e.target.value })} className="input">{PAYMENT_METHODS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+        <textarea value={data.comment} onChange={(e) => setData({ ...data, comment: e.target.value })} placeholder="Коментар" className="input h-24" />
+        <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm"><input type="checkbox" checked={Boolean(data.is_recurring)} onChange={(e) => setData({ ...data, is_recurring: e.target.checked })} /> Постійна витрата</label>
+        {data.is_recurring && <select value={data.recurring_period} onChange={(e) => setData({ ...data, recurring_period: e.target.value })} className="input"><option value="monthly">Щомісяця</option><option value="weekly">Щотижня</option><option value="daily">Щодня</option><option value="none">Без повтору</option></select>}
+        <button type="submit" disabled={saving} className="w-full bg-rose-600 text-white py-4 rounded-2xl font-black uppercase flex items-center justify-center gap-2 disabled:opacity-60">{saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} Зберегти витрату</button>
       </div>
     </form>
   </div>
 );
-
 
 export default Analytics;

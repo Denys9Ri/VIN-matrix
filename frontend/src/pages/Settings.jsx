@@ -8,6 +8,64 @@ const getMechanicName = (mech = {}) => {
   const user = getMechanicUser(mech);
   return user.first_name || user.username || mech.first_name || mech.username || mech.name || `Працівник #${mech.id || ''}`;
 };
+const emptyMechanicData = {
+  username: '',
+  password: '',
+  first_name: '',
+  can_create_visits: false,
+  can_view_finances: false,
+  commission_percent: 40,
+  parts_commission_percent: 0,
+  salary_scheme: 'services_only',
+  payout_period: 'monthly',
+  is_salary_active: true,
+};
+const emptyEditMechanicData = {
+  first_name: '',
+  new_password: '',
+  can_create_visits: false,
+  can_view_finances: false,
+  commission_percent: 40,
+  parts_commission_percent: 0,
+  salary_scheme: 'services_only',
+  payout_period: 'monthly',
+  is_salary_active: true,
+};
+const salarySchemeLabel = (scheme) => ({
+  services_only: '% тільки від робіт',
+  services_and_parts_profit: '% від робіт + маржа запчастин',
+  order_profit: '% від прибутку замовлення',
+  fixed: 'Фіксована сума',
+}[scheme] || '% від робіт');
+const payoutPeriodLabel = (period) => ({
+  daily: 'щодня',
+  weekly: 'щотижня',
+  monthly: 'щомісяця',
+  custom: 'довільний період',
+}[period] || 'щомісяця');
+const mechanicPayrollSummary = (mech = {}) => {
+  if (mech.is_salary_active === false) return 'Нарахування зарплати вимкнено';
+  const workPercent = Number(mech.commission_percent ?? 40);
+  const partsPercent = Number(mech.parts_commission_percent ?? 0);
+  const scheme = mech.salary_scheme || 'services_only';
+  const period = payoutPeriodLabel(mech.payout_period || 'monthly');
+  if (scheme === 'services_and_parts_profit') return `${workPercent}% роботи + ${partsPercent}% маржі запчастин · ${period}`;
+  if (scheme === 'order_profit') return `${workPercent}% від прибутку замовлення · ${period}`;
+  if (scheme === 'fixed') return `Фіксована схема · ${period}`;
+  return `${workPercent}% від робіт · ${period}`;
+};
+const mechanicPayload = (data = {}, isEdit = false) => ({
+  ...(isEdit ? {} : { username: data.username || '', password: data.password || '' }),
+  first_name: data.first_name || '',
+  ...(isEdit ? { new_password: data.new_password || '' } : {}),
+  can_create_visits: Boolean(data.can_create_visits),
+  can_view_finances: Boolean(data.can_view_finances),
+  commission_percent: Number(data.commission_percent || 0),
+  parts_commission_percent: Number(data.parts_commission_percent || 0),
+  salary_scheme: data.salary_scheme || 'services_only',
+  payout_period: data.payout_period || 'monthly',
+  is_salary_active: data.is_salary_active !== false,
+});
 const emptyWorkPost = { name: '', number: 1, description: '', sort_order: 10, is_active: true };
 const workPostLabel = (post = {}) => post.name || `Пост ${post.number || post.id || ''}`;
 
@@ -41,8 +99,8 @@ const Settings = () => {
   const [billingNotice, setBillingNotice] = useState('');
   const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', global_margin_percent: 20, logo: null, business_type: 'sto' });
   const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
-  const [mechanicData, setMechanicData] = useState({ username: '', password: '', first_name: '', can_create_visits: false, can_view_finances: false });
-  const [editMechanicData, setEditMechanicData] = useState({ first_name: '', new_password: '', can_create_visits: false, can_view_finances: false });
+  const [mechanicData, setMechanicData] = useState({ ...emptyMechanicData });
+  const [editMechanicData, setEditMechanicData] = useState({ ...emptyEditMechanicData });
   const [workPostData, setWorkPostData] = useState({ ...emptyWorkPost });
   const [editWorkPostData, setEditWorkPostData] = useState({ ...emptyWorkPost });
 
@@ -134,10 +192,10 @@ const Settings = () => {
   const handleAddMechanic = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_BASE}/api/mechanics/`, mechanicData, { headers: authHeaders });
+      await axios.post(`${API_BASE}/api/mechanics/`, mechanicPayload(mechanicData), { headers: authHeaders });
       alert("Працівника додано!");
       setIsAddingMechanic(false);
-      setMechanicData({ username: '', password: '', first_name: '', can_create_visits: false, can_view_finances: false });
+      setMechanicData({ ...emptyMechanicData });
       fetchData();
     } catch (error) { alert(error.response?.data?.error || "Помилка. Логін може бути зайнятий."); }
   };
@@ -154,7 +212,7 @@ const Settings = () => {
   const handleUpdateMechanic = async (e) => {
     e.preventDefault();
     try {
-      await axios.patch(`${API_BASE}/api/mechanics/${isEditingMechanic}/`, editMechanicData, { headers: authHeaders });
+      await axios.patch(`${API_BASE}/api/mechanics/${isEditingMechanic}/`, mechanicPayload(editMechanicData, true), { headers: authHeaders });
       alert("Дані працівника оновлено!");
       setIsEditingMechanic(null);
       fetchData();
@@ -333,8 +391,12 @@ const Settings = () => {
                   const name = getMechanicName(mech);
                   return (
                     <div key={mech.id || name} className="bg-slate-50 p-3 rounded-2xl flex items-center justify-between gap-3">
-                      <div className="min-w-0"><p className="font-bold text-slate-800 truncate">{name}</p><p className="text-[10px] text-slate-400 font-black uppercase">{mech.can_view_finances ? 'Фінанси' : 'Майстер'}</p></div>
-                      <div className="flex gap-1 shrink-0"><button onClick={() => { setIsEditingMechanic(mech.id); setEditMechanicData({ first_name: name, new_password: '', can_create_visits: Boolean(mech.can_create_visits), can_view_finances: Boolean(mech.can_view_finances) }); }} className="p-2 text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-100"><Pencil size={15}/></button><button onClick={() => handleDeleteMechanic(mech.id)} className="p-2 text-red-500 bg-red-50 rounded-xl hover:bg-red-100"><Trash2 size={15}/></button></div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800 truncate">{name}</p>
+                        <p className="text-[10px] text-slate-400 font-black uppercase">{mech.can_view_finances ? 'Фінанси' : 'Майстер'}</p>
+                        <p className={`text-[10px] font-black uppercase mt-1 ${mech.is_salary_active === false ? 'text-rose-500' : 'text-emerald-600'}`}>{mechanicPayrollSummary(mech)}</p>
+                      </div>
+                      <div className="flex gap-1 shrink-0"><button onClick={() => { setIsEditingMechanic(mech.id); setEditMechanicData({ first_name: name, new_password: '', can_create_visits: Boolean(mech.can_create_visits), can_view_finances: Boolean(mech.can_view_finances), commission_percent: mech.commission_percent ?? 40, parts_commission_percent: mech.parts_commission_percent ?? 0, salary_scheme: mech.salary_scheme || 'services_only', payout_period: mech.payout_period || 'monthly', is_salary_active: mech.is_salary_active !== false }); }} className="p-2 text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-100"><Pencil size={15}/></button><button onClick={() => handleDeleteMechanic(mech.id)} className="p-2 text-red-500 bg-red-50 rounded-xl hover:bg-red-100"><Trash2 size={15}/></button></div>
                     </div>
                   );
                 })}
@@ -472,6 +534,118 @@ const WorkPostModal = ({ title, data, setData, onSubmit, onClose }) => (
   </Modal>
 );
 
-const MechanicModal = ({ title, data, setData, onSubmit, onClose, isEdit }) => <Modal title={title} onClose={onClose}><form onSubmit={onSubmit} className="space-y-4"><input placeholder="Ім'я" className="input" value={data.first_name || ''} onChange={e => setData({...data, first_name: e.target.value})}/>{!isEdit && <input placeholder="Логін" className="input" value={data.username || ''} onChange={e => setData({...data, username: e.target.value})}/>}<input type="password" placeholder={isEdit ? "Новий пароль (необов'язково)" : "Пароль"} className="input" value={isEdit ? (data.new_password || '') : (data.password || '')} onChange={e => setData({...data, [isEdit ? 'new_password' : 'password']: e.target.value})}/><label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm"><input type="checkbox" checked={Boolean(data.can_create_visits)} onChange={e => setData({...data, can_create_visits: e.target.checked})}/> Створювати візити</label><label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm"><input type="checkbox" checked={Boolean(data.can_view_finances)} onChange={e => setData({...data, can_view_finances: e.target.checked})}/> Бачити фінанси</label><button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase">Зберегти</button></form></Modal>;
+const MechanicModal = ({ title, data, setData, onSubmit, onClose, isEdit }) => (
+  <Modal title={title} onClose={onClose}>
+    <form onSubmit={onSubmit} className="space-y-4">
+      <input
+        placeholder="Ім'я майстра"
+        className="input"
+        value={data.first_name || ''}
+        onChange={e => setData({...data, first_name: e.target.value})}
+      />
+      {!isEdit && (
+        <input
+          placeholder="Логін"
+          className="input"
+          value={data.username || ''}
+          onChange={e => setData({...data, username: e.target.value})}
+        />
+      )}
+      <input
+        type="password"
+        placeholder={isEdit ? "Новий пароль (необов'язково)" : "Пароль"}
+        className="input"
+        value={isEdit ? (data.new_password || '') : (data.password || '')}
+        onChange={e => setData({...data, [isEdit ? 'new_password' : 'password']: e.target.value})}
+      />
+
+      <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-3">
+        <div>
+          <p className="text-xs font-black uppercase text-blue-700 flex items-center gap-2"><DollarSign size={14}/> Зарплата майстра</p>
+          <p className="text-[11px] font-semibold text-blue-600 mt-1">Ці правила будуть підтягуватись у роботи та аналітику. Відсоток у вже створених роботах зберігається окремо.</p>
+        </div>
+
+        <label className="block">
+          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Схема нарахування</span>
+          <select
+            className="input"
+            value={data.salary_scheme || 'services_only'}
+            onChange={e => setData({...data, salary_scheme: e.target.value})}
+          >
+            <option value="services_only">Відсоток тільки від робіт</option>
+            <option value="services_and_parts_profit">Роботи + відсоток від маржі запчастин</option>
+            <option value="order_profit">Відсоток від прибутку замовлення</option>
+            <option value="fixed">Фіксована схема</option>
+          </select>
+        </label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">% від робіт</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              className="input"
+              value={data.commission_percent ?? 40}
+              onChange={e => setData({...data, commission_percent: e.target.value})}
+            />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">% від маржі запчастин</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              className="input"
+              value={data.parts_commission_percent ?? 0}
+              onChange={e => setData({...data, parts_commission_percent: e.target.value})}
+            />
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Період виплати</span>
+          <select
+            className="input"
+            value={data.payout_period || 'monthly'}
+            onChange={e => setData({...data, payout_period: e.target.value})}
+          >
+            <option value="daily">Щодня</option>
+            <option value="weekly">Щотижня</option>
+            <option value="monthly">Щомісяця</option>
+            <option value="custom">Довільний період</option>
+          </select>
+        </label>
+
+        <div className="bg-white/80 rounded-xl p-3 border border-blue-100">
+          <p className="text-[10px] font-black uppercase text-slate-400">Як буде показано</p>
+          <p className="text-xs font-black text-slate-800 mt-1">{mechanicPayrollSummary(data)}</p>
+        </div>
+
+        <label className="flex items-center gap-3 p-3 bg-white rounded-xl font-bold text-sm border border-blue-100">
+          <input
+            type="checkbox"
+            checked={data.is_salary_active !== false}
+            onChange={e => setData({...data, is_salary_active: e.target.checked})}
+          />
+          Нарахування зарплати активне
+        </label>
+      </div>
+
+      <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm">
+        <input type="checkbox" checked={Boolean(data.can_create_visits)} onChange={e => setData({...data, can_create_visits: e.target.checked})}/>
+        Створювати візити
+      </label>
+      <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm">
+        <input type="checkbox" checked={Boolean(data.can_view_finances)} onChange={e => setData({...data, can_view_finances: e.target.checked})}/>
+        Бачити фінанси
+      </label>
+      <button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase">Зберегти</button>
+    </form>
+  </Modal>
+);
 
 export default Settings;

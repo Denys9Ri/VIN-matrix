@@ -36,6 +36,7 @@ from apps.core.views import (
 )
 from apps.core.safe_crm_views import (
     VisitViewSet,
+    WorkPostViewSet,
     ServiceCatalogViewSet,
     OrderPartViewSet,
     OrderServiceViewSet,
@@ -98,6 +99,7 @@ from apps.core.novapost_views import (
 
 router = DefaultRouter()
 router.register(r'visits', VisitViewSet, basename='visit')
+router.register(r'work-posts', WorkPostViewSet, basename='work-post')
 router.register(r'services', ServiceCatalogViewSet, basename='service')
 router.register(r'complexes', ServiceComplexViewSet, basename='complex')
 router.register(r'recommendations', VehicleRecommendationViewSet, basename='recommendation')

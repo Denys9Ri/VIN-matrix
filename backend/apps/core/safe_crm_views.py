@@ -14,8 +14,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .activity import log_activity
-from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation, CRMTask
-from .serializers import CategorySerializer, InventoryItemSerializer, OrderPartSerializer, OrderServiceSerializer, ServiceCatalogSerializer, SupplierSerializer, VisitSerializer, VehicleRecommendationSerializer
+from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation, CRMTask, WorkPost
+from .serializers import CategorySerializer, InventoryItemSerializer, OrderPartSerializer, OrderServiceSerializer, ServiceCatalogSerializer, SupplierSerializer, VisitSerializer, VehicleRecommendationSerializer, WorkPostSerializer
 from .views import VisitViewSet as BaseVisitViewSet
 
 SUPPLIER_BADGE_KEYS = {'supplier-local','supplier-vesna','supplier-omega','supplier-tehnomir','supplier-bm','supplier-default'}
@@ -68,6 +68,48 @@ def normalize_supplier_badge_key(value, supplier_name='', is_local=False):
     value = safe_text(value, 80)
     if value in SUPPLIER_BADGE_KEYS: return value
     return supplier_badge_class(supplier_name, is_local)
+
+def mechanic_user_for_company(company, mechanic_id):
+    if not mechanic_id:
+        return None, None
+    try:
+        user = User.objects.get(id=mechanic_id, employee_profile__company=company, employee_profile__role='mechanic')
+        return user, user.employee_profile
+    except Exception:
+        return None, None
+
+def default_mechanic_settings(employee):
+    return {
+        'commission_percent': money_value(getattr(employee, 'commission_percent', 0)) if employee else Decimal('0.00'),
+        'commission_base': getattr(employee, 'salary_scheme', 'services_only') if employee else 'services_only',
+    }
+
+def service_commission_amount(service):
+    try:
+        if getattr(service, 'commission_base', 'services_only') == 'fixed':
+            return money_value(service.commission_percent)
+        total = money_value(service.price) * money_value(service.quantity or 1)
+        return (total * money_value(service.commission_percent) / Decimal('100')).quantize(Decimal('0.01'))
+    except Exception:
+        return Decimal('0.00')
+
+class WorkPostViewSet(viewsets.ModelViewSet):
+    serializer_class = WorkPostSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        company = safe_ensure_company(self.request.user)
+        return WorkPost.objects.filter(company=company).order_by('sort_order', 'number', 'id') if company else WorkPost.objects.none()
+
+    def perform_create(self, serializer):
+        company = safe_ensure_company(self.request.user)
+        if not company:
+            raise ValueError('Немає CRM-компанії для створення поста.')
+        serializer.save(company=company)
+
+    def perform_update(self, serializer):
+        company = safe_ensure_company(self.request.user)
+        serializer.save(company=company)
 
 class VisitViewSet(BaseVisitViewSet):
     serializer_class = VisitSerializer
@@ -254,25 +296,118 @@ class OrderPartViewSet(viewsets.ModelViewSet):
         except Exception as exc: return Response({'ok': False, 'message': str(exc)}, status=400)
 
 class OrderServiceViewSet(viewsets.ModelViewSet):
-    serializer_class = OrderServiceSerializer; permission_classes = [IsAuthenticated]
+    serializer_class = OrderServiceSerializer
+    permission_classes = [IsAuthenticated]
+
     def get_queryset(self):
-        company = safe_ensure_company(self.request.user); return OrderService.objects.filter(visit__company=company) if company else OrderService.objects.none()
+        company = safe_ensure_company(self.request.user)
+        return OrderService.objects.filter(visit__company=company) if company else OrderService.objects.none()
+
     def perform_create(self, serializer):
-        company = safe_ensure_company(self.request.user); visit = Visit.objects.get(id=self.request.data.get('visit'), company=company); service = serializer.save(visit=visit)
-        log_activity(company=company, user=self.request.user, visit=visit, action_type='service_added', title='Додано роботу', description=f"{service.name} · {qty_display(service.quantity)} · {money_display(service.price)}")
+        company = safe_ensure_company(self.request.user)
+        visit = Visit.objects.get(id=self.request.data.get('visit'), company=company)
+
+        mechanic_id = self.request.data.get('mechanic') or self.request.data.get('mechanic_id') or getattr(visit, 'responsible_mechanic_id', None)
+        mechanic_user, employee = mechanic_user_for_company(company, mechanic_id)
+
+        settings = default_mechanic_settings(employee)
+        raw_percent = self.request.data.get('commission_percent')
+        raw_base = self.request.data.get('commission_base')
+
+        commission_percent = money_value(raw_percent) if raw_percent not in [None, ''] else settings['commission_percent']
+        commission_base = raw_base or settings['commission_base']
+
+        service = serializer.save(
+            visit=visit,
+            mechanic=mechanic_user,
+            commission_percent=commission_percent,
+            commission_base=commission_base,
+        )
+        service.commission_amount = service_commission_amount(service)
+        service.save(update_fields=['commission_amount'])
+
+        log_activity(
+            company=company,
+            user=self.request.user,
+            visit=visit,
+            action_type='service_added',
+            title='Додано роботу',
+            description=f"{service.name} · {qty_display(service.quantity)} · {money_display(service.price)}"
+        )
+
     def update(self, request, *args, **kwargs):
-        instance = self.get_object(); old = {'name': instance.name, 'price': instance.price, 'quantity': instance.quantity, 'status': getattr(instance, 'status', '')}
+        instance = self.get_object()
+        old = {
+            'name': instance.name,
+            'price': instance.price,
+            'quantity': instance.quantity,
+            'status': getattr(instance, 'status', ''),
+            'mechanic_id': getattr(instance, 'mechanic_id', None),
+            'commission_percent': getattr(instance, 'commission_percent', 0),
+            'commission_base': getattr(instance, 'commission_base', ''),
+            'commission_amount': getattr(instance, 'commission_amount', 0),
+        }
+
         response = super().update(request, *args, **kwargs)
+
         try:
-            instance.refresh_from_db(); changes = []
-            for field, label in [('name','назва'),('price','ціна'),('quantity','кількість'),('status','статус')]:
-                if hasattr(instance, field) and str(old.get(field)) != str(getattr(instance, field)): changes.append(f"{label}: {old.get(field)} → {getattr(instance, field)}")
-            if changes: log_activity(company=instance.visit.company, user=request.user, visit=instance.visit, action_type='service_updated', title='Оновлено роботу', description=f"{instance.name} · {'; '.join(changes)}", old_value=json.dumps(old, default=str, ensure_ascii=False))
-        except Exception as exc: print(f'ACTIVITY: service update failed: {exc}')
+            instance.refresh_from_db()
+
+            if 'mechanic' in request.data or 'mechanic_id' in request.data:
+                mechanic_id = request.data.get('mechanic') or request.data.get('mechanic_id')
+                mechanic_user, employee = mechanic_user_for_company(instance.visit.company, mechanic_id)
+                instance.mechanic = mechanic_user
+
+                if employee and ('commission_percent' not in request.data or request.data.get('commission_percent') in [None, '']):
+                    instance.commission_percent = employee.commission_percent
+                if employee and ('commission_base' not in request.data or not request.data.get('commission_base')):
+                    instance.commission_base = employee.salary_scheme
+
+            instance.commission_amount = service_commission_amount(instance)
+            instance.save(update_fields=['mechanic', 'commission_percent', 'commission_base', 'commission_amount'])
+
+            changes = []
+            for field, label in [
+                ('name', 'назва'),
+                ('price', 'ціна'),
+                ('quantity', 'кількість'),
+                ('status', 'статус'),
+                ('mechanic_id', 'майстер'),
+                ('commission_percent', 'відсоток майстра'),
+                ('commission_base', 'база зарплати'),
+                ('commission_amount', 'нараховано майстру'),
+            ]:
+                if str(old.get(field)) != str(getattr(instance, field, None)):
+                    changes.append(f"{label}: {old.get(field)} → {getattr(instance, field, None)}")
+
+            if changes:
+                log_activity(
+                    company=instance.visit.company,
+                    user=request.user,
+                    visit=instance.visit,
+                    action_type='service_updated',
+                    title='Оновлено роботу',
+                    description=f"{instance.name} · {'; '.join(changes)}",
+                    old_value=json.dumps(old, default=str, ensure_ascii=False),
+                )
+        except Exception as exc:
+            print(f'ACTIVITY: service update failed: {exc}')
+
         return response
-    def partial_update(self, request, *args, **kwargs): kwargs['partial'] = True; return self.update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
     def perform_destroy(self, instance):
-        log_activity(company=instance.visit.company, user=self.request.user, visit=instance.visit, action_type='service_deleted', title='Видалено роботу', description=f"{instance.name} · {qty_display(instance.quantity)} · {money_display(instance.price)}")
+        log_activity(
+            company=instance.visit.company,
+            user=self.request.user,
+            visit=instance.visit,
+            action_type='service_deleted',
+            title='Видалено роботу',
+            description=f"{instance.name} · {qty_display(instance.quantity)} · {money_display(instance.price)}"
+        )
         instance.delete()
 
 class ServiceCatalogViewSet(viewsets.ModelViewSet):
@@ -293,35 +428,105 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class MechanicViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
+
+    def _serialize_employee(self, employee):
+        user = employee.user
+        return {
+            'id': user.id,
+            'employee_id': employee.id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'email': user.email,
+            'role': employee.role,
+            'can_create_visits': employee.can_create_visits,
+            'can_view_finances': employee.can_view_finances,
+            'commission_percent': float(employee.commission_percent or 0),
+            'parts_commission_percent': float(employee.parts_commission_percent or 0),
+            'salary_scheme': employee.salary_scheme,
+            'payout_period': employee.payout_period,
+            'is_salary_active': employee.is_salary_active,
+        }
+
     def list(self, request):
         company = safe_ensure_company(request.user)
-        if not company or not hasattr(request.user, 'company'): return Response(status=403)
-        mechanics = Employee.objects.filter(company=company, role='mechanic')
-        return Response([{'id': m.user.id, 'username': m.user.username, 'first_name': m.user.first_name, 'can_create_visits': m.can_create_visits, 'can_view_finances': m.can_view_finances} for m in mechanics])
+        if not company:
+            return Response(status=403)
+        mechanics = Employee.objects.filter(company=company, role='mechanic').select_related('user').order_by('user__first_name', 'user__username')
+        return Response([self._serialize_employee(m) for m in mechanics])
+
     def create(self, request):
         company = safe_ensure_company(request.user)
-        if not company or not hasattr(request.user, 'company'): return Response(status=403)
-        username = request.data.get('username'); password = request.data.get('password'); first_name = request.data.get('first_name')
-        if User.objects.filter(username=username).exists(): return Response({'error': 'Логін зайнятий'}, status=400)
+        if not company or not hasattr(request.user, 'company'):
+            return Response(status=403)
+
+        username = request.data.get('username')
+        password = request.data.get('password')
+        first_name = request.data.get('first_name')
+
+        if User.objects.filter(username=username).exists():
+            return Response({'error': 'Логін зайнятий'}, status=400)
+
         try:
             user = User.objects.create_user(username=username, password=password, first_name=first_name)
-            Employee.objects.create(user=user, company=company, role='mechanic', can_create_visits=request.data.get('can_create_visits') is True, can_view_finances=request.data.get('can_view_finances') is True)
-            return Response({'message': 'Створено'}, status=201)
-        except Exception as exc: return Response({'error': str(exc)}, status=500)
+            employee = Employee.objects.create(
+                user=user,
+                company=company,
+                role='mechanic',
+                can_create_visits=request.data.get('can_create_visits') is True,
+                can_view_finances=request.data.get('can_view_finances') is True,
+                commission_percent=money_value(request.data.get('commission_percent') or 40),
+                parts_commission_percent=money_value(request.data.get('parts_commission_percent') or 0),
+                salary_scheme=request.data.get('salary_scheme') or 'services_only',
+                payout_period=request.data.get('payout_period') or 'monthly',
+                is_salary_active=request.data.get('is_salary_active') is not False,
+            )
+            return Response(self._serialize_employee(employee), status=201)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=500)
+
     def partial_update(self, request, pk=None):
         company = safe_ensure_company(request.user)
-        if not company or not hasattr(request.user, 'company'): return Response(status=403)
+        if not company or not hasattr(request.user, 'company'):
+            return Response(status=403)
+
         try:
-            user = User.objects.get(id=pk, employee_profile__company=company); employee = user.employee_profile
-            if request.data.get('first_name'): user.first_name = request.data.get('first_name')
-            if request.data.get('new_password'): user.set_password(request.data.get('new_password'))
+            user = User.objects.get(id=pk, employee_profile__company=company)
+            employee = user.employee_profile
+
+            if request.data.get('first_name') is not None:
+                user.first_name = request.data.get('first_name')
+            if request.data.get('email') is not None:
+                user.email = request.data.get('email')
+            if request.data.get('new_password'):
+                user.set_password(request.data.get('new_password'))
             user.save()
-            if 'can_create_visits' in request.data: employee.can_create_visits = request.data.get('can_create_visits') is True
-            if 'can_view_finances' in request.data: employee.can_view_finances = request.data.get('can_view_finances') is True
-            employee.save(); return Response({'message':'Оновлено'})
-        except User.DoesNotExist: return Response(status=404)
+
+            if 'can_create_visits' in request.data:
+                employee.can_create_visits = request.data.get('can_create_visits') is True
+            if 'can_view_finances' in request.data:
+                employee.can_view_finances = request.data.get('can_view_finances') is True
+            if 'commission_percent' in request.data:
+                employee.commission_percent = money_value(request.data.get('commission_percent'))
+            if 'parts_commission_percent' in request.data:
+                employee.parts_commission_percent = money_value(request.data.get('parts_commission_percent'))
+            if request.data.get('salary_scheme'):
+                employee.salary_scheme = request.data.get('salary_scheme')
+            if request.data.get('payout_period'):
+                employee.payout_period = request.data.get('payout_period')
+            if 'is_salary_active' in request.data:
+                employee.is_salary_active = request.data.get('is_salary_active') is True
+
+            employee.save()
+            return Response(self._serialize_employee(employee))
+        except User.DoesNotExist:
+            return Response(status=404)
+
     def destroy(self, request, pk=None):
         company = safe_ensure_company(request.user)
-        if not company or not hasattr(request.user, 'company'): return Response(status=403)
-        try: User.objects.get(id=pk, employee_profile__company=company).delete(); return Response({'message':'Видалено'})
-        except User.DoesNotExist: return Response(status=404)
+        if not company or not hasattr(request.user, 'company'):
+            return Response(status=403)
+        try:
+            User.objects.get(id=pk, employee_profile__company=company).delete()
+            return Response({'message': 'Видалено'})
+        except User.DoesNotExist:
+            return Response(status=404)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import {
   TrendingUp,
@@ -33,6 +33,34 @@ const PERIODS = [
   { key: 'custom', label: 'Свій' },
 ];
 
+const EXPENSE_CATEGORIES = [
+  { key: 'rent', label: 'Оренда' },
+  { key: 'utilities', label: 'Комунальні' },
+  { key: 'admin_salary', label: 'Зарплата адміністратора / персоналу' },
+  { key: 'tools', label: 'Інструмент' },
+  { key: 'equipment', label: 'Обладнання' },
+  { key: 'equipment_repair', label: 'Ремонт обладнання' },
+  { key: 'consumables', label: 'Витратні матеріали' },
+  { key: 'marketing', label: 'Маркетинг / реклама' },
+  { key: 'taxes', label: 'Податки' },
+  { key: 'bank_fees', label: 'Банківські комісії' },
+  { key: 'delivery', label: 'Доставка / логістика' },
+  { key: 'fuel', label: 'Пальне' },
+  { key: 'software', label: 'Програми / підписки' },
+  { key: 'cleaning', label: 'Прибирання / господарські витрати' },
+  { key: 'other', label: 'Інше' },
+];
+
+const PAYMENT_METHODS = [
+  { key: 'cash', label: 'Готівка' },
+  { key: 'card', label: 'Картка' },
+  { key: 'bank', label: 'Рахунок / банк' },
+  { key: 'other', label: 'Інше' },
+];
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+
 const money = (value) => Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
 const decimalMoney = (value) => Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 });
 const percent = (value) => `${Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 1 })}%`;
@@ -61,37 +89,83 @@ const Analytics = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [expandedMechanicId, setExpandedMechanicId] = useState(null);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [savingExpense, setSavingExpense] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({
+    date: todayIso(),
+    category: 'other',
+    title: '',
+    amount: '',
+    payment_method: 'cash',
+    comment: '',
+    is_recurring: false,
+    recurring_period: 'none',
+  });
 
   const token = localStorage.getItem('access_token');
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const params = new URLSearchParams({ period: timeFilter });
-        if (timeFilter === 'custom') {
-          if (dateFrom) params.set('date_from', dateFrom);
-          if (dateTo) params.set('date_to', dateTo);
-        }
-
-        const res = await axios.get(`${API_BASE}/api/analytics/summary/?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setData(res.data || {});
-      } catch (err) {
-        if (err.response?.status === 401) {
-          navigate('/login');
-          return;
-        }
-        setError(err.response?.data?.error || 'Не вдалося завантажити аналітику. Перевірте backend endpoint /api/analytics/summary/.');
-      } finally {
-        setLoading(false);
+  const loadAnalytics = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams({ period: timeFilter });
+      if (timeFilter === 'custom') {
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo);
       }
-    };
 
-    fetchData();
+      const res = await axios.get(`${API_BASE}/api/analytics/summary/?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setData(res.data || {});
+    } catch (err) {
+      if (err.response?.status === 401) {
+        navigate('/login');
+        return;
+      }
+      setError(err.response?.data?.error || 'Не вдалося завантажити аналітику. Перевірте backend endpoint /api/analytics/summary/.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, [token, navigate, timeFilter, dateFrom, dateTo]);
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
+
+  const handleCreateExpense = async (e) => {
+    e.preventDefault();
+    const amount = Number(expenseForm.amount || 0);
+    if (!expenseForm.title.trim()) return alert('Вкажіть назву витрати.');
+    if (!amount || amount <= 0) return alert('Вкажіть суму витрати.');
+
+    setSavingExpense(true);
+    try {
+      await axios.post(`${API_BASE}/api/expenses/`, {
+        ...expenseForm,
+        title: expenseForm.title.trim(),
+        amount,
+      }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setExpenseModalOpen(false);
+      setExpenseForm({
+        date: todayIso(),
+        category: 'other',
+        title: '',
+        amount: '',
+        payment_method: 'cash',
+        comment: '',
+        is_recurring: false,
+        recurring_period: 'none',
+      });
+      await loadAnalytics(true);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Не вдалося додати витрату.');
+    } finally {
+      setSavingExpense(false);
+    }
+  };
 
   const summary = data?.summary || {};
   const chart = listOf(data?.chart);
@@ -101,9 +175,15 @@ const Analytics = () => {
   const debts = data?.debts || {};
   const mechanics = data?.mechanics || {};
   const workPosts = data?.work_posts || {};
+  const suppliers = data?.suppliers || {};
+  const expenses = data?.expenses || {};
   const isStore = data?.business_type === 'store' || data?.company?.business_type === 'store';
   const mechanicItems = listOf(mechanics.items).filter((item) => item && (item.id || item.employee_id || item.name));
   const hasMechanics = !isStore && mechanicItems.length > 0;
+  const supplierItems = listOf(suppliers.items);
+  const hasSuppliers = supplierItems.length > 0;
+  const expenseCategories = listOf(expenses.categories);
+  const expenseItems = listOf(expenses.items);
 
   const maxChartValue = useMemo(() => {
     const values = chart.map((item) => Math.max(Number(item.revenue || 0), Number(item.net_profit || 0), 0));
@@ -158,20 +238,38 @@ const Analytics = () => {
         </div>
       </div>
 
-      {hasMechanics && (
+      {(hasMechanics || hasSuppliers || !isStore) && (
         <div className="mb-6 flex flex-wrap gap-2">
-          <button
-            onClick={() => document.getElementById('mechanics-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            className="bg-purple-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-purple-100 flex items-center gap-2"
-          >
-            <Users size={16} /> Майстри
-          </button>
           <button
             onClick={() => document.getElementById('overview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             className="bg-white border border-slate-200 text-slate-700 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2"
           >
             <BarChart size={16} /> Огляд
           </button>
+          {hasMechanics && (
+            <button
+              onClick={() => document.getElementById('mechanics-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="bg-purple-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-purple-100 flex items-center gap-2"
+            >
+              <Users size={16} /> Майстри
+            </button>
+          )}
+          {hasSuppliers && (
+            <button
+              onClick={() => document.getElementById('suppliers-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="bg-amber-500 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-amber-100 flex items-center gap-2"
+            >
+              <Package size={16} /> Постачальники
+            </button>
+          )}
+          {!isStore && (
+            <button
+              onClick={() => document.getElementById('expenses-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="bg-rose-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-rose-100 flex items-center gap-2"
+            >
+              <DollarSign size={16} /> Витрати
+            </button>
+          )}
         </div>
       )}
 
@@ -185,11 +283,12 @@ const Analytics = () => {
         </div>
       )}
 
-      <div id="overview-section" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 md:gap-5 mb-6 md:mb-8 scroll-mt-24">
+      <div id="overview-section" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-4 md:gap-5 mb-6 md:mb-8 scroll-mt-24">
         <MetricCard icon={<Wallet size={15} />} label="Виручка" value={`${money(summary.revenue)} ₴`} tone="blue" />
         <MetricCard icon={<TrendingUp size={15} />} label="Валовий прибуток" value={`${money(summary.gross_profit)} ₴`} sub={`Маржа ${percent(summary.margin_percent)}`} tone="emerald" />
         <MetricCard icon={<CheckCircle2 size={15} />} label="Чистий прибуток" value={`${money(summary.net_profit)} ₴`} sub={`Після зарплат ${percent(summary.net_margin_percent)}`} tone="green" />
         <MetricCard icon={<Wrench size={15} />} label="Майстрам" value={`${money(summary.mechanic_commission)} ₴`} tone="purple" />
+        <MetricCard icon={<DollarSign size={15} />} label="Витрати СТО" value={`${money(summary.operating_expenses)} ₴`} tone="red" />
         <MetricCard icon={<DollarSign size={15} />} label="Борги" value={`${money(summary.debt_total)} ₴`} sub={`${summary.debt_orders_count || 0} зам.`} tone="red" />
         <MetricCard icon={<Activity size={15} />} label={`Закриті ${isStore ? 'замовлення' : 'візити'}`} value={summary.completed_orders_count || 0} sub={`Сер. чек ${money(summary.average_check)} ₴`} tone="orange" />
       </div>
@@ -212,7 +311,7 @@ const Analytics = () => {
                 return (
                   <div key={`${item.date || idx}`} className="min-w-[46px] flex-1 max-w-[80px] flex flex-col items-center group relative h-full justify-end">
                     <div className="absolute -top-10 bg-slate-800 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-                      {money(item.revenue)} ₴ / {money(item.net_profit)} ₴
+                      {money(item.revenue)} ₴ / чистий {money(item.net_profit)} ₴ / витрати {money(item.operating_expenses)} ₴
                     </div>
                     <div className="w-full h-full flex items-end gap-1 justify-center">
                       <div className="w-1/2 bg-blue-500 rounded-t-lg transition-all duration-500" style={{ height: `${revenueHeight}%` }} />
@@ -264,6 +363,54 @@ const Analytics = () => {
         </div>
       )}
 
+      {hasSuppliers && (
+        <div id="suppliers-section" className="scroll-mt-24 grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+          <ListCard title="Оборот по постачальниках" icon={<Package size={16} className="text-amber-500" />} empty="Немає даних по постачальниках">
+            {supplierItems.slice(0, 12).map((supplier, idx) => <SupplierRow key={`${supplier.name || idx}`} item={supplier} />)}
+          </ListCard>
+          <ListCard title="Постачальники з низькою маржею" icon={<AlertTriangle size={16} className="text-orange-500" />} empty="Низької маржі по постачальниках немає">
+            {listOf(suppliers.low_margin).slice(0, 12).map((supplier, idx) => <SupplierRow key={`${supplier.name || idx}`} item={supplier} compact />)}
+          </ListCard>
+        </div>
+      )}
+
+      {!isStore && (
+        <div id="expenses-section" className="scroll-mt-24 mb-6">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-5 md:p-6 bg-slate-50/70 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="font-black uppercase text-slate-800 flex items-center gap-2 text-sm">
+                  <DollarSign size={16} className="text-rose-600" /> Витрати СТО
+                </h3>
+                <p className="text-xs font-semibold text-slate-500 mt-1">
+                  Сюди вносимо операційні витрати: оренда, комунальні, інструмент, реклама, податки. Закупку запчастин сюди не дублюємо.
+                </p>
+              </div>
+              <button
+                onClick={() => setExpenseModalOpen(true)}
+                className="bg-rose-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-rose-100"
+              >
+                Додати витрату
+              </button>
+            </div>
+            <div className="p-5 grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <SmallStat label="Витрати за період" value={`${money(expenses.summary?.total)} ₴`} icon={<DollarSign size={16} />} />
+              <SmallStat label="Разові витрати" value={`${money(expenses.summary?.one_time_total)} ₴`} icon={<Activity size={16} />} />
+              <SmallStat label="Постійні витрати" value={`${money(expenses.summary?.recurring_total)} ₴`} icon={<Clock3 size={16} />} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+            <ListCard title="Витрати по категоріях" icon={<DollarSign size={16} className="text-rose-500" />} empty="Витрат за період немає">
+              {expenseCategories.slice(0, 12).map((item, idx) => <ExpenseCategoryRow key={`${item.category || idx}`} item={item} />)}
+            </ListCard>
+            <ListCard title="Останні витрати" icon={<Clock3 size={16} className="text-slate-500" />} empty="Витрат ще немає">
+              {expenseItems.slice(0, 12).map((item, idx) => <ExpenseItemRow key={`${item.id || idx}`} item={item} />)}
+            </ListCard>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <ListCard title="Топ клієнтів" icon={<Users size={16} className="text-emerald-500" />} empty="Немає клієнтів за період">
           {listOf(clients.top_by_revenue).slice(0, 8).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
@@ -287,6 +434,16 @@ const Analytics = () => {
           {listOf(clients.sleeping).slice(0, 8).map((client, idx) => <ClientRow key={`${client.phone || idx}`} item={client} />)}
         </ListCard>
       </div>
+      {expenseModalOpen && (
+        <ExpenseModal
+          data={expenseForm}
+          setData={setExpenseForm}
+          saving={savingExpense}
+          onSubmit={handleCreateExpense}
+          onClose={() => setExpenseModalOpen(false)}
+        />
+      )}
+
     </div>
   );
 };
@@ -589,5 +746,140 @@ const DeadStockRow = ({ item }) => (
     </div>
   </div>
 );
+
+
+const SupplierRow = ({ item, compact }) => (
+  <div className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+    <div className="min-w-0 flex-1">
+      <p className="text-sm font-black text-slate-800 truncate">{item.name || 'Без постачальника'}</p>
+      <p className="text-[10px] font-bold text-slate-400 mt-1">
+        {item.parts_count || 0} позицій · {item.visits_count || 0} візитів · маржа {percent(item.margin_percent)}
+      </p>
+      {!compact && (
+        <p className="text-[10px] font-bold text-slate-500 mt-1">
+          Закупка {money(item.cost)} ₴ · прибуток {money(item.profit)} ₴
+        </p>
+      )}
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-sm font-black text-slate-800">{money(item.revenue)} ₴</div>
+      <div className="text-[10px] font-bold text-emerald-600">+{money(item.profit)} ₴</div>
+    </div>
+  </div>
+);
+
+const ExpenseCategoryRow = ({ item }) => (
+  <div className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+    <div className="min-w-0">
+      <p className="text-sm font-black text-slate-800 truncate">{item.label || item.category || 'Витрати'}</p>
+      <p className="text-[10px] font-bold text-slate-400 mt-1">
+        {item.count || 0} записів · {percent(item.share_percent)} від витрат
+      </p>
+      <p className="text-[10px] font-bold text-slate-500 mt-1">
+        Разові {money(item.one_time_total)} ₴ · постійні {money(item.recurring_total)} ₴
+      </p>
+    </div>
+    <div className="text-sm font-black text-rose-600 shrink-0">{money(item.total)} ₴</div>
+  </div>
+);
+
+const ExpenseItemRow = ({ item }) => (
+  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+    <div className="flex justify-between items-start gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-black text-slate-800 truncate">{item.title || 'Витрата'}</p>
+        <p className="text-[10px] font-bold text-slate-400 mt-1">
+          {item.date || '—'} · {item.category_label || item.category || 'Інше'} · {item.payment_method_label || ''}
+        </p>
+      </div>
+      <div className="text-sm font-black text-rose-600 shrink-0">{money(item.amount)} ₴</div>
+    </div>
+    {item.comment && <p className="text-xs font-semibold text-slate-500 mt-2 break-words">{item.comment}</p>}
+  </div>
+);
+
+const ExpenseModal = ({ data, setData, saving, onSubmit, onClose }) => (
+  <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <form onSubmit={onSubmit} className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-black uppercase italic text-slate-900">Нова витрата СТО</h2>
+        <button type="button" onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 font-black">×</button>
+      </div>
+
+      <div className="space-y-4">
+        <label className="block">
+          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Дата</span>
+          <input type="date" className="input" value={data.date || todayIso()} onChange={(e) => setData({ ...data, date: e.target.value })} />
+        </label>
+
+        <label className="block">
+          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Категорія</span>
+          <select className="input" value={data.category || 'other'} onChange={(e) => setData({ ...data, category: e.target.value })}>
+            {EXPENSE_CATEGORIES.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+          </select>
+        </label>
+
+        <input
+          required
+          placeholder="Назва: оренда боксу, реклама, набір ключів..."
+          className="input"
+          value={data.title || ''}
+          onChange={(e) => setData({ ...data, title: e.target.value })}
+        />
+
+        <input
+          required
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Сума"
+          className="input"
+          value={data.amount || ''}
+          onChange={(e) => setData({ ...data, amount: e.target.value })}
+        />
+
+        <label className="block">
+          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Спосіб оплати</span>
+          <select className="input" value={data.payment_method || 'cash'} onChange={(e) => setData({ ...data, payment_method: e.target.value })}>
+            {PAYMENT_METHODS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+          </select>
+        </label>
+
+        <textarea
+          placeholder="Коментар"
+          className="input h-24"
+          value={data.comment || ''}
+          onChange={(e) => setData({ ...data, comment: e.target.value })}
+        />
+
+        <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl font-bold text-sm">
+          <input
+            type="checkbox"
+            checked={Boolean(data.is_recurring)}
+            onChange={(e) => setData({ ...data, is_recurring: e.target.checked, recurring_period: e.target.checked ? 'monthly' : 'none' })}
+          />
+          Постійна витрата
+        </label>
+
+        {data.is_recurring && (
+          <select className="input" value={data.recurring_period || 'monthly'} onChange={(e) => setData({ ...data, recurring_period: e.target.value })}>
+            <option value="weekly">Щотижня</option>
+            <option value="monthly">Щомісяця</option>
+            <option value="yearly">Щороку</option>
+          </select>
+        )}
+
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 text-xs font-bold text-amber-700">
+          Закупку запчастин сюди не додаємо — вона вже врахована як собівартість товарів.
+        </div>
+
+        <button disabled={saving} className="w-full bg-rose-600 text-white py-4 rounded-2xl font-black uppercase disabled:opacity-60">
+          {saving ? 'Зберігаю...' : 'Зберегти витрату'}
+        </button>
+      </div>
+    </form>
+  </div>
+);
+
 
 export default Analytics;

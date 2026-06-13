@@ -63,6 +63,7 @@ from apps.core.stock_actions import (
 from apps.core.crm_client_views import StoreClientListView, StoreClientDetailView
 from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
 from apps.core.notification_views import NotificationsSummaryView
+from apps.core.dashboard_views import DashboardSummaryView
 from apps.core.activity_views import ActivityLogView
 from apps.core.payment_views import (
     VisitAddPaymentView,
@@ -163,6 +164,7 @@ urlpatterns = [
     path('api/part-search/', PartSearchView.as_view(), name='part-search-alt'),
 
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
+    path('api/dashboard/summary/', DashboardSummaryView.as_view(), name='dashboard-summary'),
     path('api/activity/', ActivityLogView.as_view(), name='activity-log'),
 
     path('api/billing/me/', BillingMeView.as_view(), name='billing-me'),

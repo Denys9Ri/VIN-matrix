@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Employee, InventoryItem, OrderPart, Visit, WorkPost
+from .models import Employee, InventoryItem, OrderPart, StoExpense, Visit, WorkPost
 from .safe_crm_views import safe_ensure_company
 
 
@@ -19,6 +19,42 @@ DEBT_PAYMENT_STATUSES = {'unpaid', 'prepaid', 'cod', 'debt'}
 SLEEPING_CLIENT_DAYS = 60
 DEAD_STOCK_DAYS = 60
 LOW_MARGIN_PERCENT = Decimal('15')
+
+
+def expense_category_label(value):
+    return dict(StoExpense.CATEGORY_CHOICES).get(value, value or 'Інше')
+
+
+def expense_payment_method_label(value):
+    return dict(StoExpense.PAYMENT_METHOD_CHOICES).get(value, value or 'Інше')
+
+
+def expense_queryset_for_bounds(company, bounds):
+    try:
+        qs = StoExpense.objects.filter(company=company).select_related('created_by')
+        if bounds.get('start_date'):
+            qs = qs.filter(date__gte=bounds['start_date'])
+        if bounds.get('end_date'):
+            qs = qs.filter(date__lte=bounds['end_date'])
+        return list(qs.order_by('-date', '-id')[:2000])
+    except Exception:
+        return []
+
+
+def chart_seed(date, label):
+    return {
+        'date': date,
+        'label': label,
+        'revenue': Decimal('0'),
+        'profit': Decimal('0'),
+        'net_profit': Decimal('0'),
+        'mechanic_commission': Decimal('0'),
+        'operating_expenses': Decimal('0'),
+        'orders_count': 0,
+        'average_check': Decimal('0'),
+        'debt': Decimal('0'),
+    }
+
 
 
 def money(value):
@@ -537,6 +573,24 @@ class AnalyticsSummaryView(APIView):
             'brand': '', 'article': '', 'name': '', 'quantity': Decimal('0'),
             'revenue': Decimal('0'), 'cost': Decimal('0'), 'profit': Decimal('0'),
         })
+        suppliers = defaultdict(lambda: {
+            'name': 'Без постачальника',
+            'quantity': Decimal('0'),
+            'parts_count': 0,
+            'visits': set(),
+            'revenue': Decimal('0'),
+            'cost': Decimal('0'),
+            'profit': Decimal('0'),
+        })
+        expense_categories = defaultdict(lambda: {
+            'category': '',
+            'label': '',
+            'count': 0,
+            'total': Decimal('0'),
+            'recurring_total': Decimal('0'),
+            'one_time_total': Decimal('0'),
+        })
+        expense_items = []
         services = defaultdict(lambda: {
             'name': '', 'quantity': Decimal('0'), 'revenue': Decimal('0'),
             'commission_total': Decimal('0'), 'profit_after_commission': Decimal('0'),
@@ -558,6 +612,8 @@ class AnalyticsSummaryView(APIView):
             'services_profit': Decimal('0'),
             'gross_profit': Decimal('0'),
             'mechanic_commission': Decimal('0'),
+            'operating_expenses': Decimal('0'),
+            'net_profit_before_expenses': Decimal('0'),
             'net_profit': Decimal('0'),
             'paid_total': Decimal('0'),
             'debt_total': Decimal('0'),
@@ -614,17 +670,7 @@ class AnalyticsSummaryView(APIView):
             metric_dt = visit_metric_date(visit) or getattr(visit, 'created_at', timezone.now())
             key, label = chart_key(metric_dt, bounds.get('group_by'))
             if key not in chart:
-                chart[key] = {
-                    'date': key,
-                    'label': label,
-                    'revenue': Decimal('0'),
-                    'profit': Decimal('0'),
-                    'net_profit': Decimal('0'),
-                    'mechanic_commission': Decimal('0'),
-                    'orders_count': 0,
-                    'average_check': Decimal('0'),
-                    'debt': Decimal('0'),
-                }
+                chart[key] = chart_seed(key, label)
             chart[key]['orders_count'] += 1
             if is_completed and not is_cancelled:
                 chart[key]['revenue'] += totals['revenue']
@@ -698,6 +744,17 @@ class AnalyticsSummaryView(APIView):
                     products[product_key]['revenue'] += revenue
                     products[product_key]['cost'] += cost
                     products[product_key]['profit'] += profit
+
+                    supplier_name = str(getattr(part, 'supplier', '') or '').strip() or 'Без постачальника'
+                    supplier_key = supplier_name.lower()
+                    suppliers[supplier_key]['name'] = supplier_name
+                    suppliers[supplier_key]['quantity'] += qty
+                    suppliers[supplier_key]['parts_count'] += 1
+                    suppliers[supplier_key]['visits'].add(visit.id)
+                    suppliers[supplier_key]['revenue'] += revenue
+                    suppliers[supplier_key]['cost'] += cost
+                    suppliers[supplier_key]['profit'] += profit
+
                     visit_parts_items.append({
                         'brand': brand,
                         'article': article,
@@ -810,13 +867,51 @@ class AnalyticsSummaryView(APIView):
                     chart[key]['mechanic_commission'] += parts_commission_total
                     work_posts[post_key]['mechanic_commission'] += parts_commission_total
 
-        summary['net_profit'] = summary['gross_profit'] - summary['mechanic_commission']
+        expenses_for_period = expense_queryset_for_bounds(company, bounds)
+        for expense in expenses_for_period:
+            amount = money(getattr(expense, 'amount', 0))
+            category = getattr(expense, 'category', '') or 'other'
+            category_label = expense_category_label(category)
+            summary['operating_expenses'] += amount
+
+            expense_categories[category]['category'] = category
+            expense_categories[category]['label'] = category_label
+            expense_categories[category]['count'] += 1
+            expense_categories[category]['total'] += amount
+            if getattr(expense, 'is_recurring', False):
+                expense_categories[category]['recurring_total'] += amount
+            else:
+                expense_categories[category]['one_time_total'] += amount
+
+            expense_items.append({
+                'id': getattr(expense, 'id', None),
+                'date': getattr(expense, 'date', None).isoformat() if getattr(expense, 'date', None) else '',
+                'category': category,
+                'category_label': category_label,
+                'title': getattr(expense, 'title', '') or category_label,
+                'amount': round_money(amount),
+                'payment_method': getattr(expense, 'payment_method', '') or '',
+                'payment_method_label': expense_payment_method_label(getattr(expense, 'payment_method', '') or ''),
+                'comment': getattr(expense, 'comment', '') or '',
+                'is_recurring': bool(getattr(expense, 'is_recurring', False)),
+                'recurring_period': getattr(expense, 'recurring_period', '') or 'none',
+                'created_by_name': user_label(getattr(expense, 'created_by', None)),
+            })
+
+            expense_dt = local_start_of_day(getattr(expense, 'date', timezone.localdate()))
+            expense_key, expense_label = chart_key(expense_dt, bounds.get('group_by'))
+            if expense_key not in chart:
+                chart[expense_key] = chart_seed(expense_key, expense_label)
+            chart[expense_key]['operating_expenses'] += amount
+
+        summary['net_profit_before_expenses'] = summary['gross_profit'] - summary['mechanic_commission']
+        summary['net_profit'] = summary['net_profit_before_expenses'] - summary['operating_expenses']
         summary['average_check'] = summary['revenue'] / summary['completed_orders_count'] if summary['completed_orders_count'] else Decimal('0')
 
         normalized_chart = []
         for key in sorted(chart.keys()):
             item = chart[key]
-            item['net_profit'] = item['profit'] - item['mechanic_commission']
+            item['net_profit'] = item['profit'] - item['mechanic_commission'] - item.get('operating_expenses', Decimal('0'))
             item['average_check'] = item['revenue'] / item['orders_count'] if item['orders_count'] else Decimal('0')
             normalized_chart.append({
                 'date': item['date'],
@@ -825,6 +920,7 @@ class AnalyticsSummaryView(APIView):
                 'profit': round_money(item['profit']),
                 'net_profit': round_money(item['net_profit']),
                 'mechanic_commission': round_money(item['mechanic_commission']),
+                'operating_expenses': round_money(item.get('operating_expenses', Decimal('0'))),
                 'orders_count': item['orders_count'],
                 'average_check': round_money(item['average_check']),
                 'debt': round_money(item['debt']),
@@ -842,6 +938,32 @@ class AnalyticsSummaryView(APIView):
                 'cost': round_money(item['cost']),
                 'profit': round_money(item['profit']),
                 'margin_percent': item['margin_percent'],
+            })
+
+        supplier_rows = []
+        for item in suppliers.values():
+            supplier_rows.append({
+                'name': item['name'] or 'Без постачальника',
+                'quantity': round_number(item['quantity'], 2),
+                'parts_count': item['parts_count'],
+                'visits_count': len(item['visits']),
+                'revenue': round_money(item['revenue']),
+                'cost': round_money(item['cost']),
+                'profit': round_money(item['profit']),
+                'margin_percent': percent(item['profit'], item['revenue']),
+                'average_part_revenue': round_money(item['revenue'] / item['parts_count']) if item['parts_count'] else 0,
+            })
+
+        expense_category_rows = []
+        for item in expense_categories.values():
+            expense_category_rows.append({
+                'category': item['category'],
+                'label': item['label'] or expense_category_label(item['category']),
+                'count': item['count'],
+                'total': round_money(item['total']),
+                'recurring_total': round_money(item['recurring_total']),
+                'one_time_total': round_money(item['one_time_total']),
+                'share_percent': percent(item['total'], summary['operating_expenses']),
             })
 
         service_rows = [{
@@ -915,6 +1037,8 @@ class AnalyticsSummaryView(APIView):
                 'services_profit': round_money(summary['services_profit']),
                 'gross_profit': round_money(summary['gross_profit']),
                 'mechanic_commission': round_money(summary['mechanic_commission']),
+                'operating_expenses': round_money(summary['operating_expenses']),
+                'net_profit_before_expenses': round_money(summary['net_profit_before_expenses']),
                 'net_profit': round_money(summary['net_profit']),
                 'paid_total': round_money(summary['paid_total']),
                 'debt_total': round_money(summary['debt_total']),
@@ -934,6 +1058,29 @@ class AnalyticsSummaryView(APIView):
             'services': {
                 'top_by_revenue': sorted(service_rows, key=lambda item: item['revenue'], reverse=True)[:12],
                 'top_by_profit_after_commission': sorted(service_rows, key=lambda item: item['profit_after_commission'], reverse=True)[:12],
+            },
+            'suppliers': {
+                'summary': {
+                    'count': len(supplier_rows),
+                    'revenue': round_money(sum((money(item['revenue']) for item in supplier_rows), Decimal('0'))),
+                    'cost': round_money(sum((money(item['cost']) for item in supplier_rows), Decimal('0'))),
+                    'profit': round_money(sum((money(item['profit']) for item in supplier_rows), Decimal('0'))),
+                },
+                'items': sorted(supplier_rows, key=lambda item: item['revenue'], reverse=True),
+                'top_by_revenue': sorted(supplier_rows, key=lambda item: item['revenue'], reverse=True)[:12],
+                'top_by_profit': sorted(supplier_rows, key=lambda item: item['profit'], reverse=True)[:12],
+                'low_margin': sorted([item for item in supplier_rows if item['revenue'] > 0 and item['margin_percent'] <= float(LOW_MARGIN_PERCENT)], key=lambda item: item['margin_percent'])[:12],
+            },
+            'expenses': {
+                'summary': {
+                    'total': round_money(summary['operating_expenses']),
+                    'count': len(expense_items),
+                    'categories_count': len(expense_category_rows),
+                    'recurring_total': round_money(sum((money(item['recurring_total']) for item in expense_category_rows), Decimal('0'))),
+                    'one_time_total': round_money(sum((money(item['one_time_total']) for item in expense_category_rows), Decimal('0'))),
+                },
+                'categories': sorted(expense_category_rows, key=lambda item: item['total'], reverse=True),
+                'items': sorted(expense_items, key=lambda item: item['date'], reverse=True)[:50],
             },
             'clients': {
                 'top_by_revenue': sorted(client_rows, key=lambda item: item['revenue'], reverse=True)[:12],

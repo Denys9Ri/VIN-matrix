@@ -26,8 +26,6 @@ import {
   BarChart3,
   Eye,
   EyeOff,
-  ChevronUp,
-  ChevronDown,
   RotateCcw,
   RefreshCw,
   FileDown,
@@ -220,6 +218,8 @@ const Dashboard = () => {
 
   const [layout, setLayout] = useState(loadDashboardLayout);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [draggedWidgetKey, setDraggedWidgetKey] = useState(null);
+  const [dragOverWidgetKey, setDragOverWidgetKey] = useState(null);
 
   const activeWidgets = layout.widgets;
   const widgetOrder = layout.order;
@@ -266,12 +266,13 @@ const Dashboard = () => {
     });
   };
 
-  const moveWidget = (key, direction) => {
-    const currentIndex = layout.order.indexOf(key);
-    if (currentIndex < 0) return;
+  const reorderWidgets = (activeKey, overKey) => {
+    if (!activeKey || !overKey || activeKey === overKey) return;
 
-    const nextIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (nextIndex < 0 || nextIndex >= layout.order.length) return;
+    const currentIndex = layout.order.indexOf(activeKey);
+    const nextIndex = layout.order.indexOf(overKey);
+
+    if (currentIndex < 0 || nextIndex < 0) return;
 
     const nextOrder = [...layout.order];
     const [item] = nextOrder.splice(currentIndex, 1);
@@ -281,6 +282,42 @@ const Dashboard = () => {
       ...layout,
       order: nextOrder,
     });
+  };
+
+  const handleWidgetDragStart = (event, key) => {
+    setDraggedWidgetKey(key);
+    setDragOverWidgetKey(key);
+
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', key);
+    }
+  };
+
+  const handleWidgetDragOver = (event, key) => {
+    event.preventDefault();
+
+    if (!draggedWidgetKey || draggedWidgetKey === key) return;
+    setDragOverWidgetKey(key);
+
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleWidgetDrop = (event, key) => {
+    event.preventDefault();
+
+    const activeKey = draggedWidgetKey || event.dataTransfer?.getData('text/plain');
+    reorderWidgets(activeKey, key);
+
+    setDraggedWidgetKey(null);
+    setDragOverWidgetKey(null);
+  };
+
+  const handleWidgetDragEnd = () => {
+    setDraggedWidgetKey(null);
+    setDragOverWidgetKey(null);
   };
 
   const resetLayout = () => {
@@ -915,7 +952,7 @@ const Dashboard = () => {
                 Налаштування Панелі
               </h2>
               <p className="text-xs font-bold text-slate-400 mt-1">
-                Виберіть, що показувати, і змініть порядок блоків кнопками вгору/вниз.
+                Виберіть, що показувати, і перетягніть блоки мишею в потрібному порядку.
               </p>
             </div>
 
@@ -927,9 +964,31 @@ const Dashboard = () => {
                 const Icon = meta.icon || LayoutGrid;
                 const enabled = Boolean(layout.widgets[key]);
 
+                const isDragging = draggedWidgetKey === key;
+                const isDragTarget = dragOverWidgetKey === key && draggedWidgetKey !== key;
+
                 return (
-                  <div key={key} className={`rounded-2xl border p-4 transition-colors ${enabled ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100 opacity-70'}`}>
+                  <div
+                    key={key}
+                    draggable
+                    onDragStart={(event) => handleWidgetDragStart(event, key)}
+                    onDragOver={(event) => handleWidgetDragOver(event, key)}
+                    onDragEnter={(event) => handleWidgetDragOver(event, key)}
+                    onDrop={(event) => handleWidgetDrop(event, key)}
+                    onDragEnd={handleWidgetDragEnd}
+                    className={`rounded-2xl border p-4 transition-all select-none cursor-grab active:cursor-grabbing ${
+                      enabled ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100 opacity-70'
+                    } ${
+                      isDragging ? 'opacity-50 scale-[0.98] shadow-lg' : ''
+                    } ${
+                      isDragTarget ? 'border-blue-400 bg-blue-50/80 shadow-md translate-y-0.5' : ''
+                    }`}
+                  >
                     <div className="flex items-center gap-3">
+                      <div className="h-10 w-8 rounded-xl flex items-center justify-center shrink-0 text-slate-300 hover:text-blue-500 transition-colors" title="Затисніть і перетягніть">
+                        <span className="text-2xl leading-none font-black tracking-[-6px] pr-1">⋮⋮</span>
+                      </div>
+
                       <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${enabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-300'}`}>
                         <Icon size={18} />
                       </div>
@@ -942,27 +1001,11 @@ const Dashboard = () => {
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
-                          onClick={() => moveWidget(key, 'up')}
-                          disabled={index === 0}
-                          className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-blue-600 hover:border-blue-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                          title="Підняти вище"
-                        >
-                          <ChevronUp size={16} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => moveWidget(key, 'down')}
-                          disabled={index === layout.order.length - 1}
-                          className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-blue-600 hover:border-blue-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                          title="Опустити нижче"
-                        >
-                          <ChevronDown size={16} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => toggleWidget(key)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleWidget(key);
+                          }}
+                          onDragStart={(event) => event.preventDefault()}
                           className={`h-9 px-3 rounded-xl border text-[10px] font-black uppercase flex items-center gap-1.5 ${enabled ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-200 hover:text-blue-600'}`}
                         >
                           {enabled ? <Eye size={14} /> : <EyeOff size={14} />}

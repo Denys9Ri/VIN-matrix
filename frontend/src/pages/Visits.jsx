@@ -262,7 +262,7 @@ export default function Visits() {
   const [editCarData, setEditCarData] = useState({ ...emptyCarData });
   const [editComment, setEditComment] = useState('');
   const [showServiceForm, setShowServiceForm] = useState(false);
-  const [newService, setNewService] = useState({ name: '', price: '', quantity: 1, mechanic: '', commission_percent: '', commission_base: 'service' });
+  const [newService, setNewService] = useState({ name: '', price: '', quantity: 1, mechanic: '', commission_percent: '', commission_base: '' });
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
   const [showManualPartForm, setShowManualPartForm] = useState(false);
   const [manualPart, setManualPart] = useState({ ...emptyManualPart });
@@ -342,7 +342,7 @@ export default function Visits() {
         quantity: 1,
         mechanic: visitMechanicId(selectedVisit),
         commission_percent: '',
-        commission_base: 'service',
+        commission_base: '',
       });
       setNewRecommendation({ ...emptyRecommendation });
       fetchRecommendations(selectedVisit);
@@ -484,8 +484,11 @@ export default function Visits() {
       name: newService.name,
       price: Number(newService.price || 0),
       quantity: Number(newService.quantity || 1),
-      commission_base: newService.commission_base || 'service',
+      commission_base: newService.commission_base,
     };
+
+    const allowedCommissionBases = ['services_only', 'services_and_parts_profit', 'order_profit', 'fixed'];
+    if (!allowedCommissionBases.includes(payload.commission_base)) delete payload.commission_base;
 
     if (newService.mechanic) payload.mechanic = Number(newService.mechanic);
     if (newService.commission_percent !== '' && newService.commission_percent !== null && newService.commission_percent !== undefined) {
@@ -494,7 +497,7 @@ export default function Visits() {
 
     try {
       await axios.post(`${API_BASE}/api/order-services/`, payload, { headers });
-      setNewService({ name: '', price: '', quantity: 1, mechanic: visitMechanicId(selectedVisit), commission_percent: '', commission_base: 'service' });
+      setNewService({ name: '', price: '', quantity: 1, mechanic: visitMechanicId(selectedVisit), commission_percent: '', commission_base: '' });
       setSelectedCatalogId('');
       setShowServiceForm(false);
       refreshSelected();
@@ -847,6 +850,7 @@ function Works({
       ...newService,
       mechanic: mechanicId,
       commission_percent: newService.commission_percent || mechanicDefaultPercent(mechanic),
+      commission_base: newService.commission_base || mechanic?.salary_scheme || '',
     });
   };
 

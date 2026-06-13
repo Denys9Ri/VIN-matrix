@@ -161,13 +161,16 @@ const Settings = () => {
     } catch { alert("Помилка оновлення"); }
   };
 
-  const normalizeWorkPostPayload = (data = {}) => ({
-    name: String(data.name || '').trim(),
-    number: Number(data.number || 1),
-    description: data.description || '',
-    sort_order: Number(data.sort_order || data.number || 100),
-    is_active: data.is_active !== false,
-  });
+  const normalizeWorkPostPayload = (data = {}) => {
+    const number = Number(data.number || 1);
+    return {
+      name: String(data.name || '').trim(),
+      number,
+      description: data.description || '',
+      sort_order: number * 10,
+      is_active: data.is_active !== false,
+    };
+  };
 
   const handleAddWorkPost = async (e) => {
     e.preventDefault();
@@ -373,7 +376,6 @@ const WorkPostsPanel = ({ posts = [], onAdd, onEdit, onDelete }) => (
               <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${post.is_active === false ? 'bg-slate-200 text-slate-500' : 'bg-emerald-50 text-emerald-700'}`}>{post.is_active === false ? 'Вимкнений' : 'Активний'}</span>
             </div>
             {post.description && <p className="text-xs font-semibold text-slate-500 mt-1 break-words">{post.description}</p>}
-            <p className="text-[10px] font-black uppercase text-slate-400 mt-2">Сортування: {post.sort_order || 100}</p>
           </div>
           <div className="flex gap-2 shrink-0">
             <button onClick={() => onEdit(post)} className="p-2 text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-100"><Pencil size={15}/></button>
@@ -440,28 +442,17 @@ const WorkPostModal = ({ title, data, setData, onSubmit, onClose }) => (
         value={data.name || ''}
         onChange={e => setData({...data, name: e.target.value})}
       />
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Номер</span>
-          <input
-            type="number"
-            min="1"
-            className="input"
-            value={data.number || 1}
-            onChange={e => setData({...data, number: e.target.value})}
-          />
-        </label>
-        <label className="block">
-          <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Сортування</span>
-          <input
-            type="number"
-            min="1"
-            className="input"
-            value={data.sort_order || 100}
-            onChange={e => setData({...data, sort_order: e.target.value})}
-          />
-        </label>
-      </div>
+      <label className="block">
+        <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Номер поста</span>
+        <input
+          type="number"
+          min="1"
+          className="input"
+          value={data.number || 1}
+          onChange={e => setData({...data, number: e.target.value})}
+        />
+        <span className="text-[10px] font-bold text-slate-400 ml-1 mt-1 block">Пости у списку автоматично йдуть за номером: 1, 2, 3...</span>
+      </label>
       <textarea
         placeholder="Опис: біля воріт, підйомник, електрика, розвал-сходження..."
         className="input h-24"

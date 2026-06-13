@@ -199,8 +199,8 @@ const Analytics = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col w-full overflow-x-hidden pb-24">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
+    <div className="w-full max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen flex flex-col overflow-x-hidden pb-24">
+      <div className="bg-white border border-slate-200 shadow-sm rounded-[28px] p-5 md:p-6 flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center mb-6 gap-5">
         <div>
           <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-800 flex items-center gap-2">
             <BarChart className="text-blue-600" /> Аналітика
@@ -215,13 +215,13 @@ const Analytics = () => {
           )}
         </div>
 
-        <div className="w-full xl:w-auto space-y-2">
-          <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 w-full xl:w-auto overflow-x-auto">
+        <div className="w-full 2xl:w-auto space-y-2">
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 w-full 2xl:w-auto overflow-x-auto">
             {PERIODS.map((periodItem) => (
               <button
                 key={periodItem.key}
                 onClick={() => setTimeFilter(periodItem.key)}
-                className={`flex-1 xl:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${
+                className={`flex-1 2xl:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${
                   timeFilter === periodItem.key ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
@@ -239,17 +239,17 @@ const Analytics = () => {
       </div>
 
       {(hasMechanics || hasSuppliers || !isStore) && (
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-6 bg-white border border-slate-200 rounded-[24px] p-2 shadow-sm flex flex-wrap gap-2">
           <button
             onClick={() => document.getElementById('overview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            className="bg-white border border-slate-200 text-slate-700 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2"
+            className="bg-slate-900 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2 shadow-sm"
           >
             <BarChart size={16} /> Огляд
           </button>
           {hasMechanics && (
             <button
               onClick={() => document.getElementById('mechanics-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="bg-purple-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-purple-100 flex items-center gap-2"
+              className="bg-purple-50 text-purple-700 border border-purple-100 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2 hover:bg-purple-100"
             >
               <Users size={16} /> Майстри
             </button>
@@ -257,7 +257,7 @@ const Analytics = () => {
           {hasSuppliers && (
             <button
               onClick={() => document.getElementById('suppliers-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="bg-amber-500 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-amber-100 flex items-center gap-2"
+              className="bg-amber-50 text-amber-700 border border-amber-100 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2 hover:bg-amber-100"
             >
               <Package size={16} /> Постачальники
             </button>
@@ -265,7 +265,7 @@ const Analytics = () => {
           {!isStore && (
             <button
               onClick={() => document.getElementById('expenses-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="bg-rose-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase shadow-lg shadow-rose-100 flex items-center gap-2"
+              className="bg-rose-50 text-rose-700 border border-rose-100 rounded-2xl px-5 py-3 text-xs font-black uppercase flex items-center gap-2 hover:bg-rose-100"
             >
               <DollarSign size={16} /> Витрати
             </button>
@@ -283,7 +283,7 @@ const Analytics = () => {
         </div>
       )}
 
-      <div id="overview-section" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-4 md:gap-5 mb-6 md:mb-8 scroll-mt-24">
+      <div id="overview-section" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7 gap-4 md:gap-5 mb-6 md:mb-8 scroll-mt-24">
         <MetricCard icon={<Wallet size={15} />} label="Виручка" value={`${money(summary.revenue)} ₴`} tone="blue" />
         <MetricCard icon={<TrendingUp size={15} />} label="Валовий прибуток" value={`${money(summary.gross_profit)} ₴`} sub={`Маржа ${percent(summary.margin_percent)}`} tone="emerald" />
         <MetricCard icon={<CheckCircle2 size={15} />} label="Чистий прибуток" value={`${money(summary.net_profit)} ₴`} sub={`Після зарплат ${percent(summary.net_margin_percent)}`} tone="green" />
@@ -293,8 +293,8 @@ const Analytics = () => {
         <MetricCard icon={<Activity size={15} />} label={`Закриті ${isStore ? 'замовлення' : 'візити'}`} value={summary.completed_orders_count || 0} sub={`Сер. чек ${money(summary.average_check)} ₴`} tone="orange" />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6 md:mb-8">
-        <div className="xl:col-span-2 bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+      <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,2fr)_360px] gap-6 mb-6 md:mb-8">
+        <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
             <h3 className="font-black uppercase text-slate-800 flex items-center gap-2 text-sm"><Calendar size={16} className="text-blue-500" /> Динаміка</h3>
             <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase">
@@ -327,7 +327,7 @@ const Analytics = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-1 gap-4">
           <SmallStat label="Активні в роботі" value={summary.active_orders_count || 0} icon={<Clock3 size={16} />} />
           <SmallStat label="Воронка / незакрита сума" value={`${money(summary.pipeline_revenue)} ₴`} icon={<Activity size={16} />} />
           <SmallStat label="Оплачено" value={`${money(summary.paid_total)} ₴`} icon={<CheckCircle2 size={16} />} />
@@ -364,7 +364,7 @@ const Analytics = () => {
       )}
 
       {hasSuppliers && (
-        <div id="suppliers-section" className="scroll-mt-24 grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+        <div id="suppliers-section" className="scroll-mt-24 grid grid-cols-1 2xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)] gap-6 mb-6">
           <ListCard title="Оборот по постачальниках" icon={<Package size={16} className="text-amber-500" />} empty="Немає даних по постачальниках">
             {supplierItems.slice(0, 12).map((supplier, idx) => <SupplierRow key={`${supplier.name || idx}`} item={supplier} />)}
           </ListCard>
@@ -458,10 +458,10 @@ const MetricCard = ({ icon, label, value, sub, tone = 'blue' }) => {
     orange: 'bg-orange-50 text-orange-600',
   };
   return (
-    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
+    <div className="bg-white p-5 rounded-[28px] border border-slate-200 shadow-sm relative overflow-hidden hover:shadow-md transition-shadow">
       <div className={`w-10 h-10 rounded-2xl ${tones[tone] || tones.blue} flex items-center justify-center mb-4`}>{icon}</div>
       <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{label}</p>
-      <h3 className="text-2xl font-black text-slate-800 leading-tight">{value}</h3>
+      <h3 className="text-[26px] font-black text-slate-900 leading-tight tracking-tight">{value}</h3>
       {sub && <p className="text-[10px] font-bold text-slate-500 mt-2">{sub}</p>}
     </div>
   );
@@ -480,7 +480,7 @@ const SmallStat = ({ icon, label, value }) => (
 const ListCard = ({ title, icon, empty, children }) => {
   const count = React.Children.count(children);
   return (
-    <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
+    <div className="bg-white p-5 md:p-6 rounded-[28px] border border-slate-200 shadow-sm">
       <h3 className="font-black uppercase text-slate-800 mb-4 flex items-center gap-2 text-sm">{icon} {title}</h3>
       <div className="space-y-3">
         {count > 0 ? children : <p className="text-[10px] font-black uppercase text-center text-slate-400 py-6">{empty}</p>}
@@ -749,11 +749,12 @@ const DeadStockRow = ({ item }) => (
 
 
 const SupplierRow = ({ item, compact }) => (
-  <div className="flex justify-between items-start bg-slate-50 p-3 rounded-xl border border-slate-100 gap-3">
+  <div className="flex justify-between items-start bg-slate-50/80 hover:bg-white p-4 rounded-2xl border border-slate-100 gap-4 transition-colors">
     <div className="min-w-0 flex-1">
       <p className="text-sm font-black text-slate-800 truncate">{item.name || 'Без постачальника'}</p>
       <p className="text-[10px] font-bold text-slate-400 mt-1">
         {item.parts_count || 0} позицій · {item.visits_count || 0} візитів · маржа {percent(item.margin_percent)}
+        {Number(item.variants_count || 0) > 1 ? ` · складів: ${item.variants_count}` : ''}
       </p>
       {!compact && (
         <p className="text-[10px] font-bold text-slate-500 mt-1">

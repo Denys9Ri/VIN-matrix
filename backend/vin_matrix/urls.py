@@ -65,6 +65,7 @@ from apps.core.crm_client_views import StoreClientListView, StoreClientDetailVie
 from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
 from apps.core.notification_views import NotificationsSummaryView
 from apps.core.dashboard_views import DashboardSummaryView
+from apps.core.analytics_views import AnalyticsSummaryView
 from apps.core.activity_views import ActivityLogView
 from apps.core.payment_views import (
     VisitAddPaymentView,
@@ -167,6 +168,7 @@ urlpatterns = [
 
     path('api/notifications/summary/', NotificationsSummaryView.as_view(), name='notifications-summary'),
     path('api/dashboard/summary/', DashboardSummaryView.as_view(), name='dashboard-summary'),
+    path('api/analytics/summary/', AnalyticsSummaryView.as_view(), name='analytics-summary'),
     path('api/activity/', ActivityLogView.as_view(), name='activity-log'),
 
     path('api/billing/me/', BillingMeView.as_view(), name='billing-me'),

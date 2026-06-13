@@ -251,7 +251,7 @@ export default function Visits() {
         axios.get(`${API_BASE}/api/work-posts/`, { headers }).catch(() => ({ data: [] })),
         axios.get(`${API_BASE}/api/mechanics/`, { headers }).catch(() => ({ data: [] })),
       ]);
-      setVisits(visitsRes.data || []);
+      setVisits(listOf(visitsRes.data));
       setSettings(settingsRes.data || { role: 'owner', permissions: {}, company: {} });
       setCatalogServices(listOf(servicesRes.data));
       setWorkPosts(listOf(workPostsRes.data));
@@ -302,7 +302,7 @@ export default function Visits() {
     if (!visit?.id) return;
     try {
       const res = await axios.get(`${API_BASE}/api/recommendations/?visit=${visit.id}`, { headers });
-      setRecommendations(res.data || []);
+      setRecommendations(listOf(res.data));
     } catch {
       setRecommendations(recommendationsOf(visit));
     }
@@ -382,10 +382,10 @@ export default function Visits() {
   const acceptPassportScan = () => { if (!passportScanDraft) return; setEditCarData((prev) => mergeScanInto(prev, passportScanDraft)); if (passportScanDraft.plate) patchVisit('plate', passportScanDraft.plate.toUpperCase()); if (passportScanDraft.vin_code) patchVisit('vin_code', passportScanDraft.vin_code.toUpperCase()); setPassportScanDraft(null); };
 
   const handlePlateBlur = async () => {
-    if (!newVisitData.plate || newVisitData.plate.length < 3) return;
+    if (!String(newVisitData.plate || '').trim() || String(newVisitData.plate || '').length < 3) return;
     try {
       const res = await axios.get(`${API_BASE}/api/visits/?search=${newVisitData.plate}`, { headers });
-      const existing = (res.data || []).find((v) => v.plate?.toUpperCase() === newVisitData.plate.toUpperCase());
+      const existing = listOf(res.data).find((v) => v.plate?.toUpperCase() === newVisitData.plate.toUpperCase());
       if (existing) {
         setNewVisitData((p) => ({ ...p, client: existing.client, phone: existing.phone, vin_code: existing.vin_code || p.vin_code }));
         setFoundExisting(true);
@@ -539,11 +539,12 @@ export default function Visits() {
   const printPdf = async () => { const w = window.open('', '_blank'); if (!w) return; try { const r = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, { headers, responseType: 'text' }); w.document.write(r.data); w.document.close(); } catch { w.close(); alert('Не вдалося згенерувати документ'); } };
   const cancelVisit = async () => { if (!window.confirm('Скасувати запис?')) return; await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers }); setSelectedVisit(null); fetchData(); };
 
+  const boardVisits = listOf(visits);
   const grouped = {
-    pending: visits.filter((v) => ['PENDING', 'SELECTION', 'DRAFT'].includes(v.status)),
-    progress: visits.filter((v) => ['IN_PROGRESS', 'ORDERED'].includes(v.status)),
-    done: visits.filter((v) => v.status === 'DONE'),
-    completed: visits.filter((v) => v.status === 'COMPLETED'),
+    pending: boardVisits.filter((v) => ['PENDING', 'SELECTION', 'DRAFT'].includes(v.status)),
+    progress: boardVisits.filter((v) => ['IN_PROGRESS', 'ORDERED'].includes(v.status)),
+    done: boardVisits.filter((v) => v.status === 'DONE'),
+    completed: boardVisits.filter((v) => v.status === 'COMPLETED'),
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
@@ -571,7 +572,8 @@ export default function Visits() {
 }
 
 function DateNavigator({ value, setValue, onPrev, onNext }) { return <div className="bg-white border border-slate-200 rounded-2xl p-1 shadow-sm w-full md:w-auto"><div className="grid grid-cols-[44px_1fr_44px] items-center gap-1"><button type="button" onClick={onPrev} className="h-11 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center"><ChevronLeft size={18} /></button><label className="relative block min-w-0"><span className="block text-[9px] font-black uppercase text-slate-400 text-center leading-none pt-1">Дата дошки</span><input type="date" value={value} onChange={(e) => setValue(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" /><span className="block text-center text-sm font-black text-slate-800 truncate px-1 pb-1">{humanDate(value)}</span></label><button type="button" onClick={onNext} className="h-11 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center"><ChevronRight size={18} /></button></div></div>; }
-function Column({ title, icon, items, onOpen, isStore, workPosts = [], mechanics = [], variant = 'pending' }) {
+function Column({ title, icon, items = [], onOpen, isStore, workPosts = [], mechanics = [], variant = 'pending' }) {
+  const safeItems = listOf(items);
   const styles = {
     pending: { box: 'from-amber-50 to-white border-amber-100', text: 'text-amber-700', badge: 'bg-amber-100' },
     progress: { box: 'from-blue-50 to-white border-blue-100', text: 'text-blue-700', badge: 'bg-blue-100' },
@@ -583,11 +585,11 @@ function Column({ title, icon, items, onOpen, isStore, workPosts = [], mechanics
     <div className={`bg-gradient-to-br ${s.box} rounded-3xl p-4 border shadow-sm`}>
       <h3 className={`font-black uppercase tracking-wider text-sm flex items-center gap-2 mb-4 ${s.text}`}>
         {icon} {title}
-        <span className={`ml-auto px-3 py-1 rounded-xl shadow-sm text-slate-800 ${s.badge}`}>{items.length}</span>
+        <span className={`ml-auto px-3 py-1 rounded-xl shadow-sm text-slate-800 ${s.badge}`}>{safeItems.length}</span>
       </h3>
 
       <div className="space-y-4">
-        {items.map((v) => {
+        {safeItems.map((v) => {
           const post = workPostLabel(v.work_post_name || v.work_post_label || v.work_post, workPosts);
           const mechanic = mechanicLabel(v.responsible_mechanic_name || v.responsible_mechanic_label || v.responsible_mechanic, mechanics);
           const showStoMeta = !isStore && (post !== '—' || mechanic !== '—');
@@ -613,7 +615,7 @@ function Column({ title, icon, items, onOpen, isStore, workPosts = [], mechanics
           );
         })}
 
-        {items.length === 0 && <div className="text-center text-slate-400 text-xs font-black uppercase py-10 bg-white/60 rounded-2xl">Пусто</div>}
+        {safeItems.length === 0 && <div className="text-center text-slate-400 text-xs font-black uppercase py-10 bg-white/60 rounded-2xl">Пусто</div>}
       </div>
     </div>
   );
@@ -882,11 +884,45 @@ function Works({
 function Parts({visit,showForm,setShowForm,form,setForm,onSubmit,onDelete,onStatus}){const ps=partsOf(visit);const c=partCounts(visit);return <div className="space-y-3"><div className="grid grid-cols-2 md:grid-cols-4 gap-2"><MiniStatus label="Очікується" value={c.WAITING} cls="text-amber-600 bg-amber-50 border-amber-100"/><MiniStatus label="В дорозі" value={c.IN_TRANSIT} cls="text-blue-600 bg-blue-50 border-blue-100"/><MiniStatus label="Отримано" value={c.ARRIVED} cls="text-emerald-600 bg-emerald-50 border-emerald-100"/><MiniStatus label="Відмова" value={c.UNAVAILABLE} cls="text-rose-600 bg-rose-50 border-rose-100"/></div><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><InfoCard label="Позицій" value={ps.length}/><InfoCard label="Сума" value={money(partsTotal(visit))}/><button type="button" onClick={()=>setShowForm(!showForm)} className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15}/> Додати вручну</button></div>{showForm&&<ManualPartForm form={form} setForm={setForm} onSubmit={onSubmit} onCancel={()=>setShowForm(false)}/>} {ps.map(p=><div key={p.id} className="p-3 bg-slate-50 rounded-xl border flex flex-col lg:flex-row lg:items-center gap-3"><div className="flex-1 min-w-0"><div className="flex flex-wrap items-center gap-2 mb-1"><span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${supplierBadge(p)}`}>{p.supplier || 'Постачальник'}</span><span className="text-[10px] font-black uppercase text-slate-400">к-сть {p.quantity||1}</span></div><p className="font-black text-slate-800 text-sm break-words">{p.name}</p><p className="text-xs uppercase font-bold text-slate-500 break-words">{p.brand} | {p.part_number||p.article}</p><p className="text-xs font-bold text-blue-600 mt-1">{money(p.sell_price||p.price)} · закупка {money(p.buy_price)}</p></div><select value={p.status||p.logistics_status||'WAITING'} onChange={(e)=>onStatus(p.id,e.target.value)} className="border rounded-xl px-3 py-2 text-xs font-black bg-white"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select><button onClick={()=>onDelete(p.id)} className="text-red-500 p-2 self-start lg:self-center"><Trash2 size={16}/></button></div>)}{!ps.length&&<EmptyPanel text="Запчастини ще не додані"/>}</div>}
 function MiniStatus({label,value,cls}){return <div className={`rounded-2xl border p-3 ${cls}`}><p className="text-[9px] font-black uppercase opacity-80">{label}</p><p className="text-2xl font-black leading-none mt-1">{value}</p></div>}
 function ManualPartForm({ form, setForm, onSubmit, onCancel }) { return <form onSubmit={onSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"><div className="flex items-center justify-between gap-3"><h3 className="font-black text-slate-800 uppercase text-sm">Ручне додавання</h3><button type="button" onClick={onCancel} className="text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><LabeledInput label="Назва" required value={form.name} onChange={(v)=>setForm({...form,name:v})}/><LabeledInput label="Бренд" value={form.brand} onChange={(v)=>setForm({...form,brand:v})}/><LabeledInput label="Артикул" value={form.article} onChange={(v)=>setForm({...form,article:v})}/><LabeledInput label="Постачальник" value={form.supplier} onChange={(v)=>setForm({...form,supplier:v})}/><LabeledInput label="Закупка" type="number" required value={form.buy_price} onChange={(v)=>setForm({...form,buy_price:v})}/><LabeledInput label="Продаж" type="number" required value={form.sell_price} onChange={(v)=>setForm({...form,sell_price:v})}/><LabeledInput label="Кількість" type="number" required value={form.quantity} onChange={(v)=>setForm({...form,quantity:v})}/><label className="block md:col-span-2"><span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Статус</span><select value={form.status} onChange={(e)=>setForm({...form,status:e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select></label></div><button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти запчастину</button></form>}
-function Recommendations({ recommendations, showForm, setShowForm, form, setForm, onSubmit, onDone, onPostpone }) { const active = recommendations.filter(r => r.status !== 'done' && r.status !== 'cancelled'); return <div className="space-y-3"><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><InfoCard label="Активні" value={active.length}/><InfoCard label="Всього" value={recommendations.length}/><button type="button" onClick={()=>setShowForm(!showForm)} className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15}/> Додати</button></div>{showForm&&<RecommendationForm form={form} setForm={setForm} onSubmit={onSubmit} onCancel={()=>setShowForm(false)}/>} {recommendations.map((rec)=>{const urgency=recommendationUrgency(rec);return <div key={rec.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"><div className="flex flex-wrap items-center gap-2 mb-2"><span className={`border rounded-full px-3 py-1 text-[10px] font-black uppercase ${urgency.cls}`}>{urgency.label}</span>{rec.due_date&&<span className="text-[10px] font-black uppercase text-slate-400">до {rec.due_date}</span>}{rec.due_mileage&&<span className="text-[10px] font-black uppercase text-slate-400">{rec.due_mileage} км</span>}</div><h3 className="font-black text-slate-900 text-sm">{rec.title}</h3>{rec.description&&<p className="text-sm font-semibold text-slate-500 mt-1 whitespace-pre-wrap">{rec.description}</p>}<div className="grid grid-cols-2 gap-2 mt-3"><button onClick={()=>onPostpone(rec)} className="bg-amber-50 text-amber-700 rounded-xl py-2.5 text-[10px] font-black uppercase">Відкласти</button><button onClick={()=>onDone(rec.id)} className="bg-emerald-50 text-emerald-700 rounded-xl py-2.5 text-[10px] font-black uppercase">Виконано</button></div></div>})}{!recommendations.length&&<EmptyPanel text="Рекомендації ще не додані"/>}</div>}
+function Recommendations({ recommendations = [], showForm, setShowForm, form, setForm, onSubmit, onDone, onPostpone }) {
+  const safeRecommendations = listOf(recommendations);
+  const active = safeRecommendations.filter((r) => r.status !== 'done' && r.status !== 'cancelled');
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <InfoCard label="Активні" value={active.length} />
+        <InfoCard label="Всього" value={safeRecommendations.length} />
+        <button type="button" onClick={() => setShowForm(!showForm)} className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15} /> Додати</button>
+      </div>
+      {showForm && <RecommendationForm form={form} setForm={setForm} onSubmit={onSubmit} onCancel={() => setShowForm(false)} />}
+      {safeRecommendations.map((rec) => {
+        const urgency = recommendationUrgency(rec);
+        return (
+          <div key={rec.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className={`border rounded-full px-3 py-1 text-[10px] font-black uppercase ${urgency.cls}`}>{urgency.label}</span>
+              {rec.due_date && <span className="text-[10px] font-black uppercase text-slate-400">до {rec.due_date}</span>}
+              {rec.due_mileage && <span className="text-[10px] font-black uppercase text-slate-400">{rec.due_mileage} км</span>}
+            </div>
+            <h3 className="font-black text-slate-900 text-sm">{rec.title}</h3>
+            {rec.description && <p className="text-sm font-semibold text-slate-500 mt-1 whitespace-pre-wrap">{rec.description}</p>}
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <button onClick={() => onPostpone(rec)} className="bg-amber-50 text-amber-700 rounded-xl py-2.5 text-[10px] font-black uppercase">Відкласти</button>
+              <button onClick={() => onDone(rec.id)} className="bg-emerald-50 text-emerald-700 rounded-xl py-2.5 text-[10px] font-black uppercase">Виконано</button>
+            </div>
+          </div>
+        );
+      })}
+      {!safeRecommendations.length && <EmptyPanel text="Рекомендації ще не додані" />}
+    </div>
+  );
+}
 function RecommendationForm({ form, setForm, onSubmit, onCancel }) { return <form onSubmit={onSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"><div className="flex items-center justify-between"><h3 className="font-black text-slate-800 uppercase text-sm">Нова рекомендація</h3><button type="button" onClick={onCancel} className="text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><LabeledInput label="Що рекомендуємо" required value={form.title} onChange={(v)=>setForm({...form,title:v})}/><LabeledInput label="Дата" type="date" value={form.due_date} onChange={(v)=>setForm({...form,due_date:v})}/><LabeledInput label="Пробіг" type="number" value={form.due_mileage} onChange={(v)=>setForm({...form,due_mileage:v})}/><label className="block md:col-span-2"><span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Опис</span><textarea value={form.description || ''} onChange={(e)=>setForm({...form,description:e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none min-h-[90px]"/></label></div><button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти рекомендацію</button></form>}
 function Summary({ visit, recommendations, workflowInfo, editComment, setEditComment, onSave, mechanics = [], isStore }) {
   const c = partCounts(visit);
-  const activeRecs = recommendations.filter((r) => r.status !== 'done' && r.status !== 'cancelled');
+  const safeRecommendations = listOf(recommendations);
+  const activeRecs = safeRecommendations.filter((r) => r.status !== 'done' && r.status !== 'cancelled');
   const acceptanceDone = workflowFilled(workflowInfo.acceptance, 'acceptance');
   const diagnosticDone = workflowFilled(workflowInfo.diagnostic, 'diagnostic');
   const payrollTotal = servicesPayrollTotal(visit);

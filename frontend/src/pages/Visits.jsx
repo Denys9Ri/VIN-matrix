@@ -920,27 +920,27 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-3 items-stretch">
+              <div className="space-y-3">
                 <QuickActions visit={visit} onCopy={onCopy} />
 
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3 min-w-0">
-                  <div className="flex items-start justify-between gap-3">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/45 p-3 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Запис</p>
-                      <p className="text-sm font-black text-slate-900 mt-1 flex items-center gap-2 min-w-0">
-                        <Clock size={15} className="text-blue-500 shrink-0"/>
+                      <p className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Запис / час візиту</p>
+                      <p className="text-sm font-black text-slate-950 mt-1 flex items-center gap-2 min-w-0">
+                        <Clock size={15} className="text-blue-600 shrink-0"/>
                         <span className="truncate">{visitDate(visit)}</span>
                       </p>
                     </div>
-                    <button type="button" onClick={() => setRescheduleOpen(!rescheduleOpen)} className="min-h-[36px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-slate-700 hover:border-blue-300 hover:text-blue-600 transition whitespace-nowrap shrink-0">
-                      Змінити
+                    <button type="button" onClick={() => setRescheduleOpen(!rescheduleOpen)} className="min-h-[38px] rounded-xl border border-blue-100 bg-white px-4 py-2 text-[10px] font-black uppercase text-blue-700 hover:border-blue-300 hover:bg-blue-50 transition whitespace-nowrap shrink-0">
+                      {rescheduleOpen ? 'Сховати зміну' : 'Змінити запис'}
                     </button>
                   </div>
                   {rescheduleOpen && (
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2">
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
                       <LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/>
                       <LabeledInput label="Новий час" type="time" value={reschedule.time} onChange={(v)=>setReschedule({...reschedule,time:v})}/>
-                      <button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase whitespace-nowrap">Зберегти запис</button>
+                      <button type="button" onClick={saveReschedule} className="min-h-[43px] bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase whitespace-nowrap shadow-sm shadow-blue-100 hover:bg-blue-700 transition">Зберегти</button>
                     </div>
                   )}
                 </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api/axios';
-import { useToast } from '../components/ui';
+import { AppPage, Badge, PageHeader, useToast } from '../components/ui';
 import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -377,12 +377,8 @@ const UniversalSearch = () => {
   };
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto p-3 md:p-8 md:pl-72 min-h-screen flex flex-col overflow-x-hidden">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
-        <div>
-          <h1 className="text-xl md:text-3xl font-black uppercase italic text-slate-800 mb-1 md:mb-2">Глобальний пошук</h1>
-          <p className="text-slate-500 font-bold text-xs md:text-sm">Шукайте запчастини на складі та у всіх постачальників.</p>
-        </div>
+    <AppPage className="flex flex-col"><div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 md:mb-8 gap-4 mt-4 md:mt-0">
+        <PageHeader title="Глобальний пошук" subtitle="Шукайте запчастини на складі та у всіх постачальників." icon={<Search />} />
         
         <div className="w-full lg:w-auto bg-white border border-slate-200 shadow-sm rounded-2xl p-3 flex items-center justify-between lg:justify-start gap-3">
           <div className="flex items-center gap-3">
@@ -496,9 +492,9 @@ const UniversalSearch = () => {
                     <tr className={`border-b border-slate-50 transition-colors ${item.is_local ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
                       <td className="p-3 align-top pt-4">
                         <div className="flex flex-col gap-2 items-start w-full">
-                          <span className={`inline-flex items-center justify-center w-full gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${getBadgeStyle(item.source, item.is_local)}`}>
+                          <Badge variant="supplier" supplier={item.source} className="w-full justify-center rounded-lg">
                             {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
-                          </span>
+                          </Badge>
                           
                           {!item.is_local && (
                             <button onClick={() => toggleAnalogs(item)} className="w-full text-slate-500 hover:text-blue-600 bg-white px-2 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm whitespace-nowrap">
@@ -568,9 +564,9 @@ const UniversalSearch = () => {
                                    return (
                                      <div key={analog.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all gap-3 md:gap-4 ${!isAvailable ? 'opacity-60 grayscale' : ''}`}>
                                        <div className="w-full sm:w-36 md:w-44 shrink-0 space-y-1.5">
-                                         <span className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest ${getBadgeStyle(analog.source, analog.is_local)}`}>
+                                         <Badge variant="supplier" supplier={analog.source} className="rounded-md px-2 py-1 text-[8px]">
                                            <Truck size={10}/> {analog.source || 'Постачальник'}
-                                         </span>
+                                         </Badge>
                                          <p 
                                            className={`font-black text-sm hover:text-blue-600 cursor-pointer underline decoration-dashed underline-offset-4 transition-colors ${isAvailable ? 'text-slate-800 decoration-slate-300' : 'text-slate-500 decoration-slate-200'}`}
                                            onClick={() => {
@@ -637,9 +633,9 @@ const UniversalSearch = () => {
                 <div key={`mob_${item.id}`} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden">
                   
                   <div className="flex justify-between items-center">
-                    <span className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${getBadgeStyle(item.source, item.is_local)}`}>
+                    <Badge variant="supplier" supplier={item.source} className="rounded-lg">
                       {item.is_local ? <Box size={12}/> : <Truck size={12}/>} {item.source}
-                    </span>
+                    </Badge>
                     <button onClick={() => openAddModal(item, safeIdx)} className="bg-emerald-500 text-white p-2 rounded-xl hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-200">
                       <Plus size={18}/>
                     </button>
@@ -709,9 +705,9 @@ const UniversalSearch = () => {
                                <div key={analog.id} className={`bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2 relative ${!isAvailable ? 'opacity-60 grayscale' : ''}`}>
                                   <button onClick={() => openAddModal(analog, analogWhIdx)} disabled={!isAvailable} className="absolute right-3 top-3 bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={14}/></button>
                                   <div className="pr-8 space-y-1.5">
-                                    <span className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest ${getBadgeStyle(analog.source, analog.is_local)}`}>
+                                    <Badge variant="supplier" supplier={analog.source} className="rounded-md px-2 py-1 text-[8px]">
                                       <Truck size={10}/> {analog.source || 'Постачальник'}
-                                    </span>
+                                    </Badge>
                                     <p 
                                       className={`font-black text-sm leading-tight hover:text-blue-600 cursor-pointer underline decoration-dashed underline-offset-4 transition-colors ${isAvailable ? 'text-slate-800 decoration-slate-300' : 'text-slate-500 decoration-slate-200'}`}
                                       onClick={() => {
@@ -924,7 +920,7 @@ const UniversalSearch = () => {
         </div>
       )}
 
-    </div>
+    </AppPage>
   );
 };
 

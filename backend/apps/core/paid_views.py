@@ -456,29 +456,139 @@ def _fetch_utr_search(supplier, query, *, is_analog=False, sku_param='', orig_br
             )
             if not mapped:
                 continue
-            key = f"{_clean_article(mapped.get('article'))}:{str(mapped.get('brand') or '').upper()}"
+            key = f"{_clean_article(mapped.get('article'))}:{str(mapped.get('brand') or '').upper()}:{str(mapped.get('sku') or '')}"
             if key in seen:
                 continue
             seen.add(key)
             results.append(mapped)
 
-    if is_analog and sku_param:
-        # У документації UTR немає стабільного окремого endpoint для аналогів.
-        # Якщо API віддасть аналоги всередині detail — використаємо їх, інакше повернемо пустий список.
-        try:
-            detail_res = _utr_request(supplier, f'/api/detail/{urllib.parse.quote(str(sku_param))}', timeout=10)
-            if detail_res is not None and detail_res.status_code == 200:
-                detail = detail_res.json() or {}
-                analogs = []
-                for key in ['analogs', 'analogues', 'crosses', 'crossCodes', 'replacements']:
-                    value = detail.get(key) if isinstance(detail, dict) else None
-                    if isinstance(value, dict):
-                        analogs.extend(list(value.values()))
-                    elif isinstance(value, list):
-                        analogs.extend(value)
-                add_details(analogs)
-        except Exception:
-            pass
+    def add_package_results(package_payload):
+        if not isinstance(package_payload, list):
+            return
+        for row in package_payload:
+            if not isinstance(row, dict):
+                continue
+            add_details(_extract_utr_details(row))
+
+    def brand_titles_from_visible_brand(value):
+        titles = []
+        seen_titles = set()
+
+        def add_title(raw):
+            title = str(raw or '').strip()
+            if not title:
+                return
+            key = title.upper()
+            if key in seen_titles:
+                return
+            seen_titles.add(key)
+            titles.append(title)
+
+        def walk(node):
+            if isinstance(node, dict):
+                add_title(node.get('title') or node.get('name') or node.get('displayName') or node.get('externalCode'))
+                for child in node.get('synonyms') or []:
+                    walk(child)
+                for child in node.get('aliases') or []:
+                    alias = child.get('alias') if isinstance(child, dict) else child
+                    walk(alias)
+                parent = node.get('parent')
+                if parent:
+                    walk(parent)
+            elif isinstance(node, list):
+                for child in node:
+                    walk(child)
+
+        walk(value)
+        return titles
+
+    def collect_cross_queries(value):
+        queries = []
+        seen_queries = set()
+        cross_keys = {
+            'analogs', 'analogues', 'crosses', 'crosscodes', 'cross_codes', 'replacements',
+            'replaces', 'substitutes', 'substitution', 'oe', 'oem', 'oems', 'oecodes', 'oe_codes',
+        }
+
+        def add_query(code, brand=''):
+            code = str(code or '').strip()
+            brand = str(brand or '').strip()
+            if not code:
+                return
+            key = f'{_clean_article(code)}::{brand.upper()}'
+            if key in seen_queries:
+                return
+            seen_queries.add(key)
+            if brand:
+                queries.append({'oem': code, 'brand': brand})
+            else:
+                queries.append({'oem': code})
+
+        def walk(node, active=False):
+            if isinstance(node, dict):
+                if active:
+                    code = node.get('article') or node.get('oem') or node.get('number') or node.get('code') or node.get('scanCode') or node.get('value')
+                    brand_value = node.get('brand') or node.get('displayBrand') or node.get('brandName')
+                    if isinstance(brand_value, dict):
+                        brand_value = brand_value.get('name') or brand_value.get('displayName') or brand_value.get('title')
+                    add_query(code, brand_value)
+                for key, child in node.items():
+                    walk(child, active or str(key).lower() in cross_keys)
+            elif isinstance(node, list):
+                for child in node:
+                    walk(child, active)
+            elif active:
+                add_query(node)
+
+        walk(value)
+        return queries
+
+    if is_analog:
+        # UTR у відкритій документації описує пошук по артикулу та пакетний пошук,
+        # але не має окремого стабільного endpoint як getAllCrosses. Тому робимо
+        # багаторівневий fallback: спершу шукаємо кроси в detail, потім через
+        # пакетний пошук по знайдених кодах/бренд-синонімах, потім прямий пошук
+        # цього артикулу без brand-фільтра як альтернативні пропозиції UTR.
+        detail = None
+        if sku_param:
+            try:
+                detail_res = _utr_request(supplier, f'/api/detail/{urllib.parse.quote(str(sku_param))}', timeout=10)
+                if detail_res is not None and detail_res.status_code == 200:
+                    detail = detail_res.json() or {}
+                    analog_queries = collect_cross_queries(detail)
+
+                    visible_brands = brand_titles_from_visible_brand(detail.get('visibleBrand') if isinstance(detail, dict) else None)
+                    detail_article = _utr_article(detail, query)
+                    for brand_title in visible_brands:
+                        if brand_title and brand_title.upper() != str(orig_brand or '').upper():
+                            analog_queries.append({'oem': detail_article or query, 'brand': brand_title})
+
+                    if analog_queries:
+                        payload = {'details': analog_queries[:30]}
+                        batch_res = _utr_request(supplier, '/api/search', method='post', json_payload=payload, timeout=15)
+                        if batch_res is not None and batch_res.status_code == 200:
+                            add_package_results(batch_res.json())
+            except Exception:
+                pass
+
+        if not results:
+            try:
+                res = _utr_request(supplier, f'/api/search/{urllib.parse.quote(str(query))}', params={'info': 1}, timeout=15)
+                if res is not None and res.status_code == 200:
+                    add_details(_extract_utr_details(res.json()))
+            except Exception:
+                pass
+
+        original_article = _clean_article(query)
+        original_brand = str(orig_brand or '').upper()
+        results = [
+            item for item in results
+            if not (
+                _clean_article(item.get('article')) == original_article
+                and str(item.get('brand') or '').upper() == original_brand
+                and str(item.get('sku') or '') == str(sku_param or '')
+            )
+        ]
         return results
 
     params = {'info': 1}
@@ -493,7 +603,6 @@ def _fetch_utr_search(supplier, query, *, is_analog=False, sku_param='', orig_br
         pass
 
     return results
-
 
 def _map_bm_product(supplier, item, query='', is_analog=False, sku_param='', orig_brand=''):
     if not isinstance(item, dict):

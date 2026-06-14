@@ -244,11 +244,90 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['company']
 
+def _mask_secret(value):
+    value = str(value or '')
+    if not value:
+        return ''
+    return f'{value[:4]}••••••{value[-4:]}' if len(value) > 8 else '••••••'
+
+
 class SupplierSerializer(serializers.ModelSerializer):
+    api_key_masked = serializers.SerializerMethodField()
+    api_key_set = serializers.SerializerMethodField()
+    api_password_set = serializers.SerializerMethodField()
+    api_token_set = serializers.SerializerMethodField()
+    connection_label = serializers.SerializerMethodField()
+
     class Meta:
         model = Supplier
-        fields = '__all__'
-        read_only_fields = ['company']
+        fields = [
+            'id',
+            'name',
+            'api_type',
+            'api_key',
+            'api_key_masked',
+            'api_key_set',
+            'api_login',
+            'api_password',
+            'api_password_set',
+            'api_token_set',
+            'browser_fingerprint',
+            'price_file',
+            'warehouse_prefs',
+            'is_active',
+            'connection_label',
+        ]
+        read_only_fields = [
+            'id',
+            'api_key_masked',
+            'api_key_set',
+            'api_password_set',
+            'api_token_set',
+            'connection_label',
+        ]
+        extra_kwargs = {
+            'api_key': {'write_only': True, 'required': False, 'allow_blank': True, 'allow_null': True},
+            'api_password': {'write_only': True, 'required': False, 'allow_blank': True, 'allow_null': True},
+            'api_login': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'browser_fingerprint': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'api_type': {'required': False},
+            'is_active': {'required': False},
+            'price_file': {'required': False, 'allow_null': True},
+            'warehouse_prefs': {'required': False},
+        }
+
+    def get_api_key_masked(self, obj):
+        return _mask_secret(getattr(obj, 'api_key', ''))
+
+    def get_api_key_set(self, obj):
+        return bool(getattr(obj, 'api_key', None))
+
+    def get_api_password_set(self, obj):
+        return bool(getattr(obj, 'api_password', None))
+
+    def get_api_token_set(self, obj):
+        return bool(getattr(obj, 'api_token', None) or getattr(obj, 'api_refresh_token', None))
+
+    def get_connection_label(self, obj):
+        api_type = getattr(obj, 'api_type', 'custom') or 'custom'
+        if api_type == 'utr':
+            return 'Логін/пароль' if getattr(obj, 'api_login', '') and getattr(obj, 'api_password', '') else 'Потрібен логін/пароль'
+        if api_type == 'custom':
+            return 'Файл прайсу / ручний'
+        return 'API ключ' if getattr(obj, 'api_key', '') else 'Потрібен API ключ'
+
+    def _clean_empty_secrets(self, validated_data):
+        # Не стираємо існуючий ключ або пароль, якщо користувач залишив поле пустим.
+        for field in ['api_key', 'api_password', 'api_token', 'api_refresh_token']:
+            if field in validated_data and validated_data.get(field) in [None, '']:
+                validated_data.pop(field)
+        return validated_data
+
+    def create(self, validated_data):
+        return super().create(self._clean_empty_secrets(validated_data))
+
+    def update(self, instance, validated_data):
+        return super().update(instance, self._clean_empty_secrets(validated_data))
 
 class InventoryItemSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)

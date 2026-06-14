@@ -30,6 +30,7 @@ import {
 import VisitCard from '../components/visits/VisitCard';
 import VisitWorkflowPanel from '../components/crm/VisitWorkflowPanel';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AppPage, PageHeader, useToast } from '../components/ui';
 
 const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
 const emptyCarData = { brand: '', model: '', year: '', engine: '', fuel: '', mileage: '', engine_volume: '', engine_power: '', engine_code: '', engine_review_status: 'manual' };
@@ -241,6 +242,7 @@ const workflowFilled = (data, type) => {
 
 export default function Visits() {
   const navigate = useNavigate();
+  const uiToast = useToast();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [visits, setVisits] = useState([]);
@@ -406,7 +408,7 @@ export default function Visits() {
       const scan = await recognizeDocument(file);
       setScanDraft((prev) => mergeScanInto(prev || newVisitData, scan));
     } catch {
-      alert('Помилка сканування. Спробуйте інший ракурс.');
+      uiToast.error('Помилка сканування. Спробуйте інший ракурс.');
     } finally {
       setIsScanning(false);
       if (cameraInputRef.current) cameraInputRef.current.value = '';
@@ -423,7 +425,7 @@ export default function Visits() {
       setPassportScanDraft((prev) => mergeScanInto(prev || editCarData, scan));
       setVisitTab('passport');
     } catch {
-      alert('Помилка сканування. Спробуйте інший ракурс.');
+      uiToast.error('Помилка сканування. Спробуйте інший ракурс.');
     } finally {
       setIsScanning(false);
       if (passportScanInputRef.current) passportScanInputRef.current.value = '';
@@ -469,7 +471,7 @@ export default function Visits() {
       setNewVisitData({ plate: '', vin_code: '', client: '', phone: '', date: dateISO(), time: '', work_post: '', responsible_mechanic: '', delivery_type: 'pickup', delivery_data: '', payment_status: 'unpaid', prepayment_amount: '', ...emptyCarData });
       fetchData();
     } catch {
-      alert('Помилка створення');
+      uiToast.error('Помилка створення');
     }
   };
 
@@ -502,7 +504,7 @@ export default function Visits() {
       setShowServiceForm(false);
       refreshSelected();
     } catch {
-      alert('Помилка додавання роботи');
+      uiToast.error('Помилка додавання роботи');
     }
   };
 
@@ -528,7 +530,7 @@ export default function Visits() {
       refreshSelected();
     } catch (error) {
       console.error(error.response?.data || error);
-      alert('Помилка додавання запчастини вручну. Перевірте поля.');
+      uiToast.error('Помилка додавання запчастини вручну. Перевірте поля.');
     }
   };
 
@@ -553,7 +555,7 @@ export default function Visits() {
       fetchRecommendations(selectedVisit);
     } catch (error) {
       console.error(error.response?.data || error);
-      alert('Не вдалося додати рекомендацію.');
+      uiToast.error('Не вдалося додати рекомендацію.');
     }
   };
 
@@ -562,7 +564,7 @@ export default function Visits() {
       await axios.post(`${API_BASE}/api/recommendations/${id}/mark-done/`, {}, { headers });
       fetchRecommendations(selectedVisit);
     } catch {
-      alert('Не вдалося позначити рекомендацію виконаною.');
+      uiToast.error('Не вдалося позначити рекомендацію виконаною.');
     }
   };
 
@@ -573,7 +575,7 @@ export default function Visits() {
       await axios.patch(`${API_BASE}/api/recommendations/${rec.id}/`, { due_date: dateISO(base), status: 'active' }, { headers });
       fetchRecommendations(selectedVisit);
     } catch {
-      alert('Не вдалося відкласти рекомендацію.');
+      uiToast.error('Не вдалося відкласти рекомендацію.');
     }
   };
 
@@ -591,7 +593,7 @@ export default function Visits() {
   const deleteService = async (id) => { if (window.confirm('Видалити роботу?')) { await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers }); refreshSelected(); } };
   const deletePart = async (id) => { if (window.confirm('Видалити запчастину?')) { await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers }); refreshSelected(); } };
   const updatePartStatus = async (id, status) => { await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { status }, { headers }); refreshSelected(); };
-  const printPdf = async () => { const w = window.open('', '_blank'); if (!w) return; try { const r = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, { headers, responseType: 'text' }); w.document.write(r.data); w.document.close(); } catch { w.close(); alert('Не вдалося згенерувати документ'); } };
+  const printPdf = async () => { const w = window.open('', '_blank'); if (!w) return; try { const r = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, { headers, responseType: 'text' }); w.document.write(r.data); w.document.close(); } catch { w.close(); uiToast.error('Не вдалося згенерувати документ'); } };
   const cancelVisit = async () => { if (!window.confirm('Скасувати запис?')) return; await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers }); setSelectedVisit(null); fetchData(); };
 
   const boardVisits = listOf(visits);
@@ -615,9 +617,9 @@ export default function Visits() {
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen overflow-x-hidden">
+    <AppPage>
       <div className="flex flex-col xl:flex-row gap-4 justify-between mb-6">
-        <h1 className="text-3xl sm:text-2xl font-black uppercase italic tracking-wide">{isStore ? 'Замовлення' : 'Дошка Візитів'}</h1>
+        <PageHeader title={isStore ? 'Замовлення' : 'Дошка Візитів'} subtitle="Щоденна дошка робіт, запчастин, оплат і документів." icon={<ClipboardList />} />
         <div className="flex flex-col md:flex-row gap-3 flex-1 xl:justify-center">
           <div className="relative w-full md:w-72"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Пошук ID, номер, клієнт..." className="w-full bg-white border border-slate-200 rounded-2xl pl-9 pr-4 py-3 text-sm font-bold outline-none shadow-sm" /></div>
           <DateNavigator value={filterDate} setValue={setFilterDate} onPrev={() => changeBoardDate(-1)} onNext={() => changeBoardDate(1)} />
@@ -632,7 +634,7 @@ export default function Visits() {
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] bg-slate-900 text-white px-4 py-3 rounded-2xl text-xs font-black shadow-xl">{toast}</div>}
       {isCreatingVisit && <CreateVisitModal data={newVisitData} setData={setNewVisitData} onClose={() => { setIsCreatingVisit(false); setScanDraft(null); }} onSubmit={createVisit} onPlateBlur={handlePlateBlur} foundExisting={foundExisting} isScanning={isScanning} cameraRef={cameraInputRef} galleryRef={galleryInputRef} onScan={scanNewVisit} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={acceptNewScan} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
       {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
-    </div>
+    </AppPage>
   );
 }
 

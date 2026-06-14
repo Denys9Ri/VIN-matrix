@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CopyButton from '../components/common/CopyButton';
+import { AppPage, useToast } from '../components/ui';
 
 const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
 
@@ -101,6 +102,7 @@ const scrollToSection = (id) => {
 
 const Analytics = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -143,8 +145,8 @@ const Analytics = () => {
   const handleAddExpense = async (event) => {
     event.preventDefault();
     const amount = Number(expenseForm.amount || 0);
-    if (!expenseForm.title.trim()) return alert('Вкажіть назву витрати.');
-    if (!amount || amount <= 0) return alert('Вкажіть суму витрати.');
+    if (!expenseForm.title.trim()) return toast.warning('Вкажіть назву витрати.');
+    if (!amount || amount <= 0) return toast.warning('Вкажіть суму витрати.');
 
     setExpenseSaving(true);
     try {
@@ -157,7 +159,7 @@ const Analytics = () => {
       setExpenseForm(DEFAULT_EXPENSE);
       await fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Не вдалося додати витрату.');
+      toast.error(err.response?.data?.error || 'Не вдалося додати витрату.');
     } finally {
       setExpenseSaving(false);
     }
@@ -206,7 +208,7 @@ const Analytics = () => {
     : 'Каса, прибуток, борги, майстри, пости, постачальники та витрати СТО';
 
   return (
-    <div className="w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen flex flex-col overflow-x-hidden pb-24">
+    <AppPage className="max-w-[1680px] flex flex-col pb-24">
       <Header
         title={modeTitle}
         subtitle={modeSubtitle}
@@ -277,7 +279,7 @@ const Analytics = () => {
           onClose={() => setExpenseModalOpen(false)}
         />
       )}
-    </div>
+    </AppPage>
   );
 };
 

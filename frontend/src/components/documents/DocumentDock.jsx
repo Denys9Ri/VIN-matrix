@@ -6,7 +6,6 @@ import api from '../../api/axios';
 const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
 const qty = (v) => Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 });
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const norm = (v = '') => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 function findContext() {
   const text = document.body?.innerText || '';
@@ -32,22 +31,17 @@ export default function DocumentDock() {
   const [visit, setVisit] = useState(null);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [embeddedTrigger, setEmbeddedTrigger] = useState(false);
 
-  useEffect(() => {
-    const update = () => setCtx(findContext());
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    const timer = setInterval(update, 800);
-    return () => { observer.disconnect(); clearInterval(timer); };
-  }, []);
+  const load = async (overrideCtx = null) => {
+    const currentCtx = overrideCtx?.id ? overrideCtx : ctx;
+    if (!currentCtx?.id) return;
 
-  const load = async () => {
-    if (!ctx?.id) return;
+    setCtx(currentCtx);
     setLoading(true);
     try {
       const [visitRes, settingsRes] = await Promise.all([
-        api.get(`/api/visits/${ctx.id}/`),
+        api.get(`/api/visits/${currentCtx.id}/`),
         api.get('/api/settings/'),
       ]);
       setVisit(visitRes.data);
@@ -60,6 +54,33 @@ export default function DocumentDock() {
     }
   };
 
+  useEffect(() => {
+    const update = () => {
+      setCtx(findContext());
+      setEmbeddedTrigger(Boolean(document.querySelector('[data-document-dock-anchor="true"]')));
+    };
+
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+    const timer = setInterval(update, 800);
+
+    return () => {
+      observer.disconnect();
+      clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handler = (event) => {
+      const detail = event?.detail || findContext();
+      if (detail?.id) load(detail);
+    };
+
+    window.addEventListener('vinmatrix:open-documents', handler);
+    return () => window.removeEventListener('vinmatrix:open-documents', handler);
+  }, [ctx]);
+
   const docs = useMemo(() => {
     if (!ctx) return [];
     if (ctx.mode === 'store') return ['receipt', 'invoice', 'waybill', 'warranty', 'return_note'];
@@ -69,9 +90,12 @@ export default function DocumentDock() {
   if (!ctx) return null;
 
   return <>
-    <button onClick={load} disabled={loading} className="fixed right-5 bottom-24 z-[60] md:right-8 md:bottom-8 bg-slate-900 hover:bg-blue-700 text-white rounded-2xl px-4 py-3 shadow-2xl flex items-center gap-2 font-black text-xs uppercase transition">
-      <FileText size={17}/>{loading ? 'Готуємо...' : 'Документи'}
-    </button>
+    {!embeddedTrigger && (
+      <button onClick={() => load()} disabled={loading} className="fixed right-5 bottom-24 z-[60] md:right-8 md:bottom-8 bg-slate-900 hover:bg-blue-700 text-white rounded-2xl px-4 py-3 shadow-2xl flex items-center gap-2 font-black text-xs uppercase transition">
+        <FileText size={17}/>{loading ? 'Готуємо...' : 'Документи'}
+      </button>
+    )}
+
     {open && createPortal(<div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
       <div className="bg-white w-full md:max-w-3xl rounded-t-[28px] md:rounded-[28px] shadow-2xl overflow-hidden">
         <div className="bg-gradient-to-r from-slate-900 to-blue-700 text-white p-5 flex justify-between gap-4">

@@ -1093,6 +1093,11 @@ class PartSearchView(BasePartSearchView):
             # Прибираємо сирі BM-результати з базового пошуку, бо там API повертає
             # кроси без потрібної нам логіки складів/аналогів.
             cleaned = [item for item in response.data if not (_is_bm_supplier(item.get('source')) or _is_utr_supplier(item.get('source')))]
+            # Для запиту аналогів з конкретного постачальника не даємо базовому
+            # пошуку підмішати результати інших постачальників. Кнопка "Аналоги"
+            # має показувати саме аналоги того постачальника, з картки якого її натиснули.
+            if is_analog and sup_id:
+                cleaned = [item for item in cleaned if str(item.get('supplier_id')) == str(sup_id)]
 
             connected_suppliers = _connected_suppliers(company)
             bm_suppliers = [sup for sup in connected_suppliers if _is_bm_supplier(sup)]

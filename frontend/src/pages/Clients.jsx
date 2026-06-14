@@ -299,7 +299,7 @@ const Clients = ({ embedded = false }) => {
     const activeRecommendations = selectedRecommendations.filter(isNotDone);
     const activeTasks = selectedTasks.filter(isNotDone);
     const lastVisit = selectedGroup.visits[0];
-    return { visits: selectedGroup.visits.length, services: allServices.length, parts: allParts.length, activeRecs: activeRecommendations.length, activeTasks: activeTasks.length, lastVisit, lastMileage: selectedGroup.visits.map(getVisitMileage).find((value) => Number(value) > 0) || null, lastVisitTotal: lastVisit ? getVisitTotal(lastVisit) : 0, total: selectedGroup.visits.reduce((sum, visit) => sum + getVisitTotal(visit), 0), activeRecommendations, activeTasks };
+    return { visits: selectedGroup.visits.length, services: allServices.length, parts: allParts.length, activeRecs: activeRecommendations.length, activeTasks: activeTasks.length, lastVisit, lastMileage: selectedGroup.visits.map(getVisitMileage).find((value) => Number(value) > 0) || null, lastVisitTotal: lastVisit ? getVisitTotal(lastVisit) : 0, total: selectedGroup.visits.reduce((sum, visit) => sum + getVisitTotal(visit), 0), activeRecommendations };
   }, [selectedGroup, selectedRecommendations, selectedTasks]);
 
   useEffect(() => {

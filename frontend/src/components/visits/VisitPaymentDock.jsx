@@ -5,7 +5,14 @@ import api from '../../api/axios';
 
 const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
 const num = (v) => Number(String(v || '').replace(',', '.')) || 0;
-const payTypeLabels = { cash: 'Готівка', card: 'Карта', transfer: 'Переказ', terminal: 'Термінал', other: 'Інше' };
+const fallbackPaymentTypes = [
+  { key: 'cash', label: 'Готівка' },
+  { key: 'card', label: 'Картка' },
+  { key: 'transfer', label: 'Переказ' },
+  { key: 'terminal', label: 'Термінал' },
+  { key: 'other', label: 'Інше' },
+];
+const payTypeLabels = Object.fromEntries(fallbackPaymentTypes.map((item) => [item.key, item.label]));
 const purposeLabels = { partial: 'Часткова оплата', final: 'Закриття боргу', legacy: 'Стара передплата', prepayment: 'Передплата' };
 const norm = (value = '') => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
@@ -46,6 +53,7 @@ export default function VisitPaymentDock() {
   const [saving, setSaving] = useState(false);
   const [finance, setFinance] = useState(null);
   const [payments, setPayments] = useState([]);
+  const [paymentTypes, setPaymentTypes] = useState(fallbackPaymentTypes);
   const [form, setForm] = useState({ amount: '', payment_type: 'cash', comment: '' });
   const [message, setMessage] = useState('');
   const [tabsBar, setTabsBar] = useState(null);
@@ -70,6 +78,24 @@ export default function VisitPaymentDock() {
 
   const visible = useMemo(() => Boolean(visitId && modalRoot), [visitId, modalRoot]);
 
+  const normalizedPaymentTypes = useMemo(() => {
+    const list = Array.isArray(paymentTypes) && paymentTypes.length ? paymentTypes : fallbackPaymentTypes;
+    return list.map((item) => ({ key: item.key || item.value, label: item.label || item.name || item.key })).filter((item) => item.key);
+  }, [paymentTypes]);
+
+  const paymentLabelMap = useMemo(() => Object.fromEntries([...fallbackPaymentTypes, ...normalizedPaymentTypes].map((item) => [item.key, item.label])), [normalizedPaymentTypes]);
+
+  const loadPaymentTypes = async () => {
+    try {
+      const res = await api.get('/api/settings/dictionaries/?mode=both');
+      const list = Array.isArray(res.data?.payment_type) ? res.data.payment_type : [];
+      setPaymentTypes(list.length ? list : fallbackPaymentTypes);
+    } catch {
+      setPaymentTypes(fallbackPaymentTypes);
+    }
+  };
+
+
   const load = async (id = visitId) => {
     if (!id) return;
     setLoading(true);
@@ -78,6 +104,10 @@ export default function VisitPaymentDock() {
       const nextFinance = res.data?.finance || null;
       setPayments(Array.isArray(res.data?.results) ? res.data.results : []);
       setFinance(nextFinance);
+      if (res.data?.payment_types && typeof res.data.payment_types === 'object') {
+        const fromApi = Object.entries(res.data.payment_types).map(([key, label]) => ({ key, label }));
+        setPaymentTypes(fromApi.length ? fromApi : fallbackPaymentTypes);
+      }
       if (Number(nextFinance?.debt_amount || 0) > 0) {
         setForm((p) => ({ ...p, amount: p.amount || String(nextFinance.debt_amount) }));
       }
@@ -88,13 +118,18 @@ export default function VisitPaymentDock() {
     }
   };
 
+  useEffect(() => { loadPaymentTypes(); }, []);
   useEffect(() => { if (visitId) load(visitId); }, [visitId]);
 
   const afterPayment = (res, fallbackMessage) => {
     setPayments(Array.isArray(res.data?.payments) ? res.data.payments : []);
     setFinance(res.data?.finance || finance);
+    if (res.data?.payment_types && typeof res.data.payment_types === 'object') {
+      const fromApi = Object.entries(res.data.payment_types).map(([key, label]) => ({ key, label }));
+      setPaymentTypes(fromApi.length ? fromApi : fallbackPaymentTypes);
+    }
     const left = Number(res.data?.finance?.debt_amount || 0);
-    setForm({ amount: left > 0 ? String(left) : '', payment_type: 'cash', comment: '' });
+    setForm((prev) => ({ amount: left > 0 ? String(left) : '', payment_type: prev.payment_type || normalizedPaymentTypes[0]?.key || 'cash', comment: '' }));
     setMessage(fallbackMessage || (left > 0 ? 'Оплату додано. Борг оновлено.' : 'Оплату додано. Борг закрито.'));
   };
 
@@ -185,11 +220,7 @@ export default function VisitPaymentDock() {
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px] gap-2">
                   <input value={form.amount} onChange={(e)=>setForm({...form, amount:e.target.value})} placeholder="Сума оплати" inputMode="decimal" className="bg-white border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm font-black outline-none focus:border-blue-500" />
                   <select value={form.payment_type} onChange={(e)=>setForm({...form, payment_type:e.target.value})} className="bg-white border-2 border-slate-200 rounded-2xl px-3 py-3 text-xs font-black outline-none focus:border-blue-500">
-                    <option value="cash">Готівка</option>
-                    <option value="card">Карта</option>
-                    <option value="transfer">Переказ</option>
-                    <option value="terminal">Термінал</option>
-                    <option value="other">Інше</option>
+                    {normalizedPaymentTypes.map((type) => <option key={type.key} value={type.key}>{type.label}</option>)}
                   </select>
                 </div>
                 <input value={form.comment} onChange={(e)=>setForm({...form, comment:e.target.value})} placeholder="Коментар: хто заніс, коли домовились, примітка" className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500" />
@@ -206,7 +237,7 @@ export default function VisitPaymentDock() {
                   <span className="bg-white border border-slate-200 rounded-xl px-2 py-1 text-[10px] font-black text-slate-500">{payments.length}</span>
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {payments.map((p) => <div key={p.id} className="p-3 flex justify-between gap-3"><div><p className="font-black text-slate-900">{purposeLabels[p.payment_purpose] || 'Оплата'}</p><p className="text-[11px] font-bold text-slate-500">{payTypeLabels[p.payment_type] || p.payment_type} · {p.created_at ? new Date(p.created_at).toLocaleString('uk-UA') : ''}</p>{p.comment && <p className="text-[11px] font-bold text-slate-400 mt-1">{p.comment}</p>}</div><p className="font-black text-emerald-600 whitespace-nowrap">{money(p.amount)}</p></div>)}
+                  {payments.map((p) => <div key={p.id} className="p-3 flex justify-between gap-3"><div><p className="font-black text-slate-900">{purposeLabels[p.payment_purpose] || 'Оплата'}</p><p className="text-[11px] font-bold text-slate-500">{p.payment_type_label || paymentLabelMap[p.payment_type] || p.payment_type} · {p.created_at ? new Date(p.created_at).toLocaleString('uk-UA') : ''}</p>{p.comment && <p className="text-[11px] font-bold text-slate-400 mt-1">{p.comment}</p>}</div><p className="font-black text-emerald-600 whitespace-nowrap">{money(p.amount)}</p></div>)}
                   {!payments.length && <div className="p-6 text-center text-xs font-black uppercase text-slate-400">Оплат ще немає</div>}
                 </div>
               </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
+import api from '../api/axios';
+import { useToast } from '../components/ui';
 import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -40,13 +41,13 @@ const UniversalSearch = () => {
 
   const [addToVisitData, setAddToVisitData] = useState({ sell_price: '' });
 
-  const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
+  const toast = useToast();
   const token = localStorage.getItem('access_token');
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await axios.get(`${API_BASE}/api/settings/`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await api.get('/api/settings/');
         setCompanyInfo(res.data.company);
         setEuroRateInput(res.data.company.euro_rate || '42.00');
       } catch (error) {
@@ -71,15 +72,12 @@ const UniversalSearch = () => {
 
   const handleSaveEuroRate = async () => {
     try {
-      await axios.patch(`${API_BASE}/api/settings/`, 
-        { "company[euro_rate]": euroRateInput }, 
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.patch('/api/settings/', { "company[euro_rate]": euroRateInput });
       setCompanyInfo({ ...companyInfo, euro_rate: euroRateInput });
       setIsEditingEuro(false);
       if (results.length > 0) performSearch(query);
     } catch (error) {
-      alert("Помилка збереження курсу");
+      toast.error('Помилка збереження курсу');
     }
   };
 
@@ -102,9 +100,7 @@ const UniversalSearch = () => {
     setExpandedAnalogs(new Set()); 
     setLocationFilter(''); 
     try {
-      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(searchString.trim())}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/api/search-parts/?q=${encodeURIComponent(searchString.trim())}`);
       const initialResults = res.data.map(item => ({
         ...item,
         selectedWhIdx: 0 
@@ -153,10 +149,8 @@ const UniversalSearch = () => {
   const fetchAnalogs = async (item) => {
     setAnalogLoading(prev => ({ ...prev, [item.id]: true }));
     try {
-      const supplierAnalogUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${encodeURIComponent(item.sku || '')}&brand=${encodeURIComponent(item.brand || '')}`;
-      const res = await axios.get(supplierAnalogUrl, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const supplierAnalogUrl = `/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${encodeURIComponent(item.sku || '')}&brand=${encodeURIComponent(item.brand || '')}`;
+      const res = await api.get(supplierAnalogUrl);
 
       let collected = uniqueParts(res.data, item);
 
@@ -165,10 +159,8 @@ const UniversalSearch = () => {
       // джерела й явно показуємо постачальника біля кожного аналога.
       if (collected.length === 0 && isUtrSource(item.source)) {
         try {
-          const globalAnalogUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&brand=${encodeURIComponent(item.brand || '')}`;
-          const globalAnalog = await axios.get(globalAnalogUrl, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const globalAnalogUrl = `/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&brand=${encodeURIComponent(item.brand || '')}`;
+          const globalAnalog = await api.get(globalAnalogUrl);
           collected = uniqueParts(globalAnalog.data, item);
         } catch (fallbackErr) {
           console.warn('UTR global analog fallback failed', fallbackErr);
@@ -177,10 +169,8 @@ const UniversalSearch = () => {
 
       if (collected.length === 0 && isUtrSource(item.source)) {
         try {
-          const globalDirectUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}`;
-          const globalDirect = await axios.get(globalDirectUrl, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const globalDirectUrl = `/api/search-parts/?q=${encodeURIComponent(item.article)}`;
+          const globalDirect = await api.get(globalDirectUrl);
           collected = uniqueParts(globalDirect.data, item);
         } catch (fallbackErr) {
           console.warn('UTR direct fallback failed', fallbackErr);
@@ -252,9 +242,7 @@ const UniversalSearch = () => {
 
     setInfoLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/api/suppliers/${part.supplier_id}/part_info/?article=${encodeURIComponent(part.article)}&brand=${encodeURIComponent(part.brand)}&sku=${encodeURIComponent(part.sku || '')}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/api/suppliers/${part.supplier_id}/part_info/?article=${encodeURIComponent(part.article)}&brand=${encodeURIComponent(part.brand)}&sku=${encodeURIComponent(part.sku || '')}`);
       setDetailedInfo(res.data);
     } catch (e) {
       console.error("Не вдалося завантажити інфо", e);
@@ -268,9 +256,7 @@ const UniversalSearch = () => {
       if (visitSearchQuery.length >= 2) {
         setIsSearchingVisits(true);
         try {
-          const res = await axios.get(`${API_BASE}/api/visits/?search=${visitSearchQuery}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const res = await api.get(`/api/visits/?search=${visitSearchQuery}`);
           setVisitSearchResults(res.data.filter(v => v.status !== 'DONE' && v.status !== 'COMPLETED'));
         } catch (err) {
           console.error(err);
@@ -305,7 +291,7 @@ const UniversalSearch = () => {
 
   const handleAddToVisit = async (e) => {
     e.preventDefault();
-    if (!selectedVisit) { alert("Будь ласка, знайдіть та оберіть замовлення/авто!"); return; }
+    if (!selectedVisit) { toast.warning('Будь ласка, знайдіть та оберіть замовлення/авто!'); return; }
     
     const payload = {
       visit: selectedVisit.id, brand: selectedPart.brand, article: selectedPart.article,
@@ -314,10 +300,10 @@ const UniversalSearch = () => {
     };
 
     try {
-      await axios.post(`${API_BASE}/api/order-parts/`, payload, { headers: { Authorization: `Bearer ${token}` } });
-      alert(`Запчастину додано до ${selectedVisit.plate}!`);
+      await api.post('/api/order-parts/', payload);
+      toast.success(`Запчастину додано до ${selectedVisit.plate}!`);
       setSelectedPart(null);
-    } catch (error) { alert("Помилка додавання."); }
+    } catch (error) { toast.error('Помилка додавання.'); }
   };
 
   const getBadgeStyle = (sourceName, isLocal) => {

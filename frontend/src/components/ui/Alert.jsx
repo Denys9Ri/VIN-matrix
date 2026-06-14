@@ -1,0 +1,3 @@
+import React from 'react';import{AlertCircle,CheckCircle2,Info,AlertTriangle}from'lucide-react';import{cn}from'./utils';
+const cfg={info:['bg-blue-50 border-blue-200 text-blue-900',Info],success:['bg-emerald-50 border-emerald-200 text-emerald-900',CheckCircle2],warning:['bg-amber-50 border-amber-200 text-amber-950',AlertTriangle],error:['bg-rose-50 border-rose-200 text-rose-900',AlertCircle]};
+export default function Alert({variant='info',title,children,className=''}){const[c,Icon]=cfg[variant]||cfg.info;return <div className={cn('flex gap-3 rounded-2xl border p-4 text-sm',c,className)}><Icon className="h-5 w-5 shrink-0"/><div>{title&&<div className="font-bold">{title}</div>}{children&&<div className="mt-1 opacity-90">{children}</div>}</div></div>}

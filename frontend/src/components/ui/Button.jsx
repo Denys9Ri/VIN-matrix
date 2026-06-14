@@ -1,0 +1,6 @@
+import React from 'react';
+import { Loader2 } from 'lucide-react';
+import { cn } from './utils';
+const variants={primary:'bg-blue-600 text-white hover:bg-blue-700 shadow-sm',secondary:'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50',ghost:'text-slate-700 hover:bg-slate-100',danger:'bg-rose-600 text-white hover:bg-rose-700 shadow-sm',success:'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm',warning:'bg-amber-400 text-slate-950 hover:bg-amber-500 shadow-sm',dark:'bg-slate-900 text-white hover:bg-slate-800 shadow-sm'};
+const sizes={sm:'h-9 px-3 text-sm',md:'h-11 px-4 text-sm',lg:'h-12 px-5 text-base'};
+export default function Button({variant='primary',size='md',loading=false,disabled=false,icon,iconOnly=false,fullWidthMobile=false,className='',children,...props}){return <button className={cn('inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60',variants[variant],sizes[size],iconOnly&&'aspect-square px-0',fullWidthMobile&&'w-full sm:w-auto',className)} disabled={disabled||loading} {...props}>{loading?<Loader2 className="h-4 w-4 animate-spin"/>:icon}{!iconOnly&&children}</button>}

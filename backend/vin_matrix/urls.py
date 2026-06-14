@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include, re_path
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -121,6 +121,30 @@ router.register(r'platform-clients', SecurePlatformClientViewSet, basename='plat
 router.register(r'partners', PartnerManagementViewSet, basename='partner')
 
 
+
+def openapi_schema(request):
+    return JsonResponse({
+        "openapi": "3.0.3",
+        "info": {"title": "VIN-matrix API", "version": "1.0.0"},
+        "paths": {
+            "/token/": {"post": {"summary": "Obtain JWT token pair"}},
+            "/token/refresh/": {"post": {"summary": "Refresh JWT access token"}},
+            "/api/visits/": {"get": {"summary": "List visits"}, "post": {"summary": "Create visit"}},
+            "/api/payments/": {"get": {"summary": "List visit payments"}},
+            "/api/inventory/": {"get": {"summary": "List inventory"}, "post": {"summary": "Create inventory item"}},
+        },
+    })
+
+
+def swagger_ui(request):
+    return HttpResponse(
+        """<!doctype html><html><head><title>VIN-matrix API docs</title>
+        <link rel='stylesheet' href='https://unpkg.com/swagger-ui-dist@5/swagger-ui.css'></head>
+        <body><div id='swagger-ui'></div><script src='https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js'></script>
+        <script>SwaggerUIBundle({url:'/schema/',dom_id:'#swagger-ui'});</script></body></html>""",
+        content_type='text/html',
+    )
+
 def api_root(request):
     return JsonResponse({
         "message": "VIN-matrix API is running!",
@@ -131,6 +155,8 @@ def api_root(request):
 urlpatterns = [
     path('', api_root),
     path('admin/', admin.site.urls),
+    path('schema/', openapi_schema, name='schema'),
+    path('docs/', swagger_ui, name='swagger-ui'),
 
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

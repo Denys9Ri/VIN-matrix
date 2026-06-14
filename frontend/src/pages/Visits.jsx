@@ -823,8 +823,8 @@ const openDocumentPackage = (visit, isStore) => {
 
 function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
   const tabs = [
-    ['overview','Огляд',Info,'Клієнт, авто, фінанси'],
-    ['passport','Техпаспорт',CarFront,'VIN, двигун, пробіг'],
+    ['overview','Огляд',Info,'Головна інформація'],
+    ['passport','Техпаспорт',CarFront,'Авто, VIN, двигун'],
     ['acceptance','Акт',FileText,'Приймання авто'],
     ['diagnostic','Діагностика',ClipboardCheck,'Карта і висновки'],
     ['works','Роботи',Wrench,'Послуги і зарплата'],
@@ -836,6 +836,10 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
   const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate };
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [reschedule, setReschedule] = useState(timeParts(visit.scheduled_datetime));
+
+  const revenue = totalOf(visit);
+  const paid = Number(visit.paid_amount || visit.prepayment_amount || 0);
+  const debt = Number(visit.debt_amount || Math.max(revenue - paid, 0));
 
   const saveReschedule = async () => {
     if (!reschedule.date || !reschedule.time) return;
@@ -855,141 +859,139 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
-      <div className="bg-white w-full max-w-[1180px] h-[calc(100dvh-18px)] sm:h-[calc(100vh-32px)] rounded-[28px] md:rounded-[34px] shadow-2xl flex flex-col relative overflow-hidden border border-white/60">
+    <div className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-sm overflow-y-auto px-2 py-4 sm:px-4 sm:py-6">
+      <div className="mx-auto w-full max-w-[1120px] rounded-[28px] md:rounded-[34px] bg-white shadow-2xl border border-white/60 overflow-hidden relative">
         {isScanning && <ScanOverlay />}
 
-        <div className="shrink-0 border-b border-slate-200 bg-white">
-          <div className="px-4 py-4 md:px-5 md:py-4 space-y-3">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-black uppercase shadow-sm">
-                    <Hash size={14}/> {isStore ? 'Замовлення' : 'Візит'} №{visitId(visit)}
-                  </span>
-                  <span className="inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-black uppercase bg-slate-100 text-slate-700 border border-slate-200">
-                    {stoStatusLabel(visit.status)}
-                  </span>
-                </div>
-                <h2 className="text-2xl md:text-[28px] font-black uppercase text-slate-950 leading-none tracking-tight break-words">
-                  {visit.plate || `№${visitId(visit)}`}
-                </h2>
-                <p className="text-slate-600 text-sm md:text-[15px] font-bold mt-1 break-words">
-                  {visit.client || 'Клієнт не вказаний'} · {visit.phone || 'телефон не вказаний'}
-                </p>
+        <div className="bg-white px-4 py-4 md:px-6 md:py-5 border-b border-slate-100">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-black uppercase shadow-sm">
+                  <Hash size={14}/> {isStore ? 'Замовлення' : 'Візит'} №{visitId(visit)}
+                </span>
+                <span className="inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-black uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                  {stoStatusLabel(visit.status)}
+                </span>
               </div>
+              <h2 className="text-2xl md:text-3xl font-black uppercase text-slate-950 leading-tight tracking-tight break-words">
+                {visit.plate || `№${visitId(visit)}`}
+              </h2>
+              <p className="text-slate-600 text-sm md:text-[15px] font-bold mt-1 break-words">
+                {visit.client || 'Клієнт не вказаний'} · {visit.phone || 'телефон не вказаний'}
+              </p>
+            </div>
 
-              <div className="flex flex-wrap justify-start lg:justify-end gap-2 shrink-0">
-                <button
-                  type="button"
-                  data-document-dock-anchor="true"
-                  onClick={() => openDocumentPackage(visit, isStore)}
-                  className="min-h-[42px] rounded-2xl bg-slate-900 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-sm transition whitespace-nowrap"
-                >
-                  <FileText size={16}/> Документи
+            <div className="flex flex-wrap justify-start lg:justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                data-document-dock-anchor="true"
+                onClick={() => openDocumentPackage(visit, isStore)}
+                className="min-h-[42px] rounded-2xl bg-slate-900 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-sm transition whitespace-nowrap"
+              >
+                <FileText size={16}/> Документи
+              </button>
+              <MacAction title="Видалити" color="bg-rose-50 !text-rose-500" onClick={onCancel}><Trash2 size={17}/></MacAction>
+              <MacAction title="Закрити" color="bg-slate-100 !text-slate-500" onClick={()=>setVisit(null)}><X size={18}/></MacAction>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 md:grid-cols-5 gap-2.5">
+            <HeaderMetric label="Статус" value={stoStatusLabel(visit.status)} />
+            <HeaderMetric label="Виручка" value={money(revenue)} />
+            <HeaderMetric label="Прибуток" value={money(Number(visit.profit || 0))} good />
+            <HeaderMetric label="Оплачено" value={money(paid)} />
+            <HeaderMetric label="Борг" value={money(debt)} danger={debt > 0} />
+          </div>
+        </div>
+
+        <div className="px-4 py-4 md:px-6 md:py-5 bg-slate-50 border-b border-slate-200 space-y-4">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-3">
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 min-w-0 shadow-sm">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Статус з довідника</p>
+              <div className="flex flex-wrap gap-2">
+                {stoVisitStatuses.map((status) => (
+                  <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>
+                ))}
+              </div>
+            </div>
+
+            {!isStore && (
+              <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 min-w-0 shadow-sm">
+                <div className="grid grid-cols-1 gap-2">
+                  <LabeledSelect label="Пост / підйомник" value={visitWorkPostId(visit)} onChange={(v) => onPatch('work_post', v ? Number(v) : null)}>
+                    <option value="">Не обрано</option>
+                    {arr(workPosts).filter((post) => post.is_active !== false).map((post) => <option key={post.id} value={post.id}>{workPostName(post)}</option>)}
+                  </LabeledSelect>
+                  <LabeledSelect label="Відповідальний майстер" value={visitMechanicId(visit)} onChange={(v) => onPatch('responsible_mechanic', v ? Number(v) : null)}>
+                    <option value="">Не обрано</option>
+                    {arr(mechanics).filter((mechanic) => mechanic.is_active !== false).map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanicName(mechanic)}</option>)}
+                  </LabeledSelect>
+                </div>
+                <p className="text-[11px] font-bold text-blue-700 mt-2">Пост рахує зайнятість, майстер — виконані роботи і зарплату.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-3 items-stretch">
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Запис</p>
+                  <p className="text-sm font-black text-slate-900 mt-1 flex items-center gap-2"><Clock size={15} className="text-blue-500"/> {visitDate(visit)}</p>
+                </div>
+                <button type="button" onClick={() => setRescheduleOpen(!rescheduleOpen)} className="min-h-[40px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase text-slate-700 hover:border-blue-300 hover:text-blue-600 transition whitespace-nowrap">
+                  Змінити запис
                 </button>
-                <MacAction title="Видалити" color="bg-rose-50 !text-rose-500" onClick={onCancel}><Trash2 size={17}/></MacAction>
-                <MacAction title="Закрити" color="bg-slate-100 !text-slate-500" onClick={()=>setVisit(null)}><X size={18}/></MacAction>
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              <HeaderMetric label="Статус" value={stoStatusLabel(visit.status)} />
-              <HeaderMetric label="Виручка" value={money(totalOf(visit))} />
-              <HeaderMetric label="Прибуток" value={money(Number(visit.profit || 0))} good />
-              <HeaderMetric label="Оплачено" value={money(visit.paid_amount || visit.prepayment_amount || 0)} />
-              <HeaderMetric label="Борг" value={money(visit.debt_amount || 0)} danger={Number(visit.debt_amount || 0) > 0} />
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_390px] gap-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 min-w-0">
-                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Статус з довідника</p>
-                <div className="flex flex-wrap gap-2">
-                  {stoVisitStatuses.map((status) => (
-                    <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>
-                  ))}
-                </div>
-              </div>
-
-              {!isStore && (
-                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 min-w-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <LabeledSelect label="Пост" value={visitWorkPostId(visit)} onChange={(v) => onPatch('work_post', v ? Number(v) : null)}>
-                      <option value="">Не обрано</option>
-                      {arr(workPosts).filter((post) => post.is_active !== false).map((post) => <option key={post.id} value={post.id}>{workPostName(post)}</option>)}
-                    </LabeledSelect>
-                    <LabeledSelect label="Майстер" value={visitMechanicId(visit)} onChange={(v) => onPatch('responsible_mechanic', v ? Number(v) : null)}>
-                      <option value="">Не обрано</option>
-                      {arr(mechanics).filter((mechanic) => mechanic.is_active !== false).map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanicName(mechanic)}</option>)}
-                    </LabeledSelect>
-                  </div>
-                  <p className="text-[11px] font-bold text-blue-700 mt-1.5 truncate">Пост рахує зайнятість, майстер — виконані роботи і зарплату.</p>
+              {rescheduleOpen && (
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+                  <LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/>
+                  <LabeledInput label="Новий час" type="time" value={reschedule.time} onChange={(v)=>setReschedule({...reschedule,time:v})}/>
+                  <button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase self-end whitespace-nowrap">Зберегти</button>
                 </div>
               )}
             </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_520px] gap-3 items-start">
-              <div className="rounded-2xl border border-slate-200 bg-white p-3 min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Запис</p>
-                    <p className="text-sm font-black text-slate-900 mt-1 flex items-center gap-2"><Clock size={15} className="text-blue-500"/> {visitDate(visit)}</p>
-                  </div>
-                  <button type="button" onClick={() => setRescheduleOpen(!rescheduleOpen)} className="min-h-[38px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-black uppercase text-slate-700 hover:border-blue-300 hover:text-blue-600 transition whitespace-nowrap">
-                    Змінити запис
-                  </button>
-                </div>
-                {rescheduleOpen && (
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
-                    <LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/>
-                    <LabeledInput label="Новий час" type="time" value={reschedule.time} onChange={(v)=>setReschedule({...reschedule,time:v})}/>
-                    <button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase self-end whitespace-nowrap">Зберегти</button>
-                  </div>
-                )}
-              </div>
-              <QuickActions visit={visit} onPrint={onPrint} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} />
-            </div>
+            <QuickActions visit={visit} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} />
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 bg-slate-50 overflow-y-auto overflow-x-hidden">
-          <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 backdrop-blur px-3 py-3 md:px-5">
-            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
-              {tabs.map(([key,label,Icon]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={()=>setTab(key)}
-                  className={`min-h-[46px] flex items-center justify-center gap-2 rounded-2xl px-3 py-2 text-[11px] md:text-xs font-black uppercase leading-tight transition border whitespace-nowrap ${tab===key?'bg-blue-600 text-white border-blue-600 shadow-sm':'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
-                >
-                  <Icon size={15}/>{label}
-                </button>
-              ))}
-            </div>
+        <div className="bg-white border-b border-slate-200 px-4 py-3 md:px-6">
+          <div className="flex flex-wrap gap-2">
+            {tabs.map(([key,label,Icon]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={()=>setTab(key)}
+                className={`min-h-[42px] inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-[11px] md:text-xs font-black uppercase leading-tight transition border whitespace-nowrap ${tab===key?'bg-blue-600 text-white border-blue-600 shadow-sm':'bg-slate-50 text-slate-700 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
+              >
+                <Icon size={15}/>{label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          <section className="p-3 md:p-5">
-            <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-              <div className="border-b border-slate-100 bg-white px-4 md:px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                    {React.createElement(activeTab[2], { size: 18 })}
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="text-base md:text-lg font-black text-slate-950 uppercase leading-tight truncate">{activeTab[1]}</h3>
-                    <p className="text-xs font-bold text-slate-500 truncate">{activeTab[3]}</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 self-start sm:self-auto">
-                  {isStore ? 'Замовлення' : 'СТО'} №{visitId(visit)}
+        <section className="bg-slate-50 px-3 py-4 md:px-6 md:py-5">
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+            <div className="border-b border-slate-100 bg-white px-4 md:px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  {React.createElement(activeTab[2], { size: 18 })}
                 </span>
+                <div className="min-w-0">
+                  <h3 className="text-base md:text-lg font-black text-slate-950 uppercase leading-tight truncate">{activeTab[1]}</h3>
+                  <p className="text-xs font-bold text-slate-500 truncate">{activeTab[3]}</p>
+                </div>
               </div>
-              <div className="p-4 md:p-5 overflow-x-hidden">
-                {renderContent()}
-              </div>
+              <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 self-start sm:self-auto">
+                {isStore ? 'Замовлення' : 'СТО'} №{visitId(visit)}
+              </span>
             </div>
-          </section>
-        </div>
+            <div className="p-4 md:p-5 overflow-x-hidden">
+              {renderContent()}
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -1,0 +1,193 @@
+--- a/frontend/src/pages/Settings.jsx
++++ b/frontend/src/pages/Settings.jsx
+@@ -1,7 +1,7 @@
+ import React, { useState, useEffect } from 'react';
+ import { LogOut, User, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench, ArrowRight, Building2, BadgeCheck, SlidersHorizontal, CreditCard, CalendarDays, Clock3, CheckCircle2, AlertTriangle, Truck } from 'lucide-react';
+ import { useNavigate } from 'react-router-dom';
+-import axios from 'axios';
++import api from '../api/axios';
+ import Button from '../components/ui/Button';
+ import Card from '../components/ui/Card';
+ import Input from '../components/ui/Input';
+@@ -109,15 +109,11 @@
+   const [workPostData, setWorkPostData] = useState({ ...emptyWorkPost });
+   const [editWorkPostData, setEditWorkPostData] = useState({ ...emptyWorkPost });
+ 
+-  const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
+-  const token = localStorage.getItem('access_token');
+-  const authHeaders = { Authorization: `Bearer ${token}` };
+-
+   useEffect(() => { fetchData(); }, [navigate]);
+ 
+   const fetchData = async () => {
+     try {
+-      const profileRes = await axios.get(`${API_BASE}/api/settings/`, { headers: authHeaders });
++      const profileRes = await api.get('/api/settings/');
+       const nextProfile = profileRes.data || {};
+       setProfile({
+         user: nextProfile.user || {},
+@@ -128,8 +124,8 @@
+       });
+       if (nextProfile.role === 'owner') {
+         const [mechanicsRes, workPostsRes] = await Promise.all([
+-          axios.get(`${API_BASE}/api/mechanics/`, { headers: authHeaders }).catch(() => ({ data: [] })),
+-          axios.get(`${API_BASE}/api/work-posts/`, { headers: authHeaders }).catch(() => ({ data: [] })),
++          api.get('/api/mechanics/').catch(() => ({ data: [] })),
++          api.get('/api/work-posts/').catch(() => ({ data: [] })),
+         ]);
+         setMechanics(Array.isArray(mechanicsRes.data) ? mechanicsRes.data : []);
+         setWorkPosts(Array.isArray(workPostsRes.data) ? workPostsRes.data : []);
+@@ -160,7 +156,7 @@
+     setBillingLoading(true);
+     setBillingNotice('');
+     try {
+-      const res = await axios.post(`${API_BASE}/api/billing/payment-request/`, { method, comment: method === 'cash' ? 'Клієнт планує оплату готівкою' : 'Клієнт натиснув “Я оплатив” у кабінеті' }, { headers: authHeaders });
++      const res = await api.post('/api/billing/payment-request/', { method, comment: method === 'cash' ? 'Клієнт планує оплату готівкою' : 'Клієнт натиснув “Я оплатив” у кабінеті' });
+       setBillingNotice(res.data?.message || 'Заявку створено. Ми перевіримо оплату і підтвердимо доступ.');
+       await fetchData();
+     } catch (error) {
+@@ -187,7 +183,7 @@
+     data.append('company[business_type]', formData.business_type);
+     if (formData.logo) data.append('company[logo]', formData.logo);
+     try {
+-      await axios.patch(`${API_BASE}/api/settings/`, data, { headers: { ...authHeaders, 'Content-Type': 'multipart/form-data' } });
++      await api.patch('/api/settings/', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+       setBillingNotice('Налаштування збережено.');
+       await fetchData();
+       setIsEditingProfile(false);
+@@ -199,7 +195,7 @@
+     e.preventDefault();
+     if (passData.new !== passData.confirm) return alert("Паролі не збігаються");
+     try {
+-      await axios.post(`${API_BASE}/api/change-password/`, { old_password: passData.old, new_password: passData.new }, { headers: authHeaders });
++      await api.post('/api/change-password/', { old_password: passData.old, new_password: passData.new });
+       alert("Пароль змінено!");
+       setIsChangingPassword(false);
+       setPassData({ old: '', new: '', confirm: '' });
+@@ -209,7 +205,7 @@
+   const handleAddMechanic = async (e) => {
+     e.preventDefault();
+     try {
+-      await axios.post(`${API_BASE}/api/mechanics/`, mechanicPayload(mechanicData), { headers: authHeaders });
++      await api.post('/api/mechanics/', mechanicPayload(mechanicData));
+       alert("Працівника додано!");
+       setIsAddingMechanic(false);
+       setMechanicData({ ...emptyMechanicData });
+@@ -220,7 +216,7 @@
+   const handleDeleteMechanic = async (id) => {
+     if (window.confirm("Видалити цього працівника назавжди?")) {
+       try {
+-        await axios.delete(`${API_BASE}/api/mechanics/${id}/`, { headers: authHeaders });
++        await api.delete(`/api/mechanics/${id}/`);
+         fetchData();
+       } catch { alert("Помилка видалення"); }
+     }
+@@ -229,7 +225,7 @@
+   const handleUpdateMechanic = async (e) => {
+     e.preventDefault();
+     try {
+-      await axios.patch(`${API_BASE}/api/mechanics/${isEditingMechanic}/`, mechanicPayload(editMechanicData, true), { headers: authHeaders });
++      await api.patch(`/api/mechanics/${isEditingMechanic}/`, mechanicPayload(editMechanicData, true));
+       alert("Дані працівника оновлено!");
+       setIsEditingMechanic(null);
+       fetchData();
+@@ -252,7 +248,7 @@
+     const payload = normalizeWorkPostPayload(workPostData);
+     if (!payload.name) return alert('Вкажіть назву поста.');
+     try {
+-      await axios.post(`${API_BASE}/api/work-posts/`, payload, { headers: authHeaders });
++      await api.post('/api/work-posts/', payload);
+       alert('Пост додано!');
+       setIsAddingWorkPost(false);
+       setWorkPostData({ ...emptyWorkPost, number: workPosts.length + 2, sort_order: (workPosts.length + 2) * 10 });
+@@ -267,7 +263,7 @@
+     const payload = normalizeWorkPostPayload(editWorkPostData);
+     if (!payload.name) return alert('Вкажіть назву поста.');
+     try {
+-      await axios.patch(`${API_BASE}/api/work-posts/${isEditingWorkPost}/`, payload, { headers: authHeaders });
++      await api.patch(`/api/work-posts/${isEditingWorkPost}/`, payload);
+       alert('Пост оновлено!');
+       setIsEditingWorkPost(null);
+       fetchData();
+@@ -279,7 +275,7 @@
+   const handleDeleteWorkPost = async (id) => {
+     if (!window.confirm('Видалити цей пост? Якщо він уже використовується у візитах, краще вимкнути його через редагування.')) return;
+     try {
+-      await axios.delete(`${API_BASE}/api/work-posts/${id}/`, { headers: authHeaders });
++      await api.delete(`/api/work-posts/${id}/`);
+       fetchData();
+     } catch {
+       alert('Не вдалося видалити пост. Якщо він уже використовується у візитах, відкрийте редагування і вимкніть “Активний”.');
+--- a/frontend/src/pages/Analytics.jsx
++++ b/frontend/src/pages/Analytics.jsx
+@@
+ import React, { useEffect, useMemo, useState } from 'react';
+-import axios from 'axios';
++import api from '../api/axios';
+@@
+ import CopyButton from '../components/common/CopyButton';
+ import { AppPage, useToast } from '../components/ui';
+-
+-const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
+@@
+-  const token = localStorage.getItem('access_token');
+-
+   const fetchData = async () => {
+@@
+-      const res = await axios.get(`${API_BASE}/api/analytics/summary/?${params.toString()}`, {
+-        headers: { Authorization: `Bearer ${token}` },
+-      });
++      const res = await api.get(`/api/analytics/summary/?${params.toString()}`);
+@@
+-  useEffect(() => { fetchData(); }, [token, navigate, timeFilter, dateFrom, dateTo]);
++  useEffect(() => { fetchData(); }, [navigate, timeFilter, dateFrom, dateTo]);
+@@
+-      await axios.post(`${API_BASE}/api/expenses/`, {
++      await api.post('/api/expenses/', {
+         ...expenseForm,
+         title: expenseForm.title.trim(),
+         amount,
+-      }, { headers: { Authorization: `Bearer ${token}` } });
++      });
+--- a/frontend/src/utils/visitStockActionsDom.js
++++ b/frontend/src/utils/visitStockActionsDom.js
+@@ -1,8 +1,6 @@
+-const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
++import api from '../api/axios';
++
+ const MARK = 'data-stock-actions-ready';
+-
+-const token = () => localStorage.getItem('access_token') || '';
+-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
+ 
+ function textOf(node) {
+   return String(node?.textContent || '');
+@@ -18,16 +16,21 @@
+ }
+ 
+ async function fetchVisit(visitId) {
+-  const res = await fetch(`${API_BASE}/api/visits/${visitId}/`, { headers: headers() });
+-  if (!res.ok) throw new Error('visit_load_failed');
+-  return res.json();
++  const res = await api.get(`/api/visits/${visitId}/`);
++  return res.data;
+ }
+ 
+ async function postAction(url, payload) {
+-  const res = await fetch(`${API_BASE}${url}`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) });
+-  const data = await res.json().catch(() => ({}));
+-  if (!res.ok) throw new Error(data.error || 'Не вдалося виконати дію');
+-  return data;
++  try {
++    const res = await api.post(url, payload);
++    return res.data;
++  } catch (error) {
++    throw new Error(
++      error.response?.data?.error ||
++        error.response?.data?.message ||
++        'Не вдалося виконати дію'
++    );
++  }
+ }
+ 
+ function toast(message) {

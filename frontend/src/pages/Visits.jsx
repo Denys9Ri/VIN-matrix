@@ -905,20 +905,29 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
           </div>
         </div>
 
-        <div className="px-4 py-4 md:px-6 md:py-5 bg-slate-50 border-b border-slate-200 space-y-4">
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-3">
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 min-w-0 shadow-sm">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Статус з довідника</p>
-              <div className="flex flex-wrap gap-2">
-                {stoVisitStatuses.map((status) => (
-                  <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>
-                ))}
+        <div className="px-4 py-4 md:px-6 bg-slate-50/90 border-b border-slate-200 space-y-3">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-3 items-start">
+            <section className="rounded-2xl border border-slate-200 bg-white p-3 md:p-4 shadow-sm min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Статус з довідника</p>
+                  <p className="text-sm font-black text-slate-900 mt-1 truncate">{stoStatusLabel(visit.status)}</p>
+                </div>
+                <div className="flex flex-wrap gap-2 sm:justify-end">
+                  {stoVisitStatuses.map((status) => (
+                    <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>
+                  ))}
+                </div>
               </div>
-            </div>
+            </section>
 
             {!isStore && (
-              <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 min-w-0 shadow-sm">
-                <div className="grid grid-cols-1 gap-2">
+              <section className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3 md:p-4 shadow-sm min-w-0">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <p className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Пост і майстер</p>
+                  <span className="hidden sm:inline-flex rounded-full bg-white/80 border border-blue-100 px-2 py-1 text-[10px] font-black uppercase text-blue-600">СТО</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
                   <LabeledSelect label="Пост / підйомник" value={visitWorkPostId(visit)} onChange={(v) => onPatch('work_post', v ? Number(v) : null)}>
                     <option value="">Не обрано</option>
                     {arr(workPosts).filter((post) => post.is_active !== false).map((post) => <option key={post.id} value={post.id}>{workPostName(post)}</option>)}
@@ -928,19 +937,22 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
                     {arr(mechanics).filter((mechanic) => mechanic.is_active !== false).map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanicName(mechanic)}</option>)}
                   </LabeledSelect>
                 </div>
-                <p className="text-[11px] font-bold text-blue-700 mt-2">Пост рахує зайнятість, майстер — виконані роботи і зарплату.</p>
-              </div>
+                <p className="text-[11px] font-bold text-blue-700 mt-2 leading-snug">Пост рахує зайнятість, майстер — виконані роботи і зарплату.</p>
+              </section>
             )}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-3 items-stretch">
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
+            <section className="rounded-2xl border border-slate-200 bg-white p-3 md:p-4 shadow-sm min-w-0">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Запис</p>
-                  <p className="text-sm font-black text-slate-900 mt-1 flex items-center gap-2"><Clock size={15} className="text-blue-500"/> {visitDate(visit)}</p>
+                  <p className="text-sm font-black text-slate-900 mt-1 flex items-center gap-2 min-w-0">
+                    <Clock size={15} className="text-blue-500 shrink-0"/>
+                    <span className="truncate">{visitDate(visit)}</span>
+                  </p>
                 </div>
-                <button type="button" onClick={() => setRescheduleOpen(!rescheduleOpen)} className="min-h-[40px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase text-slate-700 hover:border-blue-300 hover:text-blue-600 transition whitespace-nowrap">
+                <button type="button" onClick={() => setRescheduleOpen(!rescheduleOpen)} className="min-h-[38px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase text-slate-700 hover:border-blue-300 hover:text-blue-600 transition whitespace-nowrap shrink-0">
                   Змінити запис
                 </button>
               </div>
@@ -951,7 +963,7 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
                   <button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase self-end whitespace-nowrap">Зберегти</button>
                 </div>
               )}
-            </div>
+            </section>
             <QuickActions visit={visit} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} />
           </div>
         </div>
@@ -1039,21 +1051,23 @@ function StatusBtn({active,onClick,label}){
 
 function QuickActions({ visit, onPrint, onCopy, onReschedule }) {
   return (
-    <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-      <a href={`tel:${visit.phone || ''}`} className="min-h-[42px] bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl px-3 py-2 text-xs font-black uppercase flex items-center justify-center gap-2 leading-tight text-center">
-        <Phone size={14}/> Подзвонити
-      </a>
-      <QuickBtn onClick={()=>onCopy(visit.phone, 'Телефон')} icon={<Copy size={14}/>} label="Телефон"/>
-      <QuickBtn onClick={()=>onCopy(visit.vin_code, 'VIN')} icon={<Copy size={14}/>} label="VIN"/>
-      <QuickBtn onClick={()=>onCopy(visit.plate, 'Номер авто')} icon={<Copy size={14}/>} label="Номер"/>
-      <QuickBtn onClick={onReschedule} icon={<Clock size={14}/>} label="Змінити запис"/>
-    </div>
+    <section className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm min-w-0">
+      <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-5 gap-2">
+        <a href={`tel:${visit.phone || ''}`} className="min-h-[40px] bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl px-3 py-2 text-[11px] font-black uppercase flex items-center justify-center gap-1.5 leading-tight text-center whitespace-nowrap hover:bg-emerald-100 transition">
+          <Phone size={14}/> Дзвінок
+        </a>
+        <QuickBtn onClick={()=>onCopy(visit.phone, 'Телефон')} icon={<Copy size={14}/>} label="Телефон"/>
+        <QuickBtn onClick={()=>onCopy(visit.vin_code, 'VIN')} icon={<Copy size={14}/>} label="VIN"/>
+        <QuickBtn onClick={()=>onCopy(visit.plate, 'Номер авто')} icon={<Copy size={14}/>} label="Номер"/>
+        <QuickBtn onClick={onReschedule} icon={<Clock size={14}/>} label="Запис"/>
+      </div>
+    </section>
   );
 }
 
 function QuickBtn({ onClick, icon, label }) {
   return (
-    <button type="button" onClick={onClick} className="min-h-[42px] bg-white text-slate-700 border border-slate-200 hover:border-blue-300 hover:text-blue-600 rounded-xl px-3 py-2 text-xs font-black uppercase flex items-center justify-center gap-2 leading-tight text-center">
+    <button type="button" onClick={onClick} className="min-h-[40px] bg-slate-50 text-slate-700 border border-slate-200 hover:border-blue-300 hover:bg-white hover:text-blue-600 rounded-xl px-3 py-2 text-[11px] font-black uppercase flex items-center justify-center gap-1.5 leading-tight text-center whitespace-nowrap transition">
       {icon}{label}
     </button>
   );

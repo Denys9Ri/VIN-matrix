@@ -158,10 +158,34 @@ const UniversalSearch = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // Важливо: аналоги показуємо тільки в межах того постачальника,
-      // з картки якого натиснули кнопку. Не підмішуємо інші джерела,
-      // бо користувач очікує саме "аналоги Юнік Трейд", "аналоги Omega" тощо.
-      const collected = uniqueParts(res.data, item).filter((part) => String(part.supplier_id || '') === String(item.supplier_id || ''));
+      let collected = uniqueParts(res.data, item);
+
+      // У Юнік Трейд немає стабільного окремого endpoint для аналогів.
+      // Якщо UTR не повернув кроси, робимо fallback на інші підключені
+      // джерела й явно показуємо постачальника біля кожного аналога.
+      if (collected.length === 0 && isUtrSource(item.source)) {
+        try {
+          const globalAnalogUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&brand=${encodeURIComponent(item.brand || '')}`;
+          const globalAnalog = await axios.get(globalAnalogUrl, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          collected = uniqueParts(globalAnalog.data, item);
+        } catch (fallbackErr) {
+          console.warn('UTR global analog fallback failed', fallbackErr);
+        }
+      }
+
+      if (collected.length === 0 && isUtrSource(item.source)) {
+        try {
+          const globalDirectUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}`;
+          const globalDirect = await axios.get(globalDirectUrl, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          collected = uniqueParts(globalDirect.data, item);
+        } catch (fallbackErr) {
+          console.warn('UTR direct fallback failed', fallbackErr);
+        }
+      }
 
       const processed = collected.map(a => ({ ...a, selectedWhIdx: 0 }));
 
@@ -557,7 +581,10 @@ const UniversalSearch = () => {
                                    
                                    return (
                                      <div key={analog.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all gap-3 md:gap-4 ${!isAvailable ? 'opacity-60 grayscale' : ''}`}>
-                                       <div className="w-full sm:w-32 md:w-36 shrink-0">
+                                       <div className="w-full sm:w-36 md:w-44 shrink-0 space-y-1.5">
+                                         <span className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest ${getBadgeStyle(analog.source, analog.is_local)}`}>
+                                           <Truck size={10}/> {analog.source || 'Постачальник'}
+                                         </span>
                                          <p 
                                            className={`font-black text-sm hover:text-blue-600 cursor-pointer underline decoration-dashed underline-offset-4 transition-colors ${isAvailable ? 'text-slate-800 decoration-slate-300' : 'text-slate-500 decoration-slate-200'}`}
                                            onClick={() => {
@@ -695,7 +722,10 @@ const UniversalSearch = () => {
                              return (
                                <div key={analog.id} className={`bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2 relative ${!isAvailable ? 'opacity-60 grayscale' : ''}`}>
                                   <button onClick={() => openAddModal(analog, analogWhIdx)} disabled={!isAvailable} className="absolute right-3 top-3 bg-emerald-500 text-white p-1.5 rounded-lg hover:bg-emerald-600 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={14}/></button>
-                                  <div className="pr-8">
+                                  <div className="pr-8 space-y-1.5">
+                                    <span className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest ${getBadgeStyle(analog.source, analog.is_local)}`}>
+                                      <Truck size={10}/> {analog.source || 'Постачальник'}
+                                    </span>
                                     <p 
                                       className={`font-black text-sm leading-tight hover:text-blue-600 cursor-pointer underline decoration-dashed underline-offset-4 transition-colors ${isAvailable ? 'text-slate-800 decoration-slate-300' : 'text-slate-500 decoration-slate-200'}`}
                                       onClick={() => {

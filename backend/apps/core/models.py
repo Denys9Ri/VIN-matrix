@@ -414,11 +414,37 @@ class Category(models.Model):
     def __str__(self): return self.name
 
 class Supplier(models.Model):
+    API_CUSTOM = 'custom'
+    API_VESNA = 'vesna'
+    API_OMEGA = 'omega'
+    API_TEHNOMIR = 'tehnomir'
+    API_BM = 'bm'
+    API_UTR = 'utr'
+    API_TYPE_CHOICES = [
+        (API_CUSTOM, 'Інший / Excel'),
+        (API_VESNA, 'Vesna-auto'),
+        (API_OMEGA, 'Omega'),
+        (API_TEHNOMIR, 'Техномир'),
+        (API_BM, 'BM Parts'),
+        (API_UTR, 'Юнік Трейд'),
+    ]
+
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
+    api_type = models.CharField(max_length=30, choices=API_TYPE_CHOICES, default=API_CUSTOM)
     api_key = models.CharField(max_length=255, blank=True, null=True)
+    api_login = models.CharField(max_length=255, blank=True, null=True)
+    api_password = models.CharField(max_length=255, blank=True, null=True)
+    api_token = models.TextField(blank=True, null=True)
+    api_refresh_token = models.TextField(blank=True, null=True)
+    api_token_expires_at = models.DateTimeField(null=True, blank=True)
+    browser_fingerprint = models.CharField(max_length=128, blank=True, null=True)
     price_file = models.FileField(upload_to='supplier_prices/', null=True, blank=True)
     warehouse_prefs = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
 
 class InventoryItem(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)

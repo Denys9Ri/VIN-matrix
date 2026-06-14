@@ -30,7 +30,7 @@ import {
 import VisitCard from '../components/visits/VisitCard';
 import VisitWorkflowPanel from '../components/crm/VisitWorkflowPanel';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AppPage, PageHeader, useToast } from '../components/ui';
+import { AppPage, PageHeader, Tabs, useToast } from '../components/ui';
 
 const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
 const emptyCarData = { brand: '', model: '', year: '', engine: '', fuel: '', mileage: '', engine_volume: '', engine_power: '', engine_code: '', engine_review_status: 'manual' };

@@ -823,15 +823,16 @@ const openDocumentPackage = (visit, isStore) => {
 
 function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
   const tabs = [
-    ['overview','Огляд',Info],
-    ['passport','Техпаспорт',CarFront],
-    ['acceptance','Акт',FileText],
-    ['diagnostic','Діагностика',ClipboardCheck],
-    ['works','Роботи',Wrench],
-    ['parts','Запчастини',Package],
-    ['recommendations','Рекомендації',ClipboardList],
-    ['summary','Підсумок',Calculator],
+    ['overview','Огляд',Info,'Головне по клієнту, авто і фінансах'],
+    ['passport','Техпаспорт',CarFront,'Дані авто, VIN, двигун, пробіг'],
+    ['acceptance','Акт',FileText,'Приймання авто та скарги клієнта'],
+    ['diagnostic','Діагностика',ClipboardCheck,'Діагностична карта і висновки'],
+    ['works','Роботи',Wrench,'Роботи майстра і зарплата'],
+    ['parts','Запчастини',Package,'Товари, статуси і ціни'],
+    ['recommendations','Рекомендації',ClipboardList,'Що запропонувати клієнту далі'],
+    ['summary','Підсумок',Calculator,'Фінальний контроль перед закриттям'],
   ];
+  const activeTab = tabs.find(([key]) => key === tab) || tabs[0];
   const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate };
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [reschedule, setReschedule] = useState(timeParts(visit.scheduled_datetime));
@@ -841,9 +842,20 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
     setRescheduleOpen(false);
   };
 
+  const renderContent = () => {
+    if (tab === 'overview') return <Overview visit={visit} carData={carData} workPosts={workPosts} mechanics={mechanics} isStore={isStore}/>;
+    if (tab === 'passport') return <Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>;
+    if (tab === 'acceptance') return <VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>;
+    if (tab === 'diagnostic') return <VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>;
+    if (tab === 'works') return <Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService} mechanics={mechanics} isStore={isStore}/>;
+    if (tab === 'parts') return <Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>;
+    if (tab === 'recommendations') return <Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>;
+    return <Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />;
+  };
+
   return (
-    <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden">
-      <div className="bg-white w-full max-w-[1180px] h-[calc(100dvh-16px)] sm:h-auto sm:max-h-[calc(100vh-48px)] rounded-[28px] md:rounded-[34px] shadow-2xl flex flex-col relative overflow-hidden">
+    <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden">
+      <div className="bg-white w-full max-w-[1200px] h-[calc(100dvh-16px)] sm:h-auto sm:max-h-[calc(100vh-42px)] rounded-[30px] md:rounded-[36px] shadow-2xl flex flex-col relative overflow-hidden border border-white/60">
         {isScanning && <ScanOverlay />}
 
         <div className="shrink-0 border-b border-slate-200 bg-white">
@@ -858,7 +870,7 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
                     {stoStatusLabel(visit.status)}
                   </span>
                 </div>
-                <h2 className="text-2xl md:text-3xl font-black uppercase text-slate-950 leading-tight break-words">
+                <h2 className="text-2xl md:text-3xl font-black uppercase text-slate-950 leading-tight break-words tracking-tight">
                   {visit.plate || `№${visitId(visit)}`}
                 </h2>
                 <p className="text-slate-600 text-sm md:text-base font-bold mt-1 break-words">
@@ -893,16 +905,19 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
               <HeaderMetric label="Борг" value={money(Number(visit.debt_amount || 0))} danger={Number(visit.debt_amount || 0) > 0} />
             </div>
 
-            <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-[11px] font-black uppercase text-slate-500 mb-2">Статус з довідника</p>
-              <div className="flex flex-wrap gap-2">
-                {listOf(stoVisitStatuses).map((status) => (
-                  <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>
-                ))}
+            <div className="mt-4 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)] gap-3">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-black uppercase text-slate-500 mb-2">Статус з довідника</p>
+                <div className="flex flex-wrap gap-2">
+                  {listOf(stoVisitStatuses).map((status) => (
+                    <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>
+                  ))}
+                </div>
               </div>
+              {!isStore && <StoAssignmentPanel visit={visit} workPosts={workPosts} mechanics={mechanics} onPatch={onPatch} />}
             </div>
 
-            <div className="mt-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-3">
+            <div className="mt-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.65fr)] gap-3">
               <div className="bg-white border border-slate-200 rounded-2xl p-3">
                 <p className="text-[11px] font-black uppercase text-slate-400">Запис</p>
                 <p className="font-black text-slate-800 text-sm flex items-center gap-2 mt-1"><Clock size={15} className="text-blue-600"/> {visitDate(visit)}</p>
@@ -914,39 +929,81 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
                   </div>
                 )}
               </div>
-              {!isStore && <StoAssignmentPanel visit={visit} workPosts={workPosts} mechanics={mechanics} onPatch={onPatch} />}
-            </div>
-
-            <QuickActions visit={visit} onPrint={onPrint} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} />
-          </div>
-
-          <div className="px-4 md:px-6 pb-3">
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {tabs.map(([key,label,Icon]) => (
-                <button
-                  key={key}
-                  onClick={()=>setTab(key)}
-                  className={`min-h-[42px] shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black uppercase whitespace-nowrap transition ${tab===key?'bg-blue-600 text-white shadow-sm':'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                >
-                  <Icon size={15}/>{label}
-                </button>
-              ))}
+              <QuickActions visit={visit} onPrint={onPrint} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} />
             </div>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-4 md:p-6">
-          {tab==='overview'&&<Overview visit={visit} carData={carData} workPosts={workPosts} mechanics={mechanics} isStore={isStore}/>}
-          {tab==='passport'&&<Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>}
-          {tab==='acceptance'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>}
-          {tab==='diagnostic'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>}
-          {tab==='works'&&<Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService} mechanics={mechanics} isStore={isStore}/>}
-          {tab==='parts'&&<Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>}
-          {tab==='recommendations'&&<Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>}
-          {tab==='summary'&&<Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />}
+        <div className="min-h-0 flex-1 bg-slate-50 p-3 md:p-5 overflow-hidden">
+          <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)] gap-4">
+            <aside className="hidden lg:flex min-h-0 flex-col rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+              <p className="px-2 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-400">Розділи картки</p>
+              <div className="space-y-1.5 overflow-y-auto pr-1">
+                {tabs.map(([key,label,Icon,description]) => (
+                  <ModalNavButton key={key} active={tab === key} icon={<Icon size={16}/>} label={label} description={description} onClick={() => setTab(key)} />
+                ))}
+              </div>
+              <div className="mt-auto rounded-2xl bg-blue-50 border border-blue-100 p-3 text-[11px] font-bold text-blue-800 leading-snug">
+                Усі документи відкриваються через кнопку “Документи” у верхній частині картки.
+              </div>
+            </aside>
+
+            <div className="lg:hidden rounded-3xl border border-slate-200 bg-white p-2 shadow-sm overflow-x-auto">
+              <div className="flex gap-2 min-w-max">
+                {tabs.map(([key,label,Icon]) => (
+                  <button
+                    key={key}
+                    onClick={()=>setTab(key)}
+                    className={`min-h-[42px] shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black uppercase whitespace-nowrap transition ${tab===key?'bg-blue-600 text-white shadow-sm':'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  >
+                    <Icon size={15}/>{label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <section className="min-h-0 bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden flex flex-col">
+              <div className="shrink-0 border-b border-slate-100 bg-white px-4 md:px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    {React.createElement(activeTab[2], { size: 18 })}
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-base md:text-lg font-black text-slate-950 uppercase leading-tight truncate">{activeTab[1]}</h3>
+                    <p className="text-xs font-bold text-slate-500 truncate">{activeTab[3]}</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 self-start sm:self-auto">
+                  {isStore ? 'Замовлення' : 'СТО'} №{visitId(visit)}
+                </span>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-5">
+                {renderContent()}
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function ModalNavButton({ active, icon, label, description, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left rounded-2xl px-3 py-3 transition border ${active ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-700 border-transparent hover:bg-slate-50 hover:border-slate-200'}`}
+    >
+      <div className="flex items-center gap-2">
+        <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${active ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'}`}>{icon}</span>
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase leading-tight truncate">{label}</p>
+          <p className={`text-[11px] font-bold leading-snug mt-0.5 line-clamp-2 ${active ? 'text-blue-100' : 'text-slate-400'}`}>{description}</p>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -1024,24 +1081,77 @@ function Overview({ visit, carData, workPosts = [], mechanics = [], isStore }) {
   const post = workPostLabel(visit.work_post_name || visit.work_post_label || visit.work_post, workPosts);
   const mechanic = mechanicLabel(visit.responsible_mechanic_name || visit.responsible_mechanic_label || visit.responsible_mechanic, mechanics);
   const payrollTotal = servicesPayrollTotal(visit);
+  const paid = Number(visit.paid_amount || visit.prepayment_amount || 0);
+  const debt = Number(visit.debt_amount || 0);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <InfoCard label="ID" value={`№${visitId(visit)}`} />
-      <InfoCard label="Дата" value={visitDate(visit)} />
-      <InfoCard label="Сума" value={money(totalOf(visit))} />
-      {!isStore && <InfoCard label="Пост" value={post} />}
-      {!isStore && <InfoCard label="Майстер" value={mechanic} />}
-      {!isStore && <InfoCard label="Нараховано майстрам" value={money(payrollTotal)} />}
-      <InfoCard label="Клієнт" value={visit.client} />
-      <InfoCard label="Телефон" value={visit.phone} />
-      <InfoCard label="Авто" value={`${carData.brand || '—'} ${carData.model || ''} ${carData.year || ''}`} />
-      <InfoCard label="VIN" value={visit.vin_code || '—'} />
-      <InfoCard label="Двигун" value={`${carData.engine_volume || carData.engine || '—'} см³ ${carData.engine_power ? `· ${carData.engine_power} кВт` : ''}`} />
-      <InfoCard label="Паливо" value={carData.fuel || '—'} />
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <OverviewPanel title="Клієнт" icon={<Phone size={18}/>} tone="blue">
+          <OverviewRow label="Імʼя" value={visit.client || '—'} />
+          <OverviewRow label="Телефон" value={visit.phone || '—'} />
+          <OverviewRow label="Запис" value={visitDate(visit)} />
+        </OverviewPanel>
+
+        <OverviewPanel title="Автомобіль" icon={<CarFront size={18}/>} tone="slate">
+          <OverviewRow label="Номер" value={visit.plate || '—'} strong />
+          <OverviewRow label="VIN" value={visit.vin_code || '—'} />
+          <OverviewRow label="Авто" value={`${carData.brand || '—'} ${carData.model || ''} ${carData.year || ''}`.trim()} />
+          <OverviewRow label="Двигун / паливо" value={`${carData.engine_volume || carData.engine || '—'}${carData.engine_power ? ` · ${carData.engine_power} кВт` : ''}${carData.fuel ? ` · ${carData.fuel}` : ''}`} />
+        </OverviewPanel>
+
+        {!isStore && (
+          <OverviewPanel title="СТО" icon={<Wrench size={18}/>} tone="indigo">
+            <OverviewRow label="Пост" value={post} strong />
+            <OverviewRow label="Майстер" value={mechanic} />
+            <OverviewRow label="Нараховано майстрам" value={money(payrollTotal)} />
+          </OverviewPanel>
+        )}
+
+        <OverviewPanel title="Фінанси" icon={<Calculator size={18}/>} tone={debt > 0 ? 'rose' : 'emerald'}>
+          <OverviewRow label="Сума" value={money(totalOf(visit))} strong />
+          <OverviewRow label="Оплачено" value={money(paid)} />
+          <OverviewRow label="Борг" value={money(debt)} danger={debt > 0} />
+          <OverviewRow label="Прибуток" value={money(Number(visit.profit || 0))} good />
+        </OverviewPanel>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+        <p className="text-xs font-black uppercase text-slate-500 mb-2">Коментар</p>
+        <p className="text-sm font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">{visit.comment || 'Коментарів поки немає. Їх можна додати у вкладці “Підсумок”.'}</p>
+      </div>
     </div>
   );
 }
+
+function OverviewPanel({ title, icon, tone = 'slate', children }) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-700 border-blue-100',
+    indigo: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    rose: 'bg-rose-50 text-rose-700 border-rose-100',
+    slate: 'bg-slate-50 text-slate-700 border-slate-100',
+  };
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <span className={`w-10 h-10 rounded-2xl flex items-center justify-center border ${tones[tone] || tones.slate}`}>{icon}</span>
+        <h4 className="text-sm font-black uppercase text-slate-900">{title}</h4>
+      </div>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function OverviewRow({ label, value, strong, good, danger }) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-2xl bg-slate-50 border border-slate-100 px-3 py-2.5">
+      <span className="text-[11px] font-black uppercase text-slate-400 shrink-0">{label}</span>
+      <span className={`text-right text-sm leading-snug ${strong ? 'font-black text-slate-950' : 'font-bold text-slate-700'} ${good ? 'text-emerald-700' : ''} ${danger ? 'text-rose-700' : ''}`}>{value || '—'}</span>
+    </div>
+  );
+}
+
 function Passport({carData,setCarData,onSave,scanRef,onScan,scanDraft,setScanDraft,onAcceptScan,visit}){return <div className="space-y-4"><div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 justify-between"><h3 className="font-black text-slate-800 flex gap-2 items-center"><ScanLine size={17}/> Скан техпаспорта</h3><button onClick={()=>scanRef.current?.click()} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase flex gap-2 justify-center"><Camera size={15}/> Сканувати</button><input ref={scanRef} type="file" accept="image/*" onChange={onScan} className="hidden"/></div>{scanDraft&&<ScanReviewCard data={scanDraft} setData={setScanDraft} onApply={onAcceptScan} onCancel={()=>setScanDraft(null)}/>}<CarFields data={carData} setData={setCarData}/><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><InfoCard label="Держ. номер" value={visit.plate}/><InfoCard label="VIN" value={visit.vin_code || '—'}/></div><button onClick={onSave} className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти техпаспорт</button></div>}
 function Works({
   visit,

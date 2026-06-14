@@ -618,27 +618,70 @@ export default function Visits() {
 
   return (
     <AppPage>
-      <div className="flex flex-col xl:flex-row gap-4 justify-between mb-6">
-        <PageHeader title={isStore ? 'Замовлення' : 'Дошка Візитів'} subtitle="Щоденна дошка робіт, запчастин, оплат і документів." icon={<ClipboardList />} />
-        <div className="flex flex-col md:flex-row gap-3 flex-1 xl:justify-center">
-          <div className="relative w-full md:w-72"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Пошук ID, номер, клієнт..." className="w-full bg-white border border-slate-200 rounded-2xl pl-9 pr-4 py-3 text-sm font-bold outline-none shadow-sm" /></div>
-          <DateNavigator value={filterDate} setValue={setFilterDate} onPrev={() => changeBoardDate(-1)} onNext={() => changeBoardDate(1)} />
+      <div className="w-full max-w-[1500px] mx-auto space-y-6 pb-16">
+        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+          <PageHeader
+            title={isStore ? 'Дошка замовлень' : 'Дошка візитів'}
+            subtitle={isStore ? 'Замовлення, оплати, доставка і швидкий продаж в одному робочому екрані.' : 'Записи, пости, майстри, роботи, запчастини і документи в одному робочому екрані.'}
+            icon={<ClipboardList />}
+          />
+          <button
+            onClick={() => setIsCreatingVisit(true)}
+            className="w-full sm:w-auto min-h-[48px] bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-100 transition leading-tight whitespace-nowrap"
+          >
+            <Plus size={18} className="shrink-0" />
+            <span>{isStore ? 'Нове замовлення' : 'Новий візит'}</span>
+          </button>
         </div>
-        <button onClick={() => setIsCreatingVisit(true)} className="bg-blue-600 text-white px-5 py-3.5 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-100 leading-none"><Plus size={16} className="shrink-0" /> <span>Новий візит</span></button>
+
+        <div className="bg-white border border-slate-200 rounded-[28px] p-3 md:p-4 shadow-sm">
+          <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
+            <div className="relative flex-1 min-w-0">
+              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={isStore ? 'Пошук: №, телефон, клієнт, ТТН, артикул...' : 'Пошук: ID, номер авто, клієнт, телефон, VIN...'}
+                className="w-full min-h-[52px] bg-slate-50 border-2 border-slate-200 rounded-2xl pl-12 pr-4 py-3 text-sm md:text-base font-extrabold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition placeholder:text-slate-400 placeholder:font-bold"
+              />
+            </div>
+            <DateNavigator value={filterDate} setValue={setFilterDate} onPrev={() => changeBoardDate(-1)} onNext={() => changeBoardDate(1)} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+          {grouped.map((column) => (
+            <Column key={column.key} variant={column.variant} title={column.title} items={column.items} icon={column.icon} onOpen={setSelectedVisit} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />
+          ))}
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-        {grouped.map((column) => (
-          <Column key={column.key} variant={column.variant} title={column.title} items={column.items} icon={column.icon} onOpen={setSelectedVisit} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />
-        ))}
-      </div>
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] bg-slate-900 text-white px-4 py-3 rounded-2xl text-xs font-black shadow-xl">{toast}</div>}
+
+      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] bg-slate-900 text-white px-5 py-3 rounded-2xl text-sm font-black shadow-xl">{toast}</div>}
       {isCreatingVisit && <CreateVisitModal data={newVisitData} setData={setNewVisitData} onClose={() => { setIsCreatingVisit(false); setScanDraft(null); }} onSubmit={createVisit} onPlateBlur={handlePlateBlur} foundExisting={foundExisting} isScanning={isScanning} cameraRef={cameraInputRef} galleryRef={galleryInputRef} onScan={scanNewVisit} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={acceptNewScan} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
       {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
     </AppPage>
   );
 }
 
-function DateNavigator({ value, setValue, onPrev, onNext }) { return <div className="bg-white border border-slate-200 rounded-2xl p-1 shadow-sm w-full md:w-auto"><div className="grid grid-cols-[44px_1fr_44px] items-center gap-1"><button type="button" onClick={onPrev} className="h-11 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center"><ChevronLeft size={18} /></button><label className="relative block min-w-0"><span className="block text-[9px] font-black uppercase text-slate-400 text-center leading-none pt-1">Дата дошки</span><input type="date" value={value} onChange={(e) => setValue(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" /><span className="block text-center text-sm font-black text-slate-800 truncate px-1 pb-1">{humanDate(value)}</span></label><button type="button" onClick={onNext} className="h-11 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center"><ChevronRight size={18} /></button></div></div>; }
+function DateNavigator({ value, setValue, onPrev, onNext }) {
+  return (
+    <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-1.5 shadow-sm w-full lg:w-[300px] shrink-0">
+      <div className="grid grid-cols-[46px_1fr_46px] items-center gap-1.5">
+        <button type="button" onClick={onPrev} className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 flex items-center justify-center hover:border-blue-300 hover:text-blue-600 transition">
+          <ChevronLeft size={18} />
+        </button>
+        <label className="relative block min-w-0 h-11 rounded-xl bg-white border border-slate-200 px-3 py-1 cursor-pointer hover:border-blue-300 transition">
+          <span className="block text-[10px] font-black uppercase text-slate-400 text-center leading-none">Дата дошки</span>
+          <input type="date" value={value} onChange={(e) => setValue(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+          <span className="block text-center text-sm font-black text-slate-900 truncate mt-1">{humanDate(value)}</span>
+        </label>
+        <button type="button" onClick={onNext} className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 flex items-center justify-center hover:border-blue-300 hover:text-blue-600 transition">
+          <ChevronRight size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
 function Column({ title, icon, items = [], onOpen, isStore, workPosts = [], mechanics = [], variant = 'pending' }) {
   const safeItems = listOf(items);
   const styles = {
@@ -667,12 +710,12 @@ function Column({ title, icon, items = [], onOpen, isStore, workPosts = [], mech
               {showStoMeta && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-1">
                   {post !== '—' && (
-                    <button type="button" onClick={() => onOpen(v)} className="bg-white/80 border border-slate-100 rounded-xl px-3 py-2 text-left text-[10px] font-black uppercase text-slate-500 hover:border-blue-200 transition-colors">
+                    <button type="button" onClick={() => onOpen(v)} className="bg-white/80 border border-slate-100 rounded-xl px-3 py-2 text-left text-[11px] font-black uppercase text-slate-500 hover:border-blue-200 transition-colors">
                       Пост: <span className="text-slate-800">{post}</span>
                     </button>
                   )}
                   {mechanic !== '—' && (
-                    <button type="button" onClick={() => onOpen(v)} className="bg-white/80 border border-slate-100 rounded-xl px-3 py-2 text-left text-[10px] font-black uppercase text-slate-500 hover:border-blue-200 transition-colors">
+                    <button type="button" onClick={() => onOpen(v)} className="bg-white/80 border border-slate-100 rounded-xl px-3 py-2 text-left text-[11px] font-black uppercase text-slate-500 hover:border-blue-200 transition-colors">
                       Майстер: <span className="text-slate-800">{mechanic}</span>
                     </button>
                   )}
@@ -729,7 +772,7 @@ function CreateVisitModal({
 
           {!isStore && (
             <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-              <p className="text-[10px] font-black uppercase text-blue-500 tracking-widest mb-3">Пост і майстер</p>
+              <p className="text-[11px] font-black uppercase text-blue-500 tracking-widest mb-3">Пост і майстер</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <LabeledSelect label="Пост / підйомник" value={data.work_post} onChange={(v) => setData({ ...data, work_post: v })}>
                   <option value="">Не обрано</option>
@@ -766,19 +809,177 @@ function CreateVisitModal({
 }
 
 function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
-  const tabs = [['overview','Огляд',Info],['passport','Техпаспорт',CarFront],['acceptance','Акт',FileText],['diagnostic','Діагностика',ClipboardCheck],['works','Роботи',Wrench],['parts','Запчастини',Package],['recommendations','Рекомендації',ClipboardList],['summary','Підсумок',Calculator],['documents','Документи',FileDown]];
+  const tabs = [
+    ['overview','Огляд',Info],
+    ['passport','Техпаспорт',CarFront],
+    ['acceptance','Акт',FileText],
+    ['diagnostic','Діагностика',ClipboardCheck],
+    ['works','Роботи',Wrench],
+    ['parts','Запчастини',Package],
+    ['recommendations','Рекомендації',ClipboardList],
+    ['summary','Підсумок',Calculator],
+    ['documents','Документи',FileDown],
+  ];
   const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate };
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [reschedule, setReschedule] = useState(timeParts(visit.scheduled_datetime));
-  const saveReschedule = async () => { if (!reschedule.date || !reschedule.time) return; await onPatch('scheduled_datetime', new Date(`${reschedule.date}T${reschedule.time}`).toISOString()); setRescheduleOpen(false); };
-  return <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-stretch justify-center p-0 sm:items-center sm:p-6 overflow-hidden"><div className="bg-white w-full sm:max-w-6xl sm:rounded-[32px] shadow-2xl flex flex-col min-h-[100dvh] sm:min-h-0 max-h-[100dvh] sm:max-h-[calc(100vh-48px)] relative overflow-hidden">{isScanning && <ScanOverlay />}<div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50 shrink-0"><div className="flex justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap gap-2 mb-2"><span className="bg-blue-600 text-white rounded-xl px-3 py-1 text-xs font-black uppercase flex items-center gap-1"><Hash size={13}/> Візит №{visitId(visit)}</span><span className="bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-black uppercase text-slate-500">{stoStatusLabel(visit.status)}</span></div><h2 className="text-2xl font-black uppercase break-words">{visit.plate}</h2><p className="text-slate-500 text-sm font-bold break-words">{visit.client} · {visit.phone}</p></div><div className="flex gap-2 shrink-0"><MacAction title="Друк" color="bg-blue-400" onClick={onPrint}><Printer size={16}/></MacAction><MacAction title="Видалити" color="bg-red-400" onClick={onCancel}><Trash2 size={16}/></MacAction><MacAction title="Закрити" color="bg-slate-300" onClick={() => setVisit(null)}><X size={16}/></MacAction></div></div><div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">{listOf(stoVisitStatuses).map((status) => <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>)}</div><div className="mt-3 bg-white border border-slate-200 rounded-2xl p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-black uppercase text-slate-400">Запис</p><p className="font-black text-slate-800 text-sm flex items-center gap-2"><Clock size={15} className="text-blue-600"/> {visitDate(visit)}</p></div></div>{rescheduleOpen && <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2"><LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/><LabeledInput label="Новий час" type="time" value={reschedule.time} onChange={(v)=>setReschedule({...reschedule,time:v})}/><button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase self-end">Зберегти</button></div>}</div>{!isStore && <StoAssignmentPanel visit={visit} workPosts={workPosts} mechanics={mechanics} onPatch={onPatch} />}<QuickActions visit={visit} onPrint={onPrint} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} /></div><div className="px-4 md:px-6 pt-3 bg-white border-b border-slate-100 overflow-x-auto shrink-0"><div className="flex gap-2 min-w-max pb-3">{tabs.map(([key,label,Icon])=><button key={key} onClick={()=>setTab(key)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase whitespace-nowrap ${tab===key?'bg-blue-600 text-white':'bg-slate-50 text-slate-500'}`}><Icon size={15}/>{label}</button>)}</div></div><div className="p-4 md:p-6 overflow-y-auto overflow-x-hidden flex-1">{tab==='overview'&&<Overview visit={visit} carData={carData} workPosts={workPosts} mechanics={mechanics} isStore={isStore}/>} {tab==='passport'&&<Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>} {tab==='acceptance'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>} {tab==='diagnostic'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>} {tab==='works'&&<Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService} mechanics={mechanics} isStore={isStore}/>} {tab==='parts'&&<Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>} {tab==='recommendations'&&<Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>} {tab==='summary'&&<Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />} {tab==='documents'&&<DocumentsPanel visit={visit} onPrint={onPrint}/>}</div></div></div>;
+  const saveReschedule = async () => {
+    if (!reschedule.date || !reschedule.time) return;
+    await onPatch('scheduled_datetime', new Date(`${reschedule.date}T${reschedule.time}`).toISOString());
+    setRescheduleOpen(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden">
+      <div className="bg-white w-full max-w-[1180px] h-[calc(100dvh-16px)] sm:h-auto sm:max-h-[calc(100vh-48px)] rounded-[28px] md:rounded-[34px] shadow-2xl flex flex-col relative overflow-hidden">
+        {isScanning && <ScanOverlay />}
+
+        <div className="shrink-0 border-b border-slate-200 bg-white">
+          <div className="p-4 md:p-6">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-black uppercase shadow-sm">
+                    <Hash size={14}/> {isStore ? 'Замовлення' : 'Візит'} №{visitId(visit)}
+                  </span>
+                  <span className="inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-black uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                    {stoStatusLabel(visit.status)}
+                  </span>
+                </div>
+                <h2 className="text-2xl md:text-3xl font-black uppercase text-slate-950 leading-tight break-words">
+                  {visit.plate || `№${visitId(visit)}`}
+                </h2>
+                <p className="text-slate-600 text-sm md:text-base font-bold mt-1 break-words">
+                  {visit.client || 'Клієнт не вказаний'} · {visit.phone || 'телефон не вказаний'}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap justify-start lg:justify-end gap-2 shrink-0">
+                <button type="button" onClick={onPrint} className="min-h-[42px] rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-black uppercase inline-flex items-center justify-center gap-2 shadow-sm whitespace-nowrap">
+                  <FileDown size={15}/> PDF-звіт
+                </button>
+                <button type="button" onClick={() => setTab('documents')} className={`min-h-[42px] rounded-2xl px-4 py-2 text-xs font-black uppercase inline-flex items-center justify-center gap-2 border shadow-sm whitespace-nowrap ${tab === 'documents' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'}`}>
+                  <FileText size={15}/> Документи
+                </button>
+                <button type="button" onClick={onCancel} className="min-h-[42px] rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 px-3 py-2 inline-flex items-center justify-center hover:bg-rose-100" title="Видалити">
+                  <Trash2 size={16}/>
+                </button>
+                <button type="button" onClick={() => setVisit(null)} className="min-h-[42px] rounded-2xl bg-slate-100 text-slate-600 border border-slate-200 px-3 py-2 inline-flex items-center justify-center hover:bg-slate-200" title="Закрити">
+                  <X size={18}/>
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 md:grid-cols-5 gap-2">
+              <HeaderMetric label="Статус" value={stoStatusLabel(visit.status)} />
+              <HeaderMetric label="Виручка" value={money(totalOf(visit))} />
+              <HeaderMetric label="Прибуток" value={money(Number(visit.profit || 0))} good />
+              <HeaderMetric label="Оплачено" value={money(Number(visit.paid_amount || visit.prepayment_amount || 0))} />
+              <HeaderMetric label="Борг" value={money(Number(visit.debt_amount || 0))} danger={Number(visit.debt_amount || 0) > 0} />
+            </div>
+
+            <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[11px] font-black uppercase text-slate-500 mb-2">Статус з довідника</p>
+              <div className="flex flex-wrap gap-2">
+                {listOf(stoVisitStatuses).map((status) => (
+                  <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-3">
+              <div className="bg-white border border-slate-200 rounded-2xl p-3">
+                <p className="text-[11px] font-black uppercase text-slate-400">Запис</p>
+                <p className="font-black text-slate-800 text-sm flex items-center gap-2 mt-1"><Clock size={15} className="text-blue-600"/> {visitDate(visit)}</p>
+                {rescheduleOpen && (
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+                    <LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/>
+                    <LabeledInput label="Новий час" type="time" value={reschedule.time} onChange={(v)=>setReschedule({...reschedule,time:v})}/>
+                    <button type="button" onClick={saveReschedule} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase self-end whitespace-nowrap">Зберегти</button>
+                  </div>
+                )}
+              </div>
+              {!isStore && <StoAssignmentPanel visit={visit} workPosts={workPosts} mechanics={mechanics} onPatch={onPatch} />}
+            </div>
+
+            <QuickActions visit={visit} onPrint={onPrint} onCopy={onCopy} onReschedule={() => setRescheduleOpen(!rescheduleOpen)} />
+          </div>
+
+          <div className="px-4 md:px-6 pb-3">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {tabs.map(([key,label,Icon]) => (
+                <button
+                  key={key}
+                  onClick={()=>setTab(key)}
+                  className={`min-h-[42px] shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black uppercase whitespace-nowrap transition ${tab===key?'bg-blue-600 text-white shadow-sm':'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                >
+                  <Icon size={15}/>{label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-4 md:p-6">
+          {tab==='overview'&&<Overview visit={visit} carData={carData} workPosts={workPosts} mechanics={mechanics} isStore={isStore}/>}
+          {tab==='passport'&&<Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>}
+          {tab==='acceptance'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>}
+          {tab==='diagnostic'&&<VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>}
+          {tab==='works'&&<Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService} mechanics={mechanics} isStore={isStore}/>}
+          {tab==='parts'&&<Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>}
+          {tab==='recommendations'&&<Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>}
+          {tab==='summary'&&<Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />}
+          {tab==='documents'&&<DocumentsPanel visit={visit} onPrint={onPrint}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeaderMetric({ label, value, good, danger }) {
+  return (
+    <div className={`rounded-2xl border p-3 min-w-0 ${danger ? 'bg-rose-50 border-rose-100' : good ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+      <p className="text-[11px] font-black uppercase text-slate-400">{label}</p>
+      <p className={`text-sm md:text-base font-black mt-1 truncate ${danger ? 'text-rose-700' : good ? 'text-emerald-700' : 'text-slate-900'}`}>{value || '—'}</p>
+    </div>
+  );
 }
 
 function DocumentsPanel({ visit, onPrint }) { return <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div><h3 className="text-lg font-black text-slate-900">Документи</h3><p className="text-sm font-semibold text-slate-500 mt-1">PDF-звіт, друк та документи по візиту №{visitId(visit)} зібрані в одному місці.</p></div><button type="button" onClick={onPrint} className="bg-blue-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase inline-flex items-center justify-center gap-2"><FileDown size={16}/> PDF-звіт</button></div><div className="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-sm font-semibold text-slate-600">Плаваюча кнопка документів прибрана: документи доступні у вкладці та в швидких діях зверху.</div></div>; }
 function MacAction({ title, color, onClick, children }) { return <button type="button" title={title} aria-label={title} onClick={onClick} className={`w-10 h-10 rounded-full ${color} text-white flex items-center justify-center shadow-sm hover:scale-105 transition-transform`}>{children}</button>; }
-function StatusBtn({active,onClick,label}){return <button onClick={onClick} className={`py-2.5 rounded-xl text-[10px] font-black uppercase ${active?'bg-blue-600 text-white':'bg-white text-slate-500 border border-slate-200'}`}>{label}</button>}
-function QuickActions({ visit, onPrint, onCopy, onReschedule }) { return <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"><a href={`tel:${visit.phone || ''}`} className="bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl py-2.5 px-2 text-[10px] font-black uppercase flex items-center justify-center gap-1"><Phone size={13}/> Подзвонити</a><QuickBtn onClick={()=>onCopy(visit.phone, 'Телефон')} icon={<Copy size={13}/>} label="Телефон"/><QuickBtn onClick={()=>onCopy(visit.vin_code, 'VIN')} icon={<Copy size={13}/>} label="VIN"/><QuickBtn onClick={()=>onCopy(visit.plate, 'Номер авто')} icon={<Copy size={13}/>} label="Номер"/><QuickBtn onClick={onPrint} icon={<FileDown size={13}/>} label="PDF-звіт"/><QuickBtn onClick={onReschedule} icon={<Clock size={13}/>} label="Змінити запис"/></div>; }
-function QuickBtn({ onClick, icon, label }) { return <button type="button" onClick={onClick} className="bg-white text-slate-600 border border-slate-200 rounded-xl py-2.5 px-2 text-[10px] font-black uppercase flex items-center justify-center gap-1">{icon}{label}</button>; }
+function StatusBtn({active,onClick,label}){
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-[42px] px-4 py-2 rounded-xl text-xs font-black uppercase leading-tight transition text-center ${active ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-700 border border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function QuickActions({ visit, onPrint, onCopy, onReschedule }) {
+  return (
+    <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+      <a href={`tel:${visit.phone || ''}`} className="min-h-[42px] bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl px-3 py-2 text-xs font-black uppercase flex items-center justify-center gap-2 leading-tight text-center">
+        <Phone size={14}/> Подзвонити
+      </a>
+      <QuickBtn onClick={()=>onCopy(visit.phone, 'Телефон')} icon={<Copy size={14}/>} label="Телефон"/>
+      <QuickBtn onClick={()=>onCopy(visit.vin_code, 'VIN')} icon={<Copy size={14}/>} label="VIN"/>
+      <QuickBtn onClick={()=>onCopy(visit.plate, 'Номер авто')} icon={<Copy size={14}/>} label="Номер"/>
+      <QuickBtn onClick={onReschedule} icon={<Clock size={14}/>} label="Змінити запис"/>
+    </div>
+  );
+}
+
+function QuickBtn({ onClick, icon, label }) {
+  return (
+    <button type="button" onClick={onClick} className="min-h-[42px] bg-white text-slate-700 border border-slate-200 hover:border-blue-300 hover:text-blue-600 rounded-xl px-3 py-2 text-xs font-black uppercase flex items-center justify-center gap-2 leading-tight text-center">
+      {icon}{label}
+    </button>
+  );
+}
 function StoAssignmentPanel({ visit, workPosts = [], mechanics = [], onPatch }) {
   const currentPost = visitWorkPostId(visit);
   const currentMechanic = visitMechanicId(visit);
@@ -799,7 +1000,7 @@ function StoAssignmentPanel({ visit, workPosts = [], mechanics = [], onPatch }) 
           </LabeledSelect>
         </div>
       </div>
-      <p className="text-[10px] font-bold text-blue-700 mt-2">
+      <p className="text-[11px] font-bold text-blue-700 mt-2">
         Пост рахує зайнятість, майстер — виконані роботи і зарплату.
       </p>
     </div>
@@ -893,11 +1094,11 @@ function Works({
 
           {!isStore && (
             <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
-              <p className="text-[10px] font-black uppercase text-slate-400">Майстер і нарахування</p>
+              <p className="text-[11px] font-black uppercase text-slate-400">Майстер і нарахування</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="block">
-                  <span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Майстер</span>
+                  <span className="text-[11px] font-black uppercase text-slate-400 ml-1 block mb-1">Майстер</span>
                   <select value={newService.mechanic || ''} onChange={(e) => pickMechanic(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none">
                     <option value="">Не обрано</option>
                     {arr(mechanics).filter((mechanic) => mechanic.is_active !== false).map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanicName(mechanic)}</option>)}
@@ -914,7 +1115,7 @@ function Works({
               </div>
 
               <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
-                <p className="text-[10px] font-black uppercase text-blue-500">Попередньо майстру</p>
+                <p className="text-[11px] font-black uppercase text-blue-500">Попередньо майстру</p>
                 <p className="text-lg font-black text-blue-800">
                   {money((Number(newService.price || 0) * Number(newService.quantity || 1) * Number(newService.commission_percent || mechanicDefaultPercent(selectedMechanic) || 0)) / 100)}
                 </p>
@@ -950,9 +1151,9 @@ function Works({
     </div>
   );
 }
-function Parts({visit,showForm,setShowForm,form,setForm,onSubmit,onDelete,onStatus}){const ps=partsOf(visit);const c=partCounts(visit);return <div className="space-y-3"><div className="grid grid-cols-2 md:grid-cols-4 gap-2"><MiniStatus label="Очікується" value={c.WAITING} cls="text-amber-600 bg-amber-50 border-amber-100"/><MiniStatus label="В дорозі" value={c.IN_TRANSIT} cls="text-blue-600 bg-blue-50 border-blue-100"/><MiniStatus label="Отримано" value={c.ARRIVED} cls="text-emerald-600 bg-emerald-50 border-emerald-100"/><MiniStatus label="Відмова" value={c.UNAVAILABLE} cls="text-rose-600 bg-rose-50 border-rose-100"/></div><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><InfoCard label="Позицій" value={ps.length}/><InfoCard label="Сума" value={money(partsTotal(visit))}/><button type="button" onClick={()=>setShowForm(!showForm)} className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15}/> Додати вручну</button></div>{showForm&&<ManualPartForm form={form} setForm={setForm} onSubmit={onSubmit} onCancel={()=>setShowForm(false)}/>} {ps.map(p=><div key={p.id} className="p-3 bg-slate-50 rounded-xl border flex flex-col lg:flex-row lg:items-center gap-3"><div className="flex-1 min-w-0"><div className="flex flex-wrap items-center gap-2 mb-1"><span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${supplierBadge(p)}`}>{p.supplier || 'Постачальник'}</span><span className="text-[10px] font-black uppercase text-slate-400">к-сть {p.quantity||1}</span></div><p className="font-black text-slate-800 text-sm break-words">{p.name}</p><p className="text-xs uppercase font-bold text-slate-500 break-words">{p.brand} | {p.part_number||p.article}</p><p className="text-xs font-bold text-blue-600 mt-1">{money(p.sell_price||p.price)} · закупка {money(p.buy_price)}</p></div><select value={p.status||p.logistics_status||'WAITING'} onChange={(e)=>onStatus(p.id,e.target.value)} className="border rounded-xl px-3 py-2 text-xs font-black bg-white"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select><button onClick={()=>onDelete(p.id)} className="text-red-500 p-2 self-start lg:self-center"><Trash2 size={16}/></button></div>)}{!ps.length&&<EmptyPanel text="Запчастини ще не додані"/>}</div>}
-function MiniStatus({label,value,cls}){return <div className={`rounded-2xl border p-3 ${cls}`}><p className="text-[9px] font-black uppercase opacity-80">{label}</p><p className="text-2xl font-black leading-none mt-1">{value}</p></div>}
-function ManualPartForm({ form, setForm, onSubmit, onCancel }) { return <form onSubmit={onSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"><div className="flex items-center justify-between gap-3"><h3 className="font-black text-slate-800 uppercase text-sm">Ручне додавання</h3><button type="button" onClick={onCancel} className="text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><LabeledInput label="Назва" required value={form.name} onChange={(v)=>setForm({...form,name:v})}/><LabeledInput label="Бренд" value={form.brand} onChange={(v)=>setForm({...form,brand:v})}/><LabeledInput label="Артикул" value={form.article} onChange={(v)=>setForm({...form,article:v})}/><LabeledInput label="Постачальник" value={form.supplier} onChange={(v)=>setForm({...form,supplier:v})}/><LabeledInput label="Закупка" type="number" required value={form.buy_price} onChange={(v)=>setForm({...form,buy_price:v})}/><LabeledInput label="Продаж" type="number" required value={form.sell_price} onChange={(v)=>setForm({...form,sell_price:v})}/><LabeledInput label="Кількість" type="number" required value={form.quantity} onChange={(v)=>setForm({...form,quantity:v})}/><label className="block md:col-span-2"><span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Статус</span><select value={form.status} onChange={(e)=>setForm({...form,status:e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select></label></div><button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти запчастину</button></form>}
+function Parts({visit,showForm,setShowForm,form,setForm,onSubmit,onDelete,onStatus}){const ps=partsOf(visit);const c=partCounts(visit);return <div className="space-y-3"><div className="grid grid-cols-2 md:grid-cols-4 gap-2"><MiniStatus label="Очікується" value={c.WAITING} cls="text-amber-600 bg-amber-50 border-amber-100"/><MiniStatus label="В дорозі" value={c.IN_TRANSIT} cls="text-blue-600 bg-blue-50 border-blue-100"/><MiniStatus label="Отримано" value={c.ARRIVED} cls="text-emerald-600 bg-emerald-50 border-emerald-100"/><MiniStatus label="Відмова" value={c.UNAVAILABLE} cls="text-rose-600 bg-rose-50 border-rose-100"/></div><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><InfoCard label="Позицій" value={ps.length}/><InfoCard label="Сума" value={money(partsTotal(visit))}/><button type="button" onClick={()=>setShowForm(!showForm)} className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15}/> Додати вручну</button></div>{showForm&&<ManualPartForm form={form} setForm={setForm} onSubmit={onSubmit} onCancel={()=>setShowForm(false)}/>} {ps.map(p=><div key={p.id} className="p-3 bg-slate-50 rounded-xl border flex flex-col lg:flex-row lg:items-center gap-3"><div className="flex-1 min-w-0"><div className="flex flex-wrap items-center gap-2 mb-1"><span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-widest ${supplierBadge(p)}`}>{p.supplier || 'Постачальник'}</span><span className="text-[11px] font-black uppercase text-slate-400">к-сть {p.quantity||1}</span></div><p className="font-black text-slate-800 text-sm break-words">{p.name}</p><p className="text-xs uppercase font-bold text-slate-500 break-words">{p.brand} | {p.part_number||p.article}</p><p className="text-xs font-bold text-blue-600 mt-1">{money(p.sell_price||p.price)} · закупка {money(p.buy_price)}</p></div><select value={p.status||p.logistics_status||'WAITING'} onChange={(e)=>onStatus(p.id,e.target.value)} className="border rounded-xl px-3 py-2 text-xs font-black bg-white"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select><button onClick={()=>onDelete(p.id)} className="text-red-500 p-2 self-start lg:self-center"><Trash2 size={16}/></button></div>)}{!ps.length&&<EmptyPanel text="Запчастини ще не додані"/>}</div>}
+function MiniStatus({label,value,cls}){return <div className={`rounded-2xl border p-3 ${cls}`}><p className="text-[10px] font-black uppercase opacity-80">{label}</p><p className="text-2xl font-black leading-none mt-1">{value}</p></div>}
+function ManualPartForm({ form, setForm, onSubmit, onCancel }) { return <form onSubmit={onSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"><div className="flex items-center justify-between gap-3"><h3 className="font-black text-slate-800 uppercase text-sm">Ручне додавання</h3><button type="button" onClick={onCancel} className="text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><LabeledInput label="Назва" required value={form.name} onChange={(v)=>setForm({...form,name:v})}/><LabeledInput label="Бренд" value={form.brand} onChange={(v)=>setForm({...form,brand:v})}/><LabeledInput label="Артикул" value={form.article} onChange={(v)=>setForm({...form,article:v})}/><LabeledInput label="Постачальник" value={form.supplier} onChange={(v)=>setForm({...form,supplier:v})}/><LabeledInput label="Закупка" type="number" required value={form.buy_price} onChange={(v)=>setForm({...form,buy_price:v})}/><LabeledInput label="Продаж" type="number" required value={form.sell_price} onChange={(v)=>setForm({...form,sell_price:v})}/><LabeledInput label="Кількість" type="number" required value={form.quantity} onChange={(v)=>setForm({...form,quantity:v})}/><label className="block md:col-span-2"><span className="text-[11px] font-black uppercase text-slate-400 ml-1 block mb-1">Статус</span><select value={form.status} onChange={(e)=>setForm({...form,status:e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select></label></div><button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти запчастину</button></form>}
 function Recommendations({ recommendations = [], showForm, setShowForm, form, setForm, onSubmit, onDone, onPostpone }) {
   const safeRecommendations = listOf(recommendations);
   const active = safeRecommendations.filter((r) => r.status !== 'done' && r.status !== 'cancelled');
@@ -970,15 +1171,15 @@ function Recommendations({ recommendations = [], showForm, setShowForm, form, se
         return (
           <div key={rec.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className={`border rounded-full px-3 py-1 text-[10px] font-black uppercase ${urgency.cls}`}>{urgency.label}</span>
-              {rec.due_date && <span className="text-[10px] font-black uppercase text-slate-400">до {rec.due_date}</span>}
-              {rec.due_mileage && <span className="text-[10px] font-black uppercase text-slate-400">{rec.due_mileage} км</span>}
+              <span className={`border rounded-full px-3 py-1 text-[11px] font-black uppercase ${urgency.cls}`}>{urgency.label}</span>
+              {rec.due_date && <span className="text-[11px] font-black uppercase text-slate-400">до {rec.due_date}</span>}
+              {rec.due_mileage && <span className="text-[11px] font-black uppercase text-slate-400">{rec.due_mileage} км</span>}
             </div>
             <h3 className="font-black text-slate-900 text-sm">{rec.title}</h3>
             {rec.description && <p className="text-sm font-semibold text-slate-500 mt-1 whitespace-pre-wrap">{rec.description}</p>}
             <div className="grid grid-cols-2 gap-2 mt-3">
-              <button onClick={() => onPostpone(rec)} className="bg-amber-50 text-amber-700 rounded-xl py-2.5 text-[10px] font-black uppercase">Відкласти</button>
-              <button onClick={() => onDone(rec.id)} className="bg-emerald-50 text-emerald-700 rounded-xl py-2.5 text-[10px] font-black uppercase">Виконано</button>
+              <button onClick={() => onPostpone(rec)} className="bg-amber-50 text-amber-700 rounded-xl py-2.5 text-[11px] font-black uppercase">Відкласти</button>
+              <button onClick={() => onDone(rec.id)} className="bg-emerald-50 text-emerald-700 rounded-xl py-2.5 text-[11px] font-black uppercase">Виконано</button>
             </div>
           </div>
         );
@@ -987,7 +1188,7 @@ function Recommendations({ recommendations = [], showForm, setShowForm, form, se
     </div>
   );
 }
-function RecommendationForm({ form, setForm, onSubmit, onCancel }) { return <form onSubmit={onSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"><div className="flex items-center justify-between"><h3 className="font-black text-slate-800 uppercase text-sm">Нова рекомендація</h3><button type="button" onClick={onCancel} className="text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><LabeledInput label="Що рекомендуємо" required value={form.title} onChange={(v)=>setForm({...form,title:v})}/><LabeledInput label="Дата" type="date" value={form.due_date} onChange={(v)=>setForm({...form,due_date:v})}/><LabeledInput label="Пробіг" type="number" value={form.due_mileage} onChange={(v)=>setForm({...form,due_mileage:v})}/><label className="block md:col-span-2"><span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Опис</span><textarea value={form.description || ''} onChange={(e)=>setForm({...form,description:e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none min-h-[90px]"/></label></div><button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти рекомендацію</button></form>}
+function RecommendationForm({ form, setForm, onSubmit, onCancel }) { return <form onSubmit={onSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"><div className="flex items-center justify-between"><h3 className="font-black text-slate-800 uppercase text-sm">Нова рекомендація</h3><button type="button" onClick={onCancel} className="text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><LabeledInput label="Що рекомендуємо" required value={form.title} onChange={(v)=>setForm({...form,title:v})}/><LabeledInput label="Дата" type="date" value={form.due_date} onChange={(v)=>setForm({...form,due_date:v})}/><LabeledInput label="Пробіг" type="number" value={form.due_mileage} onChange={(v)=>setForm({...form,due_mileage:v})}/><label className="block md:col-span-2"><span className="text-[11px] font-black uppercase text-slate-400 ml-1 block mb-1">Опис</span><textarea value={form.description || ''} onChange={(e)=>setForm({...form,description:e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none min-h-[90px]"/></label></div><button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти рекомендацію</button></form>}
 function Summary({ visit, recommendations, workflowInfo, editComment, setEditComment, onSave, mechanics = [], isStore }) {
   const c = partCounts(visit);
   const safeRecommendations = listOf(recommendations);
@@ -1053,11 +1254,40 @@ function Summary({ visit, recommendations, workflowInfo, editComment, setEditCom
     </div>
   );
 }
-function CarFields({data,setData}){return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4"><div className="flex justify-between items-center border-b pb-2 mb-3"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Дані автомобіля</p><span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg border ${data.engine_review_status==='needs_review'?'bg-amber-50 text-amber-700 border-amber-100':'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>{data.engine_review_status==='needs_review'?'Двигун перевірити':'Перевірено вручну'}</span></div><div className="grid grid-cols-2 gap-3"><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v,engine_review_status:'manual'})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v,engine_review_status:'manual'})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v,engine_review_status:'manual'})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v,engine_review_status:'manual'})}/></div></div></div>}
+function CarFields({data,setData}){return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4"><div className="flex justify-between items-center border-b pb-2 mb-3"><p className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Дані автомобіля</p><span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border ${data.engine_review_status==='needs_review'?'bg-amber-50 text-amber-700 border-amber-100':'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>{data.engine_review_status==='needs_review'?'Двигун перевірити':'Перевірено вручну'}</span></div><div className="grid grid-cols-2 gap-3"><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v,engine_review_status:'manual'})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v,engine_review_status:'manual'})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v,engine_review_status:'manual'})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v,engine_review_status:'manual'})}/></div></div></div>}
 function ScanReviewCard({data,setData,onApply,onCancel}){return <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 space-y-3"><div className="flex gap-2"><AlertTriangle size={18} className="text-amber-600 shrink-0"/><div><p className="font-black text-amber-800 text-sm">Результат скану потребує перевірки</p><p className="text-xs font-semibold text-amber-700">Це обʼєднаний результат: нове фото доповнює вже знайдені дані.</p></div></div><div className="grid grid-cols-2 gap-2"><LabeledInput label="Держ. номер" value={data.plate} onChange={(v)=>setData({...data,plate:v.toUpperCase()})}/><LabeledInput label="VIN" value={data.vin_code||data.vin_candidate} onChange={(v)=>setData({...data,vin_code:v.toUpperCase()})}/><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v})}/></div></div>{data.warnings?.length>0&&<div className="text-xs font-bold text-amber-700 space-y-1">{data.warnings.map((w,i)=><p key={i}>• {w}</p>)}</div>}<div className="flex flex-col sm:flex-row gap-2"><button type="button" onClick={onApply} className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Прийняти дані</button><button type="button" onClick={onCancel} className="flex-1 bg-white border border-amber-200 text-amber-700 rounded-xl py-3 text-xs font-black uppercase">Не використовувати</button></div></div>}
-function LabeledInput({label,value,onChange,type='text',required,hint,onBlur}){return <label className="block"><span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">{label}</span><input required={required} type={type} value={value||''} onBlur={onBlur} onChange={(e)=>onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none focus:border-blue-500"/>{hint&&<span className="text-[10px] font-black text-emerald-600 ml-1 mt-1 block">{hint}</span>}</label>}
-function LabeledSelect({ label, value, onChange, children, hint }) { return <label className="block"><span className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">{label}</span><select value={value || ''} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none focus:border-blue-500">{children}</select>{hint && <span className="text-[10px] font-black text-emerald-600 ml-1 mt-1 block">{hint}</span>}</label>}
-function InfoCard({label,value}){return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 min-w-0"><p className="text-[10px] font-black uppercase text-slate-400">{label}</p><p className="font-black text-slate-800 text-sm mt-1 break-words">{value||'—'}</p></div>}
+function LabeledInput({label,value,onChange,type='text',required,hint,onBlur}){
+  return (
+    <label className="block min-w-0">
+      <span className="text-[11px] font-black uppercase text-slate-500 ml-1 block mb-1.5">{label}</span>
+      <input
+        required={required}
+        type={type}
+        value={value||''}
+        onBlur={onBlur}
+        onChange={(e)=>onChange(e.target.value)}
+        className="w-full min-h-[46px] bg-white border-2 border-slate-200 rounded-xl py-3 px-3 text-sm font-extrabold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition"
+      />
+      {hint&&<span className="text-[11px] font-black text-emerald-600 ml-1 mt-1 block">{hint}</span>}
+    </label>
+  );
+}
+function LabeledSelect({ label, value, onChange, children, hint }) {
+  return (
+    <label className="block min-w-0">
+      <span className="text-[11px] font-black uppercase text-slate-500 ml-1 block mb-1.5">{label}</span>
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full min-h-[46px] bg-white border-2 border-slate-200 rounded-xl py-3 px-3 text-sm font-extrabold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition"
+      >
+        {children}
+      </select>
+      {hint && <span className="text-[11px] font-black text-emerald-600 ml-1 mt-1 block">{hint}</span>}
+    </label>
+  );
+}
+function InfoCard({label,value}){return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 min-w-0"><p className="text-[11px] font-black uppercase text-slate-400">{label}</p><p className="font-black text-slate-800 text-sm mt-1 break-words">{value||'—'}</p></div>}
 function Row({title,sub,price,onDelete}){return <div className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center gap-3"><div><p className="font-bold text-slate-700 text-sm">{title}</p><p className="text-xs text-slate-400">{sub}</p></div><div className="flex items-center gap-3"><p className="font-black text-sm text-slate-800">{price}</p><button onClick={onDelete} className="text-red-500 p-1"><Trash2 size={16}/></button></div></div>}
 function EmptyPanel({text}){return <div className="bg-slate-50 rounded-2xl border border-slate-100 p-6 text-center text-slate-400 font-bold text-sm">{text}</div>}
 function ScanOverlay(){return <div className="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center text-center"><Loader2 className="animate-spin text-white mb-4" size={38}/><h3 className="text-white font-black text-xl">Розпізнаємо техпаспорт</h3><p className="text-slate-300 text-sm font-semibold mt-1">Після скану покажемо дані для перевірки</p></div>}

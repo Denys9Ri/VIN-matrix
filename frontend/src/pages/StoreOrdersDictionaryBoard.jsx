@@ -7,6 +7,8 @@ import {
   ChevronRight,
   Clock,
   CreditCard,
+  FileText,
+  Hash,
   PackageCheck,
   Plus,
   Search,
@@ -271,6 +273,17 @@ function hint(order, statusLabel) {
   }
 
   return `Статус: ${statusLabel}. Усі товари отримано.`;
+}
+
+function openDocumentPackage(order) {
+  if (!order?.id) return;
+  window.dispatchEvent(new CustomEvent('vinmatrix:open-documents', {
+    detail: {
+      id: order.id,
+      mode: 'store',
+      title: `Замовлення №${order.id}`,
+    },
+  }));
 }
 
 export default function StoreOrdersDictionaryBoard() {
@@ -1641,89 +1654,162 @@ function Drawer(p) {
 
   const d = parseDelivery(order);
   const t = totals(order);
+  const paid = order.payment_status === 'paid' ? t.revenue : num(order.prepayment_amount);
+  const left = Math.max(t.revenue - paid, 0);
+  const statusLabel = getStatusLabel(order.status);
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-end">
-      <div className="bg-white w-full max-w-5xl h-full overflow-y-auto shadow-2xl p-4 md:p-7">
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div>
-            <h2 className="text-2xl font-black uppercase">Замовлення №{order.id}</h2>
-            <p className="text-sm font-bold text-slate-500">
-              {order.client} • {order.phone}
-            </p>
+    <div className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-sm overflow-y-auto px-2 py-4 sm:px-4 sm:py-6">
+      <div className="mx-auto w-full max-w-[1120px] rounded-[28px] md:rounded-[34px] bg-white shadow-2xl border border-white/60 overflow-hidden relative">
+        <div className="bg-white px-4 py-4 md:px-6 md:py-5 border-b border-slate-100">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-black uppercase shadow-sm">
+                  <Hash size={14} />
+                  Замовлення №{order.id}
+                </span>
+                <span className="inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-black uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                  {statusLabel}
+                </span>
+                <span className="inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
+                  {pay[order.payment_status] || 'Оплата'}
+                </span>
+              </div>
+
+              <h2 className="text-2xl md:text-3xl font-black uppercase text-slate-950 leading-tight tracking-tight break-words">
+                {order.plate || `№${order.id}`}
+              </h2>
+
+              <p className="text-slate-600 text-sm md:text-[15px] font-bold mt-1 break-words">
+                {order.client || 'Покупець не вказаний'} · {order.phone || 'телефон не вказаний'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap justify-start lg:justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                data-document-dock-anchor="true"
+                onClick={() => openDocumentPackage(order)}
+                className="min-h-[42px] rounded-2xl bg-slate-900 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-sm transition whitespace-nowrap"
+              >
+                <FileText size={16} />
+                Документи
+              </button>
+
+              <button
+                type="button"
+                onClick={onCancel}
+                title="Скасувати"
+                className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center transition"
+              >
+                <XCircle size={18} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onPatch({ status: 'COMPLETED' })}
+                title="Закрити як виконане"
+                className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center justify-center transition"
+              >
+                <CheckCircle2 size={18} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOrder(null)}
+                title="Закрити"
+                className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onCancel} className="p-2 bg-rose-50 text-rose-600 rounded-xl">
-              <XCircle size={18} />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onPatch({ status: 'COMPLETED' })}
-              className="p-2 bg-emerald-50 text-emerald-700 rounded-xl"
-            >
-              <CheckCircle2 size={18} />
-            </button>
-
-            <button type="button" onClick={() => setOrder(null)} className="p-2 bg-slate-100 rounded-xl">
-              <X size={18} />
-            </button>
+          <div className="mt-5 grid grid-cols-2 md:grid-cols-5 gap-2.5">
+            <HeaderMetric label="Статус" value={statusLabel} />
+            <HeaderMetric label="Виручка" value={money(t.revenue)} />
+            <HeaderMetric label="Прибуток" value={money(t.profit)} good />
+            <HeaderMetric label="Оплачено" value={money(paid)} />
+            <HeaderMetric label="Борг" value={money(left)} danger={left > 0 && order.payment_status !== 'paid'} />
           </div>
         </div>
 
-        <Summary order={order} totals={t} getStatusLabel={getStatusLabel} />
+        <div className="px-4 py-4 md:px-6 bg-slate-50/90 border-b border-slate-200">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-3 items-start">
+            <div className="space-y-3 min-w-0">
+              <StatusSwitcher order={order} statuses={statuses} onPatch={onPatch} />
 
-        <StatusSwitcher order={order} statuses={statuses} onPatch={onPatch} />
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm">
+                💡 {hint(order, statusLabel)}
+              </div>
+            </div>
 
-        <PaymentBar order={order} totals={t} onPay={onPay} onPrepay={onPrepay} />
-
-        <div className="bg-slate-50 border rounded-2xl p-3 mb-4 text-sm font-bold text-slate-600">
-          💡 {hint(order, getStatusLabel(order.status))}
+            <PaymentBar order={order} totals={t} onPay={onPay} onPrepay={onPrepay} />
+          </div>
         </div>
 
-        <Tabs active={tab} setActive={setTab} />
+        <div className="px-4 py-3 md:px-6 bg-white border-b border-slate-100">
+          <Tabs active={tab} setActive={setTab} />
+        </div>
 
-        {tab === 'client' && (
-          <Panel title="Покупець">
-            <Info label="Клієнт" value={order.client} />
-            <Info label="Телефон" value={order.phone} />
-            <Info label="Авто / VIN" value={`${order.plate || '-'} ${order.vin_code || ''}`} />
-            <Info label="Джерело" value={d.source || '-'} />
-          </Panel>
-        )}
+        <div className="px-4 py-4 md:px-6 bg-white min-h-[360px]">
+          {tab === 'client' && (
+            <Panel title="Покупець">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Info label="Клієнт" value={order.client} />
+                <Info label="Телефон" value={order.phone} />
+                <Info label="Авто / номер" value={order.plate || '-'} />
+                <Info label="VIN" value={order.vin_code || '-'} />
+                <Info label="Джерело" value={d.source || '-'} />
+                <Info label="Тип доставки" value={order.delivery_type || '-'} />
+              </div>
+            </Panel>
+          )}
 
-        {tab === 'parts' && (
-          <PartsPanel
-            parts={arr(order.parts)}
-            partForm={partForm}
-            setPartForm={setPartForm}
-            onAddPart={onAddPart}
-            onPartStatus={onPartStatus}
-            onDelete={onDelete}
-            partStatuses={partStatuses}
-          />
-        )}
+          {tab === 'parts' && (
+            <PartsPanel
+              parts={arr(order.parts)}
+              partForm={partForm}
+              setPartForm={setPartForm}
+              onAddPart={onAddPart}
+              onPartStatus={onPartStatus}
+              onDelete={onDelete}
+              partStatuses={partStatuses}
+            />
+          )}
 
-        {tab === 'delivery' && (
-          <DeliveryPanel
-            order={order}
-            delivery={d}
-            onPatch={onPatch}
-            onUpdateDelivery={onUpdateDelivery}
-            onCreateTtn={onCreateTtn}
-            onRefreshNovaPost={onRefreshNovaPost}
-            busy={busy}
-          />
-        )}
+          {tab === 'delivery' && (
+            <DeliveryPanel
+              order={order}
+              delivery={d}
+              onPatch={onPatch}
+              onUpdateDelivery={onUpdateDelivery}
+              onCreateTtn={onCreateTtn}
+              onRefreshNovaPost={onRefreshNovaPost}
+              busy={busy}
+            />
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function HeaderMetric({ label, value, good, danger }) {
+  return (
+    <div className={`rounded-2xl border p-3 min-h-[64px] ${good ? 'bg-emerald-50 border-emerald-100' : danger ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wide">{label}</p>
+      <p className={`mt-1 text-sm md:text-base font-black truncate ${good ? 'text-emerald-700' : danger ? 'text-rose-700' : 'text-slate-950'}`}>
+        {value}
+      </p>
     </div>
   );
 }
 
 function StatusSwitcher({ order, statuses, onPatch }) {
   return (
-    <div className="bg-white border rounded-2xl p-3 mb-4">
+    <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
       <p className="text-[10px] font-black uppercase text-slate-400 mb-2">
         Статус замовлення з довідника
       </p>
@@ -1761,7 +1847,7 @@ function PaymentBar({ order, totals: t, onPay, onPrepay }) {
 
   return (
     <div
-      className={`mb-4 rounded-2xl border p-3 md:p-4 ${
+      className={`rounded-2xl border p-3 md:p-4 shadow-sm ${
         paidStatus ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'
       }`}
     >
@@ -1820,14 +1906,16 @@ function Tabs({ active, setActive }) {
   ];
 
   return (
-    <div className="bg-slate-100 rounded-2xl p-1 grid grid-cols-3 gap-1 mb-4 sticky top-0 z-10">
+    <div className="flex flex-wrap gap-2">
       {tabs.map(([k, Icon, l]) => (
         <button
           key={k}
           type="button"
           onClick={() => setActive(k)}
-          className={`rounded-xl p-3 font-black uppercase text-xs flex items-center justify-center gap-2 ${
-            active === k ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-white'
+          className={`min-h-[42px] rounded-2xl px-4 py-2.5 font-black uppercase text-xs flex items-center justify-center gap-2 border transition whitespace-nowrap ${
+            active === k
+              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:text-blue-700 hover:border-blue-200'
           }`}
         >
           <Icon size={15} />

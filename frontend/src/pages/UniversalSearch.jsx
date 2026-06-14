@@ -158,35 +158,10 @@ const UniversalSearch = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      let collected = uniqueParts(res.data, item);
-
-      // У Юнік Трейд немає стабільного окремого endpoint для аналогів.
-      // Якщо UTR не повернув кроси, робимо професійний fallback: спочатку
-      // загальний cross-search по всіх підключених постачальниках, потім прямий
-      // пошук цього коду як альтернативні пропозиції.
-      if (collected.length === 0 && isUtrSource(item.source)) {
-        try {
-          const globalAnalogUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&brand=${encodeURIComponent(item.brand || '')}`;
-          const globalAnalog = await axios.get(globalAnalogUrl, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          collected = uniqueParts(globalAnalog.data, item);
-        } catch (fallbackErr) {
-          console.warn('UTR global analog fallback failed', fallbackErr);
-        }
-      }
-
-      if (collected.length === 0 && isUtrSource(item.source)) {
-        try {
-          const globalDirectUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}`;
-          const globalDirect = await axios.get(globalDirectUrl, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          collected = uniqueParts(globalDirect.data, item);
-        } catch (fallbackErr) {
-          console.warn('UTR direct fallback failed', fallbackErr);
-        }
-      }
+      // Важливо: аналоги показуємо тільки в межах того постачальника,
+      // з картки якого натиснули кнопку. Не підмішуємо інші джерела,
+      // бо користувач очікує саме "аналоги Юнік Трейд", "аналоги Omega" тощо.
+      const collected = uniqueParts(res.data, item).filter((part) => String(part.supplier_id || '') === String(item.supplier_id || ''));
 
       const processed = collected.map(a => ({ ...a, selectedWhIdx: 0 }));
 

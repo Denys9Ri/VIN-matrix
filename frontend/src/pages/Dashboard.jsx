@@ -914,6 +914,22 @@ const Dashboard = () => {
         </div>
       </div>
 
+
+      <div className="mb-6 rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-500">Швидкий старт</p>
+            <h2 className="mt-1 text-lg font-black text-slate-800">Почніть з демо-даних, складу та першого візиту</h2>
+            <p className="mt-1 text-sm font-bold text-slate-500">Перевірте налаштування компанії, додайте товари на склад і створіть візит або замовлення.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 md:min-w-[520px]">
+            <button onClick={() => navigate('/settings')} className="rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase text-blue-700 shadow-sm transition hover:-translate-y-0.5">1. Компанія</button>
+            <button onClick={() => navigate('/inventory')} className="rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase text-indigo-700 shadow-sm transition hover:-translate-y-0.5">2. Склад</button>
+            <button onClick={() => navigate('/visits')} className="rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700">3. Перший візит</button>
+          </div>
+        </div>
+      </div>
+
       {visibleWidgets.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm">
           <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-slate-50 flex items-center justify-center">

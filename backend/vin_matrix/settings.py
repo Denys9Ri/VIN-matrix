@@ -9,10 +9,22 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Безпека
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key')
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+def env_bool(name, default=False):
+    return str(os.getenv(name, str(default))).strip().lower() in {'1', 'true', 'yes', 'on'}
 
-ALLOWED_HOSTS = ['*']
+def env_list(name, default=''):
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(',') if item.strip()]
+
+SECRET_KEY = os.getenv('SECRET_KEY')
+DEBUG = env_bool('DEBUG', False)
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'dev-only-insecure-secret-key-change-me'
+    else:
+        raise RuntimeError('SECRET_KEY must be set when DEBUG=False')
+
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 
 # Реєструємо сторонні бібліотеки та наші модулі
 INSTALLED_APPS = [
@@ -69,11 +81,9 @@ ROOT_URLCONF = 'vin_matrix.urls'
 WSGI_APPLICATION = 'vin_matrix.wsgi.application'
 
 # Налаштування CORS для React
-# Для production краще використовувати whitelist або regex для доменів
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https?://[a-z0-9-]+\.95\.217\.211\.207\.sslip\.io$",
-]
+CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
+CORS_ALLOWED_ORIGIN_REGEXES = env_list('CORS_ALLOWED_ORIGIN_REGEXES')
 CORS_ALLOW_HEADERS = [
     "accept",
     "authorization",
@@ -84,13 +94,10 @@ CORS_ALLOW_HEADERS = [
 ]
 CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://*.95.217.211.207.sslip.io",
-    "https://*.95.217.211.207.sslip.io",
-]
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000')
 
 # Налаштування Бази Даних
-if os.getenv('USE_POSTGRES') == 'True':
+if env_bool('USE_POSTGRES', False):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -120,7 +127,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
-    )
+    ),
 }
 
 # Налаштування часу життя токенів
@@ -147,22 +154,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Сучасний часовий пояс для України
 TIME_ZONE = 'Europe/Kyiv'
 USE_TZ = True
-
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "authorization",
-    "content-type",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-]
-CSRF_TRUSTED_ORIGINS = [
-    "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io",
-]
-
 
 LANGUAGE_CODE = 'uk'
 USE_I18N = True

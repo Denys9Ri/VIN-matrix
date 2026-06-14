@@ -808,6 +808,19 @@ function CreateVisitModal({
   );
 }
 
+
+const openDocumentPackage = (visit, isStore) => {
+  const id = String(visitId(visit) || '').trim();
+  if (!id) return;
+  window.dispatchEvent(new CustomEvent('vinmatrix:open-documents', {
+    detail: {
+      id,
+      mode: isStore ? 'store' : 'sto',
+      title: `${isStore ? 'Замовлення' : 'Візит'} №${id}`,
+    },
+  }));
+};
+
 function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
   const tabs = [
     ['overview','Огляд',Info],
@@ -818,7 +831,6 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
     ['parts','Запчастини',Package],
     ['recommendations','Рекомендації',ClipboardList],
     ['summary','Підсумок',Calculator],
-    ['documents','Документи',FileDown],
   ];
   const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate };
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -855,11 +867,14 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
               </div>
 
               <div className="flex flex-wrap justify-start lg:justify-end gap-2 shrink-0">
-                <button type="button" onClick={onPrint} className="min-h-[42px] rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-black uppercase inline-flex items-center justify-center gap-2 shadow-sm whitespace-nowrap">
-                  <FileDown size={15}/> PDF-звіт
-                </button>
-                <button type="button" onClick={() => setTab('documents')} className={`min-h-[42px] rounded-2xl px-4 py-2 text-xs font-black uppercase inline-flex items-center justify-center gap-2 border shadow-sm whitespace-nowrap ${tab === 'documents' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'}`}>
-                  <FileText size={15}/> Документи
+                <button
+                  type="button"
+                  data-document-dock-anchor="true"
+                  onClick={() => openDocumentPackage(visit, isStore)}
+                  className="min-h-[44px] rounded-2xl bg-slate-900 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-black uppercase inline-flex items-center justify-center gap-2 shadow-sm whitespace-nowrap"
+                  title="Відкрити пакет документів"
+                >
+                  <FileText size={16}/> Документи
                 </button>
                 <button type="button" onClick={onCancel} className="min-h-[42px] rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 px-3 py-2 inline-flex items-center justify-center hover:bg-rose-100" title="Видалити">
                   <Trash2 size={16}/>
@@ -929,7 +944,6 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
           {tab==='parts'&&<Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>}
           {tab==='recommendations'&&<Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>}
           {tab==='summary'&&<Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />}
-          {tab==='documents'&&<DocumentsPanel visit={visit} onPrint={onPrint}/>}
         </div>
       </div>
     </div>
@@ -945,7 +959,6 @@ function HeaderMetric({ label, value, good, danger }) {
   );
 }
 
-function DocumentsPanel({ visit, onPrint }) { return <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div><h3 className="text-lg font-black text-slate-900">Документи</h3><p className="text-sm font-semibold text-slate-500 mt-1">PDF-звіт, друк та документи по візиту №{visitId(visit)} зібрані в одному місці.</p></div><button type="button" onClick={onPrint} className="bg-blue-600 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase inline-flex items-center justify-center gap-2"><FileDown size={16}/> PDF-звіт</button></div><div className="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-sm font-semibold text-slate-600">Плаваюча кнопка документів прибрана: документи доступні у вкладці та в швидких діях зверху.</div></div>; }
 function MacAction({ title, color, onClick, children }) { return <button type="button" title={title} aria-label={title} onClick={onClick} className={`w-10 h-10 rounded-full ${color} text-white flex items-center justify-center shadow-sm hover:scale-105 transition-transform`}>{children}</button>; }
 function StatusBtn({active,onClick,label}){
   return (

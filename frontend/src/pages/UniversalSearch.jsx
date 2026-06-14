@@ -273,6 +273,7 @@ const UniversalSearch = () => {
     if (name.includes('VESNA')) return "bg-emerald-600 text-white shadow-md shadow-emerald-200 whitespace-nowrap";
     if (name.includes('OMEGA') || name.includes('ОМЕГА')) return "bg-blue-600 text-white shadow-md shadow-blue-200 whitespace-nowrap";
     if (name.includes('TEHNO') || name.includes('ТЕХНО')) return "bg-rose-600 text-white shadow-md shadow-rose-200 whitespace-nowrap";
+    if (name.includes('UTR') || name.includes('UNIQ') || name.includes('UNIQUE') || name.includes('ЮНІК') || name.includes('ЮНИК') || name.includes('УНІК') || name.includes('УНИК')) return "bg-orange-400 text-black shadow-md shadow-orange-200 whitespace-nowrap";
     return "bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap";
   };
 

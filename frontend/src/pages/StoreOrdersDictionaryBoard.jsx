@@ -296,6 +296,7 @@ export default function StoreOrdersDictionaryBoard() {
   const [day, setDay] = useState(dateISO());
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [tab, setTab] = useState('client');
   const [busy, setBusy] = useState(false);
 
@@ -656,24 +657,35 @@ export default function StoreOrdersDictionaryBoard() {
     }
   };
 
-  const deletePart = async (part) => {
-    if (!window.confirm('Видалити товар із замовлення?')) return;
+  const askConfirm = ({ title, message, confirmLabel = 'Підтвердити', tone = 'danger', onConfirm }) => {
+    setConfirmDialog({ title, message, confirmLabel, tone, onConfirm });
+  };
 
-    setBusy(true);
+  const deletePart = (part) => {
+    askConfirm({
+      title: 'Видалити товар із замовлення?',
+      message: 'Позиція буде прибрана із замовлення. Сума, прибуток і статус замовлення оновляться після видалення.',
+      confirmLabel: 'Видалити товар',
+      onConfirm: async () => {
+        setBusy(true);
 
-    try {
-      await api.delete(`/api/order-parts/${part.id}/`);
+        try {
+          await api.delete(`/api/order-parts/${part.id}/`);
 
-      const fresh = await refresh();
+          const fresh = await refresh();
 
-      if (fresh) {
-        await patchOrder({ status: smartStatus(fresh) }, fresh.id);
-      }
-    } catch {
-      setMessage('Не вдалося видалити товар.');
-    } finally {
-      setBusy(false);
-    }
+          if (fresh) {
+            await patchOrder({ status: smartStatus(fresh) }, fresh.id);
+          }
+
+          setMessage('Товар видалено.');
+        } catch {
+          setMessage('Не вдалося видалити товар.');
+        } finally {
+          setBusy(false);
+        }
+      },
+    });
   };
 
   const updateDelivery = async (patch) => {
@@ -1110,6 +1122,7 @@ export default function StoreOrdersDictionaryBoard() {
           getStatusLabel={getStatusLabel}
         />
       )}
+      {confirmDialog && <ConfirmActionModal dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />}
 
       {modal === 'order' && (
         <Modal title="Нове замовлення" onClose={() => setModal(null)}>
@@ -2267,6 +2280,40 @@ function CancelModal({ onClose, onSubmit, busy }) {
         Скасувати
       </button>
     </Modal>
+  );
+}
+
+
+function ConfirmActionModal({ dialog, onClose }) {
+  const [saving, setSaving] = useState(false);
+  const isDanger = dialog?.tone !== 'safe';
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    try {
+      await dialog?.onConfirm?.();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) onClose(); }}>
+      <div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl border border-white/70 overflow-hidden">
+        <div className={`p-5 ${isDanger ? 'bg-rose-50 border-b border-rose-100' : 'bg-blue-50 border-b border-blue-100'}`}>
+          <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${isDanger ? 'text-rose-600' : 'text-blue-600'}`}>Підтвердження дії</p>
+          <h3 className="mt-1 text-xl font-black uppercase text-slate-950">{dialog?.title || 'Підтвердити дію?'}</h3>
+          {dialog?.message && <p className="mt-2 text-sm font-bold text-slate-600 leading-relaxed">{dialog.message}</p>}
+        </div>
+        <div className="p-4 flex flex-col sm:flex-row gap-2 sm:justify-end">
+          <button type="button" disabled={saving} onClick={onClose} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase text-slate-600 hover:bg-slate-50 disabled:opacity-60">Не чіпати</button>
+          <button type="button" disabled={saving} onClick={handleConfirm} className={`rounded-2xl px-5 py-3 text-xs font-black uppercase text-white shadow-lg disabled:opacity-60 ${isDanger ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'}`}>
+            {saving ? 'Виконуємо...' : (dialog?.confirmLabel || 'Підтвердити')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

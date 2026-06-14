@@ -823,19 +823,20 @@ const openDocumentPackage = (visit, isStore) => {
 
 function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
   const tabs = [
-    ['overview','Огляд',Info,'Головне по клієнту, авто і фінансах'],
-    ['passport','Техпаспорт',CarFront,'Дані авто, VIN, двигун, пробіг'],
-    ['acceptance','Акт',FileText,'Приймання авто та скарги клієнта'],
-    ['diagnostic','Діагностика',ClipboardCheck,'Діагностична карта і висновки'],
-    ['works','Роботи',Wrench,'Роботи майстра і зарплата'],
-    ['parts','Запчастини',Package,'Товари, статуси і ціни'],
-    ['recommendations','Рекомендації',ClipboardList,'Що запропонувати клієнту далі'],
-    ['summary','Підсумок',Calculator,'Фінальний контроль перед закриттям'],
+    ['overview','Огляд',Info,'Клієнт, авто, фінанси'],
+    ['passport','Техпаспорт',CarFront,'VIN, двигун, пробіг'],
+    ['acceptance','Акт',FileText,'Приймання авто'],
+    ['diagnostic','Діагностика',ClipboardCheck,'Карта і висновки'],
+    ['works','Роботи',Wrench,'Послуги і зарплата'],
+    ['parts','Запчастини',Package,'Товари і статуси'],
+    ['recommendations','Рекомендації',ClipboardList,'Наступні роботи'],
+    ['summary','Підсумок',Calculator,'Фінальний контроль'],
   ];
   const activeTab = tabs.find(([key]) => key === tab) || tabs[0];
   const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate };
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [reschedule, setReschedule] = useState(timeParts(visit.scheduled_datetime));
+
   const saveReschedule = async () => {
     if (!reschedule.date || !reschedule.time) return;
     await onPatch('scheduled_datetime', new Date(`${reschedule.date}T${reschedule.time}`).toISOString());
@@ -854,15 +855,15 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden">
-      <div className="bg-white w-full max-w-[1200px] h-[calc(100dvh-16px)] sm:h-auto sm:max-h-[calc(100vh-42px)] rounded-[30px] md:rounded-[36px] shadow-2xl flex flex-col relative overflow-hidden border border-white/60">
+    <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+      <div className="bg-white w-full max-w-[1180px] h-[calc(100dvh-18px)] sm:h-[calc(100vh-32px)] rounded-[28px] md:rounded-[34px] shadow-2xl flex flex-col relative overflow-hidden border border-white/60">
         {isScanning && <ScanOverlay />}
 
         <div className="shrink-0 border-b border-slate-200 bg-white">
-          <div className="p-4 md:p-6">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div className="px-4 py-4 md:px-5 md:py-4 space-y-3">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-3">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
                   <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-black uppercase shadow-sm">
                     <Hash size={14}/> {isStore ? 'Замовлення' : 'Візит'} №{visitId(visit)}
                   </span>
@@ -870,10 +871,10 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
                     {stoStatusLabel(visit.status)}
                   </span>
                 </div>
-                <h2 className="text-2xl md:text-3xl font-black uppercase text-slate-950 leading-tight break-words tracking-tight">
+                <h2 className="text-2xl md:text-[28px] font-black uppercase text-slate-950 leading-none tracking-tight break-words">
                   {visit.plate || `№${visitId(visit)}`}
                 </h2>
-                <p className="text-slate-600 text-sm md:text-base font-bold mt-1 break-words">
+                <p className="text-slate-600 text-sm md:text-[15px] font-bold mt-1 break-words">
                   {visit.client || 'Клієнт не вказаний'} · {visit.phone || 'телефон не вказаний'}
                 </p>
               </div>
@@ -883,44 +884,61 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
                   type="button"
                   data-document-dock-anchor="true"
                   onClick={() => openDocumentPackage(visit, isStore)}
-                  className="min-h-[44px] rounded-2xl bg-slate-900 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-black uppercase inline-flex items-center justify-center gap-2 shadow-sm whitespace-nowrap"
-                  title="Відкрити пакет документів"
+                  className="min-h-[42px] rounded-2xl bg-slate-900 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-black uppercase flex items-center justify-center gap-2 shadow-sm transition whitespace-nowrap"
                 >
                   <FileText size={16}/> Документи
                 </button>
-                <button type="button" onClick={onCancel} className="min-h-[42px] rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 px-3 py-2 inline-flex items-center justify-center hover:bg-rose-100" title="Видалити">
-                  <Trash2 size={16}/>
-                </button>
-                <button type="button" onClick={() => setVisit(null)} className="min-h-[42px] rounded-2xl bg-slate-100 text-slate-600 border border-slate-200 px-3 py-2 inline-flex items-center justify-center hover:bg-slate-200" title="Закрити">
-                  <X size={18}/>
-                </button>
+                <MacAction title="Видалити" color="bg-rose-50 !text-rose-500" onClick={onCancel}><Trash2 size={17}/></MacAction>
+                <MacAction title="Закрити" color="bg-slate-100 !text-slate-500" onClick={()=>setVisit(null)}><X size={18}/></MacAction>
               </div>
             </div>
 
-            <div className="mt-5 grid grid-cols-2 md:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               <HeaderMetric label="Статус" value={stoStatusLabel(visit.status)} />
               <HeaderMetric label="Виручка" value={money(totalOf(visit))} />
               <HeaderMetric label="Прибуток" value={money(Number(visit.profit || 0))} good />
-              <HeaderMetric label="Оплачено" value={money(Number(visit.paid_amount || visit.prepayment_amount || 0))} />
-              <HeaderMetric label="Борг" value={money(Number(visit.debt_amount || 0))} danger={Number(visit.debt_amount || 0) > 0} />
+              <HeaderMetric label="Оплачено" value={money(visit.paid_amount || visit.prepayment_amount || 0)} />
+              <HeaderMetric label="Борг" value={money(visit.debt_amount || 0)} danger={Number(visit.debt_amount || 0) > 0} />
             </div>
 
-            <div className="mt-4 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)] gap-3">
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-[11px] font-black uppercase text-slate-500 mb-2">Статус з довідника</p>
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_390px] gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 min-w-0">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Статус з довідника</p>
                 <div className="flex flex-wrap gap-2">
-                  {listOf(stoVisitStatuses).map((status) => (
+                  {stoVisitStatuses.map((status) => (
                     <StatusBtn key={status.key} active={stoStatusMatches(visit.status, status)} onClick={() => onPatch('status', status.key)} label={status.label || status.key}/>
                   ))}
                 </div>
               </div>
-              {!isStore && <StoAssignmentPanel visit={visit} workPosts={workPosts} mechanics={mechanics} onPatch={onPatch} />}
+
+              {!isStore && (
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 min-w-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <LabeledSelect label="Пост" value={visitWorkPostId(visit)} onChange={(v) => onPatch('work_post', v ? Number(v) : null)}>
+                      <option value="">Не обрано</option>
+                      {arr(workPosts).filter((post) => post.is_active !== false).map((post) => <option key={post.id} value={post.id}>{workPostName(post)}</option>)}
+                    </LabeledSelect>
+                    <LabeledSelect label="Майстер" value={visitMechanicId(visit)} onChange={(v) => onPatch('responsible_mechanic', v ? Number(v) : null)}>
+                      <option value="">Не обрано</option>
+                      {arr(mechanics).filter((mechanic) => mechanic.is_active !== false).map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanicName(mechanic)}</option>)}
+                    </LabeledSelect>
+                  </div>
+                  <p className="text-[11px] font-bold text-blue-700 mt-1.5 truncate">Пост рахує зайнятість, майстер — виконані роботи і зарплату.</p>
+                </div>
+              )}
             </div>
 
-            <div className="mt-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.65fr)] gap-3">
-              <div className="bg-white border border-slate-200 rounded-2xl p-3">
-                <p className="text-[11px] font-black uppercase text-slate-400">Запис</p>
-                <p className="font-black text-slate-800 text-sm flex items-center gap-2 mt-1"><Clock size={15} className="text-blue-600"/> {visitDate(visit)}</p>
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_520px] gap-3 items-start">
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Запис</p>
+                    <p className="text-sm font-black text-slate-900 mt-1 flex items-center gap-2"><Clock size={15} className="text-blue-500"/> {visitDate(visit)}</p>
+                  </div>
+                  <button type="button" onClick={() => setRescheduleOpen(!rescheduleOpen)} className="min-h-[38px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-black uppercase text-slate-700 hover:border-blue-300 hover:text-blue-600 transition whitespace-nowrap">
+                    Змінити запис
+                  </button>
+                </div>
                 {rescheduleOpen && (
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
                     <LabeledInput label="Нова дата" type="date" value={reschedule.date} onChange={(v)=>setReschedule({...reschedule,date:v})}/>
@@ -934,36 +952,25 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 bg-slate-50 p-3 md:p-5 overflow-hidden">
-          <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)] gap-4">
-            <aside className="hidden lg:flex min-h-0 flex-col rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
-              <p className="px-2 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-400">Розділи картки</p>
-              <div className="space-y-1.5 overflow-y-auto pr-1">
-                {tabs.map(([key,label,Icon,description]) => (
-                  <ModalNavButton key={key} active={tab === key} icon={<Icon size={16}/>} label={label} description={description} onClick={() => setTab(key)} />
-                ))}
-              </div>
-              <div className="mt-auto rounded-2xl bg-blue-50 border border-blue-100 p-3 text-[11px] font-bold text-blue-800 leading-snug">
-                Усі документи відкриваються через кнопку “Документи” у верхній частині картки.
-              </div>
-            </aside>
-
-            <div className="lg:hidden rounded-3xl border border-slate-200 bg-white p-2 shadow-sm overflow-x-auto">
-              <div className="flex gap-2 min-w-max">
-                {tabs.map(([key,label,Icon]) => (
-                  <button
-                    key={key}
-                    onClick={()=>setTab(key)}
-                    className={`min-h-[42px] shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black uppercase whitespace-nowrap transition ${tab===key?'bg-blue-600 text-white shadow-sm':'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                  >
-                    <Icon size={15}/>{label}
-                  </button>
-                ))}
-              </div>
+        <div className="min-h-0 flex-1 bg-slate-50 overflow-y-auto overflow-x-hidden">
+          <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 backdrop-blur px-3 py-3 md:px-5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+              {tabs.map(([key,label,Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={()=>setTab(key)}
+                  className={`min-h-[46px] flex items-center justify-center gap-2 rounded-2xl px-3 py-2 text-[11px] md:text-xs font-black uppercase leading-tight transition border whitespace-nowrap ${tab===key?'bg-blue-600 text-white border-blue-600 shadow-sm':'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
+                >
+                  <Icon size={15}/>{label}
+                </button>
+              ))}
             </div>
+          </div>
 
-            <section className="min-h-0 bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden flex flex-col">
-              <div className="shrink-0 border-b border-slate-100 bg-white px-4 md:px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <section className="p-3 md:p-5">
+            <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+              <div className="border-b border-slate-100 bg-white px-4 md:px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                     {React.createElement(activeTab[2], { size: 18 })}
@@ -977,12 +984,11 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
                   {isStore ? 'Замовлення' : 'СТО'} №{visitId(visit)}
                 </span>
               </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-5">
+              <div className="p-4 md:p-5 overflow-x-hidden">
                 {renderContent()}
               </div>
-            </section>
-          </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>

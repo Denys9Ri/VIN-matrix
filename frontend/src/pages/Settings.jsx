@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { LogOut, User, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench, ArrowRight, Building2, BadgeCheck, SlidersHorizontal, CreditCard, CalendarDays, Clock3, CheckCircle2, AlertTriangle, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
+import Alert from '../components/ui/Alert';
 
 const getMechanicUser = (mech = {}) => mech.user || mech.employee_user || mech.profile || {};
 const getMechanicName = (mech = {}) => {
@@ -81,7 +86,7 @@ const Settings = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState({
     user: { first_name: '', email: '', username: '' },
-    company: { name: '', logo: null, phone: '', address: '', document_footer: '', global_margin_percent: 20, business_type: 'sto' },
+    company: { name: '', logo: null, phone: '', address: '', document_footer: '', document_requisites: '', document_signature: '', document_warranty_text: '', payment_link: '', payment_requisites: '', payment_instruction: '', global_margin_percent: 20, business_type: 'sto' },
     role: 'owner',
     billing: null
   });
@@ -97,7 +102,7 @@ const Settings = () => {
   const [saveLoading, setSaveLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingNotice, setBillingNotice] = useState('');
-  const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', global_margin_percent: 20, logo: null, business_type: 'sto' });
+  const [formData, setFormData] = useState({ first_name: '', email: '', company_name: '', phone: '', address: '', document_footer: '', document_requisites: '', document_signature: '', document_warranty_text: '', payment_link: '', payment_requisites: '', payment_instruction: '', global_margin_percent: 20, logo: null, business_type: 'sto' });
   const [passData, setPassData] = useState({ old: '', new: '', confirm: '' });
   const [mechanicData, setMechanicData] = useState({ ...emptyMechanicData });
   const [editMechanicData, setEditMechanicData] = useState({ ...emptyEditMechanicData });
@@ -135,6 +140,12 @@ const Settings = () => {
           phone: nextProfile.company?.phone || '',
           address: nextProfile.company?.address || '',
           document_footer: nextProfile.company?.document_footer || '',
+          document_requisites: nextProfile.company?.document_requisites || '',
+          document_signature: nextProfile.company?.document_signature || '',
+          document_warranty_text: nextProfile.company?.document_warranty_text || '',
+          payment_link: nextProfile.company?.payment_link || '',
+          payment_requisites: nextProfile.company?.payment_requisites || '',
+          payment_instruction: nextProfile.company?.payment_instruction || '',
           global_margin_percent: nextProfile.company?.global_margin_percent || 20,
           business_type: nextProfile.company?.business_type || 'sto',
           logo: null
@@ -166,15 +177,21 @@ const Settings = () => {
     data.append('company[phone]', formData.phone);
     data.append('company[address]', formData.address);
     data.append('company[document_footer]', formData.document_footer);
+    data.append('company[document_requisites]', formData.document_requisites);
+    data.append('company[document_signature]', formData.document_signature);
+    data.append('company[document_warranty_text]', formData.document_warranty_text);
+    data.append('company[payment_link]', formData.payment_link);
+    data.append('company[payment_requisites]', formData.payment_requisites);
+    data.append('company[payment_instruction]', formData.payment_instruction);
     data.append('company[global_margin_percent]', formData.global_margin_percent);
     data.append('company[business_type]', formData.business_type);
     if (formData.logo) data.append('company[logo]', formData.logo);
     try {
       await axios.patch(`${API_BASE}/api/settings/`, data, { headers: { ...authHeaders, 'Content-Type': 'multipart/form-data' } });
-      alert("Налаштування збережено!");
+      setBillingNotice('Налаштування збережено.');
       await fetchData();
       setIsEditingProfile(false);
-    } catch { alert("Помилка збереження."); }
+    } catch { setBillingNotice('Помилка збереження.'); }
     finally { setSaveLoading(false); }
   };
 
@@ -407,8 +424,57 @@ const Settings = () => {
         </div>
       </div>
 
-      {isEditingProfile && <Modal title="Профіль компанії" onClose={() => setIsEditingProfile(false)}><form onSubmit={handleSaveProfile} className="space-y-4"><input value={formData.first_name} onChange={e => setFormData({...formData, first_name: e.target.value})} placeholder="Ваше ім'я" className="input" /><input value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} placeholder="Назва компанії" className="input" /><input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Телефон" className="input" /><input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Адреса" className="input" /><textarea value={formData.document_footer} onChange={e => setFormData({...formData, document_footer: e.target.value})} placeholder="Текст внизу документів" className="input h-24" /><div className="bg-slate-50 p-4 rounded-2xl"><label className="block text-xs font-black text-slate-400 uppercase mb-2">Режим бізнесу</label><select value={formData.business_type} onChange={e => setFormData({...formData, business_type: e.target.value})} className="input"><option value="sto">СТО</option><option value="store">Магазин автозапчастин</option></select></div><input type="number" value={formData.global_margin_percent} onChange={e => setFormData({...formData, global_margin_percent: e.target.value})} placeholder="Націнка %" className="input" /><label className="block"><span className="text-xs font-black uppercase text-slate-400 mb-2 block">Логотип</span><input type="file" onChange={e => setFormData({...formData, logo: e.target.files[0]})} className="input" /></label><button type="submit" disabled={saveLoading} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase flex items-center justify-center gap-2">{saveLoading ? <Loader2 className="animate-spin"/> : <Save size={18}/>} Зберегти</button></form></Modal>}
-      {isChangingPassword && <Modal title="Зміна пароля" onClose={() => setIsChangingPassword(false)}><form onSubmit={handleChangePassword} className="space-y-4"><input type="password" placeholder="Старий пароль" className="input" value={passData.old} onChange={e => setPassData({...passData, old: e.target.value})}/><input type="password" placeholder="Новий пароль" className="input" value={passData.new} onChange={e => setPassData({...passData, new: e.target.value})}/><input type="password" placeholder="Повторіть новий пароль" className="input" value={passData.confirm} onChange={e => setPassData({...passData, confirm: e.target.value})}/><button className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase flex items-center justify-center gap-2"><Key size={18}/> Оновити пароль</button></form></Modal>}
+      {isEditingProfile && <Modal title="Профіль компанії" onClose={() => setIsEditingProfile(false)}>
+        <form onSubmit={handleSaveProfile} className="space-y-5">
+          {billingNotice && <Alert variant={billingNotice.includes('Помилка') ? 'error' : 'success'}>{billingNotice}</Alert>}
+          <Card className="space-y-4">
+            <SectionTitle title="Дані компанії" desc="Основні контакти для CRM і документів." />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input label="Ваше ім'я" value={formData.first_name} onChange={e => setFormData({...formData, first_name: e.target.value})} />
+              <Input label="Назва компанії" value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} />
+              <Input label="Телефон" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+              <Input label="Адреса" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+            </div>
+          </Card>
+          <Card className="space-y-4">
+            <SectionTitle title="Режим бізнесу" desc="Впливає на назви дошок і робочі сценарії." />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Select label="Тип бізнесу" value={formData.business_type} onChange={e => setFormData({...formData, business_type: e.target.value})} options={[{value:'sto', label:'СТО'}, {value:'store', label:'Магазин автозапчастин'}]} />
+              <Input type="number" label="Глобальна націнка, %" value={formData.global_margin_percent} onChange={e => setFormData({...formData, global_margin_percent: e.target.value})} />
+            </div>
+          </Card>
+          <Card className="space-y-4">
+            <SectionTitle title="Документи" desc="Окремі реквізити для актів, чеків і PDF." />
+            <Textarea label="Текст у футері документів" value={formData.document_footer} onChange={v => setFormData({...formData, document_footer: v})} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input label="Підпис" value={formData.document_signature} onChange={e => setFormData({...formData, document_signature: e.target.value})} />
+              <Textarea label="Текст гарантії" value={formData.document_warranty_text} onChange={v => setFormData({...formData, document_warranty_text: v})} compact />
+            </div>
+            <Textarea label="Реквізити для документів" value={formData.document_requisites} onChange={v => setFormData({...formData, document_requisites: v})} />
+          </Card>
+          <Card className="space-y-4">
+            <SectionTitle title="Оплата" desc="Ці дані показуються менеджеру для швидкої відправки клієнту." />
+            <Input label="Посилання на оплату" value={formData.payment_link} onChange={e => setFormData({...formData, payment_link: e.target.value})} placeholder="https://..." />
+            <Textarea label="Реквізити для оплати" value={formData.payment_requisites} onChange={v => setFormData({...formData, payment_requisites: v})} />
+            <Textarea label="Коротка інструкція для клієнта" value={formData.payment_instruction} onChange={v => setFormData({...formData, payment_instruction: v})} compact />
+          </Card>
+          <Card className="space-y-4">
+            <SectionTitle title="Логотип" desc="PNG або JPG для документів і шапки компанії." />
+            <label className="block rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/50 transition">
+              <input type="file" accept="image/*" onChange={e => setFormData({...formData, logo: e.target.files[0]})} className="hidden" />
+              <ImageIcon className="mx-auto text-blue-600" size={28}/>
+              <p className="mt-2 font-black text-slate-900">{formData.logo?.name || 'Оберіть файл логотипа'}</p>
+              <p className="text-xs font-semibold text-slate-500 mt-1">Поточний логотип не буде змінено, якщо файл не обрано.</p>
+            </label>
+            {profile.company?.logo && <img src={profile.company.logo} alt="Логотип" className="max-h-20 rounded-2xl border border-slate-100 bg-white p-2" />}
+          </Card>
+          <div className="sticky bottom-0 -mx-6 -mb-6 bg-white/95 border-t border-slate-100 p-5 rounded-b-3xl flex flex-col sm:flex-row gap-3 sm:justify-end">
+            <Button type="button" variant="secondary" onClick={() => setIsEditingProfile(false)}>Скасувати</Button>
+            <Button type="submit" loading={saveLoading} icon={<Save size={18}/>}>Зберегти</Button>
+          </div>
+        </form>
+      </Modal>}
+            {isChangingPassword && <Modal title="Зміна пароля" onClose={() => setIsChangingPassword(false)}><form onSubmit={handleChangePassword} className="space-y-4"><input type="password" placeholder="Старий пароль" className="input" value={passData.old} onChange={e => setPassData({...passData, old: e.target.value})}/><input type="password" placeholder="Новий пароль" className="input" value={passData.new} onChange={e => setPassData({...passData, new: e.target.value})}/><input type="password" placeholder="Повторіть новий пароль" className="input" value={passData.confirm} onChange={e => setPassData({...passData, confirm: e.target.value})}/><button className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase flex items-center justify-center gap-2"><Key size={18}/> Оновити пароль</button></form></Modal>}
       {isAddingWorkPost && <WorkPostModal title="Новий пост / підйомник" data={workPostData} setData={setWorkPostData} onSubmit={handleAddWorkPost} onClose={() => setIsAddingWorkPost(false)} />}
       {isEditingWorkPost && <WorkPostModal title="Редагувати пост" data={editWorkPostData} setData={setEditWorkPostData} onSubmit={handleUpdateWorkPost} onClose={() => setIsEditingWorkPost(null)} />}
       {isAddingMechanic && <MechanicModal title="Новий працівник" data={mechanicData} setData={setMechanicData} onSubmit={handleAddMechanic} onClose={() => setIsAddingMechanic(false)} />}
@@ -417,6 +483,9 @@ const Settings = () => {
   );
 };
 
+
+const SectionTitle = ({ title, desc }) => <div><h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-900">{title}</h3>{desc && <p className="mt-1 text-xs font-semibold text-slate-500">{desc}</p>}</div>;
+const Textarea = ({ label, value, onChange, compact }) => <label className="block space-y-1.5"><span className="text-sm font-semibold text-slate-700">{label}</span><textarea value={value || ''} onChange={e => onChange(e.target.value)} className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 ${compact ? 'min-h-[88px]' : 'min-h-[120px]'}`} /></label>;
 
 const WorkPostsPanel = ({ posts = [], onAdd, onEdit, onDelete }) => (
   <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">

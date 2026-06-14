@@ -273,6 +273,7 @@ export default function Visits() {
   const [newRecommendation, setNewRecommendation] = useState({ ...emptyRecommendation });
   const [workflowInfo, setWorkflowInfo] = useState({ acceptance: {}, diagnostic: {} });
   const [toast, setToast] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [foundExisting, setFoundExisting] = useState(false);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -586,15 +587,67 @@ export default function Visits() {
       setToast(`${label} скопійовано`);
       setTimeout(() => setToast(''), 2200);
     } catch {
-      window.prompt('Скопіюйте значення:', value);
+      uiToast.warning('Не вдалося скопіювати автоматично. Виділіть значення вручну.');
     }
   };
 
-  const deleteService = async (id) => { if (window.confirm('Видалити роботу?')) { await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers }); refreshSelected(); } };
-  const deletePart = async (id) => { if (window.confirm('Видалити запчастину?')) { await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers }); refreshSelected(); } };
+  const askConfirm = ({ title, message, confirmLabel = 'Підтвердити', tone = 'danger', onConfirm }) => {
+    setConfirmDialog({ title, message, confirmLabel, tone, onConfirm });
+  };
+
+  const deleteService = (id) => {
+    askConfirm({
+      title: 'Видалити роботу?',
+      message: 'Робота буде прибрана з візиту. Сума візиту перерахується після оновлення.',
+      confirmLabel: 'Видалити роботу',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_BASE}/api/order-services/${id}/`, { headers });
+          uiToast.success('Роботу видалено.');
+          refreshSelected();
+        } catch {
+          uiToast.error('Не вдалося видалити роботу.');
+        }
+      },
+    });
+  };
+
+  const deletePart = (id) => {
+    askConfirm({
+      title: 'Видалити запчастину?',
+      message: 'Запчастина буде прибрана з візиту. Якщо вона була пов’язана зі складом, перевірте резерв після видалення.',
+      confirmLabel: 'Видалити запчастину',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_BASE}/api/order-parts/${id}/`, { headers });
+          uiToast.success('Запчастину видалено.');
+          refreshSelected();
+        } catch {
+          uiToast.error('Не вдалося видалити запчастину.');
+        }
+      },
+    });
+  };
+
   const updatePartStatus = async (id, status) => { await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { status }, { headers }); refreshSelected(); };
   const printPdf = async () => { const w = window.open('', '_blank'); if (!w) return; try { const r = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, { headers, responseType: 'text' }); w.document.write(r.data); w.document.close(); } catch { w.close(); uiToast.error('Не вдалося згенерувати документ'); } };
-  const cancelVisit = async () => { if (!window.confirm('Скасувати запис?')) return; await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers }); setSelectedVisit(null); fetchData(); };
+  const cancelVisit = () => {
+    askConfirm({
+      title: 'Скасувати запис?',
+      message: 'Візит буде скасовано/видалено з дошки. Цю дію варто виконувати тільки якщо запис справді більше не потрібен.',
+      confirmLabel: 'Скасувати запис',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_BASE}/api/visits/${selectedVisit.id}/`, { headers });
+          uiToast.success('Запис скасовано.');
+          setSelectedVisit(null);
+          fetchData();
+        } catch {
+          uiToast.error('Не вдалося скасувати запис.');
+        }
+      },
+    });
+  };
 
   const boardVisits = listOf(visits);
   const boardStatuses = useMemo(() => {
@@ -659,6 +712,7 @@ export default function Visits() {
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] bg-slate-900 text-white px-5 py-3 rounded-2xl text-sm font-black shadow-xl">{toast}</div>}
       {isCreatingVisit && <CreateVisitModal data={newVisitData} setData={setNewVisitData} onClose={() => { setIsCreatingVisit(false); setScanDraft(null); }} onSubmit={createVisit} onPlateBlur={handlePlateBlur} foundExisting={foundExisting} isScanning={isScanning} cameraRef={cameraInputRef} galleryRef={galleryInputRef} onScan={scanNewVisit} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={acceptNewScan} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
       {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
+      {confirmDialog && <ConfirmActionModal dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />}
     </AppPage>
   );
 }
@@ -1402,6 +1456,40 @@ function Summary({ visit, recommendations, workflowInfo, editComment, setEditCom
 }
 function CarFields({data,setData}){return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4"><div className="flex justify-between items-center border-b pb-2 mb-3"><p className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Дані автомобіля</p><span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border ${data.engine_review_status==='needs_review'?'bg-amber-50 text-amber-700 border-amber-100':'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>{data.engine_review_status==='needs_review'?'Двигун перевірити':'Перевірено вручну'}</span></div><div className="grid grid-cols-2 gap-3"><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v,engine_review_status:'manual'})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v,engine_review_status:'manual'})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v,engine_review_status:'manual'})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v,engine_review_status:'manual'})}/></div></div></div>}
 function ScanReviewCard({data,setData,onApply,onCancel}){return <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 space-y-3"><div className="flex gap-2"><AlertTriangle size={18} className="text-amber-600 shrink-0"/><div><p className="font-black text-amber-800 text-sm">Результат скану потребує перевірки</p><p className="text-xs font-semibold text-amber-700">Це обʼєднаний результат: нове фото доповнює вже знайдені дані.</p></div></div><div className="grid grid-cols-2 gap-2"><LabeledInput label="Держ. номер" value={data.plate} onChange={(v)=>setData({...data,plate:v.toUpperCase()})}/><LabeledInput label="VIN" value={data.vin_code||data.vin_candidate} onChange={(v)=>setData({...data,vin_code:v.toUpperCase()})}/><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v})}/></div></div>{data.warnings?.length>0&&<div className="text-xs font-bold text-amber-700 space-y-1">{data.warnings.map((w,i)=><p key={i}>• {w}</p>)}</div>}<div className="flex flex-col sm:flex-row gap-2"><button type="button" onClick={onApply} className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Прийняти дані</button><button type="button" onClick={onCancel} className="flex-1 bg-white border border-amber-200 text-amber-700 rounded-xl py-3 text-xs font-black uppercase">Не використовувати</button></div></div>}
+
+function ConfirmActionModal({ dialog, onClose }) {
+  const [saving, setSaving] = useState(false);
+  const isDanger = dialog?.tone !== 'safe';
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    try {
+      await dialog?.onConfirm?.();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) onClose(); }}>
+      <div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl border border-white/70 overflow-hidden">
+        <div className={`p-5 ${isDanger ? 'bg-rose-50 border-b border-rose-100' : 'bg-blue-50 border-b border-blue-100'}`}>
+          <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${isDanger ? 'text-rose-600' : 'text-blue-600'}`}>Підтвердження дії</p>
+          <h3 className="mt-1 text-xl font-black uppercase text-slate-950">{dialog?.title || 'Підтвердити дію?'}</h3>
+          {dialog?.message && <p className="mt-2 text-sm font-bold text-slate-600 leading-relaxed">{dialog.message}</p>}
+        </div>
+        <div className="p-4 flex flex-col sm:flex-row gap-2 sm:justify-end">
+          <button type="button" disabled={saving} onClick={onClose} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase text-slate-600 hover:bg-slate-50 disabled:opacity-60">Не чіпати</button>
+          <button type="button" disabled={saving} onClick={handleConfirm} className={`rounded-2xl px-5 py-3 text-xs font-black uppercase text-white shadow-lg disabled:opacity-60 ${isDanger ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'}`}>
+            {saving ? 'Виконуємо...' : (dialog?.confirmLabel || 'Підтвердити')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LabeledInput({label,value,onChange,type='text',required,hint,onBlur}){
   return (
     <label className="block min-w-0">

@@ -128,14 +128,67 @@ const UniversalSearch = () => {
     localStorage.removeItem('partSearchHistory');
   };
 
+  const isUtrSource = (sourceName) => {
+    const name = String(sourceName || '').toUpperCase();
+    return name.includes('ЮНІК') || name.includes('ЮНИК') || name.includes('UNIQ') || name.includes('UNIQUE') || name.includes('UTR');
+  };
+
+  const uniqueParts = (items, parent = null) => {
+    const seen = new Set();
+    return (Array.isArray(items) ? items : [])
+      .filter(Boolean)
+      .filter((part) => {
+        const key = `${String(part.article || '').replace(/[^A-Za-zА-Яа-яІіЇїЄєҐґ0-9]/g, '').toUpperCase()}::${String(part.brand || '').toUpperCase()}::${String(part.sku || '')}`;
+        if (!key.trim() || seen.has(key)) return false;
+        seen.add(key);
+        if (!parent) return true;
+        const sameSku = String(part.sku || '') && String(part.sku || '') === String(parent.sku || '');
+        const sameSupplier = String(part.supplier_id || '') === String(parent.supplier_id || '');
+        const sameArticle = String(part.article || '').replace(/[^A-Za-zА-Яа-яІіЇїЄєҐґ0-9]/g, '').toUpperCase() === String(parent.article || '').replace(/[^A-Za-zА-Яа-яІіЇїЄєҐґ0-9]/g, '').toUpperCase();
+        const sameBrand = String(part.brand || '').toUpperCase() === String(parent.brand || '').toUpperCase();
+        return !(sameSupplier && (sameSku || (sameArticle && sameBrand)));
+      });
+  };
+
   const fetchAnalogs = async (item) => {
     setAnalogLoading(prev => ({ ...prev, [item.id]: true }));
     try {
-      const res = await axios.get(`${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${item.sku}&brand=${encodeURIComponent(item.brand)}`, {
+      const supplierAnalogUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&supplier_id=${item.supplier_id}&sku=${encodeURIComponent(item.sku || '')}&brand=${encodeURIComponent(item.brand || '')}`;
+      const res = await axios.get(supplierAnalogUrl, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      const processed = res.data.map(a => ({ ...a, selectedWhIdx: 0 }));
+
+      let collected = uniqueParts(res.data, item);
+
+      // У Юнік Трейд немає стабільного окремого endpoint для аналогів.
+      // Якщо UTR не повернув кроси, робимо професійний fallback: спочатку
+      // загальний cross-search по всіх підключених постачальниках, потім прямий
+      // пошук цього коду як альтернативні пропозиції.
+      if (collected.length === 0 && isUtrSource(item.source)) {
+        try {
+          const globalAnalogUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}&analog=true&brand=${encodeURIComponent(item.brand || '')}`;
+          const globalAnalog = await axios.get(globalAnalogUrl, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          collected = uniqueParts(globalAnalog.data, item);
+        } catch (fallbackErr) {
+          console.warn('UTR global analog fallback failed', fallbackErr);
+        }
+      }
+
+      if (collected.length === 0 && isUtrSource(item.source)) {
+        try {
+          const globalDirectUrl = `${API_BASE}/api/search-parts/?q=${encodeURIComponent(item.article)}`;
+          const globalDirect = await axios.get(globalDirectUrl, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          collected = uniqueParts(globalDirect.data, item);
+        } catch (fallbackErr) {
+          console.warn('UTR direct fallback failed', fallbackErr);
+        }
+      }
+
+      const processed = collected.map(a => ({ ...a, selectedWhIdx: 0 }));
 
       processed.sort((a, b) => {
         const checkAvailability = (part) => {
@@ -166,6 +219,7 @@ const UniversalSearch = () => {
       setAnalogLoading(prev => ({ ...prev, [item.id]: false }));
     }
   };
+
 
   const toggleAnalogs = (item) => {
     const id = item.id;

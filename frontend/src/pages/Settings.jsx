@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { LogOut, User, Loader2, X, Save, Key, Plus, Trash2, DollarSign, Pencil, Image as ImageIcon, MapPin, Phone, Users, ShieldAlert, FileText, FileSpreadsheet, Wrench, ArrowRight, Building2, BadgeCheck, SlidersHorizontal, CreditCard, CalendarDays, Clock3, CheckCircle2, AlertTriangle, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api/axios';
+import useToast from '../components/ui/useToast';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
@@ -84,6 +85,7 @@ const billingTone = (status) => {
 
 const Settings = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const [profile, setProfile] = useState({
     user: { first_name: '', email: '', username: '' },
     company: { name: '', logo: null, phone: '', address: '', document_footer: '', document_requisites: '', document_signature: '', document_warranty_text: '', payment_link: '', payment_requisites: '', payment_instruction: '', global_margin_percent: 20, business_type: 'sto' },
@@ -108,16 +110,21 @@ const Settings = () => {
   const [editMechanicData, setEditMechanicData] = useState({ ...emptyEditMechanicData });
   const [workPostData, setWorkPostData] = useState({ ...emptyWorkPost });
   const [editWorkPostData, setEditWorkPostData] = useState({ ...emptyWorkPost });
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
-  const API_BASE = "http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io";
-  const token = localStorage.getItem('access_token');
-  const authHeaders = { Authorization: `Bearer ${token}` };
+  const openConfirm = (config) => setConfirmDialog(config);
+  const closeConfirm = () => setConfirmDialog(null);
+  const runConfirm = async () => {
+    const action = confirmDialog?.onConfirm;
+    setConfirmDialog(null);
+    if (action) await action();
+  };
 
   useEffect(() => { fetchData(); }, [navigate]);
 
   const fetchData = async () => {
     try {
-      const profileRes = await axios.get(`${API_BASE}/api/settings/`, { headers: authHeaders });
+      const profileRes = await api.get('/api/settings/');
       const nextProfile = profileRes.data || {};
       setProfile({
         user: nextProfile.user || {},
@@ -128,8 +135,8 @@ const Settings = () => {
       });
       if (nextProfile.role === 'owner') {
         const [mechanicsRes, workPostsRes] = await Promise.all([
-          axios.get(`${API_BASE}/api/mechanics/`, { headers: authHeaders }).catch(() => ({ data: [] })),
-          axios.get(`${API_BASE}/api/work-posts/`, { headers: authHeaders }).catch(() => ({ data: [] })),
+          api.get('/api/mechanics/').catch(() => ({ data: [] })),
+          api.get('/api/work-posts/').catch(() => ({ data: [] })),
         ]);
         setMechanics(Array.isArray(mechanicsRes.data) ? mechanicsRes.data : []);
         setWorkPosts(Array.isArray(workPostsRes.data) ? workPostsRes.data : []);
@@ -160,7 +167,7 @@ const Settings = () => {
     setBillingLoading(true);
     setBillingNotice('');
     try {
-      const res = await axios.post(`${API_BASE}/api/billing/payment-request/`, { method, comment: method === 'cash' ? 'Клієнт планує оплату готівкою' : 'Клієнт натиснув “Я оплатив” у кабінеті' }, { headers: authHeaders });
+      const res = await api.post('/api/billing/payment-request/', { method, comment: method === 'cash' ? 'Клієнт планує оплату готівкою' : 'Клієнт натиснув “Я оплатив” у кабінеті' });
       setBillingNotice(res.data?.message || 'Заявку створено. Ми перевіримо оплату і підтвердимо доступ.');
       await fetchData();
     } catch (error) {
@@ -187,7 +194,7 @@ const Settings = () => {
     data.append('company[business_type]', formData.business_type);
     if (formData.logo) data.append('company[logo]', formData.logo);
     try {
-      await axios.patch(`${API_BASE}/api/settings/`, data, { headers: { ...authHeaders, 'Content-Type': 'multipart/form-data' } });
+      await api.patch('/api/settings/', data, { headers: { 'Content-Type': 'multipart/form-data' } });
       setBillingNotice('Налаштування збережено.');
       await fetchData();
       setIsEditingProfile(false);
@@ -197,43 +204,65 @@ const Settings = () => {
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    if (passData.new !== passData.confirm) return alert("Паролі не збігаються");
+    if (passData.new !== passData.confirm) {
+      toast.warning('Паролі не збігаються.');
+      return;
+    }
+
     try {
-      await axios.post(`${API_BASE}/api/change-password/`, { old_password: passData.old, new_password: passData.new }, { headers: authHeaders });
-      alert("Пароль змінено!");
+      await api.post('/api/change-password/', {
+        old_password: passData.old,
+        new_password: passData.new,
+      });
+      toast.success('Пароль змінено.');
       setIsChangingPassword(false);
       setPassData({ old: '', new: '', confirm: '' });
-    } catch (e) { alert(e.response?.data?.error || "Помилка зміни пароля"); }
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Помилка зміни пароля.');
+    }
   };
 
   const handleAddMechanic = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_BASE}/api/mechanics/`, mechanicPayload(mechanicData), { headers: authHeaders });
-      alert("Працівника додано!");
+      await api.post('/api/mechanics/', mechanicPayload(mechanicData));
+      toast.success('Працівника додано.');
       setIsAddingMechanic(false);
       setMechanicData({ ...emptyMechanicData });
       fetchData();
-    } catch (error) { alert(error.response?.data?.error || "Помилка. Логін може бути зайнятий."); }
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Помилка. Логін може бути зайнятий.');
+    }
   };
 
-  const handleDeleteMechanic = async (id) => {
-    if (window.confirm("Видалити цього працівника назавжди?")) {
-      try {
-        await axios.delete(`${API_BASE}/api/mechanics/${id}/`, { headers: authHeaders });
-        fetchData();
-      } catch { alert("Помилка видалення"); }
-    }
+  const handleDeleteMechanic = (id) => {
+    openConfirm({
+      title: 'Видалити працівника?',
+      message: 'Працівника буде видалено назавжди. Якщо він уже привʼязаний до візитів, краще спочатку перевірити історію.',
+      confirmText: 'Видалити',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/api/mechanics/${id}/`);
+          toast.success('Працівника видалено.');
+          fetchData();
+        } catch {
+          toast.error('Помилка видалення працівника.');
+        }
+      },
+    });
   };
 
   const handleUpdateMechanic = async (e) => {
     e.preventDefault();
     try {
-      await axios.patch(`${API_BASE}/api/mechanics/${isEditingMechanic}/`, mechanicPayload(editMechanicData, true), { headers: authHeaders });
-      alert("Дані працівника оновлено!");
+      await api.patch(`/api/mechanics/${isEditingMechanic}/`, mechanicPayload(editMechanicData, true));
+      toast.success('Дані працівника оновлено.');
       setIsEditingMechanic(null);
       fetchData();
-    } catch { alert("Помилка оновлення"); }
+    } catch {
+      toast.error('Помилка оновлення працівника.');
+    }
   };
 
   const normalizeWorkPostPayload = (data = {}) => {
@@ -250,40 +279,56 @@ const Settings = () => {
   const handleAddWorkPost = async (e) => {
     e.preventDefault();
     const payload = normalizeWorkPostPayload(workPostData);
-    if (!payload.name) return alert('Вкажіть назву поста.');
+    if (!payload.name) {
+      toast.warning('Вкажіть назву поста.');
+      return;
+    }
+
     try {
-      await axios.post(`${API_BASE}/api/work-posts/`, payload, { headers: authHeaders });
-      alert('Пост додано!');
+      await api.post('/api/work-posts/', payload);
+      toast.success('Пост додано.');
       setIsAddingWorkPost(false);
       setWorkPostData({ ...emptyWorkPost, number: workPosts.length + 2, sort_order: (workPosts.length + 2) * 10 });
       fetchData();
     } catch (error) {
-      alert(error.response?.data?.error || 'Помилка створення поста.');
+      toast.error(error.response?.data?.error || 'Помилка створення поста.');
     }
   };
 
   const handleUpdateWorkPost = async (e) => {
     e.preventDefault();
     const payload = normalizeWorkPostPayload(editWorkPostData);
-    if (!payload.name) return alert('Вкажіть назву поста.');
+    if (!payload.name) {
+      toast.warning('Вкажіть назву поста.');
+      return;
+    }
+
     try {
-      await axios.patch(`${API_BASE}/api/work-posts/${isEditingWorkPost}/`, payload, { headers: authHeaders });
-      alert('Пост оновлено!');
+      await api.patch(`/api/work-posts/${isEditingWorkPost}/`, payload);
+      toast.success('Пост оновлено.');
       setIsEditingWorkPost(null);
       fetchData();
     } catch {
-      alert('Помилка оновлення поста.');
+      toast.error('Помилка оновлення поста.');
     }
   };
 
-  const handleDeleteWorkPost = async (id) => {
-    if (!window.confirm('Видалити цей пост? Якщо він уже використовується у візитах, краще вимкнути його через редагування.')) return;
-    try {
-      await axios.delete(`${API_BASE}/api/work-posts/${id}/`, { headers: authHeaders });
-      fetchData();
-    } catch {
-      alert('Не вдалося видалити пост. Якщо він уже використовується у візитах, відкрийте редагування і вимкніть “Активний”.');
-    }
+  const handleDeleteWorkPost = (id) => {
+    openConfirm({
+      title: 'Видалити пост?',
+      message: 'Якщо пост уже використовується у візитах, безпечніше відкрити редагування і вимкнути “Активний”. Видаляти варто тільки зайві або помилково створені пости.',
+      confirmText: 'Видалити пост',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/api/work-posts/${id}/`);
+          toast.success('Пост видалено.');
+          fetchData();
+        } catch {
+          toast.error('Не вдалося видалити пост. Якщо він уже використовується у візитах, відкрийте редагування і вимкніть “Активний”.');
+        }
+      },
+    });
   };
 
   const openAddWorkPostModal = () => {
@@ -479,6 +524,7 @@ const Settings = () => {
       {isEditingWorkPost && <WorkPostModal title="Редагувати пост" data={editWorkPostData} setData={setEditWorkPostData} onSubmit={handleUpdateWorkPost} onClose={() => setIsEditingWorkPost(null)} />}
       {isAddingMechanic && <MechanicModal title="Новий працівник" data={mechanicData} setData={setMechanicData} onSubmit={handleAddMechanic} onClose={() => setIsAddingMechanic(false)} />}
       {isEditingMechanic && <MechanicModal title="Редагувати працівника" data={editMechanicData} setData={setEditMechanicData} onSubmit={handleUpdateMechanic} onClose={() => setIsEditingMechanic(null)} isEdit />}
+      {confirmDialog && <ConfirmModal dialog={confirmDialog} onCancel={closeConfirm} onConfirm={runConfirm} />}
     </div>
   );
 };
@@ -589,6 +635,34 @@ const Modal = ({ title, children, onClose }) => (
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-5 md:p-6">
         {children}
+      </div>
+    </div>
+  </div>
+);
+
+const ConfirmModal = ({ dialog, onCancel, onConfirm }) => (
+  <div className="fixed inset-0 z-[70] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="p-5 border-b border-slate-100">
+        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-rose-600 mb-1">Підтвердження</p>
+        <h3 className="text-xl font-black uppercase text-slate-950">{dialog.title || 'Підтвердити дію?'}</h3>
+        {dialog.message && <p className="mt-2 text-sm font-semibold text-slate-500 leading-relaxed">{dialog.message}</p>}
+      </div>
+      <div className="p-4 flex flex-col sm:flex-row sm:justify-end gap-2 bg-slate-50">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase text-slate-700 hover:bg-slate-100"
+        >
+          Скасувати
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="rounded-2xl bg-rose-600 px-5 py-3 text-xs font-black uppercase text-white hover:bg-rose-700 shadow-lg shadow-rose-100"
+        >
+          {dialog.confirmText || 'Підтвердити'}
+        </button>
       </div>
     </div>
   </div>

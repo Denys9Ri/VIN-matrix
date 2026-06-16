@@ -52,6 +52,7 @@ from apps.core.visit_workflow_views import (
     VisitAcceptanceActView,
     VisitDiagnosticChecklistView,
 )
+from apps.core.document_views import VisitDocumentView
 from apps.core.ocr_views import RecognizeDocumentView
 from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
@@ -132,6 +133,7 @@ def openapi_schema(request):
             "/api/visits/": {"get": {"summary": "List visits"}, "post": {"summary": "Create visit"}},
             "/api/payments/": {"get": {"summary": "List visit payments"}},
             "/api/inventory/": {"get": {"summary": "List inventory"}, "post": {"summary": "Create inventory item"}},
+            "/api/documents/visits/{visit_id}/{doc_type}/": {"get": {"summary": "Render visit document"}},
         },
     })
 
@@ -217,6 +219,9 @@ urlpatterns = [
     path('api/visits/<int:pk>/add-payment/', VisitAddPaymentView.as_view(), name='visit-add-payment'),
     path('api/visits/<int:pk>/mark-paid/', VisitMarkPaidView.as_view(), name='visit-mark-paid'),
     path('api/visits/<int:pk>/debt-reminder/', VisitDebtReminderView.as_view(), name='visit-debt-reminder'),
+
+    path('api/documents/visits/<int:visit_id>/<str:doc_type>/', VisitDocumentView.as_view(), name='visit-document'),
+    path('api/visits/<int:visit_id>/documents/<str:doc_type>/', VisitDocumentView.as_view(), name='visit-document-alt'),
 
     path('api/visits/recognize_document/', RecognizeDocumentView.as_view(), name='recognize-document'),
     path('api/visit-acceptance-act/', VisitAcceptanceActView.as_view(), name='visit-acceptance-act'),

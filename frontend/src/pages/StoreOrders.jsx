@@ -1,1 +1,1 @@
-export { default } from './StoreOrdersDictionaryBoard.jsx';
+export { default } from './StoreOrdersStage7.jsx';

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Clock3, Copy, Download, Eye, FileText, History, Printer, ReceiptText, ShieldCheck, Undo2, X } from 'lucide-react';
+import { CheckCircle2, Clock3, Copy, Download, Eye, FileText, History, Printer, ReceiptText, Share2, ShieldCheck, Undo2, X } from 'lucide-react';
 import api from '../../api/axios';
 
 const money = (value) => `${Number(value || 0).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴`;
@@ -84,6 +84,17 @@ async function copyTextToClipboard(text) {
   }
 }
 
+function canShareDocumentFile() {
+  try {
+    if (!window.isSecureContext || !navigator?.share || typeof File === 'undefined') return false;
+    const file = new File(['Документ'], 'document.html', { type: 'text/html' });
+    if (!navigator.canShare) return true;
+    return navigator.canShare({ files: [file] });
+  } catch {
+    return false;
+  }
+}
+
 export default function DocumentDock() {
   const [ctx, setCtx] = useState(null);
   const [open, setOpen] = useState(false);
@@ -96,6 +107,8 @@ export default function DocumentDock() {
   const [sendType, setSendType] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [shareAvailable, setShareAvailable] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const loadDocumentHistory = async (id = visit?.id) => {
     if (!id) return;
@@ -126,6 +139,7 @@ export default function DocumentDock() {
       setSettings(settingsRes.data);
       setActiveType(currentCtx.mode === 'store' ? 'receipt' : 'service_act');
       setOpen(true);
+      setShareAvailable(canShareDocumentFile());
       await loadDocumentHistory(visitRes.data?.id || currentCtx.id);
     } catch {
       setNotice('Не вдалося підготувати документи. Оновіть сторінку і спробуйте ще раз.');
@@ -138,6 +152,7 @@ export default function DocumentDock() {
     const update = () => {
       setCtx(findContext());
       setEmbeddedTrigger(Boolean(document.querySelector('[data-document-dock-anchor="true"]')));
+      setShareAvailable(canShareDocumentFile());
     };
 
     update();
@@ -224,6 +239,32 @@ export default function DocumentDock() {
       downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
       await recordDocumentEvent(type, 'downloaded', 'fallback');
       setNotice('Документ скачано локальним бланком. Його можна прикріпити в Telegram або Viber.');
+    }
+  };
+
+  const shareDocument = async (type) => {
+    if (!visit?.id) return false;
+    const meta = docTypes[type] || docTypes.receipt;
+    const html = buildDocumentHtml(type, visit, settings);
+    const file = new File([html], `${fileSlug(meta.title)}-${visit.id}.html`, { type: 'text/html' });
+    const text = `Документ “${meta.title}” по замовленню №${visit.id}. Сума: ${money(documentTotals(type, visit).total)}.`;
+
+    try {
+      if (!canShareDocumentFile()) throw new Error('Share is not supported');
+      setSharing(true);
+      await navigator.share({ title: `${meta.title} №${visit.id}`, text, files: [file] });
+      await recordDocumentEvent(type, 'sent', 'native_share');
+      setNotice('Документ передано в системне меню “Поділитись”.');
+      setSendType(null);
+      return true;
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        setNotice('На цьому пристрої “Поділитись” недоступне. Скачайте документ і прикріпіть вручну.');
+      }
+      return false;
+    } finally {
+      setSharing(false);
+      setShareAvailable(canShareDocumentFile());
     }
   };
 
@@ -317,7 +358,7 @@ export default function DocumentDock() {
                   <ActionButton onClick={() => openWindow(activeType, false)} icon={<Eye size={15}/>} label="Переглянути" />
                   <ActionButton onClick={() => openWindow(activeType, true)} icon={<Printer size={15}/>} label="Друк" />
                   <ActionButton onClick={() => downloadDocument(activeType)} icon={<Download size={15}/>} label="PDF" />
-                  <ActionButton onClick={() => setSendType(activeType)} icon={<Download size={15}/>} label="Скачати" dark />
+                  <ActionButton onClick={() => setSendType(activeType)} icon={shareAvailable ? <Share2 size={15}/> : <Download size={15}/>} label={shareAvailable ? 'Поділитись' : 'Скачати'} dark />
                 </div>
               </div>
 
@@ -330,7 +371,7 @@ export default function DocumentDock() {
           </div>
         </div>
 
-        {sendType && <DownloadDialog type={sendType} visit={visit} settings={settings} onClose={() => setSendType(null)} onDownload={() => downloadDocument(sendType)} onCopy={async () => { await recordDocumentEvent(sendType, 'copied', 'copy'); setNotice('Текст скопійовано.'); }} />}
+        {sendType && <DownloadDialog type={sendType} visit={visit} settings={settings} shareAvailable={shareAvailable} sharing={sharing} onClose={() => setSendType(null)} onShare={() => shareDocument(sendType)} onDownload={() => downloadDocument(sendType)} onCopy={async () => { await recordDocumentEvent(sendType, 'copied', 'copy'); setNotice('Текст скопійовано.'); }} />}
       </div>,
       document.body
     )}
@@ -341,7 +382,7 @@ function ActionButton({ icon, label, onClick, dark = false }) {
   return <button type="button" onClick={onClick} className={`${dark ? 'bg-slate-900 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'} rounded-2xl px-3 py-2.5 text-[11px] font-black uppercase flex items-center justify-center gap-1.5 transition whitespace-nowrap`}>{icon}{label}</button>;
 }
 
-function DownloadDialog({ type, visit, settings, onClose, onDownload, onCopy }) {
+function DownloadDialog({ type, visit, settings, shareAvailable, sharing, onClose, onShare, onDownload, onCopy }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
@@ -353,6 +394,12 @@ function DownloadDialog({ type, visit, settings, onClose, onDownload, onCopy }) 
     await onDownload?.();
     setDownloaded(true);
     window.setTimeout(() => setDownloaded(false), 1800);
+  };
+
+  const handleShare = async () => {
+    const ok = await onShare?.();
+    if (!ok) return;
+    setDownloaded(false);
   };
 
   const handleCopy = async () => {
@@ -373,20 +420,31 @@ function DownloadDialog({ type, visit, settings, onClose, onDownload, onCopy }) 
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Файл для клієнта</p>
           <h3 className="text-xl font-black uppercase mt-1">{meta.title}</h3>
-          <p className="text-xs font-bold text-blue-100 mt-1">Скачайте документ і прикріпіть його в Telegram, Viber або іншому месенджері.</p>
+          <p className="text-xs font-bold text-blue-100 mt-1">{shareAvailable ? 'Натисніть “Поділитись” і вручну оберіть Telegram, Viber або контакт.' : 'Скачайте документ і прикріпіть його в Telegram, Viber або іншому месенджері.'}</p>
         </div>
         <button onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center"><X size={18}/></button>
       </div>
       <div className="p-5 space-y-3">
-        <button type="button" onClick={handleDownload} className={`w-full rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 transition ${downloaded ? 'bg-emerald-600 text-white scale-[1.02]' : 'bg-slate-900 text-white hover:bg-blue-700'}`}>
-          {downloaded ? <CheckCircle2 size={18}/> : <Download size={17}/>} {downloaded ? 'Документ скачано' : 'Скачати документ'}
-        </button>
+        {shareAvailable ? (
+          <button type="button" onClick={handleShare} disabled={sharing} className="w-full rounded-2xl bg-slate-900 text-white px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 transition hover:bg-blue-700 disabled:opacity-60">
+            <Share2 size={17}/> {sharing ? 'Відкриваємо...' : 'Поділитись документом'}
+          </button>
+        ) : (
+          <button type="button" onClick={handleDownload} className={`w-full rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 transition ${downloaded ? 'bg-emerald-600 text-white scale-[1.02]' : 'bg-slate-900 text-white hover:bg-blue-700'}`}>
+            {downloaded ? <CheckCircle2 size={18}/> : <Download size={17}/>} {downloaded ? 'Документ скачано' : 'Скачати документ'}
+          </button>
+        )}
+        {shareAvailable && (
+          <button type="button" onClick={handleDownload} className={`w-full rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 transition ${downloaded ? 'bg-emerald-50 text-emerald-700 ring-4 ring-emerald-100 scale-[1.02]' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+            {downloaded ? <CheckCircle2 size={16}/> : <Download size={16}/>} {downloaded ? 'Документ скачано' : 'Або скачати файл'}
+          </button>
+        )}
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600 leading-relaxed">{text}</div>
         <button type="button" onClick={handleCopy} className={`w-full rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 transition ${copied ? 'bg-emerald-50 text-emerald-700 ring-4 ring-emerald-100 scale-[1.02]' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
           {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? 'Скопійовано' : 'Скопіювати текст'}
         </button>
         {copyError && <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">Не вдалося скопіювати автоматично. Виділіть текст вище і скопіюйте вручну.</div>}
-        <p className="text-[11px] font-semibold text-slate-400 leading-relaxed">Після скачування файл буде у завантаженнях браузера. Його можна прикріпити клієнту в Telegram, Viber або будь-якому іншому месенджері.</p>
+        <p className="text-[11px] font-semibold text-slate-400 leading-relaxed">{shareAvailable ? 'На HTTPS і сумісному телефоні відкриється системне меню телефона. На HTTP кнопка автоматично замінюється на скачування.' : 'Після скачування файл буде у завантаженнях браузера. Його можна прикріпити клієнту в Telegram, Viber або будь-якому іншому месенджері.'}</p>
       </div>
     </div>
   </div>;

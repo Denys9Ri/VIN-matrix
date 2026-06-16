@@ -40,6 +40,14 @@ def margin_value(buy_price, sell_price):
     return round(sell - money(buy_price), 2)
 
 
+def calculated_sell_price(buy_price, markup_percent):
+    buy = money(buy_price)
+    markup = money(markup_percent)
+    if buy <= 0:
+        return 0.0
+    return round(buy + (buy * markup / 100), 2)
+
+
 def days_since(value):
     if not value:
         return None
@@ -99,7 +107,7 @@ def movement_stats(company, item_ids):
     return stats
 
 
-def serialize_item(item, extra=None, stat=None):
+def serialize_item(item, extra=None, stat=None, markup_percent=0):
     extra = extra or {}
     stat = stat or {}
     qty = int(item.quantity or 0)
@@ -107,7 +115,9 @@ def serialize_item(item, extra=None, stat=None):
     min_qty = int(extra.get('min_quantity') or 0)
     available = max(qty - reserved, 0)
     buy = money(item.buy_price)
-    sell = money(item.sell_price)
+    raw_sell = money(item.sell_price)
+    is_price_calculated = raw_sell <= 0 and buy > 0
+    sell = calculated_sell_price(buy, markup_percent) if is_price_calculated else raw_sell
     has_sell_price = sell > 0
     missing_sell_price = not has_sell_price
     margin = margin_value(buy, sell)
@@ -141,9 +151,13 @@ def serialize_item(item, extra=None, stat=None):
         'available_quantity': available,
         'min_quantity': min_qty,
         'buy_price': buy,
+        'raw_sell_price': raw_sell,
         'sell_price': sell,
+        'effective_sell_price': sell,
         'has_sell_price': has_sell_price,
         'missing_sell_price': missing_sell_price,
+        'is_price_calculated': is_price_calculated,
+        'markup_percent': money(markup_percent),
         'stock_buy_value': round(qty * buy, 2),
         'stock_sell_value': stock_sell_value,
         'potential_profit': potential_profit,
@@ -174,6 +188,7 @@ class InventoryInsightsView(APIView):
         if not company:
             return Response({'summary': {}, 'purchase_list': [], 'slow_moving': [], 'margin': {}})
 
+        markup_percent = money(getattr(company, 'global_margin_percent', 0) or 0)
         items = list(
             InventoryItem.objects.filter(company=company)
             .select_related('supplier', 'category')
@@ -182,7 +197,7 @@ class InventoryInsightsView(APIView):
         ids = [item.id for item in items]
         extra_map = stock_extra(ids)
         movement_map = movement_stats(company, ids)
-        rows = [serialize_item(item, extra_map.get(item.id), movement_map.get(item.id)) for item in items]
+        rows = [serialize_item(item, extra_map.get(item.id), movement_map.get(item.id), markup_percent) for item in items]
 
         query = request.query_params.get('q', '').strip().lower()
         if query:
@@ -204,6 +219,7 @@ class InventoryInsightsView(APIView):
         high_margin = sorted([row for row in rows if row['high_margin']], key=lambda row: row['margin_percent'], reverse=True)
         min_stock = sorted([row for row in rows if row['min_quantity'] and row['available_quantity'] <= row['min_quantity']], key=lambda row: row['available_quantity'] - row['min_quantity'])
         missing_sell_price = sorted([row for row in rows if row['missing_sell_price']], key=lambda row: row['stock_buy_value'], reverse=True)
+        calculated_prices = sorted([row for row in rows if row['is_price_calculated']], key=lambda row: row['stock_buy_value'], reverse=True)
 
         stock_buy_value = round(sum(row['stock_buy_value'] for row in rows), 2)
         stock_sell_value = round(sum(row['stock_sell_value'] for row in rows), 2)
@@ -245,6 +261,8 @@ class InventoryInsightsView(APIView):
                 'low_margin_count': len(low_margin),
                 'high_margin_count': len(high_margin),
                 'missing_sell_price_count': len(missing_sell_price),
+                'calculated_prices_count': len(calculated_prices),
+                'global_margin_percent': markup_percent,
                 'margin_percent': round((potential_profit / stock_sell_value * 100) if stock_sell_value else 0, 1),
             },
             'purchase_list': purchase_list[:300],
@@ -255,6 +273,7 @@ class InventoryInsightsView(APIView):
                 'low_margin': low_margin[:120],
                 'high_margin': high_margin[:120],
                 'missing_sell_price': missing_sell_price[:120],
+                'calculated_prices': calculated_prices[:120],
             },
             'min_stock': min_stock[:200],
             'generated_at': timezone.now(),

@@ -67,17 +67,53 @@ const orderTone = {
   CANCELLED: 'bg-rose-50 text-rose-700 border-rose-100',
 };
 
-const copyText = async (value, onDone) => {
+const copyText = async (value, onDone, successMessage = 'Скопійовано.') => {
   const text = String(value || '').trim();
-  if (!text) return false;
-  try {
-    await navigator.clipboard?.writeText(text);
-    onDone?.('Скопійовано.');
-    return true;
-  } catch {
-    onDone?.('Не вдалося скопіювати автоматично.');
+  if (!text) {
+    onDone?.('Немає що копіювати.');
     return false;
   }
+
+  const fallbackCopy = () => {
+    if (typeof document === 'undefined') return false;
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch { copied = false; }
+    textarea.remove();
+    return copied;
+  };
+
+  try {
+    if (typeof window !== 'undefined' && window.isSecureContext && navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      onDone?.(successMessage);
+      return true;
+    }
+  } catch {}
+
+  if (fallbackCopy()) {
+    onDone?.(successMessage);
+    return true;
+  }
+
+  onDone?.(`Не вдалося скопіювати автоматично. Скопіюйте вручну: ${text}`);
+  return false;
+};
+
+const normalizePaymentLink = (value) => {
+  const link = String(value || '').trim();
+  if (!link) return '';
+  if (/^https?:\/\//i.test(link)) return link;
+  return `https://${link}`;
 };
 
 export default function ClientsCRM() {
@@ -204,12 +240,26 @@ export default function ClientsCRM() {
   };
 
   const handlePayLink = async () => {
-    if (!companyPaymentLink) {
+    const paymentLink = normalizePaymentLink(companyPaymentLink);
+    if (!paymentLink) {
       setMessage('Посилання на оплату ще не додано. Відкрийте Налаштування → Профіль компанії → Оплата і заповніть payment_link.');
       return;
     }
-    await copyText(companyPaymentLink, setMessage);
-    window.open(companyPaymentLink, '_blank', 'noopener,noreferrer');
+
+    let openedWindow = null;
+    try {
+      openedWindow = window.open('', '_blank', 'noopener,noreferrer');
+    } catch {
+      openedWindow = null;
+    }
+
+    await copyText(paymentLink, setMessage, 'Посилання на оплату скопійовано і відкрито.');
+
+    if (openedWindow) {
+      openedWindow.location.href = paymentLink;
+    } else {
+      window.open(paymentLink, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const repeatPart = async (part) => {
@@ -448,7 +498,7 @@ function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onPay, onCopy
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-bold text-slate-300">
                 <InfoPill icon={<Phone size={14}/>} text={client.phone || 'Телефон не вказаний'} onCopy={() => copyText(client.phone, onCopy)} />
-                {client.key && <InfoPill icon={<Star size={14}/>} text={`ID: ${client.key}`} />}
+                {client.key && <InfoPill icon={<Star size={14}/>} text={`ID: ${client.key}`} onCopy={() => copyText(client.key, onCopy, 'ID покупця скопійовано.')} />}
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -481,11 +531,11 @@ function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onPay, onCopy
       <Tabs active={tab} setActive={setTab} />
 
       <div className="p-4 md:p-5 bg-slate-50/60 overflow-visible flex-1">
-        {tab === 'overview' && <Overview client={client} orders={orders} parts={parts} cars={cars} debts={debts} returns={returns} onPay={onPay} onRepeatPart={onRepeatPart} onSearchPart={onSearchPart} busyRepeat={busyRepeat} />}
-        {tab === 'history' && <PurchaseHistory orders={orders} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busyRepeat={busyRepeat} />}
+        {tab === 'overview' && <Overview client={client} orders={orders} parts={parts} cars={cars} debts={debts} returns={returns} onPay={onPay} onCopy={onCopy} onRepeatPart={onRepeatPart} onSearchPart={onSearchPart} busyRepeat={busyRepeat} />}
+        {tab === 'history' && <PurchaseHistory orders={orders} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busyRepeat={busyRepeat} onCopy={onCopy} />}
         {tab === 'cars' && <Cars cars={cars} onCopy={onCopy} />}
         {tab === 'debts' && <Debts debts={debts} onPay={onPay} />}
-        {tab === 'returns' && <Returns returns={returns} />}
+        {tab === 'returns' && <Returns returns={returns} onCopy={onCopy} />}
       </div>
     </div>
   );
@@ -530,7 +580,7 @@ function Tabs({ active, setActive }) {
   );
 }
 
-function Overview({ client, orders, parts, cars, debts, returns, onPay, onSearchPart, onRepeatPart, busyRepeat }) {
+function Overview({ client, orders, parts, cars, debts, returns, onPay, onCopy, onSearchPart, onRepeatPart, busyRepeat }) {
   const lastOrder = orders[0];
   const topParts = parts.slice(0, 5);
   const hasDebt = Number(client.debt_amount || 0) > 0 || debts.length > 0;
@@ -568,7 +618,7 @@ function Overview({ client, orders, parts, cars, debts, returns, onPay, onSearch
         </Panel>
 
         <Panel title="Авто / VIN" icon={<Car size={17} className="text-blue-600" />}>
-          <Cars cars={cars.slice(0, 2)} compact />
+          <Cars cars={cars.slice(0, 2)} compact onCopy={onCopy} />
         </Panel>
 
         <Panel title="Ризики" icon={<AlertTriangle size={17} className="text-amber-500" />}>
@@ -598,7 +648,7 @@ function ProfileInfo({ label, value, icon }) {
   );
 }
 
-function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, onRepeatPart, busyRepeat }) {
+function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, onRepeatPart, busyRepeat, onCopy }) {
   if (!orders.length) return <Empty text="Історії покупок ще немає" />;
   return (
     <div className="bg-white border border-slate-200 rounded-[28px] overflow-hidden shadow-sm">
@@ -637,7 +687,7 @@ function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, on
                   <div className="hidden 2xl:grid grid-cols-[130px_minmax(220px,1fr)_120px_90px_90px_90px_110px] gap-3 px-3 py-2 text-[11px] font-black uppercase text-slate-400">
                     <span>Артикул</span><span>Назва</span><span>Постачальник</span><span>К-сть</span><span>Закупка</span><span>Продаж</span><span>Дія</span>
                   </div>
-                  <div className="space-y-2">{parts.map((part) => <PartLine key={`${order.id}-${part.id}`} p={{ ...part, order_id: order.id }} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busy={busyRepeat === `${order.id}-${part.id}`} />)}{!parts.length && <Empty text="У замовленні немає товарів" />}</div>
+                  <div className="space-y-2">{parts.map((part) => <PartLine key={`${order.id}-${part.id}`} p={{ ...part, order_id: order.id }} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busy={busyRepeat === `${order.id}-${part.id}`} onCopy={onCopy} />)}{!parts.length && <Empty text="У замовленні немає товарів" />}</div>
                 </div>
               )}
             </div>
@@ -662,7 +712,10 @@ function Cars({ cars, onCopy, compact = false }) {
                 <p className="font-black text-slate-900 flex items-center gap-2 min-w-0"><Car size={16} className="text-blue-600 shrink-0" /><span className="truncate">{car.plate || 'Без номера'}</span></p>
                 <p className="text-sm font-bold text-slate-600 mt-2 break-words">{title}</p>
               </div>
-              {car.vin_code && <button type="button" onClick={() => copyText(car.vin_code, onCopy)} className="rounded-xl bg-slate-50 border border-slate-200 p-2 text-slate-500 hover:text-blue-600"><Copy size={15}/></button>}
+              <div className="flex gap-1 shrink-0">
+                {car.plate && <button type="button" onClick={() => copyText(car.plate, onCopy, 'Номер авто скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 p-2 text-slate-500 hover:text-blue-600" title="Копіювати номер авто"><Copy size={15}/></button>}
+                {car.vin_code && <button type="button" onClick={() => copyText(car.vin_code, onCopy, 'VIN скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 p-2 text-slate-500 hover:text-blue-600" title="Копіювати VIN"><Copy size={15}/></button>}
+              </div>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2">
               <Mini label="VIN" value={car.vin_code || '—'} />
@@ -695,25 +748,35 @@ function Debts({ debts, onPay }) {
   );
 }
 
-function Returns({ returns }) {
+function Returns({ returns, onCopy }) {
   if (!returns.length) return <Empty text="Повернень немає" />;
-  return <div className="space-y-2">{returns.map((part) => <PartLine key={`${part.order_id}-${part.id}`} p={part} returnMode />)}</div>;
+  return <div className="space-y-2">{returns.map((part) => <PartLine key={`${part.order_id}-${part.id}`} p={part} returnMode onCopy={onCopy} />)}</div>;
 }
 
-function PartLine({ p, returnMode, onSearchPart, onRepeatPart, busy }) {
+function PartLine({ p, returnMode, onSearchPart, onRepeatPart, busy, onCopy }) {
   const article = `${p.brand || ''} ${p.article || ''}`.trim() || p.article || 'Артикул';
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm min-w-0">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3 lg:items-center">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onSearchPart?.(p)}
-            className="max-w-full font-black text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-4 inline-flex items-center gap-1 text-left"
-          >
-            <span className="break-words">{article}</span>
-            <ExternalLink size={13} className="shrink-0" />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onSearchPart?.(p)}
+              className="max-w-full font-black text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-4 inline-flex items-center gap-1 text-left"
+            >
+              <span className="break-words">{article}</span>
+              <ExternalLink size={13} className="shrink-0" />
+            </button>
+            <button
+              type="button"
+              onClick={() => copyText(p.article || article, onCopy, 'Артикул скопійовано.')}
+              className="rounded-lg bg-blue-50 border border-blue-100 p-1.5 text-blue-600 hover:bg-blue-100"
+              title="Копіювати артикул"
+            >
+              <Copy size={13} />
+            </button>
+          </div>
           <p className="mt-1 text-xs font-bold text-slate-600 break-words">{p.name || 'Товар без назви'}</p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-500">{p.supplier || '—'}</span>

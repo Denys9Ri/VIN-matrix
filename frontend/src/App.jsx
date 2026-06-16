@@ -102,8 +102,7 @@ function CRMByBusinessType() {
   }, []);
 
   if (!businessType) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження CRM...</div>;
-  if (businessType === 'store') return <><ClientsCRM /><ActivityDock /></>;
-  return <><CRM /><ActivityDock /></>;
+  return <><ClientsCRM mode={businessType} /><ActivityDock /></>;
 }
 
 function App() {

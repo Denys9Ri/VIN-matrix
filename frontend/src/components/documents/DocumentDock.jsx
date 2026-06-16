@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Clock3, Copy, Download, Eye, FileText, History, Mail, MessageCircle, Printer, ReceiptText, Send, ShieldCheck, Undo2, X } from 'lucide-react';
+import { CheckCircle2, Clock3, Copy, Download, Eye, FileText, History, Loader2, Printer, ReceiptText, Send, Share2, ShieldCheck, Undo2, X } from 'lucide-react';
 import api from '../../api/axios';
 
 const money = (value) => `${Number(value || 0).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴`;
@@ -53,6 +53,16 @@ function formatActivityDate(value) {
   return date.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+function canNativeShareFile(file) {
+  if (typeof navigator === 'undefined' || !navigator.share || !file) return false;
+  if (!navigator.canShare) return true;
+  try {
+    return navigator.canShare({ files: [file] });
+  } catch {
+    return false;
+  }
+}
+
 export default function DocumentDock() {
   const [ctx, setCtx] = useState(null);
   const [open, setOpen] = useState(false);
@@ -65,6 +75,7 @@ export default function DocumentDock() {
   const [sendType, setSendType] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const loadDocumentHistory = async (id = visit?.id) => {
     if (!id) return;
@@ -96,7 +107,7 @@ export default function DocumentDock() {
       setActiveType(currentCtx.mode === 'store' ? 'receipt' : 'service_act');
       setOpen(true);
       await loadDocumentHistory(visitRes.data?.id || currentCtx.id);
-    } catch (error) {
+    } catch {
       setNotice('Не вдалося підготувати документи. Оновіть сторінку і спробуйте ще раз.');
     } finally {
       setLoading(false);
@@ -172,7 +183,7 @@ export default function DocumentDock() {
       popup.document.write(html);
       popup.document.close();
       await loadDocumentHistory(visit.id);
-    } catch (error) {
+    } catch {
       const html = buildDocumentHtml(type, visit, settings, { autoPrint });
       popup.document.open();
       popup.document.write(html);
@@ -188,11 +199,37 @@ export default function DocumentDock() {
       downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
       setNotice('Бланк скачано. Відкрийте його і оберіть “Зберегти як PDF” у друці.');
       await loadDocumentHistory(visit.id);
-    } catch (error) {
+    } catch {
       const html = buildDocumentHtml(type, visit, settings);
       downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
       await recordDocumentEvent(type, 'downloaded', 'fallback');
       setNotice('Backend-документ ще недоступний після деплою, скачано локальний стабільний бланк.');
+    }
+  };
+
+  const shareDocument = async (type) => {
+    if (!visit?.id) return;
+    setSharing(true);
+    const meta = docTypes[type] || docTypes.receipt;
+    const filename = `${fileSlug(meta.title)}-${visit.id}.html`;
+    const html = buildDocumentHtml(type, visit, settings);
+    const text = `Документ “${meta.title}” по замовленню №${visit.id}. Сума: ${money(documentTotals(type, visit).total)}.`;
+
+    try {
+      if (typeof File === 'undefined') throw new Error('File API is not supported');
+      const file = new File([html], filename, { type: 'text/html' });
+      if (!canNativeShareFile(file)) throw new Error('Native file share is not supported');
+      await navigator.share({ title: `${meta.title} №${visit.id}`, text, files: [file] });
+      await recordDocumentEvent(type, 'sent', 'native_share');
+      setNotice('Документ передано в системне меню “Поділитись”. Оберіть Telegram, Viber або інший месенджер і контакт.');
+      setSendType(null);
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      downloadBlob(html, filename);
+      await recordDocumentEvent(type, 'downloaded', 'share_fallback');
+      setNotice('На цьому пристрої немає системного “Поділитись файлом”. Документ скачано — прикріпіть його у Telegram або Viber вручну.');
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -206,24 +243,24 @@ export default function DocumentDock() {
     {notice && !open && <div className="fixed right-5 bottom-40 z-[70] max-w-sm rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 shadow-xl">{notice}</div>}
 
     {open && createPortal(
-      <div className="fixed inset-0 z-[110] bg-slate-900/70 backdrop-blur-sm flex items-stretch md:items-center justify-center p-0 md:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
-        <div className="bg-white w-full md:max-w-7xl h-dvh md:h-[92vh] rounded-none md:rounded-[30px] shadow-2xl overflow-hidden flex flex-col">
+      <div className="fixed inset-0 z-[110] bg-slate-900/70 backdrop-blur-sm flex items-stretch md:items-center justify-center p-0 md:p-4 overflow-hidden" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+        <div className="bg-white w-full md:max-w-7xl h-[100dvh] md:h-[92dvh] rounded-none md:rounded-[30px] shadow-2xl overflow-hidden flex flex-col">
           <div className="bg-gradient-to-r from-slate-950 via-blue-950 to-blue-700 text-white p-4 md:p-5 flex justify-between gap-4 shrink-0">
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Пакет документів</p>
-              <h2 className="text-xl md:text-2xl font-black uppercase truncate">{ctx.title}</h2>
-              <p className="text-xs font-bold text-blue-100 mt-1">Превʼю, друк, PDF-бланк, відправка клієнту і журнал дій.</p>
+              <h2 className="text-lg md:text-2xl font-black uppercase truncate">{ctx.title}</h2>
+              <p className="text-[11px] md:text-xs font-bold text-blue-100 mt-1">Превʼю, друк, PDF-бланк, відправка клієнту і журнал дій.</p>
             </div>
             <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center shrink-0"><X size={18}/></button>
           </div>
 
-          {notice && <div className="mx-4 md:mx-5 mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 flex items-center justify-between gap-3 shrink-0"><span>{notice}</span><button onClick={() => setNotice('')} className="text-blue-400 hover:text-blue-700"><X size={16}/></button></div>}
+          {notice && <div className="mx-3 md:mx-5 mt-3 md:mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 flex items-center justify-between gap-3 shrink-0"><span>{notice}</span><button onClick={() => setNotice('')} className="text-blue-400 hover:text-blue-700"><X size={16}/></button></div>}
 
-          <div className="grid grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)] gap-0 min-h-0 flex-1 overflow-hidden">
-            <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/80 p-4 md:p-5 overflow-y-auto">
-              <div className="mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)] gap-0 min-h-0 flex-1 overflow-y-auto lg:overflow-hidden overscroll-contain">
+            <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/80 p-3 md:p-5 lg:overflow-y-auto lg:min-h-0">
+              <div className="mb-3 md:mb-4">
                 <h3 className="text-sm font-black uppercase text-slate-900">Документи</h3>
-                <p className="text-xs font-semibold text-slate-500 mt-1">Оберіть тип документа і дію: перегляд, друк, PDF або відправка.</p>
+                <p className="text-xs font-semibold text-slate-500 mt-1">Оберіть тип документа і дію: перегляд, друк, PDF або поділитись.</p>
               </div>
 
               <div className="grid grid-cols-1 gap-2">
@@ -234,7 +271,7 @@ export default function DocumentDock() {
                   return (
                     <button key={type} onClick={() => setActiveType(type)} className={`group text-left rounded-2xl border p-3 transition ${active ? 'bg-white border-blue-300 shadow-sm ring-4 ring-blue-50' : 'bg-white/80 border-slate-200 hover:border-blue-200 hover:bg-blue-50/60'}`}>
                       <div className="flex items-start gap-3">
-                        <span className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 transition ${toneClasses[meta.tone] || toneClasses.blue}`}><Icon size={19}/></span>
+                        <span className={`w-10 h-10 md:w-11 md:h-11 rounded-2xl border flex items-center justify-center shrink-0 transition ${toneClasses[meta.tone] || toneClasses.blue}`}><Icon size={18}/></span>
                         <span className="min-w-0">
                           <span className="block font-black text-slate-900 uppercase text-sm leading-tight">{meta.title}</span>
                           <span className="block text-xs font-semibold text-slate-500 mt-1 leading-snug">{meta.description}</span>
@@ -245,7 +282,7 @@ export default function DocumentDock() {
                 })}
               </div>
 
-              <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mt-4 md:mt-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Журнал</p>
@@ -276,30 +313,30 @@ export default function DocumentDock() {
               </div>
             </aside>
 
-            <main className="min-h-0 flex flex-col bg-slate-100/70">
-              <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 md:px-5 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+            <main className="min-h-[680px] lg:min-h-0 flex flex-col bg-slate-100/70">
+              <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-3 md:px-5 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Превʼю документа</p>
-                  <h3 className="text-lg font-black uppercase text-slate-900 truncate">{docTypes[activeType]?.title}</h3>
+                  <h3 className="text-base md:text-lg font-black uppercase text-slate-900 truncate">{docTypes[activeType]?.title}</h3>
                 </div>
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                   <ActionButton onClick={() => openWindow(activeType, false)} icon={<Eye size={15}/>} label="Переглянути" />
                   <ActionButton onClick={() => openWindow(activeType, true)} icon={<Printer size={15}/>} label="Друк" />
                   <ActionButton onClick={() => downloadDocument(activeType)} icon={<Download size={15}/>} label="PDF" />
-                  <ActionButton onClick={() => setSendType(activeType)} icon={<Send size={15}/>} label="Надіслати" dark />
+                  <ActionButton onClick={() => setSendType(activeType)} icon={<Send size={15}/>} label="Поділитись" dark />
                 </div>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-auto p-4 md:p-6">
-                <div className="mx-auto w-full max-w-[860px] rounded-[24px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70 overflow-hidden">
-                  <iframe title="document-preview" srcDoc={previewHtml} className="w-full h-[72vh] bg-white" />
+              <div className="min-h-0 flex-1 overflow-visible lg:overflow-auto p-3 md:p-6">
+                <div className="mx-auto w-full max-w-[860px] rounded-[20px] md:rounded-[24px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70 overflow-hidden">
+                  <iframe title="document-preview" srcDoc={previewHtml} className="w-full h-[58dvh] sm:h-[66dvh] lg:h-[72vh] bg-white" />
                 </div>
               </div>
             </main>
           </div>
         </div>
 
-        {sendType && <SendDialog type={sendType} visit={visit} settings={settings} onClose={() => setSendType(null)} onCopy={async (text) => { navigator.clipboard?.writeText(text); await recordDocumentEvent(sendType, 'copied', 'copy'); setNotice('Текст для клієнта скопійовано.'); }} onSend={recordDocumentEvent} />}
+        {sendType && <SendDialog type={sendType} visit={visit} settings={settings} sharing={sharing} onClose={() => setSendType(null)} onShare={() => shareDocument(sendType)} onDownload={() => downloadDocument(sendType)} onCopy={async (text) => { navigator.clipboard?.writeText(text); await recordDocumentEvent(sendType, 'copied', 'copy'); setNotice('Текст для клієнта скопійовано.'); }} />}
       </div>,
       document.body
     )}
@@ -310,34 +347,31 @@ function ActionButton({ icon, label, onClick, dark = false }) {
   return <button type="button" onClick={onClick} className={`${dark ? 'bg-slate-900 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'} rounded-2xl px-3 py-2.5 text-[11px] font-black uppercase flex items-center justify-center gap-1.5 transition whitespace-nowrap`}>{icon}{label}</button>;
 }
 
-function SendDialog({ type, visit, settings, onClose, onCopy, onSend }) {
+function SendDialog({ type, visit, settings, sharing, onClose, onShare, onDownload, onCopy }) {
   const meta = docTypes[type] || docTypes.receipt;
   const company = settings?.company || {};
-  const email = visit?.email || visit?.client_email || '';
-  const phone = String(visit?.phone || '').replace(/[^+\d]/g, '');
-  const subject = `${meta.title} №${visit?.id || ''} — ${company.name || 'VIN-matrix'}`;
-  const text = `Добрий день, ${visit?.client || ''}. Документ “${meta.title}” по замовленню №${visit?.id || ''} готовий. Компанія: ${company.name || ''}. Сума: ${money(documentTotals(type, visit).total)}.`;
-  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
-  const sms = `sms:${phone}?body=${encodeURIComponent(text)}`;
+  const text = `Добрий день, ${visit?.client || ''}. Надсилаємо документ “${meta.title}” по замовленню №${visit?.id || ''}. Компанія: ${company.name || ''}. Сума: ${money(documentTotals(type, visit).total)}.`;
 
-  return <div className="absolute inset-0 z-[130] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden">
+  return <div className="absolute inset-0 z-[130] bg-slate-950/50 backdrop-blur-sm overflow-y-auto p-3 md:p-4 flex items-start md:items-center justify-center" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="my-4 md:my-0 bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden">
       <div className="bg-gradient-to-r from-slate-900 to-blue-700 text-white p-5 flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Надіслати клієнту</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Поділитись документом</p>
           <h3 className="text-xl font-black uppercase mt-1">{meta.title}</h3>
-          <p className="text-xs font-bold text-blue-100 mt-1">Підготуйте повідомлення і прикріпіть PDF після збереження.</p>
+          <p className="text-xs font-bold text-blue-100 mt-1">На телефоні відкриється системне меню: Telegram, Viber, WhatsApp, пошта або інший додаток.</p>
         </div>
         <button onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center"><X size={18}/></button>
       </div>
       <div className="p-5 space-y-3">
+        <button type="button" onClick={onShare} disabled={sharing} className="w-full rounded-2xl bg-slate-900 text-white px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-700 disabled:opacity-60">
+          {sharing ? <Loader2 size={17} className="animate-spin"/> : <Share2 size={17}/>} Поділитись документом
+        </button>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600 leading-relaxed">{text}</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <a href={mailto} onClick={() => onSend?.(type, 'email', 'email')} className="rounded-2xl bg-blue-600 text-white px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-700"><Mail size={16}/> Email</a>
-          <a href={sms} onClick={() => onSend?.(type, 'sms', 'sms')} className="rounded-2xl bg-emerald-50 text-emerald-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-emerald-100"><MessageCircle size={16}/> SMS</a>
+          <button type="button" onClick={onDownload} className="rounded-2xl bg-blue-50 text-blue-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-100"><Download size={16}/> Скачати файл</button>
+          <button type="button" onClick={() => onCopy(text)} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-slate-200"><Copy size={16}/> Скопіювати текст</button>
         </div>
-        <button type="button" onClick={() => onCopy(text)} className="w-full rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-slate-200"><Copy size={16}/> Скопіювати текст</button>
-        <p className="text-[11px] font-semibold text-slate-400 leading-relaxed">Файл PDF створіть кнопкою “PDF”, після чого прикріпіть його до листа або повідомлення.</p>
+        <p className="text-[11px] font-semibold text-slate-400 leading-relaxed">Якщо системне “Поділитись” недоступне на цьому браузері, файл автоматично скачається — його можна вручну прикріпити у Telegram або Viber.</p>
       </div>
     </div>
   </div>;

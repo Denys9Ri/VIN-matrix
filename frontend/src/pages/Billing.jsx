@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, CreditCard, History, LogOut, RefreshCcw, ShieldCheck, Sparkles, Wallet, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -19,6 +19,12 @@ const paymentStatus = {
   pending: { label: 'Очікує підтвердження', cls: 'bg-amber-50 text-amber-700 border-amber-100' },
   confirmed: { label: 'Підтверджено', cls: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
   rejected: { label: 'Відхилено', cls: 'bg-rose-50 text-rose-700 border-rose-100' },
+  covered: { label: 'Доступ уже продовжено', cls: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+};
+
+const hasActiveAccess = (billing) => {
+  const status = billing?.billing_status || billing?.status;
+  return billing?.access_allowed !== false && ['active', 'payment_due_soon', 'manual_free'].includes(status);
 };
 
 export default function Billing() {
@@ -45,7 +51,8 @@ export default function Billing() {
   const billing = data?.billing || {};
   const plan = data?.plan || {};
   const payments = Array.isArray(data?.payments) ? data.payments : [];
-  const pendingCount = payments.filter((payment) => payment.status === 'pending').length;
+  const activeAccess = hasActiveAccess(billing);
+  const pendingCount = activeAccess ? 0 : payments.filter((payment) => payment.status === 'pending').length;
   const tone = toneByStatus(billing.billing_status || billing.status);
   const Icon = tone.icon;
   const accessAllowed = billing.access_allowed !== false;
@@ -87,6 +94,7 @@ export default function Billing() {
         </div>
 
         {notice && <div className="rounded-[24px] border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">{notice}</div>}
+        {activeAccess && payments.some((payment) => payment.status === 'pending') && <div className="rounded-[24px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">Доступ активний. Старі заявки “очікує” залишені тільки в історії й не блокують роботу.</div>}
 
         <section className={`overflow-hidden rounded-[38px] bg-gradient-to-r ${tone.gradient} text-white shadow-2xl shadow-slate-200`}>
           <div className="p-5 md:p-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_420px] gap-6 items-stretch">
@@ -121,8 +129,8 @@ export default function Billing() {
         </section>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <SmallCard icon={<CreditCard size={18}/>} label="Заявок очікують" value={pendingCount} tone={pendingCount ? 'amber' : 'emerald'} />
-          <SmallCard icon={<History size={18}/>} label="Усього заявок" value={payments.length} />
+          <SmallCard icon={<CreditCard size={18}/>} label="Активних заявок" value={pendingCount} tone={pendingCount ? 'amber' : 'emerald'} />
+          <SmallCard icon={<History size={18}/>} label="Історія заявок" value={payments.length} />
           <SmallCard icon={<Sparkles size={18}/>} label="Період тарифу" value="30 днів" />
         </div>
 
@@ -134,7 +142,7 @@ export default function Billing() {
             </div>
             <button type="button" onClick={load} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase text-slate-600 hover:bg-slate-50"><RefreshCcw size={15}/> Оновити</button>
           </div>
-          {payments.length ? <div className="space-y-3">{payments.map((payment) => <PaymentRow key={payment.id} payment={payment} />)}</div> : <div className="rounded-[26px] border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-bold text-slate-400">Заявок на оплату ще немає.</div>}
+          {payments.length ? <div className="space-y-3">{payments.map((payment) => <PaymentRow key={payment.id} payment={payment} activeAccess={activeAccess} />)}</div> : <div className="rounded-[26px] border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-bold text-slate-400">Заявок на оплату ще немає.</div>}
         </section>
       </div>
     </div>
@@ -150,7 +158,8 @@ function SmallCard({ icon, label, value, tone = 'blue' }) {
   return <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className={`mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl border ${cls}`}>{icon}</div><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value}</p></div>;
 }
 
-function PaymentRow({ payment }) {
-  const meta = paymentStatus[payment.status] || { label: payment.status || 'Статус', cls: 'bg-slate-50 text-slate-600 border-slate-100' };
+function PaymentRow({ payment, activeAccess }) {
+  const effectiveStatus = payment.status === 'pending' && activeAccess ? 'covered' : payment.status;
+  const meta = paymentStatus[effectiveStatus] || { label: payment.status || 'Статус', cls: 'bg-slate-50 text-slate-600 border-slate-100' };
   return <div className="rounded-[24px] border border-slate-100 bg-slate-50 p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 md:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-black text-slate-950">{money(payment.amount, payment.currency)}</p><span className={`rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase ${meta.cls}`}>{meta.label}</span></div><p className="mt-1 text-sm font-bold text-slate-500">{payment.method_label} · {payment.comment || 'Заявка на оплату'}</p>{payment.rejected_reason && <p className="mt-1 text-xs font-bold text-rose-600">Причина: {payment.rejected_reason}</p>}</div><div className="text-left md:text-right text-xs font-bold text-slate-400"><p>Створено: {fmt(payment.created_at)}</p>{payment.confirmed_at && <p>Підтверджено: {fmt(payment.confirmed_at)}</p>}</div></div>;
 }

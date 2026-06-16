@@ -13,7 +13,7 @@ const parseDelivery = (order) => {
     if (!raw) return {};
     if (typeof raw === 'string' && raw.trim().startsWith('{')) return JSON.parse(raw);
     return typeof raw === 'object' ? raw : {};
-    } catch {
+  } catch {
     return {};
   }
 };
@@ -106,6 +106,12 @@ export default function NovaPostInlineDeliveryPolish() {
   const oldChildrenRef = useRef([]);
   const oldCreateButtonRef = useRef(null);
 
+  const restoreOldPanel = () => {
+    oldChildrenRef.current.forEach((child) => { child.style.display = ''; });
+    oldChildrenRef.current = [];
+    oldCreateButtonRef.current = null;
+  };
+
   useEffect(() => {
     let mount = null;
 
@@ -115,6 +121,7 @@ export default function NovaPostInlineDeliveryPolish() {
       setOrderId(id || '');
 
       if (!id || !panel) {
+        restoreOldPanel();
         setTarget(null);
         return;
       }
@@ -128,10 +135,12 @@ export default function NovaPostInlineDeliveryPolish() {
         else panel.appendChild(mount);
       }
 
-      const oldCreateButton = Array.from(panel.querySelectorAll('button')).find((button) => (button.textContent || '').toLowerCase().includes('створити ттн'));
+      const children = Array.from(panel.children).filter((child) => child !== mount && child.tagName !== 'H3');
+      const oldCreateButton = children
+        .flatMap((child) => Array.from(child.querySelectorAll('button')))
+        .find((button) => (button.textContent || '').toLowerCase().includes('створити ттн'));
       oldCreateButtonRef.current = oldCreateButton || null;
 
-      const children = Array.from(panel.children).filter((child) => child !== mount && child.tagName !== 'H3');
       oldChildrenRef.current.forEach((child) => {
         if (!children.includes(child)) child.style.display = '';
       });
@@ -148,7 +157,7 @@ export default function NovaPostInlineDeliveryPolish() {
     return () => {
       observer.disconnect();
       clearInterval(timer);
-      oldChildrenRef.current.forEach((child) => { child.style.display = ''; });
+      restoreOldPanel();
       if (mount?.parentElement) mount.remove();
     };
   }, []);

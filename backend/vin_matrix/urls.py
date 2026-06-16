@@ -12,6 +12,7 @@ from apps.core.billing_views import (
     BillingPaymentRequestView,
     BillingAdminClientsView,
     BillingAdminPaymentsView,
+    BillingAdminPartnerPayoutsView,
     BillingAdminConfirmPaymentView,
     BillingAdminRejectPaymentView,
 )
@@ -137,6 +138,7 @@ def openapi_schema(request):
             "/api/inventory/": {"get": {"summary": "List inventory"}, "post": {"summary": "Create inventory item"}},
             "/api/inventory/insights/": {"get": {"summary": "Inventory purchasing and margin insights"}},
             "/api/billing/admin/clients/": {"get": {"summary": "SaaS billing clients overview"}},
+            "/api/billing/admin/partner-payouts/": {"get": {"summary": "Partner payout analytics"}},
             "/api/documents/visits/{visit_id}/{doc_type}/": {"get": {"summary": "Render visit document"}},
         },
     })
@@ -194,8 +196,11 @@ urlpatterns = [
     path('api/billing/payment-request/', BillingPaymentRequestView.as_view(), name='billing-payment-request'),
     path('api/billing/admin/clients/', BillingAdminClientsView.as_view(), name='billing-admin-clients'),
     path('api/billing/admin/payments/', BillingAdminPaymentsView.as_view(), name='billing-admin-payments'),
+    path('api/billing/admin/partner-payouts/', BillingAdminPartnerPayoutsView.as_view(), name='billing-admin-partner-payouts'),
     path('api/billing/admin/confirm/', BillingAdminConfirmPaymentView.as_view(), name='billing-admin-confirm'),
+    path('api/billing/admin/confirm-payment/', BillingAdminConfirmPaymentView.as_view(), name='billing-admin-confirm-payment'),
     path('api/billing/admin/reject/', BillingAdminRejectPaymentView.as_view(), name='billing-admin-reject'),
+    path('api/billing/admin/reject-payment/', BillingAdminRejectPaymentView.as_view(), name='billing-admin-reject-payment'),
     path('api/billing/admin/client-link/', BillingAdminClientLinkView.as_view(), name='billing-admin-client-link'),
 
     path('api/export/orders/', OrdersExportView.as_view(), name='export-orders'),

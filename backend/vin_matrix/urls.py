@@ -56,6 +56,7 @@ from apps.core.document_views import VisitDocumentView
 from apps.core.ocr_views import RecognizeDocumentView
 from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
+from apps.core.inventory_insights_views import InventoryInsightsView
 from apps.core.stock_actions import (
     StockMinQuantityView,
     StockReserveView,
@@ -133,9 +134,11 @@ def openapi_schema(request):
             "/api/visits/": {"get": {"summary": "List visits"}, "post": {"summary": "Create visit"}},
             "/api/payments/": {"get": {"summary": "List visit payments"}},
             "/api/inventory/": {"get": {"summary": "List inventory"}, "post": {"summary": "Create inventory item"}},
+            "/api/inventory/insights/": {"get": {"summary": "Inventory purchasing and margin insights"}},
             "/api/documents/visits/{visit_id}/{doc_type}/": {"get": {"summary": "Render visit document"}},
         },
     })
+
 
 
 def swagger_ui(request):
@@ -232,6 +235,7 @@ urlpatterns = [
     path('api/stock/reserve/', StockReserveView.as_view(), name='stock-reserve'),
     path('api/stock/release/', StockReleaseView.as_view(), name='stock-release'),
     path('api/stock/write-off-visit/', StockWriteOffVisitView.as_view(), name='stock-write-off-visit'),
+    path('api/inventory/insights/', InventoryInsightsView.as_view(), name='inventory-insights'),
 
     path('api/store-clients/', StoreClientListView.as_view(), name='store-client-list'),
     path('api/store-clients/detail/', StoreClientDetailView.as_view(), name='store-client-detail'),

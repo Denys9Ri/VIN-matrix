@@ -338,8 +338,8 @@ export default function ClientsCRM() {
       </div>
 
       {selected && (
-        <div className="xl:hidden fixed inset-0 z-[80] bg-slate-900/65 backdrop-blur-sm p-0 block">
-          <div className="bg-white w-full h-screen overflow-hidden shadow-2xl rounded-none">
+        <div className="xl:hidden fixed inset-0 z-[80] bg-slate-900/65 backdrop-blur-sm overflow-y-auto overscroll-contain block">
+          <div className="bg-white w-full min-h-[100dvh] shadow-2xl rounded-none">
             <ClientProfileCard
               client={selected}
               tab={tab}
@@ -435,7 +435,7 @@ function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onPay, onCopy
   const hasDebt = Number(client.debt_amount || 0) > 0 || debts.length > 0;
 
   return (
-    <div className="bg-white xl:border xl:border-slate-200 xl:rounded-[34px] xl:shadow-sm overflow-hidden h-full xl:h-auto xl:max-h-none xl:flex xl:flex-col">
+    <div className={`bg-white ${onClose ? 'min-h-[100dvh]' : 'xl:border xl:border-slate-200 xl:rounded-[34px] xl:shadow-sm'} overflow-visible flex flex-col`}>
       <div className="relative overflow-hidden bg-slate-950 text-white">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.38),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.25),transparent_36%)]" />
         <div className="relative p-5 md:p-6">
@@ -480,7 +480,7 @@ function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onPay, onCopy
 
       <Tabs active={tab} setActive={setTab} />
 
-      <div className="p-4 md:p-5 bg-slate-50/60 overflow-visible xl:overflow-y-auto xl:flex-1">
+      <div className="p-4 md:p-5 bg-slate-50/60 overflow-visible flex-1">
         {tab === 'overview' && <Overview client={client} orders={orders} parts={parts} cars={cars} debts={debts} returns={returns} onPay={onPay} onRepeatPart={onRepeatPart} onSearchPart={onSearchPart} busyRepeat={busyRepeat} />}
         {tab === 'history' && <PurchaseHistory orders={orders} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busyRepeat={busyRepeat} />}
         {tab === 'cars' && <Cars cars={cars} onCopy={onCopy} />}
@@ -509,7 +509,7 @@ function Tabs({ active, setActive }) {
   ];
 
   return (
-    <div className="border-b border-slate-100 bg-white px-3 md:px-5 py-3 overflow-x-auto">
+    <div className="border-b border-slate-100 bg-white px-3 md:px-5 py-3 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <div className="flex gap-2 min-w-max">
         {tabs.map((item) => {
           const Icon = item.icon;
@@ -602,7 +602,7 @@ function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, on
   if (!orders.length) return <Empty text="Історії покупок ще немає" />;
   return (
     <div className="bg-white border border-slate-200 rounded-[28px] overflow-hidden shadow-sm">
-      <div className="hidden md:grid grid-cols-[110px_90px_140px_minmax(220px,1fr)_120px_120px_48px] gap-3 px-4 py-3 bg-slate-100 text-[11px] font-black uppercase text-slate-500 tracking-wide">
+      <div className="hidden 2xl:grid grid-cols-[110px_90px_140px_minmax(220px,1fr)_120px_120px_48px] gap-3 px-4 py-3 bg-slate-100 text-[11px] font-black uppercase text-slate-500 tracking-wide">
         <span>Дата</span><span>№</span><span>Статус</span><span>Товари</span><span>Сума</span><span>Прибуток</span><span />
       </div>
       <div className="divide-y divide-slate-100">
@@ -612,7 +612,7 @@ function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, on
           return (
             <div key={order.id} className="bg-white">
               <button type="button" onClick={() => toggleOrder(order.id)} className={`w-full text-left transition ${open ? 'bg-blue-600 text-white' : 'hover:bg-blue-50 text-slate-800'}`}>
-                <div className="hidden md:grid grid-cols-[110px_90px_140px_minmax(220px,1fr)_120px_120px_48px] gap-3 items-center px-4 py-3">
+                <div className="hidden 2xl:grid grid-cols-[110px_90px_140px_minmax(220px,1fr)_120px_120px_48px] gap-3 items-center px-4 py-3">
                   <span className="font-black text-sm">{fmtDate(order.scheduled_datetime || order.created_at)}</span>
                   <span className="font-black">№{order.id}</span>
                   <StatusChip status={order.status} invert={open} />
@@ -621,7 +621,7 @@ function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, on
                   <span className={`font-black ${open ? 'text-emerald-100' : 'text-emerald-600'}`}>{money(order.profit)}</span>
                   <span className={`rounded-xl p-2 justify-self-end ${open ? 'bg-white/15' : 'bg-white border border-slate-200'}`}>{open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
                 </div>
-                <div className="md:hidden p-4">
+                <div className="2xl:hidden p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-black text-lg">№{order.id} • {fmtDate(order.scheduled_datetime || order.created_at)}</p>
@@ -634,7 +634,7 @@ function PurchaseHistory({ orders, expandedOrders, toggleOrder, onSearchPart, on
               </button>
               {open && (
                 <div className="bg-slate-50 p-3 md:p-4">
-                  <div className="hidden md:grid grid-cols-[130px_minmax(220px,1fr)_120px_90px_90px_90px_110px] gap-3 px-3 py-2 text-[11px] font-black uppercase text-slate-400">
+                  <div className="hidden 2xl:grid grid-cols-[130px_minmax(220px,1fr)_120px_90px_90px_90px_110px] gap-3 px-3 py-2 text-[11px] font-black uppercase text-slate-400">
                     <span>Артикул</span><span>Назва</span><span>Постачальник</span><span>К-сть</span><span>Закупка</span><span>Продаж</span><span>Дія</span>
                   </div>
                   <div className="space-y-2">{parts.map((part) => <PartLine key={`${order.id}-${part.id}`} p={{ ...part, order_id: order.id }} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busy={busyRepeat === `${order.id}-${part.id}`} />)}{!parts.length && <Empty text="У замовленні немає товарів" />}</div>
@@ -701,20 +701,63 @@ function Returns({ returns }) {
 }
 
 function PartLine({ p, returnMode, onSearchPart, onRepeatPart, busy }) {
+  const article = `${p.brand || ''} ${p.article || ''}`.trim() || p.article || 'Артикул';
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm md:grid md:grid-cols-[130px_minmax(220px,1fr)_120px_90px_90px_90px_110px] md:items-center md:gap-3 flex flex-col gap-3 min-w-0">
-      <div className="min-w-0">
-        <button type="button" onClick={() => onSearchPart?.(p)} className="font-black text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-4 flex items-center gap-1 text-left break-all">
-          <span>{p.brand} {p.article}</span><ExternalLink size={13} className="shrink-0" />
-        </button>
-        {returnMode && <p className="text-[11px] font-black uppercase text-rose-600 mt-1">{p.stock_status === 'defective' ? 'Брак' : 'Повернено'}</p>}
+    <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3 lg:items-center">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={() => onSearchPart?.(p)}
+            className="max-w-full font-black text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-4 inline-flex items-center gap-1 text-left"
+          >
+            <span className="break-words">{article}</span>
+            <ExternalLink size={13} className="shrink-0" />
+          </button>
+          <p className="mt-1 text-xs font-bold text-slate-600 break-words">{p.name || 'Товар без назви'}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-500">{p.supplier || '—'}</span>
+            <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-500">{p.quantity || 0} шт</span>
+            {returnMode && (
+              <span className="rounded-lg bg-rose-50 px-2 py-1 text-[10px] font-black uppercase text-rose-600">
+                {p.stock_status === 'defective' ? 'Брак' : 'Повернено'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[90px_90px_110px] gap-2 lg:w-[310px] shrink-0">
+          <ValuePill label="Закупка" value={money(p.buy_price)} />
+          <ValuePill label="Продаж" value={money(p.revenue)} />
+          <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-2 min-w-0">
+            <p className="text-[10px] font-black uppercase text-emerald-600">Прибуток</p>
+            <p className="mt-1 text-sm font-black text-emerald-700 truncate">+{money(p.profit)}</p>
+          </div>
+        </div>
       </div>
-      <p className="text-xs font-bold text-slate-600 break-words">{p.name}</p>
-      <p className="text-xs font-black text-slate-500 uppercase break-words">{p.supplier || '—'}</p>
-      <p className="font-black text-slate-800">{p.quantity} шт</p>
-      <p className="font-black text-slate-700">{money(p.buy_price)}</p>
-      <div><p className="font-black text-slate-900">{money(p.revenue)}</p><p className="text-xs font-black text-emerald-600">+{money(p.profit)}</p></div>
-      {onRepeatPart && <button disabled={busy} type="button" onClick={() => onRepeatPart(p)} className="bg-emerald-600 text-white rounded-xl px-3 py-2 text-[11px] font-black uppercase flex items-center justify-center gap-1 disabled:opacity-40"><Repeat2 size={13}/>{busy ? '...' : 'Повторити'}</button>}
+
+      {onRepeatPart && (
+        <div className="mt-3 flex justify-end">
+          <button
+            disabled={busy}
+            type="button"
+            onClick={() => onRepeatPart(p)}
+            className="w-full sm:w-auto bg-emerald-600 text-white rounded-xl px-4 py-2.5 text-[11px] font-black uppercase inline-flex items-center justify-center gap-1 disabled:opacity-40"
+          >
+            <Repeat2 size={13} />
+            {busy ? 'Додаємо...' : 'Повторити'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ValuePill({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 border border-slate-100 p-2 min-w-0">
+      <p className="text-[10px] font-black uppercase text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-black text-slate-900 truncate">{value}</p>
     </div>
   );
 }

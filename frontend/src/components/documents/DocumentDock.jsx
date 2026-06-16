@@ -104,30 +104,51 @@ export default function DocumentDock() {
 
   if (!ctx) return null;
 
-  const openWindow = (type, autoPrint = false) => {
-    const html = buildDocumentHtml(type, visit, settings, { autoPrint });
+  const getBackendHtml = async (type, { autoPrint = false, download = false } = {}) => {
+    if (!visit?.id) throw new Error('Немає ID замовлення');
+    const params = new URLSearchParams();
+    if (autoPrint) params.set('print', '1');
+    if (download) params.set('download', '1');
+    const query = params.toString();
+    const response = await api.get(`/api/documents/visits/${visit.id}/${type}/${query ? `?${query}` : ''}`, { responseType: 'text' });
+    return response.data;
+  };
+
+  const openWindow = async (type, autoPrint = false) => {
     const popup = window.open('', '_blank');
     if (!popup) {
       setNotice('Браузер заблокував відкриття документа. Дозвольте спливаючі вікна для сайту.');
       return;
     }
+
     popup.document.open();
-    popup.document.write(html);
+    popup.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Документ</title></head><body style="font-family:Arial,sans-serif;padding:32px;color:#0f172a"><b>Формуємо документ...</b></body></html>');
     popup.document.close();
+
+    try {
+      const html = await getBackendHtml(type, { autoPrint });
+      popup.document.open();
+      popup.document.write(html);
+      popup.document.close();
+    } catch (error) {
+      const html = buildDocumentHtml(type, visit, settings, { autoPrint });
+      popup.document.open();
+      popup.document.write(html);
+      popup.document.close();
+      setNotice('Backend-документ ще недоступний після деплою, відкрито локальний стабільний бланк.');
+    }
   };
 
-  const downloadHtml = (type) => {
-    const html = buildDocumentHtml(type, visit, settings);
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    setNotice('HTML-бланк скачано. Для PDF відкрийте його і оберіть “Зберегти як PDF” у друці.');
+  const downloadDocument = async (type) => {
+    try {
+      const html = await getBackendHtml(type, { download: true });
+      downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
+      setNotice('Бланк скачано. Відкрийте його і оберіть “Зберегти як PDF” у друці.');
+    } catch (error) {
+      const html = buildDocumentHtml(type, visit, settings);
+      downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
+      setNotice('Backend-документ ще недоступний після деплою, скачано локальний стабільний бланк.');
+    }
   };
 
   return <>
@@ -189,7 +210,7 @@ export default function DocumentDock() {
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                   <ActionButton onClick={() => openWindow(activeType, false)} icon={<Eye size={15}/>} label="Переглянути" />
                   <ActionButton onClick={() => openWindow(activeType, true)} icon={<Printer size={15}/>} label="Друк" />
-                  <ActionButton onClick={() => openWindow(activeType, true)} icon={<Download size={15}/>} label="PDF" />
+                  <ActionButton onClick={() => downloadDocument(activeType)} icon={<Download size={15}/>} label="PDF" />
                   <ActionButton onClick={() => setSendType(activeType)} icon={<Send size={15}/>} label="Надіслати" dark />
                 </div>
               </div>
@@ -295,6 +316,18 @@ function carLabel(visit) {
 
 function fileSlug(value) {
   return String(value || 'document').toLowerCase().replace(/[^a-zа-яіїєґ0-9]+/gi, '-').replace(/^-|-$/g, '');
+}
+
+function downloadBlob(html, filename) {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function buildDocumentHtml(type, visit, settings, options = {}) {

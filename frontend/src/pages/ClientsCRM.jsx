@@ -4,6 +4,7 @@ import {
   Car,
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
   Copy,
   CreditCard,
   Edit3,
@@ -116,6 +117,10 @@ const normalizePaymentLink = (value) => {
   return `https://${link}`;
 };
 
+const orderDebtAmount = (order) => Number(order?.debt_amount ?? order?.revenue ?? order?.total_revenue ?? order?.total ?? 0) || 0;
+const orderPaidAmount = (order) => Number(order?.revenue ?? order?.total_revenue ?? order?.total ?? order?.debt_amount ?? 0) || 0;
+const isDebtOrder = (order) => orderDebtAmount(order) > 0 || ['unpaid', 'debt', 'cod', 'prepaid'].includes(String(order?.payment_status || '').toLowerCase());
+
 export default function ClientsCRM() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -129,6 +134,8 @@ export default function ClientsCRM() {
   const [expandedOrders, setExpandedOrders] = useState(new Set());
   const [busyRepeat, setBusyRepeat] = useState(null);
   const [companyPaymentLink, setCompanyPaymentLink] = useState('');
+  const [copyNotice, setCopyNotice] = useState('');
+  const [debtBusy, setDebtBusy] = useState(false);
 
   const load = async (query = search) => {
     setLoading(true);
@@ -167,6 +174,19 @@ export default function ClientsCRM() {
       .then((res) => setCompanyPaymentLink(res.data?.company?.payment_link || ''))
       .catch(() => {});
   }, []);
+
+  const showActionNotice = (text) => {
+    const message = String(text || '').trim();
+    if (!message) return;
+    setMessage(message);
+    setCopyNotice(message);
+  };
+
+  useEffect(() => {
+    if (!copyNotice) return undefined;
+    const timer = setTimeout(() => setCopyNotice(''), 1800);
+    return () => clearTimeout(timer);
+  }, [copyNotice]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -239,26 +259,57 @@ export default function ClientsCRM() {
     navigate(`/search?${params.toString()}`);
   };
 
-  const handlePayLink = async () => {
+  const refreshSelectedClient = async (client = selected) => {
+    if (!client?.key) return null;
+    try {
+      const detail = await api.get(`/api/store-clients/detail/?key=${encodeURIComponent(client.key)}`);
+      setSelected(detail.data);
+      return detail.data;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleCopy = (value, successMessage = 'Скопійовано.') => copyText(value, showActionNotice, successMessage);
+
+  const handlePaymentLinkCopy = async () => {
     const paymentLink = normalizePaymentLink(companyPaymentLink);
     if (!paymentLink) {
-      setMessage('Посилання на оплату ще не додано. Відкрийте Налаштування → Профіль компанії → Оплата і заповніть payment_link.');
+      showActionNotice('Посилання на оплату ще не додано в Налаштуваннях → Профіль компанії → Оплата.');
+      return;
+    }
+    await copyText(paymentLink, showActionNotice, 'Посилання на оплату скопійовано.');
+  };
+
+  const handleCloseDebt = async (clientOverride = selected) => {
+    const target = clientOverride || selected;
+    if (!target) return;
+
+    const targetOrders = arr(target.orders).filter(isDebtOrder);
+    if (!targetOrders.length && Number(target.debt_amount || 0) <= 0) {
+      showActionNotice('Боргів по цьому клієнту немає.');
       return;
     }
 
-    let openedWindow = null;
-    try {
-      openedWindow = window.open('', '_blank', 'noopener,noreferrer');
-    } catch {
-      openedWindow = null;
+    if (!targetOrders.length) {
+      showActionNotice('Не бачу замовлень для закриття боргу. Відкрийте повну картку клієнта і спробуйте ще раз.');
+      return;
     }
 
-    await copyText(paymentLink, setMessage, 'Посилання на оплату скопійовано і відкрито.');
+    setDebtBusy(true);
+    try {
+      await Promise.all(targetOrders.map((order) => api.patch(`/api/visits/${order.id}/`, {
+        payment_status: 'paid',
+        prepayment_amount: orderPaidAmount(order),
+      })));
 
-    if (openedWindow) {
-      openedWindow.location.href = paymentLink;
-    } else {
-      window.open(paymentLink, '_blank', 'noopener,noreferrer');
+      showActionNotice(`Борг закрито. Оновлено замовлень: ${targetOrders.length}.`);
+      await load(search);
+      await refreshSelectedClient(target);
+    } catch (error) {
+      setMessage(error.response?.data?.error || 'Не вдалося закрити борг. Перевірте права доступу або спробуйте ще раз.');
+    } finally {
+      setDebtBusy(false);
     }
   };
 
@@ -358,7 +409,8 @@ export default function ClientsCRM() {
                   client={client}
                   active={selected?.key === client.key}
                   onClick={() => openClient(client)}
-                  onPay={handlePayLink}
+                  onCloseDebt={handleCloseDebt}
+                  debtBusy={debtBusy}
                 />
               ))}
               {!loading && !clients.length && <Empty text="Клієнтів не знайдено" />}
@@ -372,8 +424,10 @@ export default function ClientsCRM() {
                 tab={tab}
                 setTab={setTab}
                 onEdit={() => openEdit(selected)}
-                onPay={handlePayLink}
-                onCopy={setMessage}
+                onCloseDebt={handleCloseDebt}
+                onCopy={handleCopy}
+                onPaymentLinkCopy={handlePaymentLinkCopy}
+                debtBusy={debtBusy}
                 expandedOrders={expandedOrders}
                 toggleOrder={toggleOrder}
                 onSearchPart={openSearchByPart}
@@ -396,8 +450,10 @@ export default function ClientsCRM() {
               setTab={setTab}
               onClose={() => setSelected(null)}
               onEdit={() => openEdit(selected)}
-              onPay={handlePayLink}
-              onCopy={setMessage}
+              onCloseDebt={handleCloseDebt}
+              onCopy={handleCopy}
+              onPaymentLinkCopy={handlePaymentLinkCopy}
+              debtBusy={debtBusy}
               expandedOrders={expandedOrders}
               toggleOrder={toggleOrder}
               onSearchPart={openSearchByPart}
@@ -408,6 +464,8 @@ export default function ClientsCRM() {
         </div>
       )}
 
+      {copyNotice && <CopyNotice message={copyNotice} />}
+
       {editClient && (
         <EditClientModal
           form={editClient}
@@ -416,6 +474,16 @@ export default function ClientsCRM() {
           onSubmit={saveClient}
         />
       )}
+    </div>
+  );
+}
+
+
+function CopyNotice({ message }) {
+  return (
+    <div className="fixed left-1/2 bottom-6 z-[120] -translate-x-1/2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 shadow-2xl shadow-emerald-200/60 flex items-center gap-3 text-sm font-black text-emerald-700">
+      <span className="h-9 w-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center animate-pulse"><CheckCircle2 size={19} /></span>
+      <span>{message}</span>
     </div>
   );
 }
@@ -438,7 +506,7 @@ function MessageBox({ message, onClose }) {
   );
 }
 
-function ClientCard({ client, active, onClick, onPay }) {
+function ClientCard({ client, active, onClick, onCloseDebt, debtBusy }) {
   const debt = Number(client.debt_amount || 0) > 0;
   return (
     <button
@@ -464,10 +532,10 @@ function ClientCard({ client, active, onClick, onPay }) {
           <p className="text-[11px] font-bold text-slate-400">Останнє: {fmtDate(client.last_order_date)}</p>
           {debt && (
             <span
-              onClick={(event) => { event.stopPropagation(); onPay?.(); }}
+              onClick={(event) => { event.stopPropagation(); onCloseDebt?.(client); }}
               className="bg-emerald-600 text-white rounded-xl px-3 py-2 text-[11px] font-black uppercase inline-flex items-center gap-1 shadow-sm"
             >
-              <CreditCard size={13} /> Оплатити
+              <CreditCard size={13} /> {debtBusy ? 'Закриваємо...' : 'Закрити'}
             </span>
           )}
         </div>
@@ -476,7 +544,7 @@ function ClientCard({ client, active, onClick, onPay }) {
   );
 }
 
-function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onPay, onCopy, expandedOrders, toggleOrder, onSearchPart, onRepeatPart, busyRepeat }) {
+function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onCloseDebt, onCopy, onPaymentLinkCopy, debtBusy, expandedOrders, toggleOrder, onSearchPart, onRepeatPart, busyRepeat }) {
   const orders = arr(client.orders);
   const parts = arr(client.parts);
   const cars = arr(client.cars);
@@ -497,8 +565,8 @@ function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onPay, onCopy
                 <Badge status={client.status} dark />
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-bold text-slate-300">
-                <InfoPill icon={<Phone size={14}/>} text={client.phone || 'Телефон не вказаний'} onCopy={() => copyText(client.phone, onCopy)} />
-                {client.key && <InfoPill icon={<Star size={14}/>} text={`ID: ${client.key}`} onCopy={() => copyText(client.key, onCopy, 'ID покупця скопійовано.')} />}
+                <InfoPill icon={<Phone size={14}/>} text={client.phone || 'Телефон не вказаний'} onCopy={() => onCopy?.(client.phone, 'Телефон скопійовано.')} />
+                {client.key && <InfoPill icon={<Star size={14}/>} text={`ID: ${client.key}`} onCopy={() => onCopy?.(client.key, 'ID покупця скопійовано.')} />}
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -518,10 +586,10 @@ function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onPay, onCopy
             <div className="mt-5 rounded-[24px] border border-rose-300/30 bg-rose-500/12 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div>
                 <p className="text-sm font-black uppercase text-rose-100 flex items-center gap-2"><AlertTriangle size={16}/> Є неоплачена сума</p>
-                <p className="text-xs font-bold text-rose-100/80 mt-1">Натисніть “Оплатити”, щоб відкрити/скопіювати посилання на оплату для клієнта.</p>
+                <p className="text-xs font-bold text-rose-100/80 mt-1">Натисніть “Закрити борг”, щоб позначити неоплачені замовлення клієнта як оплачені.</p>
               </div>
-              <button type="button" onClick={onPay} className="rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white px-5 py-3 text-xs font-black uppercase inline-flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20">
-                <CreditCard size={16}/> Оплатити
+              <button type="button" disabled={debtBusy} onClick={() => onCloseDebt?.(client)} className="rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-400 text-white px-5 py-3 text-xs font-black uppercase inline-flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20">
+                <CreditCard size={16}/> {debtBusy ? 'Закриваємо...' : 'Закрити борг'}
               </button>
             </div>
           )}
@@ -531,10 +599,10 @@ function ClientProfileCard({ client, tab, setTab, onClose, onEdit, onPay, onCopy
       <Tabs active={tab} setActive={setTab} />
 
       <div className="p-4 md:p-5 bg-slate-50/60 overflow-visible flex-1">
-        {tab === 'overview' && <Overview client={client} orders={orders} parts={parts} cars={cars} debts={debts} returns={returns} onPay={onPay} onCopy={onCopy} onRepeatPart={onRepeatPart} onSearchPart={onSearchPart} busyRepeat={busyRepeat} />}
+        {tab === 'overview' && <Overview client={client} orders={orders} parts={parts} cars={cars} debts={debts} returns={returns} onCloseDebt={onCloseDebt} onPaymentLinkCopy={onPaymentLinkCopy} debtBusy={debtBusy} onCopy={onCopy} onRepeatPart={onRepeatPart} onSearchPart={onSearchPart} busyRepeat={busyRepeat} />}
         {tab === 'history' && <PurchaseHistory orders={orders} expandedOrders={expandedOrders} toggleOrder={toggleOrder} onSearchPart={onSearchPart} onRepeatPart={onRepeatPart} busyRepeat={busyRepeat} onCopy={onCopy} />}
         {tab === 'cars' && <Cars cars={cars} onCopy={onCopy} />}
-        {tab === 'debts' && <Debts debts={debts} onPay={onPay} />}
+        {tab === 'debts' && <Debts debts={debts} onCloseDebt={onCloseDebt} debtBusy={debtBusy} />}
         {tab === 'returns' && <Returns returns={returns} onCopy={onCopy} />}
       </div>
     </div>
@@ -580,7 +648,7 @@ function Tabs({ active, setActive }) {
   );
 }
 
-function Overview({ client, orders, parts, cars, debts, returns, onPay, onCopy, onSearchPart, onRepeatPart, busyRepeat }) {
+function Overview({ client, orders, parts, cars, debts, returns, onCloseDebt, onPaymentLinkCopy, debtBusy, onCopy, onSearchPart, onRepeatPart, busyRepeat }) {
   const lastOrder = orders[0];
   const topParts = parts.slice(0, 5);
   const hasDebt = Number(client.debt_amount || 0) > 0 || debts.length > 0;
@@ -610,9 +678,12 @@ function Overview({ client, orders, parts, cars, debts, returns, onPay, onCopy, 
           <div className={`rounded-[24px] border p-4 ${hasDebt ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
             <p className={`text-[11px] font-black uppercase ${hasDebt ? 'text-rose-600' : 'text-emerald-700'}`}>{hasDebt ? 'Є борг' : 'Боргів немає'}</p>
             <p className={`mt-2 text-3xl font-black ${hasDebt ? 'text-rose-700' : 'text-emerald-700'}`}>{money(client.debt_amount)}</p>
-            <p className="mt-2 text-xs font-bold text-slate-500">Оплата відкриває payment_link із налаштувань компанії та копіює його в буфер.</p>
-            <button type="button" onClick={onPay} className="mt-4 w-full rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 text-xs font-black uppercase inline-flex items-center justify-center gap-2">
-              <CreditCard size={16}/> Оплатити / скопіювати
+            <p className="mt-2 text-xs font-bold text-slate-500">Кнопка нижче закриває борг у картці клієнта. Посилання на оплату можна скопіювати окремо.</p>
+            <button type="button" disabled={debtBusy || !hasDebt} onClick={() => onCloseDebt?.(client)} className="mt-4 w-full rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white px-4 py-3 text-xs font-black uppercase inline-flex items-center justify-center gap-2">
+              <CreditCard size={16}/> {debtBusy ? 'Закриваємо...' : hasDebt ? 'Закрити борг' : 'Боргів немає'}
+            </button>
+            <button type="button" onClick={onPaymentLinkCopy} className="mt-2 w-full rounded-2xl bg-white border border-emerald-100 text-emerald-700 px-4 py-3 text-xs font-black uppercase inline-flex items-center justify-center gap-2">
+              <Copy size={15}/> Скопіювати реквізити
             </button>
           </div>
         </Panel>
@@ -713,8 +784,8 @@ function Cars({ cars, onCopy, compact = false }) {
                 <p className="text-sm font-bold text-slate-600 mt-2 break-words">{title}</p>
               </div>
               <div className="flex gap-1 shrink-0">
-                {car.plate && <button type="button" onClick={() => copyText(car.plate, onCopy, 'Номер авто скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 p-2 text-slate-500 hover:text-blue-600" title="Копіювати номер авто"><Copy size={15}/></button>}
-                {car.vin_code && <button type="button" onClick={() => copyText(car.vin_code, onCopy, 'VIN скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 p-2 text-slate-500 hover:text-blue-600" title="Копіювати VIN"><Copy size={15}/></button>}
+                {car.plate && <button type="button" onClick={() => onCopy?.(car.plate, 'Номер авто скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 p-2 text-slate-500 hover:text-blue-600" title="Копіювати номер авто"><Copy size={15}/></button>}
+                {car.vin_code && <button type="button" onClick={() => onCopy?.(car.vin_code, 'VIN скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 p-2 text-slate-500 hover:text-blue-600" title="Копіювати VIN"><Copy size={15}/></button>}
               </div>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2">
@@ -728,7 +799,7 @@ function Cars({ cars, onCopy, compact = false }) {
   );
 }
 
-function Debts({ debts, onPay }) {
+function Debts({ debts, onCloseDebt, debtBusy }) {
   if (!debts.length) return <Empty text="Боргів немає" />;
   return (
     <div className="space-y-3">
@@ -740,7 +811,7 @@ function Debts({ debts, onPay }) {
           </div>
           <div className="flex items-center gap-3 justify-between md:justify-end">
             <p className="font-black text-rose-600 text-xl">{money(order.debt_amount || order.revenue)}</p>
-            <button type="button" onClick={onPay} className="rounded-2xl bg-emerald-600 text-white px-4 py-3 text-xs font-black uppercase inline-flex items-center gap-2"><CreditCard size={15}/> Оплатити</button>
+            <button type="button" disabled={debtBusy} onClick={() => onCloseDebt?.({ orders: [order], debt_amount: orderDebtAmount(order), key: order.client_key })} className="rounded-2xl bg-emerald-600 disabled:bg-slate-300 text-white px-4 py-3 text-xs font-black uppercase inline-flex items-center gap-2"><CreditCard size={15}/> {debtBusy ? 'Закриваємо...' : 'Закрити борг'}</button>
           </div>
         </div>
       ))}
@@ -770,7 +841,7 @@ function PartLine({ p, returnMode, onSearchPart, onRepeatPart, busy, onCopy }) {
             </button>
             <button
               type="button"
-              onClick={() => copyText(p.article || article, onCopy, 'Артикул скопійовано.')}
+              onClick={() => onCopy?.(p.article || article, 'Артикул скопійовано.')}
               className="rounded-lg bg-blue-50 border border-blue-100 p-1.5 text-blue-600 hover:bg-blue-100"
               title="Копіювати артикул"
             >

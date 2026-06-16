@@ -48,15 +48,6 @@ const emptyReceipt = {
   order_part_id: '',
 };
 
-const emptyPriceRow = {
-  brand: '',
-  article: '',
-  name: '',
-  quantity: 1,
-  buy_price: '',
-  category: '',
-  note: '',
-};
 
 const SUPPLIER_TYPES = [
   { value: 'custom', label: 'Інший / вручну', auth: 'none', defaultName: '' },
@@ -148,8 +139,8 @@ export default function Inventory() {
   const [newCat, setNewCat] = useState('');
   const [supplierForm, setSupplierForm] = useState(newSupplierForm());
   const [receipt, setReceipt] = useState({ ...emptyReceipt });
-  const [priceDraft, setPriceDraft] = useState({ ...emptyPriceRow });
   const [priceRows, setPriceRows] = useState([]);
+  const [priceSearch, setPriceSearch] = useState('');
   const [priceMarkupPercent, setPriceMarkupPercent] = useState(() => localStorage.getItem('vinmatrix_price_markup_percent') || '10');
 
   const load = async () => {
@@ -372,35 +363,15 @@ export default function Inventory() {
     }
   };
 
-  const addPriceRow = (event) => {
-    event.preventDefault();
-    const basePrice = num(priceDraft.buy_price);
-    const row = {
-      ...priceDraft,
-      brand: priceDraft.brand.trim().toUpperCase(),
-      article: priceDraft.article.trim().toUpperCase(),
-      name: priceDraft.name.trim(),
-      category: priceDraft.category.trim(),
-      note: priceDraft.note.trim(),
-      quantity: num(priceDraft.quantity) || 1,
-      buy_price: basePrice,
-      markup_percent: num(priceMarkupPercent),
-      price: priceListPrice(basePrice, priceMarkupPercent),
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    };
-
-    if (!row.article || !row.name) return toast.warning('Вкажіть артикул і назву товару для прайсу.');
-    if (!row.buy_price) return toast.warning('Вкажіть закупку / базову ціну. Ціна прайсу рахується від неї.');
-
-    setPriceRows((prev) => [row, ...prev]);
-    setPriceDraft({ ...emptyPriceRow });
-    toast.success('Товар додано у прайс.');
-  };
-
   const addItemToPrice = (item) => {
-    const basePrice = num(item.buy_price || item.sell_price || 0);
+    const basePrice = num(item.buy_price || 0);
+
+    if (!item?.id) return;
+    if (!basePrice) return toast.warning('У товарі немає закупки. Спочатку заповніть закупівельну ціну в складі.');
+
     const row = {
-      id: `${Date.now()}-${item.id || Math.random().toString(16).slice(2)}`,
+      id: `stock-${item.id}`,
+      source_inventory_id: item.id,
       brand: item.brand || '',
       article: item.article || '',
       name: item.name || '',
@@ -411,9 +382,50 @@ export default function Inventory() {
       category: item.category_name || '',
       note: '',
     };
-    setPriceRows((prev) => [row, ...prev]);
+
+    setPriceRows((prev) => {
+      const exists = prev.some((x) => String(x.source_inventory_id || x.id) === String(item.id));
+      if (exists) return prev.map((x) => (String(x.source_inventory_id || x.id) === String(item.id) ? row : x));
+      return [row, ...prev];
+    });
+
     setTab('price');
-    toast.success('Товар додано у прайс.');
+    toast.success('Товар зі складу додано у прайс.');
+  };
+
+  const addAllStockToPrice = (stockItems = []) => {
+    const available = stockItems.filter((item) => item?.id && num(item.buy_price || 0));
+
+    if (!available.length) {
+      toast.warning('Немає товарів зі складською закупкою для додавання у прайс.');
+      return;
+    }
+
+    const rows = available.map((item) => {
+      const basePrice = num(item.buy_price || 0);
+      return {
+        id: `stock-${item.id}`,
+        source_inventory_id: item.id,
+        brand: item.brand || '',
+        article: item.article || '',
+        name: item.name || '',
+        quantity: availableQty(item) || item.quantity || 1,
+        buy_price: basePrice,
+        markup_percent: num(priceMarkupPercent),
+        price: priceListPrice(basePrice, priceMarkupPercent),
+        category: item.category_name || '',
+        note: '',
+      };
+    });
+
+    setPriceRows((prev) => {
+      const map = new Map(prev.map((row) => [String(row.source_inventory_id || row.id), row]));
+      rows.forEach((row) => map.set(String(row.source_inventory_id), row));
+      return Array.from(map.values());
+    });
+
+    setTab('price');
+    toast.success(`У прайс додано ${rows.length} позицій зі складу.`);
   };
 
   const removePriceRow = (id) => setPriceRows((prev) => prev.filter((row) => row.id !== id));
@@ -518,15 +530,18 @@ export default function Inventory() {
 
       {tab === 'price' && (
         <PriceBuilder
-          draft={priceDraft}
-          setDraft={setPriceDraft}
+          items={items}
+          search={priceSearch}
+          setSearch={setPriceSearch}
           rows={priceRows}
           markup={priceMarkupPercent}
           setMarkup={setPriceMarkupPercent}
-          onAdd={addPriceRow}
+          onAddItem={addItemToPrice}
+          onAddAll={addAllStockToPrice}
           onRemove={removePriceRow}
           onClear={clearPriceRows}
           onDownload={downloadPriceExcel}
+          onReceipt={() => setModal('receipt')}
         />
       )}
 
@@ -702,19 +717,23 @@ function Item({ item, onDelete, onAddToPrice }) {
 }
 
 
-function PriceBuilder({ draft, setDraft, rows, markup, setMarkup, onAdd, onRemove, onClear, onDownload }) {
+function PriceBuilder({ items, search, setSearch, rows, markup, setMarkup, onAddItem, onAddAll, onRemove, onClear, onDownload, onReceipt }) {
   const total = rows.reduce((sum, row) => sum + (num(row.price) * (num(row.quantity) || 1)), 0);
-  const draftPrice = priceListPrice(draft.buy_price, markup);
+  const query = String(search || '').toLowerCase().trim();
+  const stockItems = list(items).filter((item) => {
+    const text = [item.brand, item.article, item.name, item.category_name].filter(Boolean).join(' ').toLowerCase();
+    return !query || text.includes(query);
+  });
 
   return (
     <div className="space-y-5">
       <Card padding="lg" className="overflow-hidden border-blue-100 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-200">Excel-прайс товарів</p>
-            <h2 className="mt-2 text-2xl font-black uppercase md:text-3xl">Зібрати прайс вручну</h2>
+            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-200">Excel-прайс зі складу</p>
+            <h2 className="mt-2 text-2xl font-black uppercase md:text-3xl">Прайс тільки з реального складу</h2>
             <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-300">
-              Додавайте позиції руками або кнопкою “у прайс” зі складу. Ціна прайсу рахується від закупки з окремою націнкою для оптового/партнерського прайсу.
+              У прайс можна додати тільки товари, які вже заведені на склад. Так залишки не розʼїжджаються, а Excel стає прайсом вашого магазину як маленького постачальника.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:min-w-[320px]">
@@ -734,10 +753,12 @@ function PriceBuilder({ draft, setDraft, rows, markup, setMarkup, onAdd, onRemov
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Окрема націнка прайсу</p>
-            <p className="mt-1 text-sm font-bold text-emerald-900">Це не ціна для кінцевого клієнта. Це ціна для Excel-прайсу, коли магазин хоче продавати товар як маленький постачальник.</p>
+            <p className="mt-1 text-sm font-bold text-emerald-900">
+              Ця націнка не змінює ціну продажу клієнту в CRM. Вона використовується тільки для Excel-прайсу.
+            </p>
           </div>
           <label className="block md:w-[220px]">
-            <span className="mb-1 block text-xs font-black uppercase text-emerald-700">Націнка, %</span>
+            <span className="mb-1 block text-xs font-black uppercase text-emerald-700">Націнка прайсу, %</span>
             <input
               type="number"
               step="0.01"
@@ -751,39 +772,38 @@ function PriceBuilder({ draft, setDraft, rows, markup, setMarkup, onAdd, onRemov
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[430px_minmax(0,1fr)]">
         <Panel>
-          <SectionHeader title="Додати позицію" subtitle="Це не змінює склад. Це тільки рядок для Excel-прайсу." />
-          <form onSubmit={onAdd} className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-1">
-              <Input label="Бренд" value={draft.brand} onChange={(value) => setDraft((prev) => ({ ...prev, brand: value.toUpperCase() }))} placeholder="ZILBERMANN" />
-              <Input required label="Артикул" value={draft.article} onChange={(value) => setDraft((prev) => ({ ...prev, article: value.toUpperCase() }))} placeholder="08-214" />
-              <Input required label="Назва товару" value={draft.name} onChange={(value) => setDraft((prev) => ({ ...prev, name: value }))} placeholder="Диск гальмівний задній" />
-              <Input type="number" min="1" label="Кількість" value={draft.quantity} onChange={(value) => setDraft((prev) => ({ ...prev, quantity: value }))} />
-              <Input required type="number" step="0.01" label="Закупка / база" value={draft.buy_price} onChange={(value) => setDraft((prev) => ({ ...prev, buy_price: value }))} placeholder="160" />
-              <Input type="number" step="0.01" label="Націнка прайсу, %" value={markup} onChange={(value) => setMarkup(value)} placeholder="10" />
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                <p className="text-[10px] font-black uppercase text-emerald-600">Ціна прайсу</p>
-                <p className="mt-1 text-2xl font-black text-emerald-700">{money(draftPrice)}</p>
-                <p className="mt-1 text-xs font-bold text-emerald-700/80">Рахується окремо від клієнтської ціни продажу.</p>
-              </div>
-              <Input label="Категорія" value={draft.category} onChange={(value) => setDraft((prev) => ({ ...prev, category: value }))} placeholder="Гальма" />
-            </div>
-            <label className="block">
-              <span className="mb-1 block text-xs font-black uppercase text-slate-400">Примітка</span>
-              <textarea
-                value={draft.note || ''}
-                onChange={(event) => setDraft((prev) => ({ ...prev, note: event.target.value }))}
-                className="min-h-[90px] w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white"
-                placeholder="Додаткова інформація для прайсу"
-              />
-            </label>
-            <Button type="submit" className="w-full" icon={<Plus size={16} />}>Додати у прайс</Button>
-          </form>
+          <SectionHeader
+            title="Товари зі складу"
+            subtitle="Спочатку внесіть товар через прихід. Потім додайте його у прайс одним кліком."
+            actions={<button type="button" onClick={onReceipt} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700"><Plus size={15} /> Новий прихід</button>}
+          />
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Пошук по складу: бренд, артикул, назва..."
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => onAddAll(stockItems)}
+            disabled={!stockItems.length}
+            className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-black uppercase text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-40"
+          >
+            <FileSpreadsheet size={15} /> Додати знайдені у прайс
+          </button>
+          <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
+            {stockItems.map((item) => <PriceStockItem key={item.id} item={item} markup={markup} onAdd={() => onAddItem(item)} />)}
+            {!stockItems.length && <Empty text="На складі немає товарів за цим пошуком. Спочатку зробіть прихід." />}
+          </div>
         </Panel>
 
         <Panel>
           <SectionHeader
-            title="Готовий прайс"
-            subtitle="Перевірте позиції перед завантаженням Excel-файлу."
+            title="Готовий Excel-прайс"
+            subtitle="Це список товарів зі складу, який буде завантажено в Excel. Склад не змінюється — змінюється тільки файл прайсу."
             actions={(
               <>
                 <button type="button" onClick={onClear} disabled={!rows.length} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-40"><Trash2 size={15} /> Очистити</button>
@@ -798,8 +818,41 @@ function PriceBuilder({ draft, setDraft, rows, markup, setMarkup, onAdd, onRemov
   );
 }
 
+function PriceStockItem({ item, markup, onAdd }) {
+  const base = num(item.buy_price || 0);
+  const price = priceListPrice(base, markup);
+  const qty = availableQty(item);
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="break-words text-lg font-black text-slate-900">{item.article || 'Без артикула'}</p>
+          <p className="mt-1 text-[10px] font-black uppercase text-blue-600">{item.brand || 'Без бренду'}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={!base}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-[11px] font-black uppercase text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
+        >
+          <Plus size={14} /> У прайс
+        </button>
+      </div>
+      <p className="mt-2 text-sm font-bold text-slate-700">{item.name || 'Назва не вказана'}</p>
+      <p className="mt-1 text-[10px] font-bold uppercase text-slate-400">{item.category_name || 'Без категорії'}</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Small label="Доступно" value={`${qty} шт`} good={qty > 0} />
+        <Small label="База" value={money(base)} />
+        <Small label="Ціна прайсу" value={money(price)} good />
+      </div>
+      {!base && <p className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">Для прайсу потрібна закупівельна ціна на складі.</p>}
+    </div>
+  );
+}
+
 function PriceRows({ rows, onRemove }) {
-  if (!rows.length) return <Empty text="Додайте товари у прайс вручну або зі складу" />;
+  if (!rows.length) return <Empty text="Додайте товари зі складу. Якщо товару немає — спочатку зробіть прихід." />;
 
   return (
     <div className="space-y-3">

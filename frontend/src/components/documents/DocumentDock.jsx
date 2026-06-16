@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Download, Eye, FileText, Mail, MessageCircle, Printer, ReceiptText, Send, ShieldCheck, Undo2, X } from 'lucide-react';
+import { CheckCircle2, Clock3, Copy, Download, Eye, FileText, History, Mail, MessageCircle, Printer, ReceiptText, Send, ShieldCheck, Undo2, X } from 'lucide-react';
 import api from '../../api/axios';
 
 const money = (value) => `${Number(value || 0).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴`;
@@ -29,6 +29,14 @@ const toneClasses = {
   rose: 'bg-rose-50 text-rose-700 border-rose-100 group-hover:bg-rose-600 group-hover:text-white group-hover:border-rose-600',
 };
 
+const actionLabels = {
+  document_viewed: 'Переглянуто',
+  document_printed: 'Надруковано',
+  document_downloaded: 'Скачано',
+  document_sent: 'Надіслано',
+  document_message_copied: 'Скопійовано текст',
+};
+
 function findContext() {
   const text = document.body?.innerText || '';
   const store = text.match(/Замовлення\s*№\s*(\d+)/i);
@@ -36,6 +44,13 @@ function findContext() {
   const sto = text.match(/Візит\s*№\s*(\d+)/i) || text.match(/візит\s*№\s*(\d+)/i);
   if (sto) return { id: sto[1], mode: 'sto', title: `Візит №${sto[1]}` };
   return null;
+}
+
+function formatActivityDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function DocumentDock() {
@@ -48,6 +63,21 @@ export default function DocumentDock() {
   const [activeType, setActiveType] = useState('receipt');
   const [notice, setNotice] = useState('');
   const [sendType, setSendType] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const loadDocumentHistory = async (id = visit?.id) => {
+    if (!id) return;
+    setHistoryLoading(true);
+    try {
+      const response = await api.get(`/api/activity/?visit=${id}&category=documents&limit=12`);
+      setHistory(Array.isArray(response.data?.results) ? response.data.results : []);
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const load = async (overrideCtx = null) => {
     const currentCtx = overrideCtx?.id ? overrideCtx : ctx;
@@ -65,6 +95,7 @@ export default function DocumentDock() {
       setSettings(settingsRes.data);
       setActiveType(currentCtx.mode === 'store' ? 'receipt' : 'service_act');
       setOpen(true);
+      await loadDocumentHistory(visitRes.data?.id || currentCtx.id);
     } catch (error) {
       setNotice('Не вдалося підготувати документи. Оновіть сторінку і спробуйте ще раз.');
     } finally {
@@ -114,6 +145,16 @@ export default function DocumentDock() {
     return response.data;
   };
 
+  const recordDocumentEvent = async (type, action = 'sent', channel = '') => {
+    if (!visit?.id) return;
+    try {
+      await api.post(`/api/documents/visits/${visit.id}/${type}/`, { action, channel });
+      await loadDocumentHistory(visit.id);
+    } catch {
+      // Logging must never block document work.
+    }
+  };
+
   const openWindow = async (type, autoPrint = false) => {
     const popup = window.open('', '_blank');
     if (!popup) {
@@ -130,11 +171,13 @@ export default function DocumentDock() {
       popup.document.open();
       popup.document.write(html);
       popup.document.close();
+      await loadDocumentHistory(visit.id);
     } catch (error) {
       const html = buildDocumentHtml(type, visit, settings, { autoPrint });
       popup.document.open();
       popup.document.write(html);
       popup.document.close();
+      await recordDocumentEvent(type, autoPrint ? 'printed' : 'viewed', 'fallback');
       setNotice('Backend-документ ще недоступний після деплою, відкрито локальний стабільний бланк.');
     }
   };
@@ -144,9 +187,11 @@ export default function DocumentDock() {
       const html = await getBackendHtml(type, { download: true });
       downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
       setNotice('Бланк скачано. Відкрийте його і оберіть “Зберегти як PDF” у друці.');
+      await loadDocumentHistory(visit.id);
     } catch (error) {
       const html = buildDocumentHtml(type, visit, settings);
       downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
+      await recordDocumentEvent(type, 'downloaded', 'fallback');
       setNotice('Backend-документ ще недоступний після деплою, скачано локальний стабільний бланк.');
     }
   };
@@ -167,14 +212,14 @@ export default function DocumentDock() {
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Пакет документів</p>
               <h2 className="text-xl md:text-2xl font-black uppercase truncate">{ctx.title}</h2>
-              <p className="text-xs font-bold text-blue-100 mt-1">Превʼю, друк, PDF-бланк і відправка клієнту в одному модулі.</p>
+              <p className="text-xs font-bold text-blue-100 mt-1">Превʼю, друк, PDF-бланк, відправка клієнту і журнал дій.</p>
             </div>
             <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center shrink-0"><X size={18}/></button>
           </div>
 
           {notice && <div className="mx-4 md:mx-5 mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 flex items-center justify-between gap-3 shrink-0"><span>{notice}</span><button onClick={() => setNotice('')} className="text-blue-400 hover:text-blue-700"><X size={16}/></button></div>}
 
-          <div className="grid grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)] gap-0 min-h-0 flex-1 overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)] gap-0 min-h-0 flex-1 overflow-hidden">
             <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/80 p-4 md:p-5 overflow-y-auto">
               <div className="mb-4">
                 <h3 className="text-sm font-black uppercase text-slate-900">Документи</h3>
@@ -198,6 +243,36 @@ export default function DocumentDock() {
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Журнал</p>
+                    <h4 className="text-sm font-black uppercase text-slate-900">Історія документів</h4>
+                  </div>
+                  <button type="button" onClick={() => loadDocumentHistory(visit?.id)} className="w-9 h-9 rounded-2xl bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center"><History size={16}/></button>
+                </div>
+                {historyLoading ? (
+                  <div className="rounded-2xl bg-slate-50 p-3 text-xs font-bold text-slate-400 flex items-center gap-2"><Clock3 size={14} className="animate-spin"/> Завантаження...</div>
+                ) : history.length ? (
+                  <div className="space-y-2">
+                    {history.map((item) => (
+                      <div key={item.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-black text-slate-900 truncate">{actionLabels[item.action_type] || item.title || 'Документ'}</p>
+                            <p className="text-[11px] font-semibold text-slate-500 truncate">{item.metadata?.document_title || item.description || 'Документ'}</p>
+                          </div>
+                          <span className="shrink-0 text-[10px] font-black text-slate-400">{formatActivityDate(item.created_at)}</span>
+                        </div>
+                        <div className="mt-2 flex items-center gap-1.5 text-[10px] font-black uppercase text-emerald-700"><CheckCircle2 size={12}/> {item.actor || 'Система'}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs font-bold text-slate-400">Поки дій з документами немає</div>
+                )}
               </div>
             </aside>
 
@@ -224,7 +299,7 @@ export default function DocumentDock() {
           </div>
         </div>
 
-        {sendType && <SendDialog type={sendType} visit={visit} settings={settings} onClose={() => setSendType(null)} onCopy={(text) => { navigator.clipboard?.writeText(text); setNotice('Текст для клієнта скопійовано.'); }} />}
+        {sendType && <SendDialog type={sendType} visit={visit} settings={settings} onClose={() => setSendType(null)} onCopy={async (text) => { navigator.clipboard?.writeText(text); await recordDocumentEvent(sendType, 'copied', 'copy'); setNotice('Текст для клієнта скопійовано.'); }} onSend={recordDocumentEvent} />}
       </div>,
       document.body
     )}
@@ -235,7 +310,7 @@ function ActionButton({ icon, label, onClick, dark = false }) {
   return <button type="button" onClick={onClick} className={`${dark ? 'bg-slate-900 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'} rounded-2xl px-3 py-2.5 text-[11px] font-black uppercase flex items-center justify-center gap-1.5 transition whitespace-nowrap`}>{icon}{label}</button>;
 }
 
-function SendDialog({ type, visit, settings, onClose, onCopy }) {
+function SendDialog({ type, visit, settings, onClose, onCopy, onSend }) {
   const meta = docTypes[type] || docTypes.receipt;
   const company = settings?.company || {};
   const email = visit?.email || visit?.client_email || '';
@@ -258,8 +333,8 @@ function SendDialog({ type, visit, settings, onClose, onCopy }) {
       <div className="p-5 space-y-3">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600 leading-relaxed">{text}</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <a href={mailto} className="rounded-2xl bg-blue-600 text-white px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-700"><Mail size={16}/> Email</a>
-          <a href={sms} className="rounded-2xl bg-emerald-50 text-emerald-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-emerald-100"><MessageCircle size={16}/> SMS</a>
+          <a href={mailto} onClick={() => onSend?.(type, 'email', 'email')} className="rounded-2xl bg-blue-600 text-white px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-700"><Mail size={16}/> Email</a>
+          <a href={sms} onClick={() => onSend?.(type, 'sms', 'sms')} className="rounded-2xl bg-emerald-50 text-emerald-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-emerald-100"><MessageCircle size={16}/> SMS</a>
         </div>
         <button type="button" onClick={() => onCopy(text)} className="w-full rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-slate-200"><Copy size={16}/> Скопіювати текст</button>
         <p className="text-[11px] font-semibold text-slate-400 leading-relaxed">Файл PDF створіть кнопкою “PDF”, після чого прикріпіть його до листа або повідомлення.</p>

@@ -44,9 +44,9 @@ def resolve_pending_payments_for_client(client, admin_user):
                     client.id,
                 ],
             )
+            return cursor.rowcount
     except Exception:
         return 0
-    return cursor.rowcount if 'cursor' in locals() else 0
 
 
 class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
@@ -54,6 +54,20 @@ class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
         qs = super().get_queryset()
         sync_queryset_subscriptions(qs)
         return qs
+
+    def _can_manage_client(self, user, client):
+        return is_platform_admin(user) or (
+            is_partner_user(user) and client.assigned_owner_id == user.id
+        )
+
+    def _renew_client(self, request, client):
+        if not self._can_manage_client(request.user, client):
+            return Response({'error': 'Немає прав продовжувати підписку цього клієнта.'}, status=403)
+        renew_client_30_days(client)
+        resolved_count = resolve_pending_payments_for_client(client, request.user)
+        data = self.get_serializer(client).data
+        data['resolved_pending_payments'] = resolved_count
+        return Response(data)
 
     @transaction.atomic
     def destroy(self, request, *args, **kwargs):
@@ -92,20 +106,22 @@ class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
         return Response({'message': 'Акаунт повністю видалено.', 'deleted_user_id': target_user_id, 'username': target_username}, status=status.HTTP_200_OK)
 
     @transaction.atomic
+    @action(detail=True, methods=['post'], url_path='renew-30')
+    def renew_30(self, request, pk=None):
+        repair_legacy_account(request.user)
+        return self._renew_client(request, self.get_object())
+
+    @transaction.atomic
     @action(detail=True, methods=['post'], url_path='renew-30-days')
     def renew_30_days(self, request, pk=None):
         repair_legacy_account(request.user)
-        instance = self.get_object()
-        allowed = is_platform_admin(request.user) or (
-            is_partner_user(request.user) and instance.assigned_owner_id == request.user.id
-        )
-        if not allowed:
-            return Response({'error': 'Немає прав продовжувати підписку цього клієнта.'}, status=403)
-        renew_client_30_days(instance)
-        resolved_count = resolve_pending_payments_for_client(instance, request.user)
-        data = self.get_serializer(instance).data
-        data['resolved_pending_payments'] = resolved_count
-        return Response(data)
+        return self._renew_client(request, self.get_object())
+
+    @transaction.atomic
+    @action(detail=True, methods=['post'], url_path='activate-month')
+    def activate_month(self, request, pk=None):
+        repair_legacy_account(request.user)
+        return self._renew_client(request, self.get_object())
 
     @action(detail=False, methods=['get'], url_path='subscription-alerts')
     def subscription_alerts(self, request):

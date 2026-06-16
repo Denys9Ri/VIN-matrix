@@ -10,6 +10,7 @@ from apps.core.billing_client_link_views import BillingAdminClientLinkView
 from apps.core.billing_views import (
     BillingMeView,
     BillingPaymentRequestView,
+    BillingAdminClientsView,
     BillingAdminPaymentsView,
     BillingAdminConfirmPaymentView,
     BillingAdminRejectPaymentView,
@@ -135,6 +136,7 @@ def openapi_schema(request):
             "/api/payments/": {"get": {"summary": "List visit payments"}},
             "/api/inventory/": {"get": {"summary": "List inventory"}, "post": {"summary": "Create inventory item"}},
             "/api/inventory/insights/": {"get": {"summary": "Inventory purchasing and margin insights"}},
+            "/api/billing/admin/clients/": {"get": {"summary": "SaaS billing clients overview"}},
             "/api/documents/visits/{visit_id}/{doc_type}/": {"get": {"summary": "Render visit document"}},
         },
     })
@@ -174,26 +176,10 @@ urlpatterns = [
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/profile/change-password/', ChangePasswordView.as_view(), name='change-password-alt'),
 
-    path(
-        'api/settings/dictionaries/',
-        CompanyDictionariesView.as_view(),
-        name='settings-dictionaries',
-    ),
-    path(
-        'api/settings/options/',
-        CompanyOptionListCreateView.as_view(),
-        name='settings-options',
-    ),
-    path(
-        'api/settings/options/bulk/',
-        CompanyOptionBulkView.as_view(),
-        name='settings-options-bulk',
-    ),
-    path(
-        'api/settings/options/<int:pk>/',
-        CompanyOptionDetailView.as_view(),
-        name='settings-option-detail',
-    ),
+    path('api/settings/dictionaries/', CompanyDictionariesView.as_view(), name='settings-dictionaries'),
+    path('api/settings/options/', CompanyOptionListCreateView.as_view(), name='settings-options'),
+    path('api/settings/options/bulk/', CompanyOptionBulkView.as_view(), name='settings-options-bulk'),
+    path('api/settings/options/<int:pk>/', CompanyOptionDetailView.as_view(), name='settings-option-detail'),
 
     path('api/search-parts/', PartSearchView.as_view(), name='search-parts'),
     path('api/parts/search/', PartSearchView.as_view(), name='parts-search-alt'),
@@ -206,6 +192,7 @@ urlpatterns = [
 
     path('api/billing/me/', BillingMeView.as_view(), name='billing-me'),
     path('api/billing/payment-request/', BillingPaymentRequestView.as_view(), name='billing-payment-request'),
+    path('api/billing/admin/clients/', BillingAdminClientsView.as_view(), name='billing-admin-clients'),
     path('api/billing/admin/payments/', BillingAdminPaymentsView.as_view(), name='billing-admin-payments'),
     path('api/billing/admin/confirm/', BillingAdminConfirmPaymentView.as_view(), name='billing-admin-confirm'),
     path('api/billing/admin/reject/', BillingAdminRejectPaymentView.as_view(), name='billing-admin-reject'),
@@ -247,32 +234,12 @@ urlpatterns = [
     path('api/delivery/novapost/profiles/<int:pk>/test/', NovaPostProfileTestView.as_view(), name='novapost-profile-test'),
     path('api/delivery/novapost/cities/', NovaPostCitiesView.as_view(), name='novapost-cities'),
     path('api/delivery/novapost/warehouses/', NovaPostWarehousesView.as_view(), name='novapost-warehouses'),
-    path(
-        'api/delivery/novapost/refresh-active/',
-        NovaPostDeliveryRefreshActiveView.as_view(),
-        name='novapost-delivery-refresh-active',
-    ),
+    path('api/delivery/novapost/refresh-active/', NovaPostDeliveryRefreshActiveView.as_view(), name='novapost-delivery-refresh-active'),
 
-    re_path(
-        r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/$',
-        NovaPostDeliveryView.as_view(),
-        name='novapost-delivery',
-    ),
-    re_path(
-        r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/status/$',
-        NovaPostDeliveryStatusView.as_view(),
-        name='novapost-delivery-status',
-    ),
-    re_path(
-        r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create-ttn/$',
-        NovaPostDeliveryCreateView.as_view(),
-        name='novapost-delivery-create-ttn',
-    ),
-    re_path(
-        r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create/$',
-        NovaPostDeliveryCreateView.as_view(),
-        name='novapost-delivery-create-fallback',
-    ),
+    re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/$', NovaPostDeliveryView.as_view(), name='novapost-delivery'),
+    re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/status/$', NovaPostDeliveryStatusView.as_view(), name='novapost-delivery-status'),
+    re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create-ttn/$', NovaPostDeliveryCreateView.as_view(), name='novapost-delivery-create-ttn'),
+    re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create/$', NovaPostDeliveryCreateView.as_view(), name='novapost-delivery-create-fallback'),
 
     path('api/', include(router.urls)),
 ]

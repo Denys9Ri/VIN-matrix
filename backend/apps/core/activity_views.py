@@ -80,12 +80,14 @@ def _build_filters(request, company):
         params.append(timezone.make_aware(datetime.combine(date_to + timedelta(days=1), dt_time.min)))
     if q:
         like = f'%{q}%'
-        where.append("(a.title ILIKE %s OR a.description ILIKE %s OR a.metadata->>'client' ILIKE %s OR a.metadata->>'phone' ILIKE %s OR a.metadata->>'article' ILIKE %s OR a.metadata->>'brand' ILIKE %s OR a.metadata->>'part_name' ILIKE %s)")
-        params.extend([like, like, like, like, like, like, like])
+        where.append("(a.title ILIKE %s OR a.description ILIKE %s OR a.metadata->>'client' ILIKE %s OR a.metadata->>'phone' ILIKE %s OR a.metadata->>'article' ILIKE %s OR a.metadata->>'brand' ILIKE %s OR a.metadata->>'part_name' ILIKE %s OR a.metadata->>'document_type' ILIKE %s OR a.metadata->>'document_title' ILIKE %s)")
+        params.extend([like, like, like, like, like, like, like, like, like])
     if category == 'finance':
         where.append("a.action_type LIKE 'payment_%%'")
     elif category == 'stock':
         where.append("a.action_type LIKE 'stock_%%'")
+    elif category == 'documents':
+        where.append("a.action_type LIKE 'document_%%'")
     elif category == 'cancel':
         where.append("(a.action_type LIKE '%%cancel%%' OR a.action_type LIKE '%%deleted%%')")
     elif category == 'return':
@@ -123,6 +125,8 @@ def _summary(where, params):
         payments = cursor.fetchone()[0] or 0
         cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND a.action_type LIKE 'stock_%%'", params)
         stock = cursor.fetchone()[0] or 0
+        cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND a.action_type LIKE 'document_%%'", params)
+        documents = cursor.fetchone()[0] or 0
         cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND (a.action_type LIKE '%%return%%' OR a.action_type='stock_defective')", params)
         returns = cursor.fetchone()[0] or 0
         cursor.execute(f"SELECT COUNT(*) FROM core_activitylog a WHERE {base_where} AND (a.action_type LIKE '%%cancel%%' OR a.action_type LIKE '%%deleted%%')", params)
@@ -146,7 +150,7 @@ def _summary(where, params):
             LIMIT 12
         """, params)
         by_action = [{'action_type': r[0], 'count': r[1]} for r in cursor.fetchall()]
-    return {'total': total, 'payments': payments, 'stock': stock, 'returns': returns, 'cancels': cancels, 'by_user': by_user, 'by_action': by_action}
+    return {'total': total, 'payments': payments, 'stock': stock, 'documents': documents, 'returns': returns, 'cancels': cancels, 'by_user': by_user, 'by_action': by_action}
 
 
 def _csv_response(rows):

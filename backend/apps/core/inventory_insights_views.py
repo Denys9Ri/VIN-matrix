@@ -1,8 +1,8 @@
 from collections import defaultdict
+from datetime import timedelta
 from math import ceil
 
 from django.db import connection
-from django.db.models import Q
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -65,7 +65,7 @@ def movement_stats(company, item_ids):
     if not item_ids:
         return {}
 
-    since = timezone.now() - timezone.timedelta(days=SALES_WINDOW_DAYS)
+    since = timezone.now() - timedelta(days=SALES_WINDOW_DAYS)
     stats = defaultdict(lambda: {
         'last_movement_at': None,
         'last_sale_at': None,
@@ -183,12 +183,7 @@ class InventoryInsightsView(APIView):
         )
 
         slow_moving = sorted(
-            [
-                row for row in rows
-                if row['quantity'] > 0 and (
-                    row['days_without_sale'] is None or row['days_without_sale'] >= SLOW_DAYS
-                )
-            ],
+            [row for row in rows if row['quantity'] > 0 and (row['days_without_sale'] is None or row['days_without_sale'] >= SLOW_DAYS)],
             key=lambda row: (row['frozen_money'], row['days_without_sale'] or 9999),
             reverse=True,
         )

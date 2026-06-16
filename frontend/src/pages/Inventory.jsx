@@ -53,8 +53,7 @@ const emptyPriceRow = {
   article: '',
   name: '',
   quantity: 1,
-  sell_price: '',
-  supplier: '',
+  buy_price: '',
   category: '',
   note: '',
 };
@@ -122,6 +121,12 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const excelCell = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const availableQty = (item = {}) => Number(item.available_quantity ?? Math.max(Number(item.quantity || 0) - Number(item.reserved_quantity || 0), 0));
 const needsRestock = (item = {}) => item.needs_restock || availableQty(item) <= Number(item.min_quantity || 0);
+const priceListPrice = (basePrice, markupPercent) => {
+  const base = num(basePrice);
+  const markup = num(markupPercent);
+  if (!base) return 0;
+  return Math.round((base + (base * markup / 100)) * 100) / 100;
+};
 
 export default function Inventory() {
   const navigate = useNavigate();
@@ -145,6 +150,7 @@ export default function Inventory() {
   const [receipt, setReceipt] = useState({ ...emptyReceipt });
   const [priceDraft, setPriceDraft] = useState({ ...emptyPriceRow });
   const [priceRows, setPriceRows] = useState([]);
+  const [priceMarkupPercent, setPriceMarkupPercent] = useState(() => localStorage.getItem('vinmatrix_price_markup_percent') || '10');
 
   const load = async () => {
     setLoading(true);
@@ -175,6 +181,7 @@ export default function Inventory() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { localStorage.setItem('vinmatrix_price_markup_percent', String(priceMarkupPercent || '0')); }, [priceMarkupPercent]);
 
   useEffect(() => {
     const draft = location.state?.receiptDraft;
@@ -367,20 +374,23 @@ export default function Inventory() {
 
   const addPriceRow = (event) => {
     event.preventDefault();
+    const basePrice = num(priceDraft.buy_price);
     const row = {
       ...priceDraft,
       brand: priceDraft.brand.trim().toUpperCase(),
       article: priceDraft.article.trim().toUpperCase(),
       name: priceDraft.name.trim(),
-      supplier: priceDraft.supplier.trim(),
       category: priceDraft.category.trim(),
       note: priceDraft.note.trim(),
       quantity: num(priceDraft.quantity) || 1,
-      sell_price: priceDraft.sell_price,
+      buy_price: basePrice,
+      markup_percent: num(priceMarkupPercent),
+      price: priceListPrice(basePrice, priceMarkupPercent),
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     };
 
     if (!row.article || !row.name) return toast.warning('Вкажіть артикул і назву товару для прайсу.');
+    if (!row.buy_price) return toast.warning('Вкажіть закупку / базову ціну. Ціна прайсу рахується від неї.');
 
     setPriceRows((prev) => [row, ...prev]);
     setPriceDraft({ ...emptyPriceRow });
@@ -388,14 +398,16 @@ export default function Inventory() {
   };
 
   const addItemToPrice = (item) => {
+    const basePrice = num(item.buy_price || item.sell_price || 0);
     const row = {
       id: `${Date.now()}-${item.id || Math.random().toString(16).slice(2)}`,
       brand: item.brand || '',
       article: item.article || '',
       name: item.name || '',
       quantity: availableQty(item) || item.quantity || 1,
-      sell_price: item.sell_price || '',
-      supplier: item.supplier_name || '',
+      buy_price: basePrice,
+      markup_percent: num(priceMarkupPercent),
+      price: priceListPrice(basePrice, priceMarkupPercent),
       category: item.category_name || '',
       note: '',
     };
@@ -422,15 +434,14 @@ export default function Inventory() {
   const downloadPriceExcel = () => {
     if (!priceRows.length) return toast.warning('Додайте товари у прайс перед завантаженням.');
 
-    const headers = ['Бренд', 'Артикул', 'Назва товару', 'Кількість', 'Ціна продажу', 'Постачальник', 'Категорія', 'Примітка'];
+    const headers = ['Бренд', 'Артикул', 'Назва товару', 'Кількість', 'Ціна прайсу', 'Категорія', 'Примітка'];
     const rowsHtml = priceRows.map((row) => `
       <tr>
         <td>${excelCell(row.brand)}</td>
         <td style="mso-number-format:'\@';">${excelCell(row.article)}</td>
         <td>${excelCell(row.name)}</td>
         <td>${excelCell(row.quantity)}</td>
-        <td>${excelCell(row.sell_price)}</td>
-        <td>${excelCell(row.supplier)}</td>
+        <td>${excelCell(row.price)}</td>
         <td>${excelCell(row.category)}</td>
         <td>${excelCell(row.note)}</td>
       </tr>`).join('');
@@ -510,6 +521,8 @@ export default function Inventory() {
           draft={priceDraft}
           setDraft={setPriceDraft}
           rows={priceRows}
+          markup={priceMarkupPercent}
+          setMarkup={setPriceMarkupPercent}
           onAdd={addPriceRow}
           onRemove={removePriceRow}
           onClear={clearPriceRows}
@@ -689,8 +702,9 @@ function Item({ item, onDelete, onAddToPrice }) {
 }
 
 
-function PriceBuilder({ draft, setDraft, rows, onAdd, onRemove, onClear, onDownload }) {
-  const total = rows.reduce((sum, row) => sum + (num(row.sell_price) * (num(row.quantity) || 1)), 0);
+function PriceBuilder({ draft, setDraft, rows, markup, setMarkup, onAdd, onRemove, onClear, onDownload }) {
+  const total = rows.reduce((sum, row) => sum + (num(row.price) * (num(row.quantity) || 1)), 0);
+  const draftPrice = priceListPrice(draft.buy_price, markup);
 
   return (
     <div className="space-y-5">
@@ -700,7 +714,7 @@ function PriceBuilder({ draft, setDraft, rows, onAdd, onRemove, onClear, onDownl
             <p className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-200">Excel-прайс товарів</p>
             <h2 className="mt-2 text-2xl font-black uppercase md:text-3xl">Зібрати прайс вручну</h2>
             <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-300">
-              Додавайте позиції руками або кнопкою “у прайс” зі складу. Потім одним кліком завантажуйте файл, який відкривається в Excel.
+              Додавайте позиції руками або кнопкою “у прайс” зі складу. Ціна прайсу рахується від закупки з окремою націнкою для оптового/партнерського прайсу.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:min-w-[320px]">
@@ -716,6 +730,25 @@ function PriceBuilder({ draft, setDraft, rows, onAdd, onRemove, onClear, onDownl
         </div>
       </Card>
 
+      <Card padding="md" className="border-emerald-100 bg-emerald-50/60">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Окрема націнка прайсу</p>
+            <p className="mt-1 text-sm font-bold text-emerald-900">Це не ціна для кінцевого клієнта. Це ціна для Excel-прайсу, коли магазин хоче продавати товар як маленький постачальник.</p>
+          </div>
+          <label className="block md:w-[220px]">
+            <span className="mb-1 block text-xs font-black uppercase text-emerald-700">Націнка, %</span>
+            <input
+              type="number"
+              step="0.01"
+              value={markup}
+              onChange={(event) => setMarkup(event.target.value)}
+              className="w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm font-black text-emerald-900 outline-none focus:border-emerald-500"
+            />
+          </label>
+        </div>
+      </Card>
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[430px_minmax(0,1fr)]">
         <Panel>
           <SectionHeader title="Додати позицію" subtitle="Це не змінює склад. Це тільки рядок для Excel-прайсу." />
@@ -725,8 +758,13 @@ function PriceBuilder({ draft, setDraft, rows, onAdd, onRemove, onClear, onDownl
               <Input required label="Артикул" value={draft.article} onChange={(value) => setDraft((prev) => ({ ...prev, article: value.toUpperCase() }))} placeholder="08-214" />
               <Input required label="Назва товару" value={draft.name} onChange={(value) => setDraft((prev) => ({ ...prev, name: value }))} placeholder="Диск гальмівний задній" />
               <Input type="number" min="1" label="Кількість" value={draft.quantity} onChange={(value) => setDraft((prev) => ({ ...prev, quantity: value }))} />
-              <Input type="number" step="0.01" label="Ціна продажу" value={draft.sell_price} onChange={(value) => setDraft((prev) => ({ ...prev, sell_price: value }))} placeholder="192" />
-              <Input label="Постачальник" value={draft.supplier} onChange={(value) => setDraft((prev) => ({ ...prev, supplier: value }))} placeholder="Мій склад" />
+              <Input required type="number" step="0.01" label="Закупка / база" value={draft.buy_price} onChange={(value) => setDraft((prev) => ({ ...prev, buy_price: value }))} placeholder="160" />
+              <Input type="number" step="0.01" label="Націнка прайсу, %" value={markup} onChange={(value) => setMarkup(value)} placeholder="10" />
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <p className="text-[10px] font-black uppercase text-emerald-600">Ціна прайсу</p>
+                <p className="mt-1 text-2xl font-black text-emerald-700">{money(draftPrice)}</p>
+                <p className="mt-1 text-xs font-bold text-emerald-700/80">Рахується окремо від клієнтської ціни продажу.</p>
+              </div>
               <Input label="Категорія" value={draft.category} onChange={(value) => setDraft((prev) => ({ ...prev, category: value }))} placeholder="Гальма" />
             </div>
             <label className="block">
@@ -777,8 +815,9 @@ function PriceRows({ rows, onRemove }) {
           <p className="mt-2 text-sm font-bold text-slate-700">{row.name || 'Товар без назви'}</p>
           <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
             <Small label="К-сть" value={`${row.quantity || 1} шт`} strong />
-            <Small label="Ціна" value={money(row.sell_price)} good />
-            <Small label="Постачальник" value={row.supplier || '—'} />
+            <Small label="База" value={money(row.buy_price)} />
+            <Small label="Націнка" value={`${row.markup_percent || 0}%`} />
+            <Small label="Ціна прайсу" value={money(row.price)} good />
             <Small label="Категорія" value={row.category || '—'} />
           </div>
           {row.note && <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">{row.note}</p>}

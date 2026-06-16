@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
 import UniversalSearch from './pages/UniversalSearch';
-import Inventory from './pages/Inventory';
+import Inventory from './pages/InventoryStage6';
 import Settings from './pages/Settings';
 import DocumentSettings from './pages/DocumentSettings';
 import ServicesSettings from './pages/ServicesSettings';

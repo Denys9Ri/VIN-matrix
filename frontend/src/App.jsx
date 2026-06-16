@@ -13,7 +13,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Visits from './pages/Visits';
 import StoreOrders from './pages/StoreOrders';
-import ClientsCRM from './pages/ClientsCRM';
+import ClientsCRM from './pages/ClientsCRMStage5';
 import Analytics from './pages/Analytics';
 import ActivityJournal from './pages/ActivityJournal';
 import DataExchange from './pages/DataExchange';

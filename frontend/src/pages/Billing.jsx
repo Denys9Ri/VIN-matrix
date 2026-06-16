@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, CreditCard, History, LogOut, RefreshCcw, ShieldCheck, Sparkles, Wallet, XCircle } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, CreditCard, ExternalLink, History, LogOut, RefreshCcw, ShieldCheck, Sparkles, Wallet, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -7,12 +7,12 @@ const money = (value, currency = 'UAH') => `${Number(value || 0).toLocaleString(
 const fmt = (value) => value ? new Date(value).toLocaleString('uk-UA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 const toneByStatus = (status) => {
-  if (status === 'blocked') return { gradient: 'from-rose-600 via-red-600 to-orange-500', badge: 'bg-rose-50 text-rose-700 border-rose-100', icon: XCircle, action: 'Оплатити і відновити доступ' };
-  if (status === 'grace') return { gradient: 'from-amber-500 via-orange-500 to-yellow-500', badge: 'bg-amber-50 text-amber-700 border-amber-100', icon: Clock3, action: 'Оплатити зараз' };
-  if (status === 'payment_due_soon') return { gradient: 'from-blue-600 via-indigo-600 to-cyan-500', badge: 'bg-blue-50 text-blue-700 border-blue-100', icon: AlertTriangle, action: 'Продовжити доступ' };
-  if (status === 'trial') return { gradient: 'from-blue-600 via-sky-600 to-cyan-500', badge: 'bg-blue-50 text-blue-700 border-blue-100', icon: CalendarDays, action: 'Оплатити тариф' };
-  if (status === 'manual_free') return { gradient: 'from-violet-600 via-purple-600 to-fuchsia-500', badge: 'bg-violet-50 text-violet-700 border-violet-100', icon: ShieldCheck, action: 'Створити заявку' };
-  return { gradient: 'from-emerald-600 via-teal-600 to-cyan-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: CheckCircle2, action: 'Продовжити тариф' };
+  if (status === 'blocked') return { gradient: 'from-rose-600 via-red-600 to-orange-500', icon: XCircle, action: 'Оплатити і відновити доступ' };
+  if (status === 'grace') return { gradient: 'from-amber-500 via-orange-500 to-yellow-500', icon: Clock3, action: 'Оплатити зараз' };
+  if (status === 'payment_due_soon') return { gradient: 'from-blue-600 via-indigo-600 to-cyan-500', icon: AlertTriangle, action: 'Продовжити доступ' };
+  if (status === 'trial') return { gradient: 'from-blue-600 via-sky-600 to-cyan-500', icon: CalendarDays, action: 'Оплатити тариф' };
+  if (status === 'manual_free') return { gradient: 'from-violet-600 via-purple-600 to-fuchsia-500', icon: ShieldCheck, action: 'Створити заявку' };
+  return { gradient: 'from-emerald-600 via-teal-600 to-cyan-500', icon: CheckCircle2, action: 'Продовжити тариф' };
 };
 
 const paymentStatus = {
@@ -50,9 +50,11 @@ export default function Billing() {
 
   const billing = data?.billing || {};
   const plan = data?.plan || {};
+  const paymentSettings = data?.payment_settings || {};
   const payments = Array.isArray(data?.payments) ? data.payments : [];
   const activeAccess = hasActiveAccess(billing);
-  const pendingCount = activeAccess ? 0 : payments.filter((payment) => payment.status === 'pending').length;
+  const rawPendingCount = payments.filter((payment) => payment.status === 'pending').length;
+  const pendingCount = activeAccess ? 0 : Math.min(rawPendingCount, 1);
   const tone = toneByStatus(billing.billing_status || billing.status);
   const Icon = tone.icon;
   const accessAllowed = billing.access_allowed !== false;
@@ -63,9 +65,11 @@ export default function Billing() {
     try {
       const res = await api.post('/api/billing/payment-request/', {
         method,
-        amount: billing.price || plan.price,
-        comment: method === 'cash' ? 'Клієнт планує оплату готівкою' : 'Клієнт натиснув “Я оплатив” на сторінці тарифу',
+        amount: billing.price || plan.price || paymentSettings.monthly_value || 2000,
+        comment: method === 'cash' ? 'Клієнт обрав оплату готівкою на сторінці тарифу' : 'Клієнт натиснув “Оплатити” на сторінці тарифу',
       });
+      const url = res.data?.payment_url || paymentSettings.public_url;
+      if (method !== 'cash' && url) window.open(url, '_blank', 'noopener,noreferrer');
       setNotice(res.data?.message || 'Заявку створено. Після перевірки адміністратор підтвердить доступ.');
       await load();
     } catch (error) {
@@ -88,27 +92,27 @@ export default function Billing() {
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600">VIN-matrix SaaS</p>
             <h1 className="mt-2 text-3xl md:text-5xl font-black uppercase italic text-slate-950">Тариф і доступ</h1>
-            <p className="mt-2 max-w-2xl text-sm md:text-base font-bold text-slate-500">Керуйте підпискою, оплатою і доступом до системи. Якщо доступ заблоковано, оплатіть тариф і створіть заявку на підтвердження.</p>
+            <p className="mt-2 max-w-2xl text-sm md:text-base font-bold text-slate-500">Статус підписки, оплата і заявка на підтвердження в одному місці.</p>
           </div>
           <button onClick={() => { localStorage.clear(); navigate('/login'); }} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-5 py-3 text-xs font-black uppercase text-rose-600 hover:bg-rose-100"><LogOut size={16}/> Вийти</button>
         </div>
 
         {notice && <div className="rounded-[24px] border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">{notice}</div>}
-        {activeAccess && payments.some((payment) => payment.status === 'pending') && <div className="rounded-[24px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">Доступ активний. Старі заявки “очікує” залишені тільки в історії й не блокують роботу.</div>}
+        {activeAccess && rawPendingCount > 0 && <div className="rounded-[24px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">Доступ активний. Старі заявки залишені тільки в історії й не блокують роботу.</div>}
 
         <section className={`overflow-hidden rounded-[38px] bg-gradient-to-r ${tone.gradient} text-white shadow-2xl shadow-slate-200`}>
           <div className="p-5 md:p-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_420px] gap-6 items-stretch">
             <div className="min-w-0">
               <div className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/15 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white/90"><Icon size={16}/> {billing.label || 'Активний'}</div>
               <h2 className="mt-5 text-3xl md:text-5xl font-black uppercase leading-tight">{plan.name || billing.plan_name || 'VIN-matrix Full'}</h2>
-              <p className="mt-4 max-w-2xl text-sm md:text-base font-bold text-white/85 leading-relaxed">{billing.message || 'Усі функції VIN-matrix в одному тарифі: CRM, склад, документи, аналітика, Нова пошта, магазин і СТО.'}</p>
+              <p className="mt-4 max-w-2xl text-sm md:text-base font-bold text-white/85 leading-relaxed">{billing.message || 'Усі функції VIN-matrix включені в тариф.'}</p>
               <div className="mt-6 flex flex-wrap gap-2">
                 {(plan.features || []).map((feature) => <span key={feature} className="rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-black uppercase text-white/85">{feature}</span>)}
               </div>
             </div>
             <div className="rounded-[30px] border border-white/20 bg-white/15 p-4 md:p-5 backdrop-blur-sm">
               <div className="grid grid-cols-2 gap-3">
-                <Metric label="Ціна" value={money(billing.price || plan.price || 2000, billing.currency || plan.currency || 'UAH')} icon={<Wallet size={16}/>} />
+                <Metric label="Ціна" value={money(billing.price || plan.price || paymentSettings.monthly_value || 2000, billing.currency || plan.currency || 'UAH')} icon={<Wallet size={16}/>} />
                 <Metric label="Статус" value={billing.label || 'Активний'} icon={<ShieldCheck size={16}/>} />
                 <Metric label="До дати" value={mainDate} icon={<CalendarDays size={16}/>} />
                 <Metric label="Днів" value={billing.days_left !== null && billing.days_left !== undefined ? `${billing.days_left} дн.` : billing.grace_days_left ? `${billing.grace_days_left} дн.` : '—'} icon={<Clock3 size={16}/>} />
@@ -120,13 +124,15 @@ export default function Billing() {
             </div>
           </div>
           <div className="border-t border-white/15 bg-white/10 p-4 md:px-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-            <p className="text-xs md:text-sm font-bold text-white/80">Оплата підтверджується вручну адміністратором. Після підтвердження доступ продовжується на 30 днів.</p>
+            <p className="text-xs md:text-sm font-bold text-white/80">Натисніть “Оплатити” — заявка автоматично потрапить адміну на підтвердження. Якщо є посилання, воно відкриється в новій вкладці.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full lg:w-auto">
               <button disabled={Boolean(busy)} onClick={() => createPaymentRequest('monobank_jar')} className="rounded-2xl bg-white px-5 py-3 text-xs font-black uppercase text-slate-950 shadow-lg hover:bg-slate-50 disabled:opacity-60">{busy === 'monobank_jar' ? 'Створюємо...' : tone.action}</button>
               <button disabled={Boolean(busy)} onClick={() => createPaymentRequest('cash')} className="rounded-2xl border border-white/20 bg-slate-950/25 px-5 py-3 text-xs font-black uppercase text-white hover:bg-slate-950/35 disabled:opacity-60">{busy === 'cash' ? 'Створюємо...' : 'Оплата готівкою'}</button>
             </div>
           </div>
         </section>
+
+        <PaymentInstructions settings={paymentSettings} />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <SmallCard icon={<CreditCard size={18}/>} label="Активних заявок" value={pendingCount} tone={pendingCount ? 'amber' : 'emerald'} />
@@ -147,6 +153,33 @@ export default function Billing() {
       </div>
     </div>
   );
+}
+
+function PaymentInstructions({ settings }) {
+  const url = settings?.public_url || '';
+  const note = settings?.public_note || '';
+  const instruction = settings?.instruction || '';
+  return (
+    <section className="rounded-[30px] border border-slate-200 bg-white p-4 md:p-5 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Куди оплатити</p>
+          <h3 className="mt-1 text-2xl font-black uppercase text-slate-950">Реквізити оплати</h3>
+          <p className="mt-2 text-sm font-bold text-slate-500">Після оплати заявка вже буде в адмінці. Адміністратор підтвердить її і доступ стане активним.</p>
+        </div>
+        {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-xs font-black uppercase text-white shadow-lg shadow-blue-100"><ExternalLink size={15}/> Відкрити оплату</a>}
+      </div>
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <InfoBox label="Посилання" value={url || 'Адмін ще не вказав посилання на оплату'} />
+        <InfoBox label="Інструкція" value={instruction || 'Вкажіть ваш код клієнта в коментарі до оплати'} />
+      </div>
+      {note && <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800 whitespace-pre-wrap">{note}</div>}
+    </section>
+  );
+}
+
+function InfoBox({ label, value }) {
+  return <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 break-words text-sm font-black text-slate-800">{value}</p></div>;
 }
 
 function Metric({ label, value, icon }) {

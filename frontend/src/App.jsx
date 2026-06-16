@@ -19,7 +19,7 @@ import Analytics from './pages/Analytics';
 import ActivityJournal from './pages/ActivityJournal';
 import DataExchange from './pages/DataExchange';
 import PartnerClients from './pages/PartnerClients';
-import Partners from './pages/Partners';
+import PartnersSaaS from './pages/PartnersSaaS';
 import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
@@ -130,7 +130,7 @@ function App() {
           <Route path="journal" element={<ActivityJournal />} />
           <Route path="data" element={<DataExchange />} />
           <Route path="partner-clients" element={<PartnerClients />} />
-          <Route path="partners" element={<Partners />} />
+          <Route path="partners" element={<PartnersSaaS />} />
           <Route path="complexes" element={<Complexes />} />
           <Route path="crm" element={<CRMByBusinessType />} />
           <Route path="crm/clients" element={<CRMByBusinessType />} />

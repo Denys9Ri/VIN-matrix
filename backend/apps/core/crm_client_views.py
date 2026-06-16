@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from decimal import Decimal
 
 from django.db import connection
@@ -8,8 +8,29 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Visit
+from .models import CRMClientStatus, CRMCommunication, CRMServiceReminder, CRMTask, VehicleRecommendation, Visit
 from .safe_crm_views import safe_ensure_company
+
+
+PIPELINE_LABELS = {
+    'new': 'Новий',
+    'active': 'Активний',
+    'regular': 'Постійний',
+    'vip': 'VIP',
+    'sleeping': 'Сплячий',
+    'problem': 'Проблемний',
+    'debt': 'З боргом',
+}
+
+CRM_STATUS_TO_PIPELINE = {
+    'new': 'new',
+    'active': 'active',
+    'regular': 'regular',
+    'vip': 'vip',
+    'sleeping': 'sleeping',
+    'problem': 'problem',
+}
+
 
 
 def money(value):
@@ -19,14 +40,42 @@ def money(value):
         return 0.0
 
 
+
 def normalize_phone(value):
     digits = ''.join(ch for ch in str(value or '') if ch.isdigit())
     return digits or 'no-phone'
 
 
+
+def client_record_key(client='', phone='', plate=''):
+    normalized = normalize_phone(phone)
+    if normalized != 'no-phone':
+        return normalized
+    client_name = str(client or '').strip()
+    if client_name:
+        return f'name:{client_name}'
+    plate_value = str(plate or '').strip().upper()
+    if plate_value:
+        return f'plate:{plate_value}'
+    return 'unknown'
+
+
+
 def search_order_id(value):
     value = str(value or '').strip().replace('№', '').replace('#', '')
     return int(value) if value.isdigit() else None
+
+
+
+def days_since(value):
+    if not value:
+        return None
+    try:
+        date_value = timezone.localtime(value).date() if hasattr(value, 'tzinfo') else value
+        return (timezone.localdate() - date_value).days
+    except Exception:
+        return None
+
 
 
 def parse_stock_statuses(part_ids):
@@ -38,6 +87,7 @@ def parse_stock_statuses(part_ids):
             return {row[0]: row[1] or 'none' for row in cursor.fetchall()}
     except Exception:
         return {}
+
 
 
 def payments_for_visits(visit_ids):
@@ -58,6 +108,7 @@ def payments_for_visits(visit_ids):
         return {}, {}
 
 
+
 def part_totals(parts):
     revenue = cost = profit = 0.0
     for part in parts:
@@ -71,16 +122,176 @@ def part_totals(parts):
     return {'revenue': round(revenue, 2), 'cost': round(cost, 2), 'profit': round(profit, 2), 'margin': round(margin, 1)}
 
 
-def client_status(summary):
-    if summary['debt_amount'] > 0:
-        return 'Борг'
-    if summary['returns_count'] >= 3:
-        return 'Проблемний'
-    if summary['total_revenue'] >= 10000 or summary['total_profit'] >= 2000:
-        return 'VIP'
-    if summary['orders_count'] >= 2:
-        return 'Постійний'
-    return 'Новий'
+
+def manual_statuses(company):
+    result = {}
+    queryset = CRMClientStatus.objects.filter(company=company).order_by('-updated_at', '-id')
+    for status in queryset:
+        key = client_record_key(status.client, status.phone, status.plate)
+        if key not in result:
+            pipeline_key = CRM_STATUS_TO_PIPELINE.get(status.status or 'new', 'new')
+            result[key] = {
+                'id': status.id,
+                'key': pipeline_key,
+                'label': PIPELINE_LABELS.get(pipeline_key, 'Новий'),
+                'note': status.note or '',
+                'updated_at': status.updated_at,
+            }
+    return result
+
+
+
+def serialize_task(task):
+    return {
+        'id': task.id,
+        'title': task.title,
+        'description': task.description or '',
+        'due_date': task.due_date,
+        'status': task.status,
+        'days_left': None if not task.due_date else (task.due_date - timezone.localdate()).days,
+        'created_at': task.created_at,
+    }
+
+
+
+def serialize_reminder(reminder):
+    return {
+        'id': reminder.id,
+        'title': reminder.title or dict(CRMServiceReminder.TYPE_CHOICES).get(reminder.reminder_type, 'Нагадування'),
+        'reminder_type': reminder.reminder_type,
+        'reminder_type_label': dict(CRMServiceReminder.TYPE_CHOICES).get(reminder.reminder_type, 'ТО'),
+        'due_date': reminder.due_date,
+        'due_mileage': reminder.due_mileage,
+        'status': reminder.status,
+        'note': reminder.note or '',
+        'created_at': reminder.created_at,
+    }
+
+
+
+def serialize_recommendation(rec):
+    return {
+        'id': rec.id,
+        'title': rec.title,
+        'description': rec.description or '',
+        'due_date': rec.due_date,
+        'due_mileage': rec.due_mileage,
+        'status': rec.status,
+        'created_at': rec.created_at,
+    }
+
+
+
+def serialize_communication(item):
+    return {
+        'id': item.id,
+        'status': item.status,
+        'status_label': dict(CRMCommunication.STATUS_CHOICES).get(item.status, 'Контакт'),
+        'comment': item.comment or '',
+        'created_at': item.created_at,
+    }
+
+
+
+def related_crm_records(company):
+    records = defaultdict(lambda: {'tasks': [], 'reminders': [], 'recommendations': [], 'communications': []})
+    for task in CRMTask.objects.filter(company=company).exclude(status=CRMTask.STATUS_DONE).order_by('due_date', '-created_at'):
+        records[client_record_key(task.client, task.phone, task.plate)]['tasks'].append(serialize_task(task))
+    for reminder in CRMServiceReminder.objects.filter(company=company, status=CRMServiceReminder.STATUS_ACTIVE).order_by('due_date', '-created_at'):
+        records[client_record_key(reminder.client, reminder.phone, reminder.plate)]['reminders'].append(serialize_reminder(reminder))
+    for rec in VehicleRecommendation.objects.filter(company=company, status=VehicleRecommendation.STATUS_ACTIVE).order_by('due_date', '-created_at'):
+        records[client_record_key(rec.client, rec.phone, rec.plate)]['recommendations'].append(serialize_recommendation(rec))
+    for comm in CRMCommunication.objects.filter(company=company).order_by('-created_at', '-id')[:1000]:
+        records[client_record_key(comm.client, comm.phone, comm.plate)]['communications'].append(serialize_communication(comm))
+    return records
+
+
+
+def client_pipeline(summary, manual=None):
+    dormant_days = days_since(summary.get('last_order_date'))
+    if summary.get('debt_amount', 0) > 0:
+        return {'key': 'debt', 'label': PIPELINE_LABELS['debt'], 'reason': 'Є неоплачена сума по замовленнях'}
+    if summary.get('returns_count', 0) >= 3:
+        return {'key': 'problem', 'label': PIPELINE_LABELS['problem'], 'reason': 'Багато повернень або браку'}
+    if manual:
+        return {'key': manual['key'], 'label': manual['label'], 'reason': manual.get('note') or 'Статус встановлено вручну'}
+    if summary.get('total_revenue', 0) >= 20000 or summary.get('total_profit', 0) >= 4000:
+        return {'key': 'vip', 'label': PIPELINE_LABELS['vip'], 'reason': 'Висока сума покупок або прибуток'}
+    if dormant_days is not None and dormant_days >= 90:
+        return {'key': 'sleeping', 'label': PIPELINE_LABELS['sleeping'], 'reason': f'Не купував {dormant_days} днів'}
+    if summary.get('orders_count', 0) >= 3:
+        return {'key': 'regular', 'label': PIPELINE_LABELS['regular'], 'reason': 'Є 3+ замовлення'}
+    if dormant_days is not None and dormant_days <= 45 and summary.get('orders_count', 0) >= 1:
+        return {'key': 'active', 'label': PIPELINE_LABELS['active'], 'reason': 'Недавно купував'}
+    return {'key': 'new', 'label': PIPELINE_LABELS['new'], 'reason': 'Новий клієнт'}
+
+
+
+def repeat_opportunities(summary):
+    opportunities = []
+    dormant_days = days_since(summary.get('last_order_date'))
+    parts = summary.get('parts', [])
+
+    if dormant_days is not None and dormant_days >= 60:
+        opportunities.append({
+            'type': 'sleeping_client',
+            'priority': 'high' if dormant_days >= 120 else 'medium',
+            'title': 'Клієнт давно не купував',
+            'description': f'Остання покупка була {dormant_days} днів тому. Варто написати або подзвонити.',
+        })
+
+    grouped = {}
+    for part in parts:
+        key = f"{part.get('brand') or ''}|{part.get('article') or ''}|{part.get('name') or ''}".lower()
+        item = grouped.setdefault(key, {
+            'type': 'repeat_part',
+            'priority': 'medium',
+            'title': f"Повторити продаж: {part.get('brand') or ''} {part.get('article') or ''}".strip() or part.get('name') or 'Товар з історії',
+            'description': part.get('name') or 'Товар з історії покупок клієнта',
+            'count': 0,
+            'revenue': 0.0,
+            'profit': 0.0,
+            'last_date': part.get('date'),
+            'part': part,
+        })
+        item['count'] += 1
+        item['revenue'] += money(part.get('revenue') or part.get('sell_price'))
+        item['profit'] += money(part.get('profit'))
+        if part.get('date') and (not item['last_date'] or part.get('date') > item['last_date']):
+            item['last_date'] = part.get('date')
+            item['part'] = part
+
+    repeat_parts = sorted(grouped.values(), key=lambda x: (x['count'], x['revenue'], x['profit']), reverse=True)[:4]
+    for item in repeat_parts:
+        item['revenue'] = round(item['revenue'], 2)
+        item['profit'] = round(item['profit'], 2)
+        item['description'] = f"{item['description']} · купував {item['count']} раз(и)"
+        opportunities.append(item)
+
+    if not summary.get('active_reminders_count'):
+        opportunities.append({
+            'type': 'service_reminder',
+            'priority': 'low',
+            'title': 'Поставити сервісне нагадування',
+            'description': 'Немає активного нагадування. Це шанс повернути клієнта в майбутньому.',
+        })
+
+    return opportunities[:6]
+
+
+
+def next_actions(summary):
+    pipeline = summary.get('pipeline', {})
+    actions = []
+    actions.append({'key': 'call', 'label': 'Подзвонити', 'title': 'Звʼязатися з клієнтом телефоном'})
+    actions.append({'key': 'message', 'label': 'Написати', 'title': 'Скопіювати готовий текст для месенджера'})
+    actions.append({'key': 'task', 'label': 'Створити задачу', 'title': 'Поставити задачу менеджеру'})
+    actions.append({'key': 'order', 'label': 'Створити замовлення', 'title': 'Відкрити повторне замовлення'})
+    actions.append({'key': 'reminder', 'label': 'Поставити нагадування', 'title': 'Запланувати сервіс або повторний контакт'})
+    if pipeline.get('key') in ['sleeping', 'debt', 'problem']:
+        actions.insert(0, {'key': 'priority', 'label': 'В пріоритет', 'title': pipeline.get('reason') or 'Потребує уваги'})
+    return actions
+
 
 
 def serialize_order(visit, stock_statuses=None, payments=None, paid_total=None):
@@ -131,6 +342,7 @@ def serialize_order(visit, stock_statuses=None, payments=None, paid_total=None):
     }
 
 
+
 def build_clients(company, search=''):
     qs = Visit.objects.filter(company=company).prefetch_related('parts').order_by('-created_at')
     if search:
@@ -147,6 +359,8 @@ def build_clients(company, search=''):
     all_part_ids = [p.id for v in visits for p in v.parts.all()]
     stock_statuses = parse_stock_statuses(all_part_ids)
     payments_map, paid_map = payments_for_visits([v.id for v in visits])
+    manual_map = manual_statuses(company)
+    related_map = related_crm_records(company)
     groups = defaultdict(lambda: {
         'key': '', 'client': '', 'phone': '', 'orders': [], 'cars': {}, 'parts': [], 'payments': [],
         'orders_count': 0, 'total_revenue': 0.0, 'total_cost': 0.0, 'total_profit': 0.0,
@@ -188,7 +402,23 @@ def build_clients(company, search=''):
         g['margin'] = round((g['total_profit'] / g['total_revenue'] * 100) if g['total_revenue'] else 0, 1)
         g['debt_amount'] = round(g['debt_amount'], 2)
         g['cars'] = list(g['cars'].values())
-        g['status'] = client_status(g)
+        crm_key = client_record_key(g.get('client'), g.get('phone'), g['cars'][0].get('plate') if g.get('cars') else '')
+        related = related_map.get(g['key']) or related_map.get(crm_key) or {'tasks': [], 'reminders': [], 'recommendations': [], 'communications': []}
+        manual = manual_map.get(g['key']) or manual_map.get(crm_key)
+        g['tasks'] = related['tasks'][:8]
+        g['reminders'] = related['reminders'][:8]
+        g['recommendations'] = related['recommendations'][:8]
+        g['communications'] = related['communications'][:8]
+        g['active_tasks_count'] = len(related['tasks'])
+        g['active_reminders_count'] = len(related['reminders'])
+        g['active_recommendations_count'] = len(related['recommendations'])
+        g['communications_count'] = len(related['communications'])
+        g['manual_status'] = manual
+        g['pipeline'] = client_pipeline(g, manual)
+        g['status'] = g['pipeline']['label']
+        g['dormant_days'] = days_since(g['last_order_date'])
+        g['repeat_opportunities'] = repeat_opportunities(g)
+        g['next_actions'] = next_actions(g)
         clients.append(g)
     return sorted(clients, key=lambda x: x['last_order_date'] or timezone.datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
@@ -202,6 +432,7 @@ class StoreClientListView(APIView):
             return Response({'results': []})
         search = request.query_params.get('search', '').strip()
         clients = build_clients(company, search=search)
+        pipeline_counts = Counter(c.get('pipeline', {}).get('key') or 'new' for c in clients)
         compact = []
         for c in clients:
             compact.append({
@@ -216,12 +447,18 @@ class StoreClientListView(APIView):
                 'debt_amount': c['debt_amount'],
                 'returns_count': c['returns_count'],
                 'last_order_date': c['last_order_date'],
+                'dormant_days': c.get('dormant_days'),
                 'cars': c['cars'][:3],
                 'status': c['status'],
+                'pipeline': c['pipeline'],
+                'repeat_opportunities_count': len(c.get('repeat_opportunities') or []),
+                'active_tasks_count': c.get('active_tasks_count', 0),
+                'active_reminders_count': c.get('active_reminders_count', 0),
+                'active_recommendations_count': c.get('active_recommendations_count', 0),
                 'last_parts': c['parts'][:5],
                 'last_payments': c['payments'][:5],
             })
-        return Response({'results': compact})
+        return Response({'results': compact, 'pipeline': pipeline_counts})
 
 
 class StoreClientDetailView(APIView):

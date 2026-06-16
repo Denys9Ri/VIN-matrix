@@ -108,7 +108,7 @@ export default function InventoryControlPanel({ insights, loading, onReceipt }) 
             <SideButton active={section === 'min'} onClick={() => setSection('min')} icon={<BarChart3 size={16}/>} label="Мінімальні залишки" count={rows.minStock.length} />
           </div>
           <button type="button" onClick={onReceipt} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700">
-            <Package size={15} /> Новий прихід
+            <Package size={15} /> До приходу
           </button>
         </aside>
 

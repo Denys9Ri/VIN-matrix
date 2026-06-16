@@ -34,7 +34,10 @@ def margin_percent(buy_price, sell_price):
 
 
 def margin_value(buy_price, sell_price):
-    return round(money(sell_price) - money(buy_price), 2)
+    sell = money(sell_price)
+    if sell <= 0:
+        return 0.0
+    return round(sell - money(buy_price), 2)
 
 
 def days_since(value):
@@ -105,6 +108,8 @@ def serialize_item(item, extra=None, stat=None):
     available = max(qty - reserved, 0)
     buy = money(item.buy_price)
     sell = money(item.sell_price)
+    has_sell_price = sell > 0
+    missing_sell_price = not has_sell_price
     margin = margin_value(buy, sell)
     margin_pct = margin_percent(buy, sell)
     last_sale_at = stat.get('last_sale_at')
@@ -117,6 +122,10 @@ def serialize_item(item, extra=None, stat=None):
         reorder_qty = max(reorder_qty, min_qty - available, 1)
     elif not min_qty and available <= 0 and sold_90d > 0:
         reorder_qty = max(ceil(avg_monthly_sales), 1)
+
+    stock_sell_value = round(qty * sell, 2) if has_sell_price else 0
+    potential_profit = round(qty * margin, 2) if has_sell_price else 0
+    reorder_expected_profit = round(reorder_qty * margin, 2) if has_sell_price else 0
 
     return {
         'id': item.id,
@@ -133,18 +142,20 @@ def serialize_item(item, extra=None, stat=None):
         'min_quantity': min_qty,
         'buy_price': buy,
         'sell_price': sell,
+        'has_sell_price': has_sell_price,
+        'missing_sell_price': missing_sell_price,
         'stock_buy_value': round(qty * buy, 2),
-        'stock_sell_value': round(qty * sell, 2),
-        'potential_profit': round(qty * margin, 2),
+        'stock_sell_value': stock_sell_value,
+        'potential_profit': potential_profit,
         'margin_value': margin,
         'margin_percent': margin_pct,
-        'below_cost': sell > 0 and sell < buy,
-        'low_margin': sell > 0 and sell >= buy and margin_pct < LOW_MARGIN_PERCENT,
-        'high_margin': sell > 0 and margin_pct >= HIGH_MARGIN_PERCENT,
+        'below_cost': has_sell_price and sell < buy,
+        'low_margin': has_sell_price and sell >= buy and margin_pct < LOW_MARGIN_PERCENT,
+        'high_margin': has_sell_price and margin_pct >= HIGH_MARGIN_PERCENT,
         'needs_restock': reorder_qty > 0,
         'reorder_qty': reorder_qty,
         'reorder_purchase_value': round(reorder_qty * buy, 2),
-        'reorder_expected_profit': round(reorder_qty * margin, 2),
+        'reorder_expected_profit': reorder_expected_profit,
         'sold_qty_90d': sold_90d,
         'avg_monthly_sales': avg_monthly_sales,
         'last_sale_at': last_sale_at,
@@ -192,10 +203,11 @@ class InventoryInsightsView(APIView):
         low_margin = sorted([row for row in rows if row['low_margin']], key=lambda row: row['margin_percent'])
         high_margin = sorted([row for row in rows if row['high_margin']], key=lambda row: row['margin_percent'], reverse=True)
         min_stock = sorted([row for row in rows if row['min_quantity'] and row['available_quantity'] <= row['min_quantity']], key=lambda row: row['available_quantity'] - row['min_quantity'])
+        missing_sell_price = sorted([row for row in rows if row['missing_sell_price']], key=lambda row: row['stock_buy_value'], reverse=True)
 
         stock_buy_value = round(sum(row['stock_buy_value'] for row in rows), 2)
         stock_sell_value = round(sum(row['stock_sell_value'] for row in rows), 2)
-        potential_profit = round(stock_sell_value - stock_buy_value, 2)
+        potential_profit = round(sum(row['potential_profit'] for row in rows), 2)
         frozen_money = round(sum(row['frozen_money'] for row in slow_moving), 2)
         purchase_value = round(sum(row['reorder_purchase_value'] for row in purchase_list), 2)
         purchase_profit = round(sum(row['reorder_expected_profit'] for row in purchase_list), 2)
@@ -232,6 +244,7 @@ class InventoryInsightsView(APIView):
                 'below_cost_count': len(below_cost),
                 'low_margin_count': len(low_margin),
                 'high_margin_count': len(high_margin),
+                'missing_sell_price_count': len(missing_sell_price),
                 'margin_percent': round((potential_profit / stock_sell_value * 100) if stock_sell_value else 0, 1),
             },
             'purchase_list': purchase_list[:300],
@@ -241,6 +254,7 @@ class InventoryInsightsView(APIView):
                 'below_cost': below_cost[:120],
                 'low_margin': low_margin[:120],
                 'high_margin': high_margin[:120],
+                'missing_sell_price': missing_sell_price[:120],
             },
             'min_stock': min_stock[:200],
             'generated_at': timezone.now(),

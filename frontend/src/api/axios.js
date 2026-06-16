@@ -163,11 +163,11 @@ const decorateVisitParts = (data) => {
 };
 
 const normalizeVisitSearchResponse = (response) => {
+  response.data = decorateVisitParts(response.data);
+
   if (response.config?.__singleVisitSearch && response.data && !Array.isArray(response.data)) {
     response.data = [response.data];
   }
-
-  response.data = decorateVisitParts(response.data);
 
   if (isVisitSearchUrl(response.config?.url) && Array.isArray(response.data)) {
     const query = getVisitSearchQuery(response.config.url);
@@ -208,12 +208,26 @@ const normalizeVisitSearchResponse = (response) => {
   return response;
 };
 
+const handleApiError = (error) => {
+  if (error?.response?.status === 402 && error.response?.data?.billing_required) {
+    try {
+      sessionStorage.setItem('billing_required_message', error.response.data.error || 'Потрібна оплата тарифу.');
+      if (window.location.pathname !== '/billing') {
+        window.location.href = '/billing';
+      }
+    } catch {
+      // ignore navigation/storage errors
+    }
+  }
+  return Promise.reject(error);
+};
+
 axios.defaults.baseURL = API_ORIGIN;
 axios.interceptors.request.use(attachAuthAndNormalize);
-axios.interceptors.response.use(normalizeVisitSearchResponse);
+axios.interceptors.response.use(normalizeVisitSearchResponse, handleApiError);
 
 const api = axios.create({ baseURL: API_ORIGIN });
 api.interceptors.request.use(attachAuthAndNormalize);
-api.interceptors.response.use(normalizeVisitSearchResponse);
+api.interceptors.response.use(normalizeVisitSearchResponse, handleApiError);
 
 export default api;

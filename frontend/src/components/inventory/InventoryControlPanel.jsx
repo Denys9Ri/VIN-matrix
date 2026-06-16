@@ -42,14 +42,15 @@ export default function InventoryControlPanel({ insights, loading, onReceipt }) 
       below: arr(margin.below_cost).filter(filter),
       low: arr(margin.low_margin).filter(filter),
       high: arr(margin.high_margin).filter(filter),
+      missing: arr(margin.missing_sell_price).filter(filter),
       minStock: minStock.filter(filter),
     };
   }, [query, purchaseList, slowMoving, margin, minStock]);
 
   const exportPurchases = () => {
     const data = [
-      ['Постачальник', 'Бренд', 'Артикул', 'Назва', 'Доступно', 'Мінімум', 'Дозамовити', 'Закупка/шт', 'Сума закупки', 'Очікуваний прибуток', 'Маржа %'],
-      ...rows.purchases.map((item) => [item.supplier_name, item.brand, item.article, item.name, item.available_quantity, item.min_quantity, item.reorder_qty, item.buy_price, item.reorder_purchase_value, item.reorder_expected_profit, item.margin_percent]),
+      ['Постачальник', 'Бренд', 'Артикул', 'Назва', 'Доступно', 'Мінімум', 'Дозамовити', 'Закупка/шт', 'Сума закупки', 'Ціна продажу', 'Очікуваний прибуток', 'Маржа %'],
+      ...rows.purchases.map((item) => [item.supplier_name, item.brand, item.article, item.name, item.available_quantity, item.min_quantity, item.reorder_qty, item.buy_price, item.reorder_purchase_value, item.missing_sell_price ? 'не задано' : item.sell_price, item.missing_sell_price ? '' : item.reorder_expected_profit, item.missing_sell_price ? '' : item.margin_percent]),
     ];
     downloadCsv(`purchase-list-${new Date().toISOString().slice(0, 10)}.csv`, data);
   };
@@ -81,12 +82,13 @@ export default function InventoryControlPanel({ insights, loading, onReceipt }) 
         </div>
       </section>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-9">
         <Stat icon={<Package size={17} />} label="Позицій" value={summary.items_count || 0} />
         <Stat icon={<Truck size={17} />} label="Дозамовити" value={summary.restock_count || 0} danger={summary.restock_count > 0} />
         <Stat icon={<Wallet size={17} />} label="Сума закупки" value={money(summary.purchase_value)} />
-        <Stat icon={<TrendingUp size={17} />} label="Очікув. маржа" value={money(summary.purchase_expected_profit)} good />
+        <Stat icon={<TrendingUp size={17} />} label="Очікув. прибуток" value={money(summary.purchase_expected_profit)} good />
         <Stat icon={<ShieldAlert size={17} />} label="Неліквід" value={summary.slow_count || 0} danger={summary.slow_count > 0} />
+        <Stat icon={<AlertTriangle size={17} />} label="Без ціни продажу" value={summary.missing_sell_price_count || 0} danger={summary.missing_sell_price_count > 0} />
         <Stat icon={<AlertTriangle size={17} />} label="Нижче закупки" value={summary.below_cost_count || 0} danger={summary.below_cost_count > 0} />
         <Stat icon={<TrendingDown size={17} />} label="Низька маржа" value={summary.low_margin_count || 0} danger={summary.low_margin_count > 0} />
         <Stat icon={<Sparkles size={17} />} label="Висока маржа" value={summary.high_margin_count || 0} good={summary.high_margin_count > 0} />
@@ -102,6 +104,7 @@ export default function InventoryControlPanel({ insights, loading, onReceipt }) 
             <SideButton active={section === 'purchases'} onClick={() => setSection('purchases')} icon={<Truck size={16}/>} label="Закупівельний список" count={rows.purchases.length} />
             <SideButton active={section === 'suppliers'} onClick={() => setSection('suppliers')} icon={<ClipboardList size={16}/>} label="По постачальниках" count={bySupplier.length} />
             <SideButton active={section === 'slow'} onClick={() => setSection('slow')} icon={<ShieldAlert size={16}/>} label="Неліквід" count={rows.slow.length} />
+            <SideButton active={section === 'missing'} onClick={() => setSection('missing')} icon={<AlertTriangle size={16}/>} label="Без ціни продажу" count={rows.missing.length} />
             <SideButton active={section === 'below'} onClick={() => setSection('below')} icon={<AlertTriangle size={16}/>} label="Нижче закупки" count={rows.below.length} />
             <SideButton active={section === 'low'} onClick={() => setSection('low')} icon={<TrendingDown size={16}/>} label="Низька маржа" count={rows.low.length} />
             <SideButton active={section === 'high'} onClick={() => setSection('high')} icon={<TrendingUp size={16}/>} label="Висока маржа" count={rows.high.length} />
@@ -134,6 +137,7 @@ export default function InventoryControlPanel({ insights, loading, onReceipt }) 
           {section === 'purchases' && <PurchaseList rows={rows.purchases} />}
           {section === 'suppliers' && <SupplierSummary rows={bySupplier} />}
           {section === 'slow' && <SlowList rows={rows.slow} />}
+          {section === 'missing' && <MarginList rows={rows.missing} mode="missing" />}
           {section === 'below' && <MarginList rows={rows.below} mode="below" />}
           {section === 'low' && <MarginList rows={rows.low} mode="low" />}
           {section === 'high' && <MarginList rows={rows.high} mode="high" />}
@@ -149,6 +153,7 @@ function sectionTitle(section) {
     purchases: 'Закупівельний список',
     suppliers: 'Потреба по постачальниках',
     slow: 'Неліквід і заморожені гроші',
+    missing: 'Товари без ціни продажу',
     below: 'Продаж нижче закупки',
     low: 'Низька маржа',
     high: 'Висока маржа',
@@ -163,7 +168,7 @@ function PurchaseList({ rows, compact = false }) {
 
 function SupplierSummary({ rows }) {
   if (!rows.length) return <EmptyPanel text="Поки немає потреби по постачальниках." />;
-  return <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map((row) => <div key={row.supplier_name} className="rounded-3xl border border-blue-100 bg-blue-50/50 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Постачальник</p><h4 className="mt-1 text-lg font-black text-slate-900">{row.supplier_name}</h4><div className="mt-3 grid grid-cols-2 gap-2"><Mini label="Позицій" value={row.positions} /><Mini label="К-сть" value={qty(row.reorder_qty)} /><Mini label="Закупка" value={money(row.purchase_value)} /><Mini label="Маржа" value={money(row.expected_profit)} good /></div></div>)}</div>;
+  return <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map((row) => <div key={row.supplier_name} className="rounded-3xl border border-blue-100 bg-blue-50/50 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Постачальник</p><h4 className="mt-1 text-lg font-black text-slate-900">{row.supplier_name}</h4><div className="mt-3 grid grid-cols-2 gap-2"><Mini label="Позицій" value={row.positions} /><Mini label="К-сть" value={qty(row.reorder_qty)} /><Mini label="Закупка" value={money(row.purchase_value)} /><Mini label="Прибуток" value={money(row.expected_profit)} good /></div></div>)}</div>;
 }
 
 function SlowList({ rows }) {
@@ -177,8 +182,9 @@ function MarginList({ rows, mode }) {
 }
 
 function StockMoneyRow({ item, type }) {
-  const isBad = type === 'below' || type === 'low' || type === 'slow';
+  const isBad = type === 'below' || type === 'low' || type === 'slow' || type === 'missing' || item.missing_sell_price;
   const isGood = type === 'high';
+  const hasSellPrice = item.has_sell_price !== false && !item.missing_sell_price;
   return (
     <div className={`rounded-3xl border p-4 ${isBad ? 'border-amber-100 bg-amber-50/60' : isGood ? 'border-emerald-100 bg-emerald-50/60' : 'border-slate-100 bg-slate-50/70'}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -189,6 +195,7 @@ function StockMoneyRow({ item, type }) {
         </div>
         <div className="flex flex-wrap gap-2">
           {item.needs_restock && <Pill tone="blue">Дозамовити {qty(item.reorder_qty)} шт</Pill>}
+          {item.missing_sell_price && <Pill tone="amber">Ціна продажу не задана</Pill>}
           {item.below_cost && <Pill tone="red">Нижче закупки</Pill>}
           {item.low_margin && <Pill tone="amber">Низька маржа</Pill>}
           {item.high_margin && <Pill tone="emerald">Висока маржа</Pill>}
@@ -199,8 +206,8 @@ function StockMoneyRow({ item, type }) {
         <Mini label="Доступно" value={`${qty(item.available_quantity)} шт`} good={item.available_quantity > 0} />
         <Mini label="Мінімум" value={`${qty(item.min_quantity)} шт`} />
         <Mini label="Закупка" value={money(item.buy_price)} />
-        <Mini label="Продаж" value={money(item.sell_price)} />
-        <Mini label="Маржа" value={`${money(item.margin_value)} / ${qty(item.margin_percent)}%`} good={item.margin_value > 0} bad={item.margin_value < 0} />
+        <Mini label="Продаж" value={hasSellPrice ? money(item.sell_price) : 'Не задано'} bad={!hasSellPrice} />
+        <Mini label="Маржа" value={hasSellPrice ? `${money(item.margin_value)} / ${qty(item.margin_percent)}%` : '—'} good={hasSellPrice && item.margin_value > 0} bad={hasSellPrice && item.margin_value < 0} />
         <Mini label={type === 'slow' ? 'Заморожено' : 'Сума закупки'} value={money(type === 'slow' ? item.frozen_money : item.reorder_purchase_value)} bad={type === 'slow'} />
       </div>
       <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">

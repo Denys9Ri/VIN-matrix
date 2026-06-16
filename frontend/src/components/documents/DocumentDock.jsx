@@ -1,11 +1,33 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, Printer, ReceiptText, ShieldCheck, Undo2, X } from 'lucide-react';
+import { Copy, Download, Eye, FileText, Mail, MessageCircle, Printer, ReceiptText, Send, ShieldCheck, Undo2, X } from 'lucide-react';
 import api from '../../api/axios';
 
-const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
-const qty = (v) => Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 });
-const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const money = (value) => `${Number(value || 0).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴`;
+const qty = (value) => Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 });
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+const nl2br = (value) => esc(value || '').replace(/\n/g, '<br>');
+const arr = (value) => (Array.isArray(value) ? value : []);
+
+const docTypes = {
+  receipt: { title: 'Товарний чек', short: 'Чек', icon: ReceiptText, tone: 'blue', description: 'Короткий документ для клієнта з товарами, роботами, оплатою і боргом.' },
+  invoice: { title: 'Рахунок на оплату', short: 'Рахунок', icon: FileText, tone: 'emerald', description: 'Документ для оплати з реквізитами, сумою до сплати і призначенням.' },
+  waybill: { title: 'Видаткова накладна', short: 'Накладна', icon: FileText, tone: 'slate', description: 'Складський документ по товарах без внутрішніх закупівель і постачальників.' },
+  service_act: { title: 'Акт виконаних робіт', short: 'Акт робіт', icon: FileText, tone: 'violet', description: 'Роботи, використані товари, підсумок і підписи сторін.' },
+  warranty: { title: 'Гарантійний талон', short: 'Гарантія', icon: ShieldCheck, tone: 'amber', description: 'Гарантійні умови, товари/роботи і підпис відповідальної особи.' },
+  return_note: { title: 'Акт повернення товару', short: 'Повернення', icon: Undo2, tone: 'rose', description: 'Бланк повернення з позиціями, сумою і підписами.' },
+};
+
+const docOrder = ['receipt', 'invoice', 'waybill', 'service_act', 'warranty', 'return_note'];
+
+const toneClasses = {
+  blue: 'bg-blue-50 text-blue-700 border-blue-100 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600',
+  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600',
+  slate: 'bg-slate-50 text-slate-700 border-slate-200 group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900',
+  violet: 'bg-violet-50 text-violet-700 border-violet-100 group-hover:bg-violet-600 group-hover:text-white group-hover:border-violet-600',
+  amber: 'bg-amber-50 text-amber-700 border-amber-100 group-hover:bg-amber-500 group-hover:text-slate-950 group-hover:border-amber-500',
+  rose: 'bg-rose-50 text-rose-700 border-rose-100 group-hover:bg-rose-600 group-hover:text-white group-hover:border-rose-600',
+};
 
 function findContext() {
   const text = document.body?.innerText || '';
@@ -16,15 +38,6 @@ function findContext() {
   return null;
 }
 
-const docTitles = {
-  receipt: 'Товарний чек',
-  invoice: 'Рахунок на оплату',
-  waybill: 'Видаткова накладна',
-  service_act: 'Акт виконаних робіт',
-  warranty: 'Гарантійний талон',
-  return_note: 'Акт повернення товару',
-};
-
 export default function DocumentDock() {
   const [ctx, setCtx] = useState(null);
   const [open, setOpen] = useState(false);
@@ -32,6 +45,9 @@ export default function DocumentDock() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(false);
   const [embeddedTrigger, setEmbeddedTrigger] = useState(false);
+  const [activeType, setActiveType] = useState('receipt');
+  const [notice, setNotice] = useState('');
+  const [sendType, setSendType] = useState(null);
 
   const load = async (overrideCtx = null) => {
     const currentCtx = overrideCtx?.id ? overrideCtx : ctx;
@@ -39,6 +55,7 @@ export default function DocumentDock() {
 
     setCtx(currentCtx);
     setLoading(true);
+    setNotice('');
     try {
       const [visitRes, settingsRes] = await Promise.all([
         api.get(`/api/visits/${currentCtx.id}/`),
@@ -46,9 +63,10 @@ export default function DocumentDock() {
       ]);
       setVisit(visitRes.data);
       setSettings(settingsRes.data);
+      setActiveType(currentCtx.mode === 'store' ? 'receipt' : 'service_act');
       setOpen(true);
-    } catch (e) {
-      alert('Не вдалося підготувати документи. Оновіть сторінку і спробуйте ще раз.');
+    } catch (error) {
+      setNotice('Не вдалося підготувати документи. Оновіть сторінку і спробуйте ще раз.');
     } finally {
       setLoading(false);
     }
@@ -81,89 +99,231 @@ export default function DocumentDock() {
     return () => window.removeEventListener('vinmatrix:open-documents', handler);
   }, [ctx]);
 
-  const docs = useMemo(() => {
-    if (!ctx) return [];
-    if (ctx.mode === 'store') return ['receipt', 'invoice', 'waybill', 'warranty', 'return_note'];
-    return ['service_act', 'invoice', 'receipt', 'warranty'];
-  }, [ctx]);
+  const docs = useMemo(() => docOrder, []);
+  const previewHtml = useMemo(() => buildDocumentHtml(activeType, visit, settings), [activeType, visit, settings]);
 
   if (!ctx) return null;
 
+  const openWindow = (type, autoPrint = false) => {
+    const html = buildDocumentHtml(type, visit, settings, { autoPrint });
+    const popup = window.open('', '_blank');
+    if (!popup) {
+      setNotice('Браузер заблокував відкриття документа. Дозвольте спливаючі вікна для сайту.');
+      return;
+    }
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+  };
+
+  const downloadHtml = (type) => {
+    const html = buildDocumentHtml(type, visit, settings);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setNotice('HTML-бланк скачано. Для PDF відкрийте його і оберіть “Зберегти як PDF” у друці.');
+  };
+
   return <>
     {!embeddedTrigger && (
-      <button onClick={() => load()} disabled={loading} className="fixed right-5 bottom-24 z-[60] md:right-8 md:bottom-8 bg-slate-900 hover:bg-blue-700 text-white rounded-2xl px-4 py-3 shadow-2xl flex items-center gap-2 font-black text-xs uppercase transition">
+      <button onClick={() => load()} disabled={loading} className="fixed right-5 bottom-24 z-[60] md:right-8 md:bottom-8 bg-slate-900 hover:bg-blue-700 text-white rounded-2xl px-4 py-3 shadow-2xl flex items-center gap-2 font-black text-xs uppercase transition whitespace-nowrap disabled:opacity-60">
         <FileText size={17}/>{loading ? 'Готуємо...' : 'Документи'}
       </button>
     )}
 
-    {open && createPortal(<div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
-      <div className="bg-white w-full md:max-w-3xl rounded-t-[28px] md:rounded-[28px] shadow-2xl overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-900 to-blue-700 text-white p-5 flex justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Пакет документів</p>
-            <h2 className="text-2xl font-black uppercase">{ctx.title}</h2>
-            <p className="text-xs font-bold text-blue-100 mt-1">Чек, накладна, рахунок, гарантія та документи СТО в одному місці.</p>
-          </div>
-          <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center"><X size={18}/></button>
-        </div>
-        <div className="p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {docs.map((type) => <button key={type} onClick={() => printDocument(type, visit, settings)} className="text-left rounded-2xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 p-4 transition group">
-            <div className="flex items-start gap-3">
-              <span className="w-11 h-11 rounded-2xl bg-white border border-slate-100 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition">{iconFor(type)}</span>
-              <div>
-                <p className="font-black text-slate-900 uppercase">{docTitles[type]}</p>
-                <p className="text-xs font-bold text-slate-500 mt-1">Відкрити друкований бланк із логотипом, реквізитами та підвалом.</p>
-              </div>
+    {notice && !open && <div className="fixed right-5 bottom-40 z-[70] max-w-sm rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 shadow-xl">{notice}</div>}
+
+    {open && createPortal(
+      <div className="fixed inset-0 z-[110] bg-slate-900/70 backdrop-blur-sm flex items-stretch md:items-center justify-center p-0 md:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+        <div className="bg-white w-full md:max-w-7xl h-dvh md:h-[92vh] rounded-none md:rounded-[30px] shadow-2xl overflow-hidden flex flex-col">
+          <div className="bg-gradient-to-r from-slate-950 via-blue-950 to-blue-700 text-white p-4 md:p-5 flex justify-between gap-4 shrink-0">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Пакет документів</p>
+              <h2 className="text-xl md:text-2xl font-black uppercase truncate">{ctx.title}</h2>
+              <p className="text-xs font-bold text-blue-100 mt-1">Превʼю, друк, PDF-бланк і відправка клієнту в одному модулі.</p>
             </div>
-          </button>)}
+            <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center shrink-0"><X size={18}/></button>
+          </div>
+
+          {notice && <div className="mx-4 md:mx-5 mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 flex items-center justify-between gap-3 shrink-0"><span>{notice}</span><button onClick={() => setNotice('')} className="text-blue-400 hover:text-blue-700"><X size={16}/></button></div>}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)] gap-0 min-h-0 flex-1 overflow-hidden">
+            <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/80 p-4 md:p-5 overflow-y-auto">
+              <div className="mb-4">
+                <h3 className="text-sm font-black uppercase text-slate-900">Документи</h3>
+                <p className="text-xs font-semibold text-slate-500 mt-1">Оберіть тип документа і дію: перегляд, друк, PDF або відправка.</p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2">
+                {docs.map((type) => {
+                  const meta = docTypes[type];
+                  const Icon = meta.icon;
+                  const active = activeType === type;
+                  return (
+                    <button key={type} onClick={() => setActiveType(type)} className={`group text-left rounded-2xl border p-3 transition ${active ? 'bg-white border-blue-300 shadow-sm ring-4 ring-blue-50' : 'bg-white/80 border-slate-200 hover:border-blue-200 hover:bg-blue-50/60'}`}>
+                      <div className="flex items-start gap-3">
+                        <span className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 transition ${toneClasses[meta.tone] || toneClasses.blue}`}><Icon size={19}/></span>
+                        <span className="min-w-0">
+                          <span className="block font-black text-slate-900 uppercase text-sm leading-tight">{meta.title}</span>
+                          <span className="block text-xs font-semibold text-slate-500 mt-1 leading-snug">{meta.description}</span>
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
+
+            <main className="min-h-0 flex flex-col bg-slate-100/70">
+              <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 md:px-5 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Превʼю документа</p>
+                  <h3 className="text-lg font-black uppercase text-slate-900 truncate">{docTypes[activeType]?.title}</h3>
+                </div>
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                  <ActionButton onClick={() => openWindow(activeType, false)} icon={<Eye size={15}/>} label="Переглянути" />
+                  <ActionButton onClick={() => openWindow(activeType, true)} icon={<Printer size={15}/>} label="Друк" />
+                  <ActionButton onClick={() => openWindow(activeType, true)} icon={<Download size={15}/>} label="PDF" />
+                  <ActionButton onClick={() => setSendType(activeType)} icon={<Send size={15}/>} label="Надіслати" dark />
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-auto p-4 md:p-6">
+                <div className="mx-auto w-full max-w-[860px] rounded-[24px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70 overflow-hidden">
+                  <iframe title="document-preview" srcDoc={previewHtml} className="w-full h-[72vh] bg-white" />
+                </div>
+              </div>
+            </main>
+          </div>
         </div>
-      </div>
-    </div>, document.body)}
+
+        {sendType && <SendDialog type={sendType} visit={visit} settings={settings} onClose={() => setSendType(null)} onCopy={(text) => { navigator.clipboard?.writeText(text); setNotice('Текст для клієнта скопійовано.'); }} />}
+      </div>,
+      document.body
+    )}
   </>;
 }
 
-function iconFor(type) {
-  if (type === 'warranty') return <ShieldCheck size={19}/>;
-  if (type === 'return_note') return <Undo2 size={19}/>;
-  if (type === 'receipt') return <ReceiptText size={19}/>;
-  return <Printer size={19}/>;
+function ActionButton({ icon, label, onClick, dark = false }) {
+  return <button type="button" onClick={onClick} className={`${dark ? 'bg-slate-900 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'} rounded-2xl px-3 py-2.5 text-[11px] font-black uppercase flex items-center justify-center gap-1.5 transition whitespace-nowrap`}>{icon}{label}</button>;
 }
 
-function printDocument(type, visit, settings) {
-  if (!visit) return;
+function SendDialog({ type, visit, settings, onClose, onCopy }) {
+  const meta = docTypes[type] || docTypes.receipt;
   const company = settings?.company || {};
-  const title = docTitles[type] || 'Документ';
-  const parts = Array.isArray(visit.parts) ? visit.parts : [];
-  const services = Array.isArray(visit.services) ? visit.services : [];
-  const partsTotal = parts.reduce((s, p) => s + Number(p.sell_price || 0) * Number(p.quantity || 1), 0);
-  const servicesTotal = services.reduce((s, p) => s + Number(p.price || 0) * Number(p.quantity || 1), 0);
-  const total = type === 'service_act' ? servicesTotal + partsTotal : partsTotal + (type === 'invoice' ? servicesTotal : 0);
-  const rows = [
-    ...(type === 'service_act' || type === 'invoice' ? services.map((s) => ({ article: 'Робота', name: s.name, qty: s.quantity, price: s.price, sum: Number(s.price || 0) * Number(s.quantity || 1) })) : []),
-    ...parts.map((p) => ({ article: `${p.brand || ''} ${p.article || ''}`.trim(), name: p.name, qty: p.quantity, price: p.sell_price, sum: Number(p.sell_price || 0) * Number(p.quantity || 1) })),
-  ];
+  const email = visit?.email || visit?.client_email || '';
+  const phone = String(visit?.phone || '').replace(/[^+\d]/g, '');
+  const subject = `${meta.title} №${visit?.id || ''} — ${company.name || 'VIN-matrix'}`;
+  const text = `Добрий день, ${visit?.client || ''}. Документ “${meta.title}” по замовленню №${visit?.id || ''} готовий. Компанія: ${company.name || ''}. Сума: ${money(documentTotals(type, visit).total)}.`;
+  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+  const sms = `sms:${phone}?body=${encodeURIComponent(text)}`;
+
+  return <div className="absolute inset-0 z-[130] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden">
+      <div className="bg-gradient-to-r from-slate-900 to-blue-700 text-white p-5 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Надіслати клієнту</p>
+          <h3 className="text-xl font-black uppercase mt-1">{meta.title}</h3>
+          <p className="text-xs font-bold text-blue-100 mt-1">Підготуйте повідомлення і прикріпіть PDF після збереження.</p>
+        </div>
+        <button onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center"><X size={18}/></button>
+      </div>
+      <div className="p-5 space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600 leading-relaxed">{text}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <a href={mailto} className="rounded-2xl bg-blue-600 text-white px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-700"><Mail size={16}/> Email</a>
+          <a href={sms} className="rounded-2xl bg-emerald-50 text-emerald-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-emerald-100"><MessageCircle size={16}/> SMS</a>
+        </div>
+        <button type="button" onClick={() => onCopy(text)} className="w-full rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-slate-200"><Copy size={16}/> Скопіювати текст</button>
+        <p className="text-[11px] font-semibold text-slate-400 leading-relaxed">Файл PDF створіть кнопкою “PDF”, після чого прикріпіть його до листа або повідомлення.</p>
+      </div>
+    </div>
+  </div>;
+}
+
+function buildRows(type, visit) {
+  const parts = arr(visit?.parts).map((part) => ({
+    kind: 'Товар',
+    article: [part.brand, part.article].filter(Boolean).join(' ') || '—',
+    name: part.name || 'Товар',
+    qty: part.quantity || 1,
+    price: part.sell_price || part.price || 0,
+    sum: Number(part.sell_price || part.price || 0) * Number(part.quantity || 1),
+  }));
+  const services = arr(visit?.services).map((service) => ({
+    kind: 'Робота',
+    article: 'Послуга',
+    name: service.name || 'Робота',
+    qty: service.quantity || 1,
+    price: service.price || 0,
+    sum: Number(service.price || 0) * Number(service.quantity || 1),
+  }));
+
+  if (type === 'waybill' || type === 'warranty' || type === 'return_note') return parts;
+  if (type === 'service_act') return [...services, ...parts];
+  return [...parts, ...services];
+}
+
+function documentTotals(type, visit) {
+  const rows = buildRows(type, visit);
+  const total = rows.reduce((sum, row) => sum + Number(row.sum || 0), 0);
+  const paid = Number(visit?.paid_amount || visit?.prepayment_amount || 0);
+  const debt = Math.max(total - paid, 0);
+  return { rows, total, paid, debt };
+}
+
+function normalizeLogoUrl(logo) {
+  if (!logo) return '';
+  if (/^(https?:|data:|blob:)/i.test(logo)) return logo;
+  if (logo.startsWith('/')) return `${window.location.origin}${logo}`;
+  return logo;
+}
+
+function carLabel(visit) {
+  let data = {};
+  if (visit?.delivery_data && typeof visit.delivery_data === 'string' && visit.delivery_data.trim().startsWith('{')) {
+    try { data = JSON.parse(visit.delivery_data); } catch { data = {}; }
+  }
+  return [data.brand, data.model, data.year].filter(Boolean).join(' ') || visit?.plate || '—';
+}
+
+function fileSlug(value) {
+  return String(value || 'document').toLowerCase().replace(/[^a-zа-яіїєґ0-9]+/gi, '-').replace(/^-|-$/g, '');
+}
+
+function buildDocumentHtml(type, visit, settings, options = {}) {
+  const meta = docTypes[type] || docTypes.receipt;
+  const company = settings?.company || {};
+  const { rows, total, paid, debt } = documentTotals(type, visit);
+  const logo = normalizeLogoUrl(company.logo);
+  const date = new Date().toLocaleDateString('uk-UA');
+  const requisites = company.document_requisites || '';
   const warrantyText = company.document_warranty_text || 'Гарантія діє за умови встановлення та використання товару згідно з рекомендаціями виробника. Повернення можливе згідно з чинним законодавством та умовами продавця.';
   const footer = company.document_footer || 'Дякуємо за довіру. Зберігайте цей документ до завершення гарантійного терміну.';
-  const requisites = company.document_requisites || '';
   const signature = company.document_signature || 'Підпис відповідальної особи';
+  const isWarranty = type === 'warranty';
+  const isReturn = type === 'return_note';
+  const isInvoice = type === 'invoice';
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
-    *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#0f172a;margin:0;background:#f8fafc}.page{width:210mm;min-height:297mm;margin:0 auto;background:white;padding:18mm}.header{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #0f172a;padding-bottom:16px}.brand{display:flex;gap:14px;align-items:center}.logo{width:64px;height:64px;object-fit:contain;border:1px solid #e2e8f0;border-radius:14px}.company h1{font-size:22px;margin:0}.muted{color:#64748b;font-size:12px}.doc-title{font-size:28px;font-weight:900;text-transform:uppercase;margin:24px 0 4px}.pill{display:inline-block;background:#eff6ff;color:#1d4ed8;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0}.box{border:1px solid #e2e8f0;border-radius:16px;padding:12px;background:#f8fafc}.box b{display:block;font-size:11px;text-transform:uppercase;color:#94a3b8;margin-bottom:5px}table{width:100%;border-collapse:collapse;margin-top:18px}th{background:#0f172a;color:white;text-align:left;font-size:11px;text-transform:uppercase;padding:10px}td{border-bottom:1px solid #e2e8f0;padding:10px;font-size:13px}td.num,th.num{text-align:right}.total{margin-left:auto;margin-top:18px;width:280px;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden}.total div{display:flex;justify-content:space-between;padding:12px;border-bottom:1px solid #e2e8f0}.total div:last-child{border-bottom:0;background:#0f172a;color:white;font-weight:900}.note{margin-top:22px;border:1px dashed #cbd5e1;border-radius:16px;padding:14px;color:#475569;font-size:13px;line-height:1.45}.sign{display:flex;justify-content:space-between;gap:40px;margin-top:48px}.line{border-top:1px solid #0f172a;padding-top:8px;flex:1;color:#475569;font-size:12px}.footer{position:fixed;bottom:10mm;left:18mm;right:18mm;border-top:1px solid #e2e8f0;padding-top:8px;color:#64748b;font-size:11px}@media print{body{background:white}.page{margin:0;width:auto;min-height:auto}.footer{position:fixed}.no-print{display:none}}
-  </style></head><body><div class="page">
-    <div class="header"><div class="brand">${company.logo ? `<img class="logo" src="${esc(company.logo)}">` : ''}<div class="company"><h1>${esc(company.name || 'VIN-matrix')}</h1><div class="muted">${esc(company.address || '')}</div><div class="muted">${esc(company.phone || '')}</div></div></div><div class="muted" style="text-align:right">${new Date().toLocaleDateString('uk-UA')}<br>${esc(requisites).replace(/\n/g,'<br>')}</div></div>
-    <div class="doc-title">${esc(title)}</div><span class="pill">№${esc(visit.id)} · ${esc(visit.status || '')}</span>
-    <div class="grid"><div class="box"><b>Клієнт</b>${esc(visit.client || '—')}<br><span class="muted">${esc(visit.phone || '')}</span></div><div class="box"><b>Авто / VIN</b>${esc(visit.plate || '—')}<br><span class="muted">${esc(visit.vin_code || '')}</span></div></div>
-    ${type === 'warranty' ? `<div class="note"><b>Умови гарантії</b><br>${esc(warrantyText).replace(/\n/g,'<br>')}</div>` : ''}
-    ${type === 'return_note' ? `<div class="note"><b>Повернення товару</b><br>Товар прийнято до повернення після перевірки стану, комплектності та відповідності умовам повернення.</div>` : ''}
-    <table><thead><tr><th>Артикул</th><th>Назва</th><th class="num">К-сть</th><th class="num">Ціна</th><th class="num">Сума</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${esc(r.article || '—')}</td><td>${esc(r.name || '—')}</td><td class="num">${qty(r.qty)}</td><td class="num">${money(r.price)}</td><td class="num">${money(r.sum)}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#94a3b8">Позицій немає</td></tr>'}</tbody></table>
-    <div class="total"><div><span>Разом</span><b>${money(total)}</b></div><div><span>До сплати</span><b>${money(total)}</b></div></div>
-    <div class="sign"><div class="line">${esc(signature)}</div><div class="line">Підпис клієнта</div></div>
-    <div class="note">${esc(footer).replace(/\n/g,'<br>')}</div>
-    <div class="footer">Документ сформовано у VIN-matrix · ${esc(company.name || '')}</div>
-  </div><script>window.onload=()=>{window.print();}</script></body></html>`;
-  const w = window.open('', '_blank');
-  if (!w) return alert('Браузер заблокував відкриття документа. Дозвольте спливаючі вікна.');
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(meta.title)} №${esc(visit?.id || '')}</title><style>
+    @page{size:A4;margin:12mm}*{box-sizing:border-box}body{margin:0;background:#e2e8f0;color:#0f172a;font-family:Inter,Arial,sans-serif}.sheet{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:15mm 16mm;position:relative}.top{display:flex;justify-content:space-between;gap:22px;border-bottom:3px solid #0f172a;padding-bottom:16px}.brand{display:flex;gap:14px;align-items:center;min-width:0}.logo{width:68px;height:68px;object-fit:contain;border:1px solid #e2e8f0;border-radius:18px;padding:6px}.company h1{margin:0;font-size:24px;line-height:1.05;font-weight:900;letter-spacing:-.03em}.muted{color:#64748b;font-size:12px;line-height:1.45}.req{text-align:right;max-width:82mm}.doc-head{margin:22px 0 18px;display:flex;justify-content:space-between;gap:18px;align-items:flex-end}.doc-title{font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:-.04em;margin:0}.pill{display:inline-flex;background:#eff6ff;color:#1d4ed8;padding:7px 11px;border-radius:999px;font-size:12px;font-weight:900;text-transform:uppercase}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}.box{border:1px solid #e2e8f0;border-radius:18px;padding:13px;background:#f8fafc;min-height:72px}.box b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:6px}.box p{margin:0;font-size:14px;font-weight:800;line-height:1.35}.section-title{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#334155;margin:20px 0 8px}table{width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden}th{background:#0f172a;color:white;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:10px}td{border-bottom:1px solid #e2e8f0;padding:10px;font-size:12px;vertical-align:top}tr:last-child td{border-bottom:0}.num{text-align:right;white-space:nowrap}.kind{display:inline-flex;border-radius:999px;background:#f1f5f9;color:#475569;padding:4px 7px;font-size:10px;font-weight:900;text-transform:uppercase}.summary{margin-left:auto;margin-top:16px;width:300px;border:1px solid #e2e8f0;border-radius:18px;overflow:hidden}.summary div{display:flex;justify-content:space-between;gap:12px;padding:11px 13px;border-bottom:1px solid #e2e8f0;font-size:13px}.summary div:last-child{border-bottom:0}.summary .pay{background:#0f172a;color:white;font-weight:900}.summary .debt{color:#be123c;font-weight:900}.note{margin-top:18px;border:1px dashed #cbd5e1;border-radius:18px;padding:14px;color:#475569;font-size:12px;line-height:1.5;background:#f8fafc}.note b{display:block;color:#0f172a;text-transform:uppercase;font-size:11px;margin-bottom:6px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:42px;margin-top:46px}.line{border-top:1px solid #0f172a;padding-top:8px;color:#475569;font-size:11px}.footer{margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;color:#64748b;font-size:11px;line-height:1.45}.no-print{position:sticky;top:0;z-index:5;background:#0f172a;color:white;padding:10px 14px;text-align:right}.no-print button{border:0;border-radius:12px;background:#2563eb;color:white;padding:10px 14px;font-weight:900;text-transform:uppercase;font-size:11px}@media print{body{background:white}.sheet{width:auto;min-height:auto;margin:0;padding:0}.no-print{display:none}.box,.note,tr{break-inside:avoid;page-break-inside:avoid}}
+  </style></head><body>${options.autoPrint ? '' : '<div class="no-print"><button onclick="window.print()">Друк / зберегти PDF</button></div>'}<main class="sheet">
+    <header class="top"><div class="brand">${logo ? `<img class="logo" src="${esc(logo)}" alt="logo">` : ''}<div class="company"><h1>${esc(company.name || 'VIN-matrix')}</h1><div class="muted">${esc(company.address || '')}</div><div class="muted">${esc(company.phone || '')}</div></div></div><div class="muted req"><b>${esc(date)}</b><br>${nl2br(requisites)}</div></header>
+    <section class="doc-head"><div><h2 class="doc-title">${esc(meta.title)}</h2><span class="pill">№${esc(visit?.id || '—')} · ${esc(visit?.status || '')}</span></div><div class="muted" style="text-align:right">${isInvoice ? 'Призначення платежу:<br>' : ''}${isInvoice ? `Оплата за замовлення №${esc(visit?.id || '')}` : ''}</div></section>
+    <section class="grid"><div class="box"><b>Клієнт</b><p>${esc(visit?.client || '—')}</p><div class="muted">${esc(visit?.phone || '')}</div></div><div class="box"><b>Авто / VIN</b><p>${esc(carLabel(visit))}</p><div class="muted">${esc(visit?.plate || '')}${visit?.vin_code ? ` · VIN: ${esc(visit.vin_code)}` : ''}</div></div></section>
+    <div class="section-title">Позиції документа</div>
+    <table><thead><tr><th>Тип</th><th>Артикул</th><th>Назва</th><th class="num">К-сть</th><th class="num">Ціна</th><th class="num">Сума</th></tr></thead><tbody>${rows.map((row) => `<tr><td><span class="kind">${esc(row.kind)}</span></td><td>${esc(row.article || '—')}</td><td>${esc(row.name || '—')}</td><td class="num">${qty(row.qty)}</td><td class="num">${money(row.price)}</td><td class="num">${money(row.sum)}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:18px">Позицій немає</td></tr>'}</tbody></table>
+    <section class="summary"><div><span>Разом</span><b>${money(total)}</b></div><div><span>Оплачено</span><b>${money(paid)}</b></div><div><span>Борг</span><b class="debt">${money(debt)}</b></div><div class="pay"><span>До сплати</span><b>${money(Math.max(debt, 0))}</b></div></section>
+    ${isWarranty ? `<section class="note"><b>Умови гарантії</b>${nl2br(warrantyText)}</section>` : ''}
+    ${isReturn ? '<section class="note"><b>Повернення товару</b>Товар прийнято до повернення після перевірки стану, комплектності та відповідності умовам повернення. Остаточне рішення приймається відповідальною особою компанії.</section>' : ''}
+    ${!isWarranty && !isReturn ? `<section class="note"><b>Примітка</b>${nl2br(footer)}</section>` : ''}
+    <section class="sign"><div class="line">${esc(signature)}</div><div class="line">Підпис клієнта</div></section>
+    <footer class="footer">${nl2br(footer)}<br>Документ сформовано у VIN-matrix · ${esc(company.name || '')}</footer>
+  </main>${options.autoPrint ? '<script>window.onload=()=>setTimeout(()=>window.print(),250);</script>' : ''}</body></html>`;
 }

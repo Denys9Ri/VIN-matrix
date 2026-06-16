@@ -71,6 +71,7 @@ export default function SupplierOrders() {
   const [filter, setFilter] = useState('active');
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmGroup, setConfirmGroup] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -142,14 +143,20 @@ export default function SupplierOrders() {
     }
   };
 
-  const changeGroupStatus = async (parts, status) => {
+  const changeGroupStatus = (parts, status, supplier = '') => {
     if (!parts.length) return;
-    if (!window.confirm(`Змінити статус для ${parts.length} позицій?`)) return;
+    setConfirmGroup({ parts, status, supplier });
+  };
+
+  const runGroupStatusChange = async () => {
+    if (!confirmGroup?.parts?.length) return;
     setBusy(true);
     try {
-      await Promise.all(parts.map((item) => api.patch(`/api/order-parts/${item.id}/`, { status })));
-      const ids = new Set(parts.map((item) => item.id));
-      setItems((prev) => prev.map((item) => ids.has(item.id) ? { ...item, status } : item));
+      await Promise.all(confirmGroup.parts.map((item) => api.patch(`/api/order-parts/${item.id}/`, { status: confirmGroup.status })));
+      const ids = new Set(confirmGroup.parts.map((item) => item.id));
+      setItems((prev) => prev.map((item) => ids.has(item.id) ? { ...item, status: confirmGroup.status } : item));
+      setMessage(`Статус оновлено для ${confirmGroup.parts.length} позицій.`);
+      setConfirmGroup(null);
     } catch {
       setMessage('Не вдалося змінити статуси групи.');
     } finally {
@@ -201,6 +208,15 @@ export default function SupplierOrders() {
     {loading ? <Empty text="Завантаження замовлень..." /> : groups.length === 0 ? <Empty text="Позицій для постачальників немає" /> : <div className="space-y-5">
       {groups.map((group) => <SupplierGroup key={group.supplier} group={group} busy={busy} onStatus={changeStatus} onGroupStatus={changeGroupStatus} onOpenVisit={openVisit} />)}
     </div>}
+
+    {confirmGroup && (
+      <ConfirmGroupModal
+        data={confirmGroup}
+        busy={busy}
+        onClose={() => setConfirmGroup(null)}
+        onConfirm={runGroupStatusChange}
+      />
+    )}
   </div>;
 }
 
@@ -223,8 +239,8 @@ function SupplierGroup({ group, busy, onStatus, onGroupStatus, onOpenVisit }) {
         <h2 className="text-xl font-black text-slate-900">Закупка: {money(group.total)}</h2>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full lg:w-auto">
-        <button disabled={busy || activeParts.length === 0} onClick={() => onGroupStatus(activeParts, 'IN_TRANSIT')} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase disabled:opacity-50">Позначити замовлено</button>
-        <button disabled={busy || activeParts.length === 0} onClick={() => onGroupStatus(activeParts, 'ARRIVED')} className="bg-emerald-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase disabled:opacity-50">Позначити отримано</button>
+        <button disabled={busy || activeParts.length === 0} onClick={() => onGroupStatus(activeParts, 'IN_TRANSIT', group.supplier)} className="bg-blue-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase disabled:opacity-50">Позначити замовлено</button>
+        <button disabled={busy || activeParts.length === 0} onClick={() => onGroupStatus(activeParts, 'ARRIVED', group.supplier)} className="bg-emerald-600 text-white rounded-xl px-4 py-3 text-xs font-black uppercase disabled:opacity-50">Позначити отримано</button>
       </div>
     </div>
     <div className="divide-y divide-slate-100">
@@ -266,4 +282,32 @@ function Small({ label, value }) {
 
 function Empty({ text }) {
   return <div className="bg-white rounded-3xl p-10 text-center border border-slate-200"><AlertTriangle className="mx-auto text-slate-300 mb-3" size={42}/><p className="font-black text-slate-700">{text}</p></div>;
+}
+
+function ConfirmGroupModal({ data, busy, onClose, onConfirm }) {
+  const label = statusMeta[data.status]?.label || data.status;
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="p-5 bg-blue-50 border-b border-blue-100 flex items-start gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+            <AlertTriangle size={22} />
+          </div>
+          <div>
+            <h3 className="text-xl font-black uppercase text-slate-900">Змінити статус групи?</h3>
+            <p className="text-sm font-bold text-slate-600 mt-1">
+              {data.supplier || 'Постачальник'} · {data.parts.length} позицій · новий статус “{label}”.
+            </p>
+          </div>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button type="button" disabled={busy} onClick={onClose} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase disabled:opacity-60">Скасувати</button>
+          <button type="button" disabled={busy} onClick={onConfirm} className="rounded-2xl bg-blue-600 text-white px-4 py-3 text-xs font-black uppercase disabled:opacity-60">
+            {busy ? 'Оновлюємо...' : 'Підтвердити'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

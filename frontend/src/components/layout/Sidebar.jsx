@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck, ShieldCheck, Boxes, History } from 'lucide-react';
+import { LayoutDashboard, CarFront, Briefcase, LineChart, Settings, Users, Search, X, Package, UserCheck, ShieldCheck, Boxes, History, CreditCard } from 'lucide-react';
 import api from '../../api/axios';
 
 const Sidebar = ({ isOpen, closeMenu }) => {
@@ -45,6 +45,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
 
   const menuItems = [
     ...(accessAllowed ? paidMenuItems : []),
+    { name: 'Тариф', icon: <CreditCard size={20} />, path: '/billing' },
     { name: visitsName, icon: visitsIcon, path: '/visits' },
     ...(accessAllowed && role === 'partner' && canManageAccounts ? [{ name: 'Акаунти', icon: <UserCheck size={20} />, path: '/partner-clients' }] : []),
     ...(accessAllowed && canManagePartners ? [{ name: 'Партнери', icon: <ShieldCheck size={20} />, path: '/partners' }] : []),
@@ -69,7 +70,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
               </li>
             ))}
           </ul>
-          {!accessAllowed && <div className="mx-1 mt-5 rounded-xl bg-rose-500/10 border border-rose-500/20 p-3 text-xs font-bold text-rose-200">Немає доступу через відсутність оплати.</div>}
+          {!accessAllowed && <div className="mx-1 mt-5 rounded-xl bg-rose-500/10 border border-rose-500/20 p-3 text-xs font-bold text-rose-200">Немає доступу через відсутність оплати. Відкрийте “Тариф”, щоб створити заявку на оплату.</div>}
         </nav>
       </div>
     </>

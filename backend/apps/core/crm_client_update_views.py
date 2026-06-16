@@ -91,6 +91,11 @@ class StoreClientRepeatSaleView(APIView):
         if not company:
             return Response({'error': 'Немає компанії'}, status=400)
 
+        mode = (request.data.get('mode') or '').strip().lower()
+        if mode not in ['store', 'sto']:
+            mode = getattr(company, 'business_type', 'store') or 'store'
+        is_sto = mode == 'sto'
+
         key = request.data.get('key') or ''
         phone = (request.data.get('phone') or '').strip()
         wanted = key or normalize_phone(phone)
@@ -103,7 +108,7 @@ class StoreClientRepeatSaleView(APIView):
         article = (part.get('article') or '').strip()
         brand = (part.get('brand') or '').strip() or 'Без бренду'
         name = (part.get('name') or '').strip() or article or 'Товар'
-        supplier = (part.get('supplier') or part.get('source_label') or '').strip() or 'Повторний продаж'
+        supplier = (part.get('supplier') or part.get('source_label') or '').strip() or ('СТО / повторний візит' if is_sto else 'Повторний продаж')
         buy_price = safe_decimal(part.get('buy_price'), 0)
         sell_price = safe_decimal(part.get('sell_price') or part.get('revenue'), 0)
         quantity = safe_decimal(part.get('quantity'), 1)
@@ -133,14 +138,14 @@ class StoreClientRepeatSaleView(APIView):
                 company=company,
                 client=client_name,
                 phone=phone or '0000000000',
-                plate=plate or f'ORDER-{int(timezone.now().timestamp())}',
+                plate=plate or f'VISIT-{int(timezone.now().timestamp())}' if is_sto else f'ORDER-{int(timezone.now().timestamp())}',
                 vin_code=vin_code,
-                status='ORDERED',
-                delivery_type='pickup',
-                delivery_data='{"source":"Повторний продаж","mode":"store"}',
+                status='SELECTION' if is_sto else 'ORDERED',
+                delivery_type='visit' if is_sto else 'pickup',
+                delivery_data='{"source":"CRM","mode":"sto"}' if is_sto else '{"source":"Повторний продаж","mode":"store"}',
                 payment_status='unpaid',
                 scheduled_datetime=timezone.now(),
-                comment='Повторне замовлення з CRM клієнта' if create_empty else f'Повторний продаж з історії клієнта: {article or name}',
+                comment='Повторний візит з CRM клієнта' if is_sto and create_empty else ('Повторне замовлення з CRM клієнта' if create_empty else f'Повторний продаж з історії клієнта: {article or name}'),
             )
             created = True
 
@@ -158,14 +163,24 @@ class StoreClientRepeatSaleView(APIView):
                 status='WAITING',
             )
 
-        if visit.status in ['SELECTION', 'PENDING', 'DRAFT']:
+        if not is_sto and visit.status in ['SELECTION', 'PENDING', 'DRAFT']:
             visit.status = 'ORDERED'
             visit.save(update_fields=['status', 'updated_at'])
+
+        if is_sto:
+            created_msg = 'Створено повторний візит'
+            active_msg = f'Відкрито активний візит №{visit.id}'
+            part_msg = 'Запчастину додано в активний візит' if not created else 'Створено повторний візит із запчастиною'
+        else:
+            created_msg = 'Створено повторне замовлення' if create_empty else 'Створено нове замовлення'
+            active_msg = 'Відкрито активне замовлення клієнта' if create_empty else f'Додано в активне замовлення №{visit.id}'
+            part_msg = created_msg if created else active_msg
 
         return Response({
             'created_order': created,
             'visit_id': visit.id,
             'order_id': visit.id,
             'part_id': order_part.id if order_part else None,
-            'message': 'Створено повторне замовлення' if create_empty and created else ('Відкрито активне замовлення клієнта' if create_empty else ('Створено нове замовлення' if created else f'Додано в активне замовлення №{visit.id}')),
+            'mode': mode,
+            'message': created_msg if create_empty and created else (active_msg if create_empty else part_msg),
         })

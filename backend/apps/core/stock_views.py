@@ -25,6 +25,19 @@ def to_int(value):
         return 1
 
 
+def apply_company_margin(buy_price, sell_price, company):
+    buy = to_decimal(buy_price)
+    sell = to_decimal(sell_price)
+    if sell > 0 or buy <= 0:
+        return sell
+    try:
+        margin = Decimal(str(getattr(company, 'global_margin_percent', 0) or 0))
+    except Exception:
+        margin = Decimal('0')
+    calculated = buy + (buy * margin / Decimal('100'))
+    return calculated.quantize(Decimal('0.01'))
+
+
 def norm(value):
     return str(value or '').strip().lower().replace(' ', '').replace('_', '')
 
@@ -118,7 +131,7 @@ class StockReceiveViewSet(viewsets.ViewSet):
             return None, Response({'error': 'Бренд, артикул і назва обовʼязкові'}, status=400)
         quantity = to_int(data.get('quantity'))
         buy_price = to_decimal(data.get('buy_price'))
-        sell_price = to_decimal(data.get('sell_price'))
+        sell_price = apply_company_margin(buy_price, data.get('sell_price'), company)
         supplier = None
         if data.get('supplier'):
             supplier = Supplier.objects.filter(company=company, id=data.get('supplier')).first()
@@ -145,7 +158,7 @@ class StockReceiveViewSet(viewsets.ViewSet):
         if order_part:
             order_part.status = 'ARRIVED'
             order_part.save(update_fields=['status'])
-        return {'created': created, 'item_id': item.id, 'quantity': item.quantity, 'movement': StockMovementSerializer(movement).data}, None
+        return {'created': created, 'item_id': item.id, 'quantity': item.quantity, 'sell_price': sell_price, 'movement': StockMovementSerializer(movement).data}, None
 
     @action(detail=False, methods=['post'], url_path='receive')
     def receive(self, request):

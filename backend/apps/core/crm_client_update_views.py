@@ -15,7 +15,7 @@ ACTIVE_STORE_STATUSES = ['SELECTION', 'PENDING', 'DRAFT', 'ORDERED', 'IN_PROGRES
 
 def is_generic_plate(value):
     value = str(value or '').upper().strip()
-    return (not value) or value.startswith('ORDER-') or value.startswith('SALE-')
+    return (not value) or value.startswith('ORDER-') or value.startswith('SALE-') or value.startswith('VISIT-')
 
 
 def safe_decimal(value, default=0):
@@ -134,11 +134,12 @@ class StoreClientRepeatSaleView(APIView):
         if active_visit:
             visit = active_visit
         else:
+            fallback_plate = f'VISIT-{int(timezone.now().timestamp())}' if is_sto else f'ORDER-{int(timezone.now().timestamp())}'
             visit = Visit.objects.create(
                 company=company,
                 client=client_name,
                 phone=phone or '0000000000',
-                plate=plate or f'VISIT-{int(timezone.now().timestamp())}' if is_sto else f'ORDER-{int(timezone.now().timestamp())}',
+                plate=plate or fallback_plate,
                 vin_code=vin_code,
                 status='SELECTION' if is_sto else 'ORDERED',
                 delivery_type='visit' if is_sto else 'pickup',

@@ -18,20 +18,20 @@ from .subscriptions import get_alert_clients, renew_client_30_days, sync_queryse
 
 
 def resolve_pending_payments_for_client(client, admin_user):
-    """When access is renewed manually, old pending requests should stop looking like active problems."""
+    """When access is renewed manually, old pending requests should stop looking like active problems without inflating paid revenue."""
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 '''
                 UPDATE core_subscriptionpayment
-                SET status='confirmed',
+                SET status='covered',
                     confirmed_by_id=%s,
                     confirmed_at=%s,
                     period_start=%s,
                     period_end=%s,
                     comment=CASE
-                        WHEN comment IS NULL OR comment = '' THEN 'Доступ продовжено адміністратором'
-                        ELSE comment || ' · Доступ продовжено адміністратором'
+                        WHEN comment IS NULL OR comment = '' THEN 'Закрито автоматично: доступ продовжено адміністратором'
+                        ELSE comment || ' · Закрито автоматично: доступ продовжено адміністратором'
                     END,
                     rejected_reason=NULL
                 WHERE platform_client_id=%s AND status='pending'

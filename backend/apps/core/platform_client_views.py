@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import connection, transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -14,6 +15,38 @@ from .partner_views import (
     repair_legacy_account,
 )
 from .subscriptions import get_alert_clients, renew_client_30_days, sync_queryset_subscriptions
+
+
+def resolve_pending_payments_for_client(client, admin_user):
+    """When access is renewed manually, old pending requests should stop looking like active problems."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                UPDATE core_subscriptionpayment
+                SET status='confirmed',
+                    confirmed_by_id=%s,
+                    confirmed_at=%s,
+                    period_start=%s,
+                    period_end=%s,
+                    comment=CASE
+                        WHEN comment IS NULL OR comment = '' THEN 'Доступ продовжено адміністратором'
+                        ELSE comment || ' · Доступ продовжено адміністратором'
+                    END,
+                    rejected_reason=NULL
+                WHERE platform_client_id=%s AND status='pending'
+                ''',
+                [
+                    admin_user.id if admin_user and admin_user.is_authenticated else None,
+                    timezone.now(),
+                    client.subscription_started_at,
+                    client.subscription_until,
+                    client.id,
+                ],
+            )
+    except Exception:
+        return 0
+    return cursor.rowcount if 'cursor' in locals() else 0
 
 
 class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
@@ -69,7 +102,10 @@ class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
         if not allowed:
             return Response({'error': 'Немає прав продовжувати підписку цього клієнта.'}, status=403)
         renew_client_30_days(instance)
-        return Response(self.get_serializer(instance).data)
+        resolved_count = resolve_pending_payments_for_client(instance, request.user)
+        data = self.get_serializer(instance).data
+        data['resolved_pending_payments'] = resolved_count
+        return Response(data)
 
     @action(detail=False, methods=['get'], url_path='subscription-alerts')
     def subscription_alerts(self, request):

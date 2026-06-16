@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import UniversalSearch from './pages/UniversalSearch';
 import Inventory from './pages/InventoryStage6';
 import Settings from './pages/Settings';
+import Billing from './pages/Billing';
 import DocumentSettings from './pages/DocumentSettings';
 import ServicesSettings from './pages/ServicesSettings';
 import DictionarySettings from './pages/DictionarySettings';
@@ -115,7 +116,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
-          <Route path="billing" element={<Settings />} />
+          <Route path="billing" element={<Billing />} />
           <Route path="settings" element={<Settings />} />
           <Route path="settings/services" element={<ServicesSettings />} />
           <Route path="settings/documents" element={<DocumentSettings />} />

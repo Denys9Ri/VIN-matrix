@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Boxes, CheckCircle2, Layers3, Package, Plus, Search, Trash2, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Boxes, CheckCircle2, Layers3, Package, Plus, Search, Trash2, Wrench, X } from 'lucide-react';
 import api from '../api/axios';
 
 const emptyService = { name: '', price: '', quantity: 1 };
@@ -25,6 +25,9 @@ const Complexes = () => {
   const [applyTarget, setApplyTarget] = useState(null);
   const [applyVisitId, setApplyVisitId] = useState(visitIdFromUrl);
   const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [saveFromVisitOpen, setSaveFromVisitOpen] = useState(false);
 
   const filteredComplexes = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -137,6 +140,7 @@ const Complexes = () => {
       setMessage('Вкажіть назву комплексу.');
       return;
     }
+    setBusy(true);
     try {
       if (editing?.id) {
         await api.put(`/api/complexes/${editing.id}/`, payload);
@@ -149,17 +153,23 @@ const Complexes = () => {
       fetchComplexes();
     } catch (error) {
       setMessage(error.response?.data?.error || 'Не вдалося зберегти комплекс.');
+    } finally {
+      setBusy(false);
     }
   };
 
-  const deleteComplex = async (complex) => {
-    if (!window.confirm(`Видалити комплекс “${complex.name}”?`)) return;
+  const deleteComplex = async () => {
+    if (!deleteTarget?.id) return;
+    setBusy(true);
     try {
-      await api.delete(`/api/complexes/${complex.id}/`);
+      await api.delete(`/api/complexes/${deleteTarget.id}/`);
       setMessage('Комплекс видалено.');
+      setDeleteTarget(null);
       fetchComplexes();
     } catch (error) {
-      setMessage('Не вдалося видалити комплекс.');
+      setMessage(error.response?.data?.error || 'Не вдалося видалити комплекс.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -169,28 +179,35 @@ const Complexes = () => {
       setMessage('Вкажіть ID візиту, куди додати комплекс.');
       return;
     }
+    setBusy(true);
     try {
       const response = await api.post(`/api/complexes/${applyTarget.id}/apply-to-visit/`, { visit_id: applyVisitId });
       setMessage(response.data?.message || 'Комплекс додано у візит.');
       setApplyTarget(null);
     } catch (error) {
       setMessage(error.response?.data?.error || 'Не вдалося додати комплекс у візит.');
+    } finally {
+      setBusy(false);
     }
   };
 
-  const saveFromVisit = async () => {
+  const saveFromVisit = async (name) => {
     if (!applyVisitId) {
       setMessage('Вкажіть ID візиту, з якого створити комплекс.');
       return;
     }
-    const name = window.prompt('Назва нового комплексу:');
-    if (!name) return;
+    const cleanedName = String(name || '').trim();
+    if (!cleanedName) return;
+    setBusy(true);
     try {
-      await api.post('/api/complexes/save-from-visit/', { visit_id: applyVisitId, name });
+      await api.post('/api/complexes/save-from-visit/', { visit_id: applyVisitId, name: cleanedName });
       setMessage('Комплекс створено з візиту.');
+      setSaveFromVisitOpen(false);
       fetchComplexes();
     } catch (error) {
       setMessage(error.response?.data?.error || 'Не вдалося створити комплекс з візиту.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -232,7 +249,7 @@ const Complexes = () => {
               placeholder="ID візиту"
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-blue-500 font-bold min-w-[140px]"
             />
-            <button type="button" onClick={saveFromVisit} className="bg-slate-900 text-white px-4 py-3 rounded-xl text-xs font-black uppercase hover:bg-slate-800">
+            <button type="button" onClick={() => setSaveFromVisitOpen(true)} className="bg-slate-900 text-white px-4 py-3 rounded-xl text-xs font-black uppercase hover:bg-slate-800">
               Зберегти з візиту
             </button>
           </div>
@@ -298,7 +315,7 @@ const Complexes = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button type="button" onClick={() => setApplyTarget(complex)} className="bg-slate-900 text-white py-2.5 rounded-xl text-xs font-black uppercase hover:bg-slate-800">Додати у візит</button>
                 <button type="button" onClick={() => openEditModal(complex)} className="bg-blue-50 text-blue-700 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-blue-100">Редагувати</button>
-                <button type="button" onClick={() => deleteComplex(complex)} className="bg-rose-50 text-rose-700 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-rose-100">Видалити</button>
+                <button type="button" onClick={() => setDeleteTarget(complex)} className="bg-rose-50 text-rose-700 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-rose-100">Видалити</button>
               </div>
             </div>
           ))}
@@ -373,8 +390,8 @@ const Complexes = () => {
             <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
               <p className="text-sm font-black text-slate-700">Орієнтовна сума: <span className="text-blue-600 text-base">{money(formTotal)}</span></p>
               <div className="flex gap-2 w-full sm:w-auto">
-                <button type="button" onClick={() => setModalOpen(false)} className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-white border border-slate-200 font-black text-xs uppercase text-slate-600 hover:bg-slate-50">Скасувати</button>
-                <button type="submit" className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-blue-600 font-black text-xs uppercase text-white hover:bg-blue-700 shadow-lg shadow-blue-200">Зберегти</button>
+                <button type="button" onClick={() => setModalOpen(false)} disabled={busy} className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-white border border-slate-200 font-black text-xs uppercase text-slate-600 hover:bg-slate-50 disabled:opacity-60">Скасувати</button>
+                <button type="submit" disabled={busy} className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-blue-600 font-black text-xs uppercase text-white hover:bg-blue-700 shadow-lg shadow-blue-200 disabled:opacity-60">{busy ? 'Зберігаємо...' : 'Зберегти'}</button>
               </div>
             </div>
           </form>
@@ -399,14 +416,98 @@ const Complexes = () => {
               <div className="bg-blue-50 text-blue-700 rounded-xl p-3">Робіт: {applyTarget.services_count ?? applyTarget.services?.length ?? 0}</div>
               <div className="bg-emerald-50 text-emerald-700 rounded-xl p-3">Запчастин: {applyTarget.parts_count ?? applyTarget.parts?.length ?? 0}</div>
             </div>
-            <button type="button" onClick={applyComplex} className="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase hover:bg-slate-800 flex items-center justify-center gap-2">
-              <CheckCircle2 size={16} /> Додати комплекс
+            <button type="button" onClick={applyComplex} disabled={busy} className="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase hover:bg-slate-800 flex items-center justify-center gap-2 disabled:opacity-60">
+              <CheckCircle2 size={16} /> {busy ? 'Додаємо...' : 'Додати комплекс'}
             </button>
           </div>
         </div>
       )}
+
+
+      {deleteTarget && (
+        <ConfirmModal
+          title="Видалити комплекс?"
+          text={`Комплекс “${deleteTarget.name}” буде видалено зі списку шаблонів.`}
+          confirmText="Видалити"
+          tone="danger"
+          busy={busy}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={deleteComplex}
+        />
+      )}
+
+      {saveFromVisitOpen && (
+        <NamePromptModal
+          busy={busy}
+          visitId={applyVisitId}
+          onClose={() => setSaveFromVisitOpen(false)}
+          onConfirm={saveFromVisit}
+        />
+      )}
     </div>
   );
 };
+
+
+function ConfirmModal({ title, text, confirmText, tone = 'danger', busy, onClose, onConfirm }) {
+  const isDanger = tone === 'danger';
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden">
+        <div className={`${isDanger ? 'bg-rose-50 border-rose-100' : 'bg-blue-50 border-blue-100'} p-5 border-b flex items-start gap-3`}>
+          <div className={`${isDanger ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'} w-12 h-12 rounded-2xl flex items-center justify-center shrink-0`}>
+            <AlertTriangle size={22} />
+          </div>
+          <div>
+            <h3 className="text-xl font-black uppercase text-slate-900">{title}</h3>
+            <p className="text-sm font-bold text-slate-600 mt-1">{text}</p>
+          </div>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button type="button" disabled={busy} onClick={onClose} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase disabled:opacity-60">Скасувати</button>
+          <button type="button" disabled={busy} onClick={onConfirm} className={`${isDanger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'} rounded-2xl text-white px-4 py-3 text-xs font-black uppercase disabled:opacity-60`}>
+            {busy ? 'Виконується...' : confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NamePromptModal({ busy, visitId, onClose, onConfirm }) {
+  const [name, setName] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm(name);
+        }}
+        className="bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        <div className="p-5 bg-slate-50 border-b border-slate-100">
+          <h3 className="text-xl font-black uppercase text-slate-900">Назва нового комплексу</h3>
+          <p className="text-sm font-bold text-slate-500 mt-1">Комплекс буде створено з візиту №{visitId || '—'}.</p>
+        </div>
+        <div className="p-5 space-y-4">
+          <input
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Наприклад: ТО з заміною фільтрів"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button type="button" disabled={busy} onClick={onClose} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase disabled:opacity-60">Скасувати</button>
+            <button disabled={busy} className="rounded-2xl bg-blue-600 text-white px-4 py-3 text-xs font-black uppercase disabled:opacity-60">{busy ? 'Створюємо...' : 'Створити'}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 
 export default Complexes;

@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.db import connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -95,6 +96,45 @@ def list_payments(where_sql='', params=None, limit=80):
         return [payment_row(row) for row in cursor.fetchall()]
 
 
+def client_admin_row(client):
+    billing = get_billing_status(client)
+    owner = getattr(client, 'assigned_owner', None)
+    user = getattr(client, 'user', None)
+    return {
+        'id': client.id,
+        'user_id': user.id if user else None,
+        'client_code': client.client_code,
+        'client_code_display': f'C{client.client_code}' if client.client_code else '—',
+        'client_name': (user.first_name or user.username) if user else 'Клієнт',
+        'username': user.username if user else '',
+        'email': user.email if user else '',
+        'phone': client.phone or '',
+        'assigned_owner_id': owner.id if owner else None,
+        'assigned_to': (owner.first_name or owner.username) if owner else '—',
+        'payment_status': client.payment_status,
+        'billing_status': billing.get('billing_status'),
+        'billing_label': billing.get('label'),
+        'billing_message': billing.get('message'),
+        'is_access_enabled': client.is_access_enabled,
+        'access_allowed': billing.get('access_allowed'),
+        'subscription_price': float(client.subscription_price or MONTHLY_PRICE),
+        'currency': CURRENCY,
+        'trial_until': client.trial_until,
+        'subscription_until': client.subscription_until,
+        'grace_until': client.grace_until,
+        'subscription_end': billing.get('subscription_end'),
+        'subscription_end_display': billing.get('subscription_end_display'),
+        'days_left': billing.get('days_left'),
+        'grace_days_left': billing.get('grace_days_left'),
+        'overdue_days': billing.get('overdue_days'),
+        'blocked_at': client.blocked_at,
+        'blocked_reason': client.blocked_reason,
+        'last_payment_at': client.last_payment_at,
+        'last_payment_method': client.last_payment_method,
+        'created_at': client.created_at,
+    }
+
+
 class BillingMeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -148,6 +188,36 @@ class BillingPaymentRequestView(APIView):
             'method_label': PAYMENT_METHODS.get(method, method),
             'billing': get_billing_status(client),
         }, status=201)
+
+
+class BillingAdminClientsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        repair_legacy_account(request.user)
+        if not (is_platform_admin(request.user) or is_partner_user(request.user)):
+            return Response({'error': 'Немає прав переглядати SaaS-клієнтів.'}, status=403)
+        qs = PlatformClient.objects.select_related('user', 'assigned_owner').order_by('-created_at')
+        if is_partner_user(request.user) and not is_platform_admin(request.user):
+            qs = qs.filter(assigned_owner=request.user)
+        q = request.query_params.get('search', '').strip()
+        if q:
+            qs = qs.filter(Q(client_code__icontains=q) | Q(phone__icontains=q) | Q(user__username__icontains=q) | Q(user__first_name__icontains=q) | Q(user__email__icontains=q) | Q(assigned_owner__username__icontains=q) | Q(assigned_owner__first_name__icontains=q))
+        status_filter = request.query_params.get('billing_status') or request.query_params.get('status')
+        rows = []
+        summary = {'total': 0, 'trial': 0, 'active': 0, 'grace': 0, 'blocked': 0, 'manual_free': 0, 'paid': 0}
+        for client in qs[:300]:
+            row = client_admin_row(client)
+            status_value = row.get('billing_status') or ''
+            if status_filter and status_filter != status_value:
+                continue
+            summary['total'] += 1
+            if status_value in summary:
+                summary[status_value] += 1
+            if client.payment_status == 'active':
+                summary['paid'] += 1
+            rows.append(row)
+        return Response({'results': rows, 'count': len(rows), 'summary': summary})
 
 
 class BillingAdminPaymentsView(APIView):

@@ -102,6 +102,7 @@ class BillingMeView(APIView):
         repair_legacy_account(request.user)
         client = get_platform_client(request.user)
         billing = get_billing_status(client) if client else {'access_allowed': True, 'status': 'none'}
+        payments = list_payments('WHERE pc.id = %s', [client.id], limit=30) if client else []
         return Response({
             'billing': billing,
             'plan': {
@@ -113,11 +114,21 @@ class BillingMeView(APIView):
                 'features': ['Усі функції VIN-matrix', 'Магазин', 'СТО', 'Склад', 'CRM', 'Документи', 'Аналітика'],
             },
             'payment_methods': PAYMENT_METHODS,
+            'payments': payments,
+            'pending_payments': [payment for payment in payments if payment.get('status') == 'pending'],
         })
 
 
 class BillingPaymentRequestView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        repair_legacy_account(request.user)
+        client = get_platform_client(request.user)
+        if not client:
+            return Response({'results': [], 'count': 0})
+        rows = list_payments('WHERE pc.id = %s', [client.id], limit=int(request.query_params.get('limit') or 50))
+        return Response({'results': rows, 'count': len(rows), 'billing': get_billing_status(client)})
 
     def post(self, request):
         repair_legacy_account(request.user)

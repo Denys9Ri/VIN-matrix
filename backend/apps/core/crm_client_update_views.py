@@ -98,6 +98,7 @@ class StoreClientRepeatSaleView(APIView):
         plate = (request.data.get('plate') or '').strip().upper()
         vin_code = (request.data.get('vin_code') or '').strip().upper() or None
         part = request.data.get('part') or {}
+        create_empty = request.data.get('create_empty') is True or str(request.data.get('create_empty')).lower() == 'true'
 
         article = (part.get('article') or '').strip()
         brand = (part.get('brand') or '').strip() or 'Без бренду'
@@ -107,7 +108,7 @@ class StoreClientRepeatSaleView(APIView):
         sell_price = safe_decimal(part.get('sell_price') or part.get('revenue'), 0)
         quantity = safe_decimal(part.get('quantity'), 1)
 
-        if not article and not name:
+        if not create_empty and not article and not name:
             return Response({'error': 'Немає товару для повторення'}, status=400)
 
         client_visits = find_client_visits(company, wanted) if wanted else Visit.objects.none()
@@ -139,21 +140,23 @@ class StoreClientRepeatSaleView(APIView):
                 delivery_data='{"source":"Повторний продаж","mode":"store"}',
                 payment_status='unpaid',
                 scheduled_datetime=timezone.now(),
-                comment=f'Повторний продаж з історії клієнта: {article or name}',
+                comment='Повторне замовлення з CRM клієнта' if create_empty else f'Повторний продаж з історії клієнта: {article or name}',
             )
             created = True
 
-        order_part = OrderPart.objects.create(
-            visit=visit,
-            brand=brand,
-            article=article or 'manual',
-            name=name,
-            buy_price=buy_price,
-            sell_price=sell_price,
-            quantity=quantity or 1,
-            supplier=supplier,
-            status='WAITING',
-        )
+        order_part = None
+        if not create_empty:
+            order_part = OrderPart.objects.create(
+                visit=visit,
+                brand=brand,
+                article=article or 'manual',
+                name=name,
+                buy_price=buy_price,
+                sell_price=sell_price,
+                quantity=quantity or 1,
+                supplier=supplier,
+                status='WAITING',
+            )
 
         if visit.status in ['SELECTION', 'PENDING', 'DRAFT']:
             visit.status = 'ORDERED'
@@ -163,6 +166,6 @@ class StoreClientRepeatSaleView(APIView):
             'created_order': created,
             'visit_id': visit.id,
             'order_id': visit.id,
-            'part_id': order_part.id,
-            'message': 'Створено нове замовлення' if created else f'Додано в активне замовлення №{visit.id}',
+            'part_id': order_part.id if order_part else None,
+            'message': 'Створено повторне замовлення' if create_empty and created else ('Відкрито активне замовлення клієнта' if create_empty else ('Створено нове замовлення' if created else f'Додано в активне замовлення №{visit.id}')),
         })

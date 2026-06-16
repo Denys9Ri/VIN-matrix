@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Clock3, Copy, Download, Eye, FileText, History, Loader2, Printer, ReceiptText, Send, Share2, ShieldCheck, Undo2, X } from 'lucide-react';
+import { CheckCircle2, Clock3, Copy, Download, Eye, FileText, History, Printer, ReceiptText, ShieldCheck, Undo2, X } from 'lucide-react';
 import api from '../../api/axios';
 
 const money = (value) => `${Number(value || 0).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴`;
@@ -53,11 +53,32 @@ function formatActivityDate(value) {
   return date.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-function canNativeShareFile(file) {
-  if (typeof navigator === 'undefined' || !navigator.share || !file) return false;
-  if (!navigator.canShare) return true;
+async function copyTextToClipboard(text) {
+  if (!text) return false;
   try {
-    return navigator.canShare({ files: [file] });
+    if (navigator?.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to legacy copy
+  }
+
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    const ok = document.execCommand('copy');
+    textarea.remove();
+    return ok;
   } catch {
     return false;
   }
@@ -75,7 +96,6 @@ export default function DocumentDock() {
   const [sendType, setSendType] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [sharing, setSharing] = useState(false);
 
   const loadDocumentHistory = async (id = visit?.id) => {
     if (!id) return;
@@ -197,39 +217,13 @@ export default function DocumentDock() {
     try {
       const html = await getBackendHtml(type, { download: true });
       downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
-      setNotice('Бланк скачано. Відкрийте його і оберіть “Зберегти як PDF” у друці.');
+      setNotice('Документ скачано. Його можна прикріпити в Telegram, Viber або надіслати клієнту іншим способом.');
       await loadDocumentHistory(visit.id);
     } catch {
       const html = buildDocumentHtml(type, visit, settings);
       downloadBlob(html, `${fileSlug(docTypes[type]?.title || 'document')}-${visit?.id || 'new'}.html`);
       await recordDocumentEvent(type, 'downloaded', 'fallback');
-      setNotice('Backend-документ ще недоступний після деплою, скачано локальний стабільний бланк.');
-    }
-  };
-
-  const shareDocument = async (type) => {
-    if (!visit?.id) return;
-    setSharing(true);
-    const meta = docTypes[type] || docTypes.receipt;
-    const filename = `${fileSlug(meta.title)}-${visit.id}.html`;
-    const html = buildDocumentHtml(type, visit, settings);
-    const text = `Документ “${meta.title}” по замовленню №${visit.id}. Сума: ${money(documentTotals(type, visit).total)}.`;
-
-    try {
-      if (typeof File === 'undefined') throw new Error('File API is not supported');
-      const file = new File([html], filename, { type: 'text/html' });
-      if (!canNativeShareFile(file)) throw new Error('Native file share is not supported');
-      await navigator.share({ title: `${meta.title} №${visit.id}`, text, files: [file] });
-      await recordDocumentEvent(type, 'sent', 'native_share');
-      setNotice('Документ передано в системне меню “Поділитись”. Оберіть Telegram, Viber або інший месенджер і контакт.');
-      setSendType(null);
-    } catch (error) {
-      if (error?.name === 'AbortError') return;
-      downloadBlob(html, filename);
-      await recordDocumentEvent(type, 'downloaded', 'share_fallback');
-      setNotice('На цьому пристрої немає системного “Поділитись файлом”. Документ скачано — прикріпіть його у Telegram або Viber вручну.');
-    } finally {
-      setSharing(false);
+      setNotice('Документ скачано локальним бланком. Його можна прикріпити в Telegram або Viber.');
     }
   };
 
@@ -249,7 +243,7 @@ export default function DocumentDock() {
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Пакет документів</p>
               <h2 className="text-lg md:text-2xl font-black uppercase truncate">{ctx.title}</h2>
-              <p className="text-[11px] md:text-xs font-bold text-blue-100 mt-1">Превʼю, друк, PDF-бланк, відправка клієнту і журнал дій.</p>
+              <p className="text-[11px] md:text-xs font-bold text-blue-100 mt-1">Превʼю, друк, PDF-бланк, файл для клієнта і журнал дій.</p>
             </div>
             <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center shrink-0"><X size={18}/></button>
           </div>
@@ -260,7 +254,7 @@ export default function DocumentDock() {
             <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/80 p-3 md:p-5 lg:overflow-y-auto lg:min-h-0">
               <div className="mb-3 md:mb-4">
                 <h3 className="text-sm font-black uppercase text-slate-900">Документи</h3>
-                <p className="text-xs font-semibold text-slate-500 mt-1">Оберіть тип документа і дію: перегляд, друк, PDF або поділитись.</p>
+                <p className="text-xs font-semibold text-slate-500 mt-1">Оберіть тип документа і дію: перегляд, друк, PDF або файл для клієнта.</p>
               </div>
 
               <div className="grid grid-cols-1 gap-2">
@@ -323,7 +317,7 @@ export default function DocumentDock() {
                   <ActionButton onClick={() => openWindow(activeType, false)} icon={<Eye size={15}/>} label="Переглянути" />
                   <ActionButton onClick={() => openWindow(activeType, true)} icon={<Printer size={15}/>} label="Друк" />
                   <ActionButton onClick={() => downloadDocument(activeType)} icon={<Download size={15}/>} label="PDF" />
-                  <ActionButton onClick={() => setSendType(activeType)} icon={<Send size={15}/>} label="Поділитись" dark />
+                  <ActionButton onClick={() => setSendType(activeType)} icon={<Download size={15}/>} label="Скачати" dark />
                 </div>
               </div>
 
@@ -336,7 +330,7 @@ export default function DocumentDock() {
           </div>
         </div>
 
-        {sendType && <SendDialog type={sendType} visit={visit} settings={settings} sharing={sharing} onClose={() => setSendType(null)} onShare={() => shareDocument(sendType)} onDownload={() => downloadDocument(sendType)} onCopy={async (text) => { navigator.clipboard?.writeText(text); await recordDocumentEvent(sendType, 'copied', 'copy'); setNotice('Текст для клієнта скопійовано.'); }} />}
+        {sendType && <DownloadDialog type={sendType} visit={visit} settings={settings} onClose={() => setSendType(null)} onDownload={() => downloadDocument(sendType)} onCopy={async () => { await recordDocumentEvent(sendType, 'copied', 'copy'); setNotice('Текст скопійовано.'); }} />}
       </div>,
       document.body
     )}
@@ -347,31 +341,52 @@ function ActionButton({ icon, label, onClick, dark = false }) {
   return <button type="button" onClick={onClick} className={`${dark ? 'bg-slate-900 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'} rounded-2xl px-3 py-2.5 text-[11px] font-black uppercase flex items-center justify-center gap-1.5 transition whitespace-nowrap`}>{icon}{label}</button>;
 }
 
-function SendDialog({ type, visit, settings, sharing, onClose, onShare, onDownload, onCopy }) {
+function DownloadDialog({ type, visit, settings, onClose, onDownload, onCopy }) {
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
   const meta = docTypes[type] || docTypes.receipt;
   const company = settings?.company || {};
   const text = `Добрий день, ${visit?.client || ''}. Надсилаємо документ “${meta.title}” по замовленню №${visit?.id || ''}. Компанія: ${company.name || ''}. Сума: ${money(documentTotals(type, visit).total)}.`;
+
+  const handleDownload = async () => {
+    await onDownload?.();
+    setDownloaded(true);
+    window.setTimeout(() => setDownloaded(false), 1800);
+  };
+
+  const handleCopy = async () => {
+    setCopyError(false);
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      await onCopy?.(text);
+      window.setTimeout(() => setCopied(false), 1800);
+    } else {
+      setCopyError(true);
+    }
+  };
 
   return <div className="absolute inset-0 z-[130] bg-slate-950/50 backdrop-blur-sm overflow-y-auto p-3 md:p-4 flex items-start md:items-center justify-center" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="my-4 md:my-0 bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden">
       <div className="bg-gradient-to-r from-slate-900 to-blue-700 text-white p-5 flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Поділитись документом</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Файл для клієнта</p>
           <h3 className="text-xl font-black uppercase mt-1">{meta.title}</h3>
-          <p className="text-xs font-bold text-blue-100 mt-1">На телефоні відкриється системне меню: Telegram, Viber, WhatsApp, пошта або інший додаток.</p>
+          <p className="text-xs font-bold text-blue-100 mt-1">Скачайте документ і прикріпіть його в Telegram, Viber або іншому месенджері.</p>
         </div>
         <button onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center"><X size={18}/></button>
       </div>
       <div className="p-5 space-y-3">
-        <button type="button" onClick={onShare} disabled={sharing} className="w-full rounded-2xl bg-slate-900 text-white px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-700 disabled:opacity-60">
-          {sharing ? <Loader2 size={17} className="animate-spin"/> : <Share2 size={17}/>} Поділитись документом
+        <button type="button" onClick={handleDownload} className={`w-full rounded-2xl px-4 py-4 text-xs font-black uppercase flex items-center justify-center gap-2 transition ${downloaded ? 'bg-emerald-600 text-white scale-[1.02]' : 'bg-slate-900 text-white hover:bg-blue-700'}`}>
+          {downloaded ? <CheckCircle2 size={18}/> : <Download size={17}/>} {downloaded ? 'Документ скачано' : 'Скачати документ'}
         </button>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600 leading-relaxed">{text}</div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button type="button" onClick={onDownload} className="rounded-2xl bg-blue-50 text-blue-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-100"><Download size={16}/> Скачати файл</button>
-          <button type="button" onClick={() => onCopy(text)} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-slate-200"><Copy size={16}/> Скопіювати текст</button>
-        </div>
-        <p className="text-[11px] font-semibold text-slate-400 leading-relaxed">Якщо системне “Поділитись” недоступне на цьому браузері, файл автоматично скачається — його можна вручну прикріпити у Telegram або Viber.</p>
+        <button type="button" onClick={handleCopy} className={`w-full rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2 transition ${copied ? 'bg-emerald-50 text-emerald-700 ring-4 ring-emerald-100 scale-[1.02]' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+          {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? 'Скопійовано' : 'Скопіювати текст'}
+        </button>
+        {copyError && <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">Не вдалося скопіювати автоматично. Виділіть текст вище і скопіюйте вручну.</div>}
+        <p className="text-[11px] font-semibold text-slate-400 leading-relaxed">Після скачування файл буде у завантаженнях браузера. Його можна прикріпити клієнту в Telegram, Viber або будь-якому іншому месенджері.</p>
       </div>
     </div>
   </div>;

@@ -9,7 +9,6 @@ export default function InventoryStage6() {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [receiptSignal, setReceiptSignal] = useState(0);
 
   const loadInsights = async () => {
     setLoading(true);
@@ -26,6 +25,8 @@ export default function InventoryStage6() {
 
   useEffect(() => { loadInsights(); }, []);
 
+  const goToOperations = () => setMode('operations');
+
   return (
     <div className="w-full min-h-screen bg-slate-50/40 px-3 py-4 md:px-6 md:py-6 2xl:px-8">
       <div className="mx-auto max-w-[1780px] space-y-5">
@@ -39,8 +40,8 @@ export default function InventoryStage6() {
               <button type="button" onClick={loadInsights} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase text-slate-600 shadow-sm transition hover:bg-slate-50">
                 <RefreshCcw size={15}/> Оновити аналітику
               </button>
-              <button type="button" onClick={() => { setMode('operations'); setReceiptSignal((value) => value + 1); }} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700">
-                <Settings2 size={15}/> Новий прихід
+              <button type="button" onClick={goToOperations} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700">
+                <Settings2 size={15}/> До приходу
               </button>
             </div>
           </div>
@@ -49,10 +50,10 @@ export default function InventoryStage6() {
         {message && <div className="rounded-[24px] border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">{message}</div>}
 
         {mode === 'control' ? (
-          <InventoryControlPanel insights={insights} loading={loading} onReceipt={() => { setMode('operations'); setReceiptSignal((value) => value + 1); }} />
+          <InventoryControlPanel insights={insights} loading={loading} onReceipt={goToOperations} />
         ) : (
           <div className="rounded-[34px] border border-slate-200 bg-white shadow-sm">
-            <Inventory key={receiptSignal ? `inventory-${receiptSignal}` : 'inventory'} />
+            <Inventory />
           </div>
         )}
       </div>

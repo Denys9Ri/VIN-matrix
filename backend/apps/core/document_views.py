@@ -5,8 +5,10 @@ from django.db import connection
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .activity import log_activity
 from .models import OrderPart, OrderService, Visit
 from .partner_views import repair_legacy_account
 
@@ -18,6 +20,16 @@ DOCUMENT_TYPES = {
     'service_act': 'Акт виконаних робіт',
     'warranty': 'Гарантійний талон',
     'return_note': 'Акт повернення товару',
+}
+
+DOCUMENT_ACTIONS = {
+    'viewed': ('document_viewed', 'Документ переглянуто'),
+    'printed': ('document_printed', 'Документ надруковано'),
+    'downloaded': ('document_downloaded', 'Документ скачано'),
+    'sent': ('document_sent', 'Документ надіслано клієнту'),
+    'email': ('document_sent', 'Документ надіслано email'),
+    'sms': ('document_sent', 'Документ надіслано SMS'),
+    'copied': ('document_message_copied', 'Текст документа скопійовано'),
 }
 
 
@@ -124,30 +136,82 @@ def file_slug(value):
     return safe.strip('-') or 'document'
 
 
+def resolve_visit(request, visit_id, doc_type):
+    repair_legacy_account(request.user)
+    company = get_user_company(request.user)
+    if not company:
+        return None, None, JsonResponse({'error': 'Немає компанії.'}, status=403)
+    if doc_type not in DOCUMENT_TYPES:
+        return None, None, JsonResponse({'error': 'Невідомий тип документа.'}, status=404)
+    try:
+        return company, Visit.objects.get(id=visit_id, company=company), None
+    except Visit.DoesNotExist:
+        return company, None, JsonResponse({'error': 'Замовлення не знайдено.'}, status=404)
+
+
+def log_document_event(company, user, visit, doc_type, action_key, channel='', silent=False):
+    action_type, title = DOCUMENT_ACTIONS.get(action_key, DOCUMENT_ACTIONS['viewed'])
+    document_title = DOCUMENT_TYPES.get(doc_type, 'Документ')
+    description = f"{document_title} №{visit.id}"
+    if channel:
+        description = f"{description} · {channel}"
+    log_activity(
+        company=company,
+        user=user,
+        visit=visit,
+        action_type=action_type,
+        title=title,
+        description=description,
+        metadata={
+            'document_type': doc_type,
+            'document_title': document_title,
+            'document_action': action_key,
+            'channel': channel,
+            'client': getattr(visit, 'client', '') or '',
+            'phone': getattr(visit, 'phone', '') or '',
+            'plate': getattr(visit, 'plate', '') or '',
+        },
+    )
+    if not silent:
+        return {'ok': True, 'message': title}
+    return None
+
+
 class VisitDocumentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, visit_id, doc_type):
-        repair_legacy_account(request.user)
-        company = get_user_company(request.user)
-        if not company:
-            return JsonResponse({'error': 'Немає компанії.'}, status=403)
-        if doc_type not in DOCUMENT_TYPES:
-            return JsonResponse({'error': 'Невідомий тип документа.'}, status=404)
-
-        try:
-            visit = Visit.objects.get(id=visit_id, company=company)
-        except Visit.DoesNotExist:
-            return JsonResponse({'error': 'Замовлення не знайдено.'}, status=404)
+        company, visit, error = resolve_visit(request, visit_id, doc_type)
+        if error:
+            return error
 
         services = list(OrderService.objects.filter(visit=visit).order_by('id'))
         parts = list(OrderPart.objects.filter(visit=visit).order_by('id'))
-        html = build_document_html(request, visit, company, doc_type, services, parts, auto_print=request.GET.get('print') == '1')
+        auto_print = request.GET.get('print') == '1'
+        download = request.GET.get('download') == '1'
+        html = build_document_html(request, visit, company, doc_type, services, parts, auto_print=auto_print)
         response = HttpResponse(html, content_type='text/html; charset=utf-8')
         filename = f"{file_slug(DOCUMENT_TYPES[doc_type])}-{visit.id}.html"
-        disposition = 'attachment' if request.GET.get('download') == '1' else 'inline'
+        disposition = 'attachment' if download else 'inline'
         response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
+
+        if download:
+            action = 'downloaded'
+        elif auto_print:
+            action = 'printed'
+        else:
+            action = 'viewed'
+        log_document_event(company, request.user, visit, doc_type, action, silent=True)
         return response
+
+    def post(self, request, visit_id, doc_type):
+        company, visit, error = resolve_visit(request, visit_id, doc_type)
+        if error:
+            return error
+        action = request.data.get('action') or 'sent'
+        channel = request.data.get('channel') or ''
+        result = log_document_event(company, request.user, visit, doc_type, action, channel=channel)
+        return Response(result)
 
 
 def build_document_html(request, visit, company, doc_type, services, parts, auto_print=False):

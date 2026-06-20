@@ -1,8 +1,10 @@
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .partner_views import (
     ADMIN_CODE,
-    ProfileSettingsView as BaseProfileSettingsView,
     detect_role,
     ensure_partner_code,
     get_employee,
@@ -14,14 +16,11 @@ from .serializers import CompanySerializer, UserSerializer
 from .subscriptions import get_billing_status, subscription_payload
 
 
-class ProfileSettingsView(BaseProfileSettingsView):
-    """
-    Compatibility layer for old Settings.jsx.
+class ProfileSettingsView(APIView):
+    """Settings API kept independent from legacy partner views."""
 
-    Old settings page expects role='owner' for every full CRM account so it can
-    load mechanics and company settings. New access logic still needs the real
-    hierarchy role, so we also return actual_role/account_role.
-    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def get(self, request):
         repair_legacy_account(request.user)

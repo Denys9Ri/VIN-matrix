@@ -1,4 +1,5 @@
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import SAFE_METHODS, BasePermission
+
 
 PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
 NO_ACCESS_MESSAGE = 'Немає доступу через завершення підписки або відсутність оплати.'
@@ -44,7 +45,20 @@ def is_blocked_client(user):
 
 
 class HasPaidAccess(BasePermission):
+    """Full paid-access gate for endpoints that must be hidden for blocked clients."""
+
     message = NO_ACCESS_MESSAGE
 
     def has_permission(self, request, view):
+        return not is_blocked_client(request.user)
+
+
+class HasPaidAccessForWrites(BasePermission):
+    """Allow blocked clients to read their data, but not to change business data."""
+
+    message = NO_ACCESS_MESSAGE
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
         return not is_blocked_client(request.user)

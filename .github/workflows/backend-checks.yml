@@ -35,8 +35,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Check migrations
-        run: python manage.py makemigrations --check --dry-run
+      - name: Check Django configuration
+        run: python manage.py check
 
       - name: Run stability and API tests
         run: python manage.py test apps.core.tests

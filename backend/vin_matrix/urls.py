@@ -100,9 +100,9 @@ from apps.core.novapost_views import (
     NovaPostWarehousesView,
     NovaPostDeliveryView,
     NovaPostDeliveryStatusView,
-    NovaPostDeliveryCreateView,
     NovaPostDeliveryRefreshActiveView,
 )
+from apps.core.novapost_hardened_views import NovaPostDeliveryCreateHardenedView
 
 
 router = DefaultRouter()
@@ -248,8 +248,8 @@ urlpatterns = [
 
     re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/$', NovaPostDeliveryView.as_view(), name='novapost-delivery'),
     re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/status/$', NovaPostDeliveryStatusView.as_view(), name='novapost-delivery-status'),
-    re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create-ttn/$', NovaPostDeliveryCreateView.as_view(), name='novapost-delivery-create-ttn'),
-    re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create/$', NovaPostDeliveryCreateView.as_view(), name='novapost-delivery-create-fallback'),
+    re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create-ttn/$', NovaPostDeliveryCreateHardenedView.as_view(), name='novapost-delivery-create-ttn'),
+    re_path(r'^api/delivery/novapost/visits/(?P<visit_id>\d+)/create/$', NovaPostDeliveryCreateHardenedView.as_view(), name='novapost-delivery-create-fallback'),
 
     path('api/', include(router.urls)),
 ]

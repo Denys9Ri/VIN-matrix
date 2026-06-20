@@ -22,6 +22,8 @@ CLIENT_CODE_START = 6002
 USERNAME_RE = re.compile(r'^(?=(?:.*[A-Za-z]){4,})(?=.*[A-Z])(?=.*\d)[A-Za-z\d]+$')
 PASSWORD_RE = re.compile(r'^(?=(?:.*[A-Za-z]){4,})(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$')
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+# Compatibility for legacy billing imports. It intentionally contains no identities.
+PLATFORM_ADMIN_USERNAMES = frozenset()
 
 
 def is_main_admin(user):

@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 
 from .billing_client_link_views import get_client_link_settings
 from .models import PlatformClient
-from .partner_views import PLATFORM_ADMIN_USERNAMES, get_platform_client, is_platform_admin, is_partner_user, repair_legacy_account
+from .partner_views import get_platform_client, is_platform_admin, is_partner_user, repair_legacy_account
 from .subscriptions import CURRENCY, MONTHLY_PRICE, PLAN_CODE, PLAN_NAME, get_billing_status, renew_client_30_days
 
 
@@ -253,63 +253,49 @@ def partner_payout_rows(request, period_key, start, end):
         owner_name = row[7] or row[8] or 'Партнер'
         owner_username = row[8] or ''
         role = row[11] or ''
-        is_owner_admin = owner_username in PLATFORM_ADMIN_USERNAMES or bool(row[9]) or bool(row[10])
+        is_owner_admin = bool(row[9]) or bool(row[10])
         is_partner_owner = role == 'partner' and not is_owner_admin
         amount = PARTNER_CLIENT_PRICE
         partner_share = PARTNER_SHARE if is_partner_owner else Decimal('0')
         admin_share = ADMIN_PARTNER_SHARE if is_partner_owner else amount
         key = owner_id if is_partner_owner else 'admin'
-        if key not in partners:
-            partners[key] = {
-                'partner_id': owner_id if is_partner_owner else None,
-                'partner_name': owner_name if is_partner_owner else 'Адмін / прямі клієнти',
-                'partner_username': owner_username if is_partner_owner else '',
-                'payments_count': 0,
-                'revenue': Decimal('0'),
-                'partner_earned': Decimal('0'),
-                'admin_earned': Decimal('0'),
-                'paid': Decimal('0'),
-                'due': Decimal('0'),
-                'clients': [],
-            }
-        bucket = partners[key]
+        label = owner_name if is_partner_owner else 'Адміністратор'
+        bucket = partners.setdefault(key, {'partner_id': owner_id if is_partner_owner else None, 'partner_name': label, 'payments_count': 0, 'revenue': Decimal('0'), 'partner_earned': Decimal('0'), 'admin_earned': Decimal('0'), 'paid_to_partner': Decimal('0'), 'due_to_partner': Decimal('0'), 'clients': []})
         bucket['payments_count'] += 1
         bucket['revenue'] += amount
         bucket['partner_earned'] += partner_share
         bucket['admin_earned'] += admin_share
-        bucket['clients'].append({
-            'payment_id': row[0],
-            'client_code': f'C{row[3]}',
-            'client_name': row[4] or row[5] or 'Клієнт',
-            'confirmed_at': row[2],
-            'amount': float(amount),
-            'partner_share': float(partner_share),
-            'admin_share': float(admin_share),
-        })
+        bucket['clients'].append({'payment_id': row[0], 'client_code': f'C{row[3]}', 'client_name': row[4] or row[5] or 'Клієнт', 'amount': float(amount), 'partner_share': float(partner_share), 'confirmed_at': row[2]})
         totals['payments_count'] += 1
         totals['revenue'] += amount
         totals['partner_earned'] += partner_share
         totals['admin_earned'] += admin_share
 
-    if partners:
-        with connection.cursor() as cursor:
-            cursor.execute('SELECT partner_id, COALESCE(SUM(amount),0) FROM core_partnerpayout WHERE period_key=%s GROUP BY partner_id', [period_key])
-            paid_map = {row[0]: Decimal(str(row[1] or 0)) for row in cursor.fetchall()}
-        for bucket in partners.values():
-            partner_id = bucket.get('partner_id')
-            paid = paid_map.get(partner_id, Decimal('0')) if partner_id else Decimal('0')
-            bucket['paid'] = paid
-            bucket['due'] = max(bucket['partner_earned'] - paid, Decimal('0'))
-            totals['paid_to_partners'] += paid
-            totals['partner_due'] += bucket['due']
+    with connection.cursor() as cursor:
+        cursor.execute(
+            '''
+            SELECT partner_id, COALESCE(SUM(amount),0)
+            FROM core_partnerpayout
+            WHERE period_key=%s
+            GROUP BY partner_id
+            ''',
+            [period_key],
+        )
+        payouts = {row[0]: Decimal(row[1] or 0) for row in cursor.fetchall()}
+    for key, bucket in partners.items():
+        paid = payouts.get(bucket['partner_id'], Decimal('0')) if bucket['partner_id'] else Decimal('0')
+        bucket['paid_to_partner'] = paid
+        bucket['due_to_partner'] = max(Decimal('0'), bucket['partner_earned'] - paid)
+        totals['paid_to_partners'] += paid
+        totals['partner_due'] += bucket['due_to_partner']
 
     def clean(bucket):
-        return {**bucket, 'revenue': float(bucket['revenue']), 'partner_earned': float(bucket['partner_earned']), 'admin_earned': float(bucket['admin_earned']), 'paid': float(bucket['paid']), 'due': float(bucket['due'])}
+        return {**bucket, 'revenue': float(bucket['revenue']), 'partner_earned': float(bucket['partner_earned']), 'admin_earned': float(bucket['admin_earned']), 'paid_to_partner': float(bucket['paid_to_partner']), 'due_to_partner': float(bucket['due_to_partner'])}
 
     return {
-        'period': period_key,
-        'summary': {key: float(value) if isinstance(value, Decimal) else value for key, value in totals.items()},
-        'results': [clean(bucket) for bucket in sorted(partners.values(), key=lambda item: item['due'], reverse=True)],
+        'period': {'key': period_key, 'start': start, 'end': end},
+        'totals': {k: float(v) if isinstance(v, Decimal) else v for k, v in totals.items()},
+        'partners': [clean(bucket) for bucket in partners.values()],
     }
 
 
@@ -319,222 +305,8 @@ class BillingMeView(APIView):
     def get(self, request):
         repair_legacy_account(request.user)
         client = get_platform_client(request.user)
-        billing = get_billing_status(client) if client else {'access_allowed': True, 'status': 'none'}
-        payments = list_payments('WHERE pc.id = %s', [client.id], limit=30) if client else []
-        return Response({
-            'billing': billing,
-            'plan': {
-                'code': PLAN_CODE,
-                'name': PLAN_NAME,
-                'price': float(MONTHLY_PRICE),
-                'currency': CURRENCY,
-                'period': 'month',
-                'features': ['Усі функції VIN-matrix', 'Магазин', 'СТО', 'Склад', 'CRM', 'Документи', 'Аналітика'],
-            },
-            'payment_methods': PAYMENT_METHODS,
-            'payment_settings': get_client_link_settings(),
-            'payments': payments,
-            'pending_payments': [payment for payment in payments if payment.get('status') == 'pending'],
-        })
-
-
-class BillingPaymentRequestView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        repair_legacy_account(request.user)
-        client = get_platform_client(request.user)
         if not client:
-            return Response({'results': [], 'count': 0})
-        rows = list_payments('WHERE pc.id = %s', [client.id], limit=int(request.query_params.get('limit') or 50))
-        return Response({'results': rows, 'count': len(rows), 'billing': get_billing_status(client)})
-
-    def post(self, request):
-        repair_legacy_account(request.user)
-        client = get_platform_client(request.user)
-        if not client:
-            return Response({'error': 'Платіжний профіль не знайдено.'}, status=404)
-        method = request.data.get('method') or 'monobank_jar'
-        amount = money_value(request.data.get('amount') or MONTHLY_PRICE)
-        comment = request.data.get('comment') or f'Заявка на оплату тарифу {PLAN_NAME}'
-        existing_id = find_pending_payment(client)
-        settings = get_client_link_settings()
-        if existing_id:
-            return Response({
-                'id': existing_id,
-                'message': 'Активна заявка вже є. Адміністратор бачить її в кабінеті й може підтвердити оплату.',
-                'already_pending': True,
-                'amount': float(amount),
-                'currency': CURRENCY,
-                'method': method,
-                'method_label': PAYMENT_METHODS.get(method, method),
-                'payment_url': settings.get('public_url') or '',
-                'payment_note': settings.get('public_note') or '',
-                'billing': get_billing_status(client),
-            }, status=200)
-        payment_id = create_payment(client, amount, method, status='pending', comment=comment, created_by=request.user)
-        return Response({
-            'id': payment_id,
-            'message': 'Заявку на оплату створено. Після перевірки адміністратор підтвердить доступ.',
-            'amount': float(amount),
-            'currency': CURRENCY,
-            'method': method,
-            'method_label': PAYMENT_METHODS.get(method, method),
-            'payment_url': settings.get('public_url') or '',
-            'payment_note': settings.get('public_note') or '',
-            'billing': get_billing_status(client),
-        }, status=201)
-
-
-class BillingAdminClientsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        repair_legacy_account(request.user)
-        if not (is_platform_admin(request.user) or is_partner_user(request.user)):
-            return Response({'error': 'Немає прав переглядати SaaS-клієнтів.'}, status=403)
-        qs = PlatformClient.objects.select_related('user', 'assigned_owner').order_by('-created_at')
-        if is_partner_user(request.user) and not is_platform_admin(request.user):
-            qs = qs.filter(assigned_owner=request.user)
-        q = request.query_params.get('search', '').strip()
-        if q:
-            qs = qs.filter(Q(client_code__icontains=q) | Q(phone__icontains=q) | Q(user__username__icontains=q) | Q(user__first_name__icontains=q) | Q(user__email__icontains=q) | Q(assigned_owner__username__icontains=q) | Q(assigned_owner__first_name__icontains=q))
-        status_filter = request.query_params.get('billing_status') or request.query_params.get('status')
-        rows = []
-        summary = {'total': 0, 'trial': 0, 'active': 0, 'grace': 0, 'blocked': 0, 'manual_free': 0, 'paid': 0}
-        for client in qs[:300]:
-            row = client_admin_row(client)
-            status_value = row.get('billing_status') or ''
-            if status_filter and status_filter != status_value:
-                continue
-            summary['total'] += 1
-            if status_value in summary:
-                summary[status_value] += 1
-            if client.payment_status == 'active':
-                summary['paid'] += 1
-            rows.append(row)
-        return Response({'results': rows, 'count': len(rows), 'summary': summary})
-
-
-class BillingAdminPaymentsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        repair_legacy_account(request.user)
-        if not (is_platform_admin(request.user) or is_partner_user(request.user)):
-            return Response({'error': 'Немає прав переглядати billing.'}, status=403)
-        status_filter = request.query_params.get('status')
-        params = []
-        where = []
-        if status_filter:
-            where.append('p.status = %s')
-            params.append(status_filter)
-        if is_partner_user(request.user) and not is_platform_admin(request.user):
-            where.append('pc.assigned_owner_id = %s')
-            params.append(request.user.id)
-        where_sql = 'WHERE ' + ' AND '.join(where) if where else ''
-        rows = list_payments(where_sql, params, limit=int(request.query_params.get('limit') or 100))
-        return Response({'results': rows, 'count': len(rows), 'payment_methods': PAYMENT_METHODS})
-
-
-class BillingAdminPartnerPayoutsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        repair_legacy_account(request.user)
-        if not (is_platform_admin(request.user) or is_partner_user(request.user)):
-            return Response({'error': 'Немає прав переглядати партнерські виплати.'}, status=403)
-        period_key, start, end = parse_period(request.query_params.get('month') or request.query_params.get('period'))
-        return Response(partner_payout_rows(request, period_key, start, end))
-
-    def post(self, request):
-        repair_legacy_account(request.user)
-        if not is_platform_admin(request.user):
-            return Response({'error': 'Тільки адмін може фіксувати виплати партнерам.'}, status=403)
-        partner_id = request.data.get('partner_id')
-        if not partner_id:
-            return Response({'error': 'Передайте partner_id.'}, status=400)
-        try:
-            partner = User.objects.get(id=int(partner_id))
-        except Exception:
-            return Response({'error': 'Партнера не знайдено.'}, status=404)
-        period_key, start, end = parse_period(request.data.get('period') or request.data.get('month'))
-        amount = money_value(request.data.get('amount'))
-        if amount <= 0:
-            return Response({'error': 'Сума виплати має бути більше 0.'}, status=400)
-        note = request.data.get('note') or 'Виплата партнеру'
-        ensure_partner_payout_table()
-        with connection.cursor() as cursor:
-            cursor.execute(
-                '''
-                INSERT INTO core_partnerpayout (partner_id, period_key, amount, note, paid_at, created_by_id)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ''',
-                [partner.id, period_key, amount, note, timezone.now(), request.user.id],
-            )
-        return Response({'message': 'Виплату партнеру зафіксовано.', **partner_payout_rows(request, period_key, start, end)})
-
-
-class BillingAdminConfirmPaymentView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @transaction.atomic
-    def post(self, request):
-        repair_legacy_account(request.user)
-        if not (is_platform_admin(request.user) or is_partner_user(request.user)):
-            return Response({'error': 'Немає прав підтверджувати оплату.'}, status=403)
-        payment_id = request.data.get('payment_id') or request.data.get('id')
-        if not payment_id:
-            return Response({'error': 'Передайте payment_id.'}, status=400)
-
-        with connection.cursor() as cursor:
-            cursor.execute('SELECT platform_client_id, status, method FROM core_subscriptionpayment WHERE id=%s FOR UPDATE', [payment_id])
-            row = cursor.fetchone()
-        if not row:
-            return Response({'error': 'Платіж не знайдено.'}, status=404)
-        client = PlatformClient.objects.select_for_update().filter(id=row[0]).first()
-        if not client:
-            return Response({'error': 'Клієнт не знайдений.'}, status=404)
-        if is_partner_user(request.user) and not is_platform_admin(request.user) and client.assigned_owner_id != request.user.id:
-            return Response({'error': 'Немає доступу до цього клієнта.'}, status=403)
-
-        renew_client_30_days(client, method=row[2] or 'manual')
+            return Response({'billing': {'access_allowed': True, 'billing_status': 'admin'}, 'plan': None, 'payments': []})
         billing = get_billing_status(client)
-        with connection.cursor() as cursor:
-            cursor.execute(
-                '''
-                UPDATE core_subscriptionpayment
-                SET status='confirmed', confirmed_by_id=%s, confirmed_at=%s, period_start=%s, period_end=%s, rejected_reason=NULL
-                WHERE id=%s
-                ''',
-                [request.user.id, timezone.now(), client.subscription_started_at, client.subscription_until, payment_id],
-            )
-        covered_count = cover_other_pending_payments(client, int(payment_id), request.user)
-        return Response({'message': 'Оплату підтверджено. Доступ продовжено на 30 днів.', 'billing': billing, 'payment_id': int(payment_id), 'covered_pending_payments': covered_count})
-
-
-class BillingAdminRejectPaymentView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @transaction.atomic
-    def post(self, request):
-        repair_legacy_account(request.user)
-        if not (is_platform_admin(request.user) or is_partner_user(request.user)):
-            return Response({'error': 'Немає прав відхиляти оплату.'}, status=403)
-        payment_id = request.data.get('payment_id') or request.data.get('id')
-        reason = request.data.get('reason') or 'Оплату не підтверджено.'
-        if not payment_id:
-            return Response({'error': 'Передайте payment_id.'}, status=400)
-        with connection.cursor() as cursor:
-            cursor.execute('SELECT pc.assigned_owner_id FROM core_subscriptionpayment p JOIN core_platformclient pc ON pc.id=p.platform_client_id WHERE p.id=%s', [payment_id])
-            row = cursor.fetchone()
-        if not row:
-            return Response({'error': 'Платіж не знайдено.'}, status=404)
-        if is_partner_user(request.user) and not is_platform_admin(request.user) and row[0] != request.user.id:
-            return Response({'error': 'Немає доступу до цього клієнта.'}, status=403)
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE core_subscriptionpayment SET status='rejected', confirmed_by_id=%s, confirmed_at=%s, rejected_reason=%s WHERE id=%s",
-                [request.user.id, timezone.now(), reason, payment_id],
-            )
-        return Response({'message': 'Заявку на оплату відхилено.', 'payment_id': int(payment_id), 'reason': reason})
+        settings = get_client_link_settings()
+        return Response({'billing': billing, 'plan': {'code': PLAN_CODE, 'name': PLAN_NAME, 'price': float(MONTHLY_PRICE), 'currency': CURRENCY, 'period_days': 30}, 'payment_settings': settings, 'payments': list_payments('WHERE p.platform_client_id=%s', [client.id], limit=50)})

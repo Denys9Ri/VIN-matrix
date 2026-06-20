@@ -81,21 +81,21 @@ export default function Modal({
         onMouseDown={(event) => event.stopPropagation()}
       >
         {hasHeader && (
-          <div className={cn('flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 bg-white p-4 sm:p-5', headerClassName)}>
+          <div className={cn('flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 bg-white p-4 sm:p-5', headerClassName)}>
             <div className="min-w-0">
-              {title && <h2 className="truncate text-lg font-black uppercase text-slate-900 sm:text-xl">{title}</h2>}
-              {description && <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500">{description}</p>}
+              {title && <h2 className="break-words text-lg font-black uppercase leading-tight text-slate-900 sm:text-xl">{title}</h2>}
+              {description && <p className="mt-1 break-words text-sm font-semibold leading-relaxed text-slate-500">{description}</p>}
             </div>
-            {showClose && <Button variant="ghost" size="sm" iconOnly icon={<X className="h-5 w-5" />} onClick={onClose} aria-label="Закрити" />}
+            {showClose && <Button variant="ghost" size="sm" iconOnly icon={<X className="h-5 w-5" />} onClick={onClose} aria-label="Закрити" className="shrink-0" />}
           </div>
         )}
 
-        <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5', bodyClassName)}>
+        <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5', bodyClassName)}>
           {children}
         </div>
 
         {footer && (
-          <div className={cn('shrink-0 border-t border-slate-100 bg-slate-50/80 p-4 sm:p-5', footerClassName)}>
+          <div className={cn('shrink-0 border-t border-slate-100 bg-slate-50/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5', footerClassName)}>
             <div className={cn('flex flex-col-reverse gap-2 sm:flex-row', footerAlignments[footerAlign] || footerAlignments.right)}>
               {footer}
             </div>

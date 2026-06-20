@@ -109,7 +109,7 @@ def check_novapost(tables_ok):
 
 
 def check_backup_configuration():
-    backup_dir = str(os.getenv('BACKUP_DIR', '')).strip()
+    backup_dir = str(os.getenv('BACKUP_DIR') or os.getenv('POSTGRES_BACKUP_DIR') or '').strip()
     if not backup_dir:
         return _warning(configured=False, message='BACKUP_DIR is not configured')
     return _ok(configured=True, directory_configured=True)

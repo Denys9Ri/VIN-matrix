@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import uuid
 from contextvars import ContextVar
@@ -9,9 +10,44 @@ from django.http import JsonResponse
 _request_id = ContextVar('vin_matrix_request_id', default='-')
 logger = logging.getLogger('vin_matrix.api')
 
+# Deployment can set TRUSTED_BROWSER_ORIGINS as a comma-separated list. The
+# current Coolify frontend is included only as a temporary compatibility default
+# while the frontend moves to the same-origin API proxy.
+_DEFAULT_TRUSTED_BROWSER_ORIGINS = {
+    'http://ydy3swnvdledj1sdinrvvleo.95.217.211.207.sslip.io',
+    'https://ydy3swnvdledj1sdinrvvleo.95.217.211.207.sslip.io',
+}
+_CORS_PATH_PREFIXES = ('/api/', '/token/', '/schema/', '/docs/')
+
 
 def get_request_id():
     return _request_id.get()
+
+
+def trusted_browser_origins():
+    configured = {
+        item.strip().rstrip('/')
+        for item in str(os.getenv('TRUSTED_BROWSER_ORIGINS', '')).split(',')
+        if item.strip()
+    }
+    return configured or _DEFAULT_TRUSTED_BROWSER_ORIGINS
+
+
+def apply_trusted_cors(request, response):
+    """Add CORS only for explicit trusted browser origins, never reflect arbitrary Origin."""
+    if not request.path.startswith(_CORS_PATH_PREFIXES):
+        return response
+    origin = str(request.headers.get('Origin', '')).strip().rstrip('/')
+    if origin not in trusted_browser_origins():
+        return response
+
+    response['Access-Control-Allow-Origin'] = origin
+    response['Access-Control-Allow-Credentials'] = 'true'
+    response['Access-Control-Allow-Methods'] = 'DELETE, GET, OPTIONS, PATCH, POST, PUT'
+    response['Access-Control-Allow-Headers'] = 'accept, authorization, content-type, user-agent, x-csrftoken, x-requested-with, x-request-id'
+    response['Access-Control-Expose-Headers'] = 'X-Request-ID'
+    response['Vary'] = 'Origin'
+    return response
 
 
 class RequestContextFilter(logging.Filter):
@@ -53,6 +89,7 @@ class RequestIdMiddleware:
             _request_id.reset(token)
 
         response['X-Request-ID'] = request_id
+        response = apply_trusted_cors(request, response)
         duration_ms = int((time.monotonic() - started) * 1000)
         if request.path.startswith('/api/'):
             user = getattr(request, 'user', None)
@@ -105,4 +142,4 @@ class ApiExceptionMiddleware:
                 json_dumps_params={'ensure_ascii': False},
             )
             response['X-Request-ID'] = request_id
-            return response
+            return apply_trusted_cors(request, response)

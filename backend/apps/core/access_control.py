@@ -1,7 +1,8 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
+from .partner_views import is_platform_admin
 
-PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
+
 NO_ACCESS_MESSAGE = 'Немає доступу через завершення підписки або відсутність оплати.'
 
 
@@ -17,10 +18,6 @@ def get_platform_client(user):
         return user.platform_client_profile
     except Exception:
         return None
-
-
-def is_platform_admin(user):
-    return bool(user and user.is_authenticated and (user.username in PLATFORM_ADMIN_USERNAMES or user.is_staff or user.is_superuser))
 
 
 def is_partner_user(user):

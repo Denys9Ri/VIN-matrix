@@ -42,5 +42,5 @@ jobs:
       - name: Check Django configuration
         run: python manage.py check
 
-      - name: Run stability and API tests
-        run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_system_stability
+      - name: Run stability, API and security tests
+        run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_system_stability apps.core.tests.test_security_hardening

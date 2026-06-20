@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LayoutDashboard, Menu, Package, ShoppingCart, Wrench } from 'lucide-react';
+import { Menu, Package, Search, ShoppingCart, Wrench } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 
@@ -34,12 +34,12 @@ export default function MobileActionDock({ onOpenMenu }) {
   const workLabel = businessType === 'store' ? 'Замовлення' : 'Візити';
   const WorkIcon = businessType === 'store' ? ShoppingCart : Wrench;
   const path = location.pathname;
-  const isPrimary = path === '/' || path === '/visits' || path === '/inventory';
+  const primaryPaths = ['/visits', '/search', '/inventory'];
   const items = [
-    { key: 'dashboard', label: 'Панель', icon: LayoutDashboard, onClick: () => navigate('/'), active: path === '/' },
     { key: 'work', label: workLabel, icon: WorkIcon, onClick: () => navigate('/visits'), active: path === '/visits' },
+    { key: 'search', label: 'Пошук', icon: Search, onClick: () => navigate('/search'), active: path === '/search' },
     { key: 'inventory', label: 'Склад', icon: Package, onClick: () => navigate('/inventory'), active: path === '/inventory' },
-    { key: 'more', label: 'Ще', icon: Menu, onClick: onOpenMenu, active: !isPrimary },
+    { key: 'more', label: 'Ще', icon: Menu, onClick: onOpenMenu, active: !primaryPaths.includes(path) },
   ];
 
   return (

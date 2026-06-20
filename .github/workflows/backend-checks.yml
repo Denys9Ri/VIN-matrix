@@ -17,7 +17,7 @@ jobs:
       run:
         working-directory: backend
     env:
-      SECRET_KEY: ci-test-secret-key-only
+      SECRET_KEY: ci-test-secret-key-long-enough-for-hs256-signing-only
       DEBUG: 'False'
       USE_POSTGRES: 'False'
       ALLOWED_HOSTS: testserver,localhost
@@ -34,6 +34,9 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Prepare static files directory
+        run: mkdir -p staticfiles
 
       - name: Check Django configuration
         run: python manage.py check

@@ -1,44 +1,25 @@
-/* Settings profile editor: a clean white editing surface.
-   The legacy modal is mounted inside the workspace below the app header.
-   Extend only its background upward; never move the actual form panel. */
-.vm-profile-modal-overlay {
+/* Unified visual rules for legacy Settings modals.
+   The viewport backdrop itself is managed by SettingsProfileModalPolish. */
+.vm-settings-modal-overlay {
   position: fixed !important;
   inset: 0 !important;
   width: 100vw !important;
   height: 100dvh !important;
   min-height: 100dvh !important;
   z-index: 9999 !important;
-  isolation: isolate;
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
-.vm-profile-modal-overlay::before {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  top: -4rem;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  min-height: calc(100% + 4rem);
-  background: white;
-  pointer-events: auto;
-}
-
-.vm-profile-modal-panel {
+.vm-settings-modal-panel {
   position: relative !important;
   z-index: 1;
   max-height: min(90dvh, 900px) !important;
-  border: 1px solid rgb(226 232 240) !important;
 }
 
-.vm-profile-modal-form {
+.vm-settings-modal-form {
   padding-bottom: 5.5rem;
 }
 
-.vm-profile-modal-footer {
+.vm-settings-modal-footer {
   bottom: -1.25rem !important;
   z-index: 10;
   width: auto;
@@ -49,14 +30,8 @@
   box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.08);
 }
 
-body.vm-profile-modal-open .vm-main-layout > .md\:pl-64 > header,
-body.vm-profile-modal-open .vm-mobile-action-dock {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
 @media (min-width: 768px) {
-  .vm-profile-modal-footer {
+  .vm-settings-modal-footer {
     bottom: -1.5rem !important;
     margin-right: -1.5rem !important;
     margin-left: -1.5rem !important;
@@ -64,18 +39,13 @@ body.vm-profile-modal-open .vm-mobile-action-dock {
 }
 
 @media (max-width: 767px) {
-  .vm-profile-modal-overlay {
+  .vm-settings-modal-overlay {
     align-items: stretch !important;
     justify-content: stretch !important;
     padding: 0 !important;
   }
 
-  .vm-profile-modal-overlay::before {
-    top: -4rem;
-    min-height: calc(100% + 4rem);
-  }
-
-  .vm-profile-modal-panel {
+  .vm-settings-modal-panel {
     width: 100% !important;
     max-width: none !important;
     height: 100dvh !important;

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, CreditCard, ExternalLink, Package, Phone, RefreshCcw, Truck, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, CreditCard, ExternalLink, Package, Phone, RefreshCw, Truck, UserRound } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -62,14 +62,14 @@ export default function AttentionAction() {
   const openOrder = () => navigate(`/visits?visit_id=${order?.id || visitId}${tab ? `&tab=${tab}` : ''}&open=board`);
   const openClient = () => navigate(`/clients?search=${encodeURIComponent(order?.phone || order?.client || '')}&order_id=${order?.id || visitId}&tab=debts&autopen=1`);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-blue-600 font-black"><RefreshCcw className="animate-spin mr-2"/> Завантаження...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-blue-600 font-black"><RefreshCw className="animate-spin mr-2"/> Завантаження...</div>;
   if (!order) return <div className="max-w-3xl mx-auto p-6"><EmptyState message={message || 'Замовлення не знайдено.'} onBack={() => navigate(-1)} /></div>;
 
   const isDebt = type === 'debt' || type === 'payment';
   const Icon = isDebt ? CreditCard : type === 'part_delay' ? Truck : AlertTriangle;
   const parts = arr(order.parts);
 
-  return <div className="max-w-5xl mx-auto p-4 md:p-8 md:pl-72 min-h-screen bg-slate-50/40">
+  return <div className="max-w-5xl mx-auto p-4 md:p-8 min-h-screen bg-slate-50/40">
     <button onClick={() => navigate(-1)} className="mb-4 bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-black text-slate-600 flex items-center gap-2 shadow-sm"><ArrowLeft size={17}/> Назад</button>
 
     {message && <div className="mb-4 rounded-2xl bg-blue-50 border border-blue-100 text-blue-700 p-4 font-bold text-sm">{message}</div>}

@@ -1,4 +1,5 @@
 import json
+
 from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -7,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .company_options import seed_company_options
-from .models import Category, Company, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, WorkPost
+from .models import Category, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, WorkPost
 from .partner_views import get_user_company, repair_legacy_account
 
 
@@ -61,6 +62,7 @@ def initialize_onboarding(company):
         return
     ensure_onboarding_table()
     now = timezone.now()
+    state = json.dumps({'version': 1, 'business_type_selected': False}, ensure_ascii=False)
     with connection.cursor() as cursor:
         if connection.vendor == 'postgresql':
             cursor.execute(
@@ -69,7 +71,7 @@ def initialize_onboarding(company):
                 VALUES (%s, %s, FALSE, %s, %s)
                 ON CONFLICT (company_id) DO NOTHING
                 ''',
-                [company.id, json.dumps({'version': 1, 'business_type_selected': False}, ensure_ascii=False), now, now],
+                [company.id, state, now, now],
             )
         else:
             cursor.execute(
@@ -77,7 +79,7 @@ def initialize_onboarding(company):
                 INSERT OR IGNORE INTO {ONBOARDING_TABLE} (company_id, state, is_completed, created_at, updated_at)
                 VALUES (%s, %s, 0, %s, %s)
                 ''',
-                [company.id, json.dumps({'version': 1, 'business_type_selected': False}, ensure_ascii=False), now, now],
+                [company.id, state, now, now],
             )
 
 
@@ -185,7 +187,6 @@ def onboarding_payload(company, request=None):
     business_done = bool(state.get('business_type_selected'))
     profile_done = bool(company.name and company.phone)
     documents_done = has_document_data(company) or bool(state.get('documents_skipped'))
-    statuses_done = bool(state.get('statuses_ready'))
     delivery_count = novapost_profiles_count(company.id)
     delivery_done = delivery_count > 0 or bool(state.get('delivery_skipped'))
     inventory_count = non_demo_inventory_count(company)
@@ -201,7 +202,6 @@ def onboarding_payload(company, request=None):
         {'id': 'first_action', 'title': 'Зробіть першу дію', 'subtitle': 'Додайте товар, створіть замовлення або перший запис.', 'done': first_action_done, 'required': False, 'route': '/onboarding?step=6'},
     ]
 
-    remaining_required = any(not item['done'] and item['required'] for item in checklist)
     return {
         'onboarding_exists': True,
         'onboarding_required': not row['is_completed'],
@@ -214,7 +214,7 @@ def onboarding_payload(company, request=None):
         'progress': {
             'done': sum(1 for item in checklist if item['done']),
             'total': len(checklist),
-            'required_ready': not remaining_required,
+            'required_ready': all(item['done'] or not item['required'] for item in checklist),
             'delivery_profiles_count': delivery_count,
             'inventory_count': inventory_count,
             'visit_count': visit_count,
@@ -235,7 +235,6 @@ def seed_company_demo(company):
             'category': category,
             'supplier': supplier,
             'quantity': 8,
-            'min_quantity': 2,
             'buy_price': 180,
             'sell_price': 260,
         },
@@ -262,7 +261,7 @@ def seed_company_demo(company):
         )
         return {'message': 'Демо-магазин додано: товар, клієнт і приклад замовлення.'}
 
-    post, _ = WorkPost.objects.get_or_create(company=company, number=1, defaults={'name': 'Пост 1'})
+    post, _ = WorkPost.objects.get_or_create(company=company, number=999, defaults={'name': 'Демо пост VIN-matrix', 'description': DEMO_MARKER})
     service, _ = ServiceCatalog.objects.get_or_create(company=company, name='Демо: заміна масла', defaults={'price': 500})
     visit, _ = Visit.objects.get_or_create(
         company=company,
@@ -287,12 +286,12 @@ def seed_company_demo(company):
 
 
 def remove_company_demo(company):
+    """Delete only records that carry the demo marker; preserve user configuration."""
     Visit.objects.filter(company=company, comment__icontains=DEMO_MARKER).delete()
     InventoryItem.objects.filter(company=company, article__startswith='VM-DEMO-').delete()
     ServiceCatalog.objects.filter(company=company, name__startswith='Демо:').delete()
-    WorkPost.objects.filter(company=company, name__startswith='Пост 1').filter(visits__isnull=True).delete()
-    Category.objects.filter(company=company, name='Демо товари VIN-matrix').delete()
-    Supplier.objects.filter(company=company, name='Демо постачальник VIN-matrix').delete()
+    WorkPost.objects.filter(company=company, name='Демо пост VIN-matrix', description=DEMO_MARKER, visits__isnull=True).delete()
+    # Supplier/category can be safely left empty. Removing them could affect data a user later linked to them.
 
 
 class OnboardingView(APIView):
@@ -328,7 +327,6 @@ class OnboardingView(APIView):
             company.save(update_fields=['business_type'])
             seed_company_options(company)
             state.update({'business_type_selected': True, 'statuses_ready': True, 'current_step': 2})
-
         elif action == 'profile':
             company.name = str(request.data.get('company_name') or company.name or '').strip()
             company.phone = str(request.data.get('phone') or company.phone or '').strip()
@@ -344,7 +342,6 @@ class OnboardingView(APIView):
                 request.user.first_name = first_name
                 request.user.save(update_fields=['first_name'])
             state.update({'profile_ready': True, 'current_step': 3})
-
         elif action == 'documents':
             company.document_requisites = str(request.data.get('document_requisites') or '').strip()
             company.document_signature = str(request.data.get('document_signature') or '').strip()
@@ -352,20 +349,16 @@ class OnboardingView(APIView):
             company.document_warranty_text = str(request.data.get('document_warranty_text') or '').strip()
             company.save(update_fields=['document_requisites', 'document_signature', 'document_footer', 'document_warranty_text'])
             state.update({'documents_skipped': False, 'current_step': 4})
-
         elif action == 'skip':
             step = str(request.data.get('step') or '').strip()
             if step not in {'documents', 'delivery', 'first_action'}:
                 return Response({'error': 'Некоректний крок.'}, status=400)
             state[f'{step}_skipped'] = True
             state['current_step'] = {'documents': 4, 'delivery': 6, 'first_action': 6}.get(step, 1)
-
         elif action == 'first_action_done':
             state.update({'first_action_done': True, 'current_step': 6})
-
         elif action == 'dismiss_checklist':
             state['checklist_dismissed'] = True
-
         else:
             return Response({'error': 'Невідома дія onboarding.'}, status=400)
 
@@ -388,13 +381,11 @@ class OnboardingView(APIView):
             state.update({'demo_seeded': True, 'first_action_done': True, 'current_step': 5})
             save_onboarding(company, state)
             return Response({**result, **onboarding_payload(company, request)})
-
         if action == 'remove_demo':
             remove_company_demo(company)
             state['demo_seeded'] = False
             save_onboarding(company, state)
             return Response({'message': 'Демо-дані видалено.', **onboarding_payload(company, request)})
-
         if action == 'complete':
             profile_ready = bool(company.name and company.phone)
             if not state.get('business_type_selected') or not profile_ready:
@@ -402,5 +393,4 @@ class OnboardingView(APIView):
             state['current_step'] = 6
             save_onboarding(company, state, is_completed=True)
             return Response({'message': 'Базове налаштування завершено. Ласкаво просимо до VIN-matrix.', **onboarding_payload(company, request)})
-
         return Response({'error': 'Невідома дія onboarding.'}, status=400)

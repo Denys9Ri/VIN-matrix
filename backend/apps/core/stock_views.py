@@ -1,13 +1,14 @@
 from decimal import Decimal
 import re
 
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import serializers, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Category, InventoryItem, OrderPart, StockMovement, Supplier
+from .models import Category, Company, InventoryItem, OrderPart, StockMovement, Supplier
 from .safe_crm_views import safe_ensure_company
 
 
@@ -124,41 +125,61 @@ class StockReceiveViewSet(viewsets.ViewSet):
         company = safe_ensure_company(request.user)
         if not company:
             return None, Response({'error': 'Немає компанії'}, status=400)
+
         brand = str(data.get('brand') or '').strip().upper()
         article = str(data.get('article') or '').strip().upper()
         name = str(data.get('name') or '').strip()
         if not brand or not article or not name:
             return None, Response({'error': 'Бренд, артикул і назва обовʼязкові'}, status=400)
+
         quantity = to_int(data.get('quantity'))
         buy_price = to_decimal(data.get('buy_price'))
-        sell_price = apply_company_margin(buy_price, data.get('sell_price'), company)
-        supplier = None
-        if data.get('supplier'):
-            supplier = Supplier.objects.filter(company=company, id=data.get('supplier')).first()
-        elif data.get('supplier_name'):
-            supplier, _ = Supplier.objects.get_or_create(company=company, name=str(data.get('supplier_name')).strip())
-        category = Category.objects.filter(company=company, id=data.get('category')).first() if data.get('category') else None
-        if not category and data.get('category_name'):
-            category, _ = Category.objects.get_or_create(company=company, name=str(data.get('category_name')).strip())
-        order_part = OrderPart.objects.filter(id=data.get('order_part_id'), visit__company=company).first() if data.get('order_part_id') else None
-        item = InventoryItem.objects.filter(company=company, brand__iexact=brand, article__iexact=article).first()
-        created = False
-        if item:
-            item.quantity = int(item.quantity or 0) + quantity
-            item.name = name
-            item.buy_price = buy_price
-            item.sell_price = sell_price or item.sell_price
-            item.category = category or item.category
-            item.supplier = supplier or item.supplier
-            item.save()
-        else:
-            created = True
-            item = InventoryItem.objects.create(company=company, category=category, supplier=supplier, brand=brand, article=article, name=name, quantity=quantity, buy_price=buy_price, sell_price=sell_price)
-        movement = StockMovement.objects.create(company=company, inventory_item=item, supplier=supplier, source_order_part=order_part, brand=brand, article=article, name=name, quantity=quantity, buy_price=buy_price, sell_price=sell_price, note=data.get('note') or 'Прихід товару', created_by=request.user)
-        if order_part:
-            order_part.status = 'ARRIVED'
-            order_part.save(update_fields=['status'])
-        return {'created': created, 'item_id': item.id, 'quantity': item.quantity, 'sell_price': sell_price, 'movement': StockMovementSerializer(movement).data}, None
+
+        # Lock the company row first. InventoryItem has no uniqueness constraint on
+        # company + brand + article, so this prevents simultaneous receipts from
+        # creating duplicate rows for the same item.
+        with transaction.atomic():
+            company = Company.objects.select_for_update().get(pk=company.pk)
+            sell_price = apply_company_margin(buy_price, data.get('sell_price'), company)
+
+            supplier = None
+            if data.get('supplier'):
+                supplier = Supplier.objects.filter(company=company, id=data.get('supplier')).first()
+            elif data.get('supplier_name'):
+                supplier, _ = Supplier.objects.get_or_create(company=company, name=str(data.get('supplier_name')).strip())
+
+            category = Category.objects.filter(company=company, id=data.get('category')).first() if data.get('category') else None
+            if not category and data.get('category_name'):
+                category, _ = Category.objects.get_or_create(company=company, name=str(data.get('category_name')).strip())
+
+            order_part = OrderPart.objects.filter(id=data.get('order_part_id'), visit__company=company).first() if data.get('order_part_id') else None
+            item = InventoryItem.objects.select_for_update().filter(company=company, brand__iexact=brand, article__iexact=article).first()
+            created = False
+            if item:
+                item.quantity = int(item.quantity or 0) + quantity
+                item.name = name
+                item.buy_price = buy_price
+                item.sell_price = sell_price or item.sell_price
+                item.category = category or item.category
+                item.supplier = supplier or item.supplier
+                item.save()
+            else:
+                created = True
+                item = InventoryItem.objects.create(company=company, category=category, supplier=supplier, brand=brand, article=article, name=name, quantity=quantity, buy_price=buy_price, sell_price=sell_price)
+
+            movement = StockMovement.objects.create(company=company, inventory_item=item, supplier=supplier, source_order_part=order_part, brand=brand, article=article, name=name, quantity=quantity, buy_price=buy_price, sell_price=sell_price, note=data.get('note') or 'Прихід товару', created_by=request.user)
+            if order_part:
+                order_part.status = 'ARRIVED'
+                order_part.save(update_fields=['status'])
+
+            result = {
+                'created': created,
+                'item_id': item.id,
+                'quantity': item.quantity,
+                'sell_price': sell_price,
+                'movement': StockMovementSerializer(movement).data,
+            }
+        return result, None
 
     @action(detail=False, methods=['post'], url_path='receive')
     def receive(self, request):
@@ -184,6 +205,7 @@ class StockReceiveViewSet(viewsets.ViewSet):
             return Response({'error': 'Не вдалося прочитати Excel-файл.'}, status=400)
         if not rows:
             return Response({'error': 'Файл порожній.'}, status=400)
+
         headers = [norm(x) for x in rows[0]]
         aliases = {
             'brand': ['бренд', 'brand', 'виробник', 'manufacturer'],
@@ -205,21 +227,40 @@ class StockReceiveViewSet(viewsets.ViewSet):
         missing = [x for x in required if x not in idx]
         if missing:
             return Response({'error': 'У файлі мають бути колонки: бренд, артикул, назва.'}, status=400)
+
         created = updated = skipped = 0
-        for row in rows[1:]:
-            def cell(key, default=''):
-                pos = idx.get(key)
-                return row[pos] if pos is not None and pos < len(row) else default
-            data = {'brand': cell('brand'), 'article': cell('article'), 'name': cell('name'), 'quantity': cell('quantity', 1), 'buy_price': cell('buy_price', 0), 'sell_price': cell('sell_price', 0), 'supplier_name': cell('supplier_name', request.data.get('supplier_name') or ''), 'category_name': cell('category_name', ''), 'note': 'Імпорт з Excel'}
-            if not str(data['brand'] or '').strip() or not str(data['article'] or '').strip() or not str(data['name'] or '').strip():
-                skipped += 1
-                continue
-            result, error = self._receive_payload(request, data)
-            if error:
-                skipped += 1
-                continue
-            if result.get('created'):
-                created += 1
-            else:
-                updated += 1
+        try:
+            # The whole file is atomic: an unexpected database failure cannot leave
+            # a partially imported inventory behind.
+            with transaction.atomic():
+                for row in rows[1:]:
+                    def cell(key, default=''):
+                        pos = idx.get(key)
+                        return row[pos] if pos is not None and pos < len(row) else default
+
+                    data = {
+                        'brand': cell('brand'),
+                        'article': cell('article'),
+                        'name': cell('name'),
+                        'quantity': cell('quantity', 1),
+                        'buy_price': cell('buy_price', 0),
+                        'sell_price': cell('sell_price', 0),
+                        'supplier_name': cell('supplier_name', request.data.get('supplier_name') or ''),
+                        'category_name': cell('category_name', ''),
+                        'note': 'Імпорт з Excel',
+                    }
+                    if not str(data['brand'] or '').strip() or not str(data['article'] or '').strip() or not str(data['name'] or '').strip():
+                        skipped += 1
+                        continue
+                    result, error = self._receive_payload(request, data)
+                    if error:
+                        skipped += 1
+                        continue
+                    if result.get('created'):
+                        created += 1
+                    else:
+                        updated += 1
+        except Exception:
+            return Response({'error': 'Імпорт не завершено. Дані не були частково збережені.'}, status=500)
+
         return Response({'created': created, 'updated': updated, 'skipped': skipped})

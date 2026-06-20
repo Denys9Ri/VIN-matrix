@@ -4,6 +4,8 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import MobileActionDock from './MobileActionDock';
 import MobileTablePolish from './MobileTablePolish';
+import SettingsProfileModalPolish from './SettingsProfileModalPolish';
+import '../../styles/settings-profile-modal.css';
 
 const DesktopLayoutCompatibility = () => (
   <style>{`
@@ -47,6 +49,7 @@ const MainLayout = () => {
   return (
     <div className="vm-main-layout min-h-screen bg-slate-50 overflow-x-hidden">
       <DesktopLayoutCompatibility />
+      <SettingsProfileModalPolish />
       <Sidebar isOpen={isMobileMenuOpen} closeMenu={() => setIsMobileMenuOpen(false)} />
       <div className="min-h-screen w-full md:pl-64 flex flex-col transition-all duration-300">
         <Header />

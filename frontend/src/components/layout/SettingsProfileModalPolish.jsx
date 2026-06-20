@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 
 const COVER_ID = 'vm-settings-modal-top-cover';
 const BODY_CLASS = 'vm-settings-modal-open';
+const MODAL_BACKDROP = 'rgba(15, 23, 42, 0.72)';
 
 function findSettingsModal() {
   const overlays = Array.from(document.querySelectorAll('div.fixed.inset-0.z-50'));
@@ -53,20 +54,17 @@ export default function SettingsProfileModalPolish() {
         return;
       }
 
-      const isProfileEditor = modal.title.toUpperCase() === 'ПРОФІЛЬ КОМПАНІЇ';
-      const backdrop = isProfileEditor ? '#ffffff' : 'rgba(15, 23, 42, 0.72)';
-
       modal.overlay.style.setProperty('position', 'fixed', 'important');
       modal.overlay.style.setProperty('inset', '0', 'important');
       modal.overlay.style.setProperty('width', '100vw', 'important');
       modal.overlay.style.setProperty('height', '100dvh', 'important');
       modal.overlay.style.setProperty('min-height', '100dvh', 'important');
       modal.overlay.style.setProperty('z-index', '9999', 'important');
-      modal.overlay.style.setProperty('background', backdrop, 'important');
-      modal.overlay.style.setProperty('backdrop-filter', 'none', 'important');
-      modal.overlay.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+      modal.overlay.style.setProperty('background', MODAL_BACKDROP, 'important');
+      modal.overlay.style.setProperty('backdrop-filter', 'blur(3px)', 'important');
+      modal.overlay.style.setProperty('-webkit-backdrop-filter', 'blur(3px)', 'important');
 
-      modal.overlay.classList.add('vm-settings-modal-overlay', isProfileEditor ? 'vm-settings-modal-light' : 'vm-settings-modal-dark');
+      modal.overlay.classList.add('vm-settings-modal-overlay', 'vm-settings-modal-dark');
       modal.panel.classList.add('vm-settings-modal-panel');
       modal.footer?.classList.add('vm-settings-modal-footer');
       modal.form?.classList.add('vm-settings-modal-form');
@@ -75,7 +73,9 @@ export default function SettingsProfileModalPolish() {
       const topGap = Math.max(0, Math.ceil(modal.overlay.getBoundingClientRect().top));
       const cover = getCover();
       cover.style.height = `${topGap}px`;
-      cover.style.background = backdrop;
+      cover.style.background = MODAL_BACKDROP;
+      cover.style.backdropFilter = 'blur(3px)';
+      cover.style.webkitBackdropFilter = 'blur(3px)';
       cover.style.display = topGap > 0 ? 'block' : 'none';
     };
 

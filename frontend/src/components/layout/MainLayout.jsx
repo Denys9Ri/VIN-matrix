@@ -2,34 +2,27 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import MobileActionDock from './MobileActionDock';
+import MobileTablePolish from './MobileTablePolish';
 
 const MainLayout = () => {
-  // Стан для керування мобільним меню
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
+    setIsMobileMenuOpen((value) => !value);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
-      {/* Sidebar fixed. На десктопі місце під нього резервуємо через padding, а не margin + w-full. */}
       <Sidebar isOpen={isMobileMenuOpen} closeMenu={() => setIsMobileMenuOpen(false)} />
-
-      {/*
-        ВАЖЛИВО:
-        Раніше тут було md:ml-64 + w-full. Це давало ширину 100% плюс margin зліва,
-        тому сторінки візуально їхали вправо на компʼютері.
-        Тепер основний контейнер займає реальну ширину екрана, а місце під меню
-        резервується через md:pl-64. Контент усередині сторінок центрується коректно.
-      */}
       <div className="min-h-screen w-full md:pl-64 flex flex-col transition-all duration-300">
         <Header toggleMenu={toggleMobileMenu} />
-
-        <main className="flex-1 w-full min-w-0 relative">
+        <main className="flex-1 w-full min-w-0 relative pb-[76px] md:pb-0">
           <Outlet />
         </main>
       </div>
+      <MobileTablePolish />
+      <MobileActionDock onOpenMenu={() => setIsMobileMenuOpen(true)} />
     </div>
   );
 };

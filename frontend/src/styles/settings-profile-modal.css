@@ -1,4 +1,6 @@
-/* Settings profile editor: deliberately a clean white editing surface, not a translucent overlay. */
+/* Settings profile editor: a clean white editing surface.
+   The legacy modal is mounted inside the workspace below the app header.
+   Extend only its background upward; never move the actual form panel. */
 .vm-profile-modal-overlay {
   position: fixed !important;
   inset: 0 !important;
@@ -6,12 +8,28 @@
   height: 100dvh !important;
   min-height: 100dvh !important;
   z-index: 9999 !important;
-  background: white !important;
+  isolation: isolate;
+  background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
+.vm-profile-modal-overlay::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: -4rem;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  min-height: calc(100% + 4rem);
+  background: white;
+  pointer-events: auto;
+}
+
 .vm-profile-modal-panel {
+  position: relative !important;
+  z-index: 1;
   max-height: min(90dvh, 900px) !important;
   border: 1px solid rgb(226 232 240) !important;
 }
@@ -50,6 +68,11 @@ body.vm-profile-modal-open .vm-mobile-action-dock {
     align-items: stretch !important;
     justify-content: stretch !important;
     padding: 0 !important;
+  }
+
+  .vm-profile-modal-overlay::before {
+    top: -4rem;
+    min-height: calc(100% + 4rem);
   }
 
   .vm-profile-modal-panel {

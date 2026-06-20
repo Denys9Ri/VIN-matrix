@@ -30,9 +30,11 @@ services:
       USE_POSTGRES: 'True'
       DB_HOST: db
       DB_PORT: 5432
+      BACKUP_DIR: ${BACKUP_DIR:-/backups}
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/media
+      - ${POSTGRES_BACKUP_DIR:-./backups}:/backups
     depends_on:
       db:
         condition: service_healthy

@@ -1,0 +1,42 @@
+.vm-profile-modal-overlay {
+  z-index: 9999 !important;
+}
+
+.vm-profile-modal-panel {
+  max-height: min(90dvh, 900px) !important;
+}
+
+.vm-profile-modal-form {
+  padding-bottom: 5.5rem;
+}
+
+.vm-profile-modal-footer {
+  bottom: -1.25rem !important;
+  z-index: 10;
+  width: auto;
+  margin-top: 1.25rem !important;
+  margin-right: -1.25rem !important;
+  margin-bottom: 0 !important;
+  margin-left: -1.25rem !important;
+  box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.08);
+}
+
+@media (min-width: 768px) {
+  .vm-profile-modal-footer {
+    bottom: -1.5rem !important;
+    margin-right: -1.5rem !important;
+    margin-left: -1.5rem !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .vm-profile-modal-overlay {
+    align-items: center !important;
+    padding: 0.5rem !important;
+  }
+
+  .vm-profile-modal-panel {
+    max-height: calc(100dvh - 1rem) !important;
+    border-radius: 28px !important;
+  }
+}

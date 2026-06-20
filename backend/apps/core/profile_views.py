@@ -6,7 +6,6 @@ from rest_framework.views import APIView
 from .partner_views import (
     ADMIN_CODE,
     detect_role,
-    ensure_partner_code,
     get_employee,
     get_platform_client,
     get_user_company,
@@ -14,6 +13,14 @@ from .partner_views import (
 )
 from .serializers import CompanySerializer, UserSerializer
 from .subscriptions import get_billing_status, subscription_payload
+
+
+def ensure_partner_code(employee):
+    """Return the assigned partner code without mutating the account during a settings read."""
+    if not employee or getattr(employee, 'role', None) != 'partner':
+        return None
+    code = str(getattr(employee, 'partner_code', '') or '').strip().upper()
+    return code or None
 
 
 class ProfileSettingsView(APIView):

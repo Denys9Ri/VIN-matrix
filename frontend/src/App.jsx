@@ -6,12 +6,13 @@ import UniversalSearch from './pages/UniversalSearch';
 import Inventory from './pages/InventoryStage6';
 import Settings from './pages/Settings';
 import Billing from './pages/Billing';
+import Onboarding from './pages/Onboarding';
 import DocumentSettings from './pages/DocumentSettings';
 import ServicesSettings from './pages/ServicesSettings';
 import DictionarySettings from './pages/DictionarySettings';
 import DeliverySettings from './pages/DeliverySettings';
 import Login from './pages/Login';
-import Register from './pages/Register';
+import RegisterOnboarding from './pages/RegisterOnboarding';
 import Visits from './pages/Visits';
 import StoreOrders from './pages/StoreOrders';
 import ClientsCRM from './pages/ClientsCRMStage5';
@@ -30,7 +31,8 @@ import ActivityDock from './components/activity/ActivityDock';
 import DocumentDock from './components/documents/DocumentDock';
 import api from './api/axios';
 
-const allowedWhenBlocked = ['/settings', '/billing'];
+const allowedWhenBlocked = ['/settings', '/billing', '/onboarding'];
+const allowedDuringOnboarding = ['/onboarding', '/settings/delivery'];
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('access_token');
@@ -39,19 +41,33 @@ const ProtectedRoute = ({ children }) => {
   const [accessAllowed, setAccessAllowed] = useState(true);
   const [role, setRole] = useState(null);
   const [billingStatus, setBillingStatus] = useState(null);
+  const [onboardingRequired, setOnboardingRequired] = useState(false);
 
   useEffect(() => {
     const checkAccess = async () => {
       if (!token) { setChecking(false); return; }
       try {
-        const res = await api.get('/api/settings/');
-        const data = res.data || {};
-        const billing = data.billing || {};
-        setRole(data.actual_role || data.account_role || data.role || null);
-        setBillingStatus(billing.billing_status || billing.status || data.billing_status || null);
-        setAccessAllowed(data.access_allowed !== false);
-      } catch (error) {
+        const [settingsRes, onboardingRes] = await Promise.allSettled([
+          api.get('/api/settings/'),
+          api.get('/api/onboarding/'),
+        ]);
+        if (settingsRes.status === 'fulfilled') {
+          const data = settingsRes.value.data || {};
+          const billing = data.billing || {};
+          setRole(data.actual_role || data.account_role || data.role || null);
+          setBillingStatus(billing.billing_status || billing.status || data.billing_status || null);
+          setAccessAllowed(data.access_allowed !== false);
+        } else {
+          setAccessAllowed(true);
+        }
+        if (onboardingRes.status === 'fulfilled') {
+          setOnboardingRequired(onboardingRes.value.data?.onboarding_required === true);
+        } else {
+          setOnboardingRequired(false);
+        }
+      } catch {
         setAccessAllowed(true);
+        setOnboardingRequired(false);
       } finally {
         setChecking(false);
       }
@@ -60,11 +76,14 @@ const ProtectedRoute = ({ children }) => {
   }, [token, location.pathname]);
 
   if (!token) return <Navigate to="/login" replace />;
-  if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Перевірка доступу...</div>;
+  if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Готуємо робочий простір...</div>;
 
   const isAllowedRoute = allowedWhenBlocked.some((path) => location.pathname === path || location.pathname.startsWith(path + '/'));
   const isBlockedClient = accessAllowed === false && role === 'client';
   if (isBlockedClient && !isAllowedRoute) return <Navigate to="/billing" replace state={{ billingStatus }} />;
+
+  const isOnboardingRoute = allowedDuringOnboarding.some((path) => location.pathname === path || location.pathname.startsWith(path + '/'));
+  if (onboardingRequired && !isOnboardingRoute) return <Navigate to="/onboarding" replace />;
   return children;
 };
 
@@ -111,8 +130,9 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} /> 
-        <Route path="/" element={ <ProtectedRoute><MainLayout /></ProtectedRoute> }>
+        <Route path="/register" element={<RegisterOnboarding />} />
+        <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+        <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
@@ -122,7 +142,7 @@ function App() {
           <Route path="settings/documents" element={<DocumentSettings />} />
           <Route path="settings/dictionaries" element={<DictionarySettings />} />
           <Route path="settings/delivery" element={<DeliverySettings />} />
-          <Route path="visits" element={<VisitsWithCrm />} /> 
+          <Route path="visits" element={<VisitsWithCrm />} />
           <Route path="attention" element={<AttentionAction />} />
           <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />
           <Route path="analytics" element={<Analytics />} />

@@ -16,6 +16,7 @@ from apps.core.billing_views import (
     BillingAdminConfirmPaymentView,
     BillingAdminRejectPaymentView,
 )
+from apps.core.onboarding_views import OnboardingView
 
 from apps.core.data_exchange_views import (
     OrdersExportView,
@@ -125,7 +126,6 @@ router.register(r'platform-clients', SecurePlatformClientViewSet, basename='plat
 router.register(r'partners', PartnerManagementViewSet, basename='partner')
 
 
-
 def openapi_schema(request):
     return JsonResponse({
         "openapi": "3.0.3",
@@ -137,12 +137,12 @@ def openapi_schema(request):
             "/api/payments/": {"get": {"summary": "List visit payments"}},
             "/api/inventory/": {"get": {"summary": "List inventory"}, "post": {"summary": "Create inventory item"}},
             "/api/inventory/insights/": {"get": {"summary": "Inventory purchasing and margin insights"}},
+            "/api/onboarding/": {"get": {"summary": "Get company onboarding state"}, "patch": {"summary": "Save onboarding step"}},
             "/api/billing/admin/clients/": {"get": {"summary": "SaaS billing clients overview"}},
             "/api/billing/admin/partner-payouts/": {"get": {"summary": "Partner payout analytics"}},
             "/api/documents/visits/{visit_id}/{doc_type}/": {"get": {"summary": "Render visit document"}},
         },
     })
-
 
 
 def swagger_ui(request):
@@ -172,6 +172,7 @@ urlpatterns = [
 
     path('api/logout/', LogoutView.as_view(), name='logout'),
     path('api/register/', RegisterView.as_view(), name='register'),
+    path('api/onboarding/', OnboardingView.as_view(), name='onboarding'),
 
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/profile/settings/', ProfileSettingsView.as_view(), name='profile-settings-alt'),

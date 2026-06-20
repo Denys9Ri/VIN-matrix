@@ -1,4 +1,10 @@
+/* Legacy Settings modal is rendered inside the workspace content area.
+   Lift the actual overlay by the fixed header height instead of adding a second dark strip. */
 .vm-profile-modal-overlay {
+  position: fixed !important;
+  inset: -4rem 0 auto 0 !important;
+  height: calc(100dvh + 4rem) !important;
+  min-height: calc(100dvh + 4rem) !important;
   z-index: 9999 !important;
 }
 
@@ -31,7 +37,7 @@
 
 @media (max-width: 767px) {
   .vm-profile-modal-overlay {
-    align-items: center !important;
+    align-items: flex-start !important;
     padding: 0.5rem !important;
   }
 

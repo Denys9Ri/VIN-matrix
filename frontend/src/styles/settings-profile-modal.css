@@ -1,10 +1,10 @@
-/* Legacy Settings modal is rendered inside the workspace content area.
-   Lift the actual overlay by the fixed header height instead of adding a second dark strip. */
+/* Settings profile editor: one full-viewport modal without visible app chrome behind it. */
 .vm-profile-modal-overlay {
   position: fixed !important;
-  inset: -4rem 0 auto 0 !important;
-  height: calc(100dvh + 4rem) !important;
-  min-height: calc(100dvh + 4rem) !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
   z-index: 9999 !important;
 }
 
@@ -27,6 +27,12 @@
   box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.08);
 }
 
+body.vm-profile-modal-open .vm-main-layout > .md\:pl-64 > header,
+body.vm-profile-modal-open .vm-mobile-action-dock {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 @media (min-width: 768px) {
   .vm-profile-modal-footer {
     bottom: -1.5rem !important;
@@ -37,7 +43,7 @@
 
 @media (max-width: 767px) {
   .vm-profile-modal-overlay {
-    align-items: flex-start !important;
+    align-items: center !important;
     padding: 0.5rem !important;
   }
 

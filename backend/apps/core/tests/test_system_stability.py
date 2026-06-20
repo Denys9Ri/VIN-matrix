@@ -101,11 +101,15 @@ class SystemStabilityTests(TestCase):
         self.assertEqual(Visit.objects.filter(company__owner=blocked_user).count(), 0)
         self.assertEqual(InventoryItem.objects.filter(company__owner=blocked_user).count(), 0)
 
-    def test_system_health_is_restricted_to_platform_admin(self):
+    def test_system_health_is_restricted_to_database_platform_admin(self):
         regular_response = self.api_for('owner_a').get('/api/system/health/')
         self.assertEqual(regular_response.status_code, 403)
 
-        User.objects.create_user(username='Denys9Ri', password='pass12345')
+        legacy_named_user = User.objects.create_user(username='Denys9Ri', password='pass12345')
+        self.assertEqual(self.api_for('Denys9Ri').get('/api/system/health/').status_code, 403)
+
+        legacy_named_user.is_staff = True
+        legacy_named_user.save(update_fields=['is_staff'])
         admin_response = self.api_for('Denys9Ri').get('/api/system/health/')
         self.assertIn(admin_response.status_code, (200, 503))
         self.assertIn('status', admin_response.data)

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Boxes,
-  CarFront,
   CreditCard,
   History,
   LayoutDashboard,

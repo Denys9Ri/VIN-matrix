@@ -3,8 +3,6 @@ from django.db import connection, transaction
 
 from .models import Company, Employee, PlatformClient
 
-PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
-
 
 def _table_exists(cursor, table_name):
     cursor.execute(
@@ -53,17 +51,10 @@ def _get_user_company_id(user_id):
 
 
 def _get_admin_user(exclude_user_id=None):
-    qs = User.objects.filter(username__in=PLATFORM_ADMIN_USERNAMES)
+    qs = User.objects.filter(is_staff=True, is_active=True)
     if exclude_user_id:
         qs = qs.exclude(id=exclude_user_id)
-    admin = qs.first()
-    if admin:
-        return admin
-
-    qs = User.objects.filter(is_staff=True)
-    if exclude_user_id:
-        qs = qs.exclude(id=exclude_user_id)
-    return qs.first()
+    return qs.order_by('id').first()
 
 
 def hard_delete_account(user):
@@ -76,8 +67,8 @@ def hard_delete_account(user):
     if not user:
         return {'deleted': False, 'message': 'Користувача не знайдено.'}
 
-    if user.username in PLATFORM_ADMIN_USERNAMES or user.is_staff or user.is_superuser:
-        raise ValueError('Головного адміна видаляти не можна.')
+    if user.is_staff or user.is_superuser:
+        raise ValueError('Платформного адміністратора видаляти не можна.')
 
     user_id = user.id
     company_id = _get_user_company_id(user_id)
@@ -85,7 +76,7 @@ def hard_delete_account(user):
 
     with transaction.atomic():
         # If this user was a partner/owner for clients, do not delete those clients.
-        # Move them to admin first.
+        # Move them to a platform admin first.
         if admin_user:
             PlatformClient.objects.filter(assigned_owner_id=user_id).update(
                 assigned_owner=admin_user,
@@ -93,13 +84,11 @@ def hard_delete_account(user):
             )
             PlatformClient.objects.filter(referred_by_id=user_id).update(referred_by=admin_user)
 
-        # Delete platform role/profile rows first.
         PlatformClient.objects.filter(user_id=user_id).delete()
         Employee.objects.filter(user_id=user_id).delete()
 
         with connection.cursor() as cursor:
             if company_id:
-                # Current core CRM tables.
                 _exec_if_table_and_columns(
                     cursor,
                     "DELETE FROM core_orderpart WHERE visit_id IN (SELECT id FROM core_visit WHERE company_id = %s)",
@@ -121,7 +110,6 @@ def hard_delete_account(user):
                 _exec_if_table_and_columns(cursor, "DELETE FROM core_servicecatalog WHERE company_id = %s", 'core_servicecatalog', ['company_id'], [company_id])
                 _exec_if_table_and_columns(cursor, "DELETE FROM core_employee WHERE company_id = %s", 'core_employee', ['company_id'], [company_id])
 
-                # Legacy CRM tables created by old fix scripts.
                 if _table_exists(cursor, 'crm_visit'):
                     _exec_if_table_and_columns(
                         cursor,
@@ -140,17 +128,12 @@ def hard_delete_account(user):
                 )
                 _exec_if_table_and_columns(cursor, "DELETE FROM crm_servicecatalog WHERE company_id = %s", 'crm_servicecatalog', ['company_id'], [company_id])
                 _exec_if_table_and_columns(cursor, "DELETE FROM crm_client WHERE company_id = %s", 'crm_client', ['company_id'], [company_id])
-
-                # Delete company after dependants are gone.
                 _exec_if_table_and_columns(cursor, "DELETE FROM core_company WHERE id = %s", 'core_company', ['id'], [company_id])
 
-            # Clean Django/auth rows that can block auth_user deletion.
             _exec_if_table_and_columns(cursor, "DELETE FROM django_admin_log WHERE user_id = %s", 'django_admin_log', ['user_id'], [user_id])
             _exec_if_table_and_columns(cursor, "DELETE FROM auth_user_groups WHERE user_id = %s", 'auth_user_groups', ['user_id'], [user_id])
             _exec_if_table_and_columns(cursor, "DELETE FROM auth_user_user_permissions WHERE user_id = %s", 'auth_user_user_permissions', ['user_id'], [user_id])
             _exec_if_table_and_columns(cursor, "DELETE FROM authtoken_token WHERE user_id = %s", 'authtoken_token', ['user_id'], [user_id])
-
-            # Last line: remove the auth user itself.
             cursor.execute("DELETE FROM auth_user WHERE id = %s", [user_id])
 
         if User.objects.filter(id=user_id).exists():

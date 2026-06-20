@@ -1,35 +1,43 @@
-import json
-
-from django.contrib.auth.models import AnonymousUser, User
+from django.contrib.auth.models import AnonymousUser
 from django.http import JsonResponse
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import Company, PlatformClient
 from .partner_views import is_platform_admin, is_partner_user, repair_legacy_account
 from .subscriptions import get_billing_status
 
 
 UNSAFE_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
 
+# Only write requests under these API paths are blocked for a suspended SaaS client.
+# GET requests remain available so the client can review data, open Billing and restore access.
 CRITICAL_PREFIXES = (
     '/api/visits/',
     '/api/order-parts/',
     '/api/order-services/',
     '/api/inventory/',
     '/api/stock/',
+    '/api/stock-movements/',
+    '/api/suppliers/',
+    '/api/expenses/',
     '/api/import/',
     '/api/store-clients/repeat-sale/',
+    '/api/services/',
+    '/api/categories/',
+    '/api/complexes/',
+    '/api/work-posts/',
+    '/api/mechanics/',
+    '/api/crm-tasks/',
+    '/api/crm-communications/',
+    '/api/crm-client-statuses/',
+    '/api/crm-service-reminders/',
+    '/api/recommendations/',
 )
 
 CRITICAL_EXACT = {
     '/api/delivery/novapost/refresh-active/',
 }
 
-CRITICAL_CONTAINS = (
-    '/create-ttn/',
-    '/create/',
-)
-
+# Payment, profile and recovery actions must stay accessible to a blocked client.
 ALLOW_PREFIXES = (
     '/api/settings/',
     '/api/profile/',
@@ -46,7 +54,8 @@ def is_critical_business_path(path):
         return True
     if any(path.startswith(prefix) for prefix in CRITICAL_PREFIXES):
         return True
-    if path.startswith('/api/delivery/novapost/visits/') and any(marker in path for marker in CRITICAL_CONTAINS):
+    # Saving delivery, creating a TTN and refreshing a single TTN all mutate business data.
+    if path.startswith('/api/delivery/novapost/visits/'):
         return True
     return False
 
@@ -64,6 +73,7 @@ def jwt_user(request):
 
 
 def owner_platform_client_for_user(user):
+    """Find a billing profile for the user or for the company owner of an employee account."""
     if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
         return None
     try:
@@ -90,20 +100,20 @@ def owner_platform_client_for_user(user):
         return None
 
     owner = getattr(company, 'owner', None)
-    if owner:
-        try:
-            return owner.platform_client_profile
-        except Exception:
-            return None
-    return None
+    if not owner:
+        return None
+    try:
+        return owner.platform_client_profile
+    except Exception:
+        return None
 
 
 class BillingAccessMiddleware:
     """
-    Backend SaaS guard.
+    Server-side SaaS access guard.
 
-    Frontend can redirect blocked clients to /billing, but real business actions must be protected server-side too.
-    This middleware blocks only critical unsafe API actions for blocked clients/companies and leaves billing/settings/GET open.
+    A frontend redirect is useful UX but is not security. This guard prevents a
+    blocked client from changing business data through direct API requests.
     """
 
     def __init__(self, get_response):
@@ -121,6 +131,7 @@ class BillingAccessMiddleware:
                 if billing.get('access_allowed') is False:
                     return JsonResponse({
                         'error': 'Доступ призупинено. Для виконання цієї дії потрібно оплатити тариф.',
+                        'code': 'billing_access_required',
                         'billing_required': True,
                         'billing': billing,
                         'redirect_to': '/billing',

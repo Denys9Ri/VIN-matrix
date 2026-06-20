@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timezone as dt_timezone
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
@@ -110,9 +111,21 @@ def check_novapost(tables_ok):
 
 def check_backup_configuration():
     backup_dir = str(os.getenv('BACKUP_DIR') or os.getenv('POSTGRES_BACKUP_DIR') or '').strip()
-    if not backup_dir:
-        return _warning(configured=False, message='BACKUP_DIR is not configured')
-    return _ok(configured=True, directory_configured=True)
+    bucket = str(os.getenv('BACKUP_S3_BUCKET', '')).strip()
+    encryption_key = str(os.getenv('BACKUP_ENCRYPTION_KEY', '')).strip()
+    local_configured = bool(backup_dir)
+    external_configured = bool(bucket and encryption_key)
+    if external_configured:
+        return _ok(
+            local_directory_configured=local_configured,
+            external_encrypted_backup_configured=True,
+            provider='s3-compatible',
+        )
+    return _warning(
+        local_directory_configured=local_configured,
+        external_encrypted_backup_configured=False,
+        message='Configure BACKUP_S3_BUCKET and BACKUP_ENCRYPTION_KEY for encrypted off-server backups.',
+    )
 
 
 def check_security():
@@ -121,7 +134,21 @@ def check_security():
         warnings.append('DEBUG is enabled')
     if not settings.ALLOWED_HOSTS:
         warnings.append('ALLOWED_HOSTS is empty')
-    return (_warning(warnings=warnings) if warnings else _ok(warnings=[]))
+    if not getattr(settings, 'REDIS_URL', ''):
+        warnings.append('REDIS_URL is not configured; throttling is local to one process')
+    if not settings.DEBUG and getattr(settings, 'ENABLE_API_DOCS', False):
+        warnings.append('API docs are enabled in production')
+    try:
+        User = get_user_model()
+        platform_admins = User.objects.filter(is_active=True).filter(is_staff=True).count()
+        if not platform_admins:
+            warnings.append('No active platform admin is configured in Django')
+    except Exception:
+        platform_admins = None
+        warnings.append('Unable to verify platform admin configuration')
+
+    payload = {'warnings': warnings, 'platform_admin_count': platform_admins}
+    return _warning(**payload) if warnings else _ok(**payload)
 
 
 def build_health_report():

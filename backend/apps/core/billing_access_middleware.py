@@ -1,11 +1,15 @@
+import logging
+
 from django.contrib.auth.models import AnonymousUser
 from django.http import JsonResponse
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .partner_views import is_platform_admin, is_partner_user, repair_legacy_account
+from .request_context import get_request_id
 from .subscriptions import get_billing_status
 
 
+logger = logging.getLogger('vin_matrix.billing')
 UNSAFE_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
 
 # Only write requests under these API paths are blocked for a suspended SaaS client.
@@ -31,11 +35,8 @@ CRITICAL_PREFIXES = (
     '/api/crm-client-statuses/',
     '/api/crm-service-reminders/',
     '/api/recommendations/',
+    '/api/delivery/novapost/',
 )
-
-CRITICAL_EXACT = {
-    '/api/delivery/novapost/refresh-active/',
-}
 
 # Payment, profile and recovery actions must stay accessible to a blocked client.
 ALLOW_PREFIXES = (
@@ -50,14 +51,7 @@ ALLOW_PREFIXES = (
 def is_critical_business_path(path):
     if any(path.startswith(prefix) for prefix in ALLOW_PREFIXES):
         return False
-    if path in CRITICAL_EXACT:
-        return True
-    if any(path.startswith(prefix) for prefix in CRITICAL_PREFIXES):
-        return True
-    # Saving delivery, creating a TTN and refreshing a single TTN all mutate business data.
-    if path.startswith('/api/delivery/novapost/visits/'):
-        return True
-    return False
+    return any(path.startswith(prefix) for prefix in CRITICAL_PREFIXES)
 
 
 def jwt_user(request):
@@ -129,12 +123,24 @@ class BillingAccessMiddleware:
                 client = owner_platform_client_for_user(user)
                 billing = get_billing_status(client) if client else {'access_allowed': True}
                 if billing.get('access_allowed') is False:
+                    request_id = getattr(request, 'request_id', get_request_id())
+                    logger.warning(
+                        'billing_write_blocked',
+                        extra={
+                            'request_id': request_id,
+                            'method': request.method,
+                            'path': request.path,
+                            'user_id': user.id,
+                            'client_id': getattr(client, 'id', None),
+                        },
+                    )
                     return JsonResponse({
                         'error': 'Доступ призупинено. Для виконання цієї дії потрібно оплатити тариф.',
                         'code': 'billing_access_required',
                         'billing_required': True,
                         'billing': billing,
                         'redirect_to': '/billing',
+                        'request_id': request_id,
                     }, status=402, json_dumps_params={'ensure_ascii': False})
 
         return self.get_response(request)

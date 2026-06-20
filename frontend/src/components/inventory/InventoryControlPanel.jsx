@@ -62,7 +62,7 @@ export default function InventoryControlPanel({ insights, loading, onReceipt }) 
       <section className="relative overflow-hidden rounded-[34px] border border-slate-900 bg-slate-950 text-white shadow-2xl shadow-slate-200">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.35),transparent_36%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.25),transparent_35%)]" />
         <div className="relative p-5 md:p-7">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
             <div>
               <div className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-blue-100">
                 <Wallet size={15} /> Контроль грошей складу
@@ -82,7 +82,7 @@ export default function InventoryControlPanel({ insights, loading, onReceipt }) 
         </div>
       </section>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-9">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-6">
         <Stat icon={<Package size={17} />} label="Позицій" value={summary.items_count || 0} />
         <Stat icon={<Truck size={17} />} label="Дозамовити" value={summary.restock_count || 0} danger={summary.restock_count > 0} />
         <Stat icon={<Wallet size={17} />} label="Сума закупки" value={money(summary.purchase_value)} />
@@ -94,7 +94,7 @@ export default function InventoryControlPanel({ insights, loading, onReceipt }) 
         <Stat icon={<Sparkles size={17} />} label="Висока маржа" value={summary.high_margin_count || 0} good={summary.high_margin_count > 0} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-5 2xl:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Розділи</p>
@@ -168,7 +168,7 @@ function PurchaseList({ rows, compact = false }) {
 
 function SupplierSummary({ rows }) {
   if (!rows.length) return <EmptyPanel text="Поки немає потреби по постачальниках." />;
-  return <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map((row) => <div key={row.supplier_name} className="rounded-3xl border border-blue-100 bg-blue-50/50 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Постачальник</p><h4 className="mt-1 text-lg font-black text-slate-900">{row.supplier_name}</h4><div className="mt-3 grid grid-cols-2 gap-2"><Mini label="Позицій" value={row.positions} /><Mini label="К-сть" value={qty(row.reorder_qty)} /><Mini label="Закупка" value={money(row.purchase_value)} /><Mini label="Прибуток" value={money(row.expected_profit)} good /></div></div>)}</div>;
+  return <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">{rows.map((row) => <div key={row.supplier_name} className="rounded-3xl border border-blue-100 bg-blue-50/50 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Постачальник</p><h4 className="mt-1 text-lg font-black text-slate-900">{row.supplier_name}</h4><div className="mt-3 grid grid-cols-2 gap-2"><Mini label="Позицій" value={row.positions} /><Mini label="К-сть" value={qty(row.reorder_qty)} /><Mini label="Закупка" value={money(row.purchase_value)} /><Mini label="Прибуток" value={money(row.expected_profit)} good /></div></div>)}</div>;
 }
 
 function SlowList({ rows }) {
@@ -201,7 +201,7 @@ function StockMoneyRow({ item, type }) {
           {item.high_margin && <Pill tone="emerald">Висока маржа</Pill>}
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
         <Mini label="На складі" value={`${qty(item.quantity)} шт`} />
         <Mini label="Доступно" value={`${qty(item.available_quantity)} шт`} good={item.available_quantity > 0} />
         <Mini label="Мінімум" value={`${qty(item.min_quantity)} шт`} />

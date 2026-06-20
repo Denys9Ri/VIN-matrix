@@ -22,6 +22,11 @@ function findProfileModal() {
   return { overlay, panel, footer, form };
 }
 
+function clearOverlayGeometry(overlay) {
+  if (!overlay) return;
+  ['position', 'inset', 'width', 'height', 'min-height', 'z-index'].forEach((property) => overlay.style.removeProperty(property));
+}
+
 function clearMarkers() {
   document.querySelectorAll('.vm-profile-modal-overlay, .vm-profile-modal-panel, .vm-profile-modal-footer, .vm-profile-modal-form').forEach((node) => {
     node.classList.remove('vm-profile-modal-overlay', 'vm-profile-modal-panel', 'vm-profile-modal-footer', 'vm-profile-modal-form');
@@ -36,6 +41,14 @@ export default function SettingsProfileModalPolish() {
       clearMarkers();
       const modal = findProfileModal();
       if (!modal) return;
+
+      modal.overlay.style.setProperty('position', 'fixed', 'important');
+      modal.overlay.style.setProperty('inset', '0', 'important');
+      modal.overlay.style.setProperty('width', '100vw', 'important');
+      modal.overlay.style.setProperty('height', '100dvh', 'important');
+      modal.overlay.style.setProperty('min-height', '100dvh', 'important');
+      modal.overlay.style.setProperty('z-index', '9999', 'important');
+
       modal.overlay.classList.add('vm-profile-modal-overlay');
       modal.panel?.classList.add('vm-profile-modal-panel');
       modal.footer?.classList.add('vm-profile-modal-footer');
@@ -47,6 +60,8 @@ export default function SettingsProfileModalPolish() {
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => {
       observer.disconnect();
+      const modal = findProfileModal();
+      clearOverlayGeometry(modal?.overlay);
       clearMarkers();
       document.getElementById(LEGACY_VEIL_ID)?.remove();
     };

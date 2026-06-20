@@ -15,11 +15,20 @@ def get_request_id():
 
 
 class RequestContextFilter(logging.Filter):
-    """Inject a safe correlation id into every configured VIN-matrix log record."""
+    """Inject safe request metadata into every configured VIN-matrix log record."""
 
     def filter(self, record):
-        if not hasattr(record, 'request_id'):
-            record.request_id = get_request_id()
+        defaults = {
+            'request_id': get_request_id(),
+            'method': '-',
+            'path': '-',
+            'status_code': '-',
+            'duration_ms': '-',
+            'user_id': '-',
+        }
+        for field, value in defaults.items():
+            if not hasattr(record, field):
+                setattr(record, field, value)
         return True
 
 
@@ -82,6 +91,7 @@ class ApiExceptionMiddleware:
                     'request_id': request_id,
                     'method': request.method,
                     'path': request.path,
+                    'status_code': 500,
                     'user_id': getattr(user, 'id', None) if getattr(user, 'is_authenticated', False) else None,
                 },
             )

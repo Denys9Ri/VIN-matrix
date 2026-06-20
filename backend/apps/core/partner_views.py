@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 
 from .account_delete import hard_delete_account
 from .models import Company, Employee, PlatformClient, Supplier
+from .platform_client_base import BasePlatformClientViewSet
 from .serializers import CompanySerializer, PlatformClientSerializer, UserSerializer
 from .subscriptions import activate_trial, renew_client_30_days, subscription_payload, get_alert_clients, sync_client_subscription
 
@@ -316,3 +317,9 @@ class PartnerManagementViewSet(viewsets.ViewSet):
         partner.user.is_active = not partner.user.is_active
         partner.user.save(update_fields=['is_active'])
         return Response({'is_active': partner.user.is_active})
+
+
+class SecurePlatformClientViewSet(BasePlatformClientViewSet):
+    """Compatibility base used by the extended platform-client billing viewset."""
+
+    pass

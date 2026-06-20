@@ -20,6 +20,19 @@ class SystemStabilityTests(TestCase):
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {token_response.data['access']}")
         return client
 
+    def make_blocked_client(self):
+        user = User.objects.create_user(username='blocked_client', password='pass12345')
+        Company.objects.create(owner=user, name='Blocked company')
+        PlatformClient.objects.create(
+            user=user,
+            client_code=709901,
+            assigned_owner=user,
+            payment_status=PlatformClient.PAYMENT_INACTIVE,
+            billing_status=PlatformClient.BILLING_BLOCKED,
+            is_access_enabled=False,
+        )
+        return user
+
     def test_errors_have_stable_json_shape_and_request_id(self):
         client = APIClient()
         response = client.get('/api/visits/')
@@ -56,29 +69,33 @@ class SystemStabilityTests(TestCase):
         self.assertIn(own_item.id, item_ids)
         self.assertNotIn(foreign_item.id, item_ids)
 
-    def test_billing_block_prevents_business_write(self):
-        blocked_user = User.objects.create_user(username='blocked_client', password='pass12345')
-        Company.objects.create(owner=blocked_user, name='Blocked company')
-        PlatformClient.objects.create(
-            user=blocked_user,
-            client_code=709901,
-            assigned_owner=blocked_user,
-            payment_status=PlatformClient.PAYMENT_INACTIVE,
-            billing_status=PlatformClient.BILLING_BLOCKED,
-            is_access_enabled=False,
-        )
+    def test_billing_block_prevents_business_writes_across_critical_modules(self):
+        blocked_user = self.make_blocked_client()
+        client = self.api_for(blocked_user.username)
 
-        response = self.api_for('blocked_client').post('/api/visits/', {'plate': 'AA0001AA', 'client': 'Client', 'phone': '+380501234567'}, format='json')
-        self.assertEqual(response.status_code, 402)
-        self.assertEqual(response.data['code'], 'billing_access_required')
-        self.assertTrue(response.data['billing_required'])
+        protected_requests = [
+            ('/api/visits/', {'plate': 'AA0001AA', 'client': 'Client', 'phone': '+380501234567'}),
+            ('/api/stock/receive/', {'brand': 'MANN', 'article': 'W-1', 'name': 'Filter', 'quantity': 1}),
+            ('/api/import/clients/', {}),
+            ('/api/delivery/novapost/profiles/', {'name': 'Blocked profile', 'api_key': 'secret'}),
+            ('/api/delivery/novapost/refresh-active/', {}),
+        ]
+
+        for path, payload in protected_requests:
+            with self.subTest(path=path):
+                response = client.post(path, payload, format='json')
+                self.assertEqual(response.status_code, 402)
+                self.assertEqual(response.data['code'], 'billing_access_required')
+                self.assertTrue(response.data['billing_required'])
+
         self.assertEqual(Visit.objects.filter(company__owner=blocked_user).count(), 0)
+        self.assertEqual(InventoryItem.objects.filter(company__owner=blocked_user).count(), 0)
 
     def test_system_health_is_restricted_to_platform_admin(self):
         regular_response = self.api_for('owner_a').get('/api/system/health/')
         self.assertEqual(regular_response.status_code, 403)
 
-        admin = User.objects.create_user(username='Denys9Ri', password='pass12345')
+        User.objects.create_user(username='Denys9Ri', password='pass12345')
         admin_response = self.api_for('Denys9Ri').get('/api/system/health/')
         self.assertIn(admin_response.status_code, (200, 503))
         self.assertIn('status', admin_response.data)

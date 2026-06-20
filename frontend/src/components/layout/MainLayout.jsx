@@ -8,15 +8,11 @@ import MobileTablePolish from './MobileTablePolish';
 const MainLayout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen((value) => !value);
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
       <Sidebar isOpen={isMobileMenuOpen} closeMenu={() => setIsMobileMenuOpen(false)} />
       <div className="min-h-screen w-full md:pl-64 flex flex-col transition-all duration-300">
-        <Header toggleMenu={toggleMobileMenu} />
+        <Header />
         <main className="flex-1 w-full min-w-0 relative pb-[76px] md:pb-0">
           <Outlet />
         </main>

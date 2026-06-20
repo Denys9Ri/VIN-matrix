@@ -1,0 +1,27 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py provision_platform_admin --from-env &&
+             python manage.py collectstatic --noinput &&
+             gunicorn vin_matrix.wsgi:application --bind 0.0.0.0:8000 --workers $${GUNICORN_WORKERS:-3} --access-logfile - --error-logfile -"
+    environment:
+      REDIS_URL: $${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:

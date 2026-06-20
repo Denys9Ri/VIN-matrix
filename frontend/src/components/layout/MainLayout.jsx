@@ -12,6 +12,10 @@ const DesktopLayoutCompatibility = () => (
       .vm-main-layout [class~="max-w-[1680px]"] .sticky.top-2.z-20 { top: 5rem; }
     }
 
+    @media (min-width: 1280px) {
+      .vm-main-layout [class~="xl:sticky"][class~="xl:top-6"] { top: 5rem; }
+    }
+
     @media (min-width: 1280px) and (max-width: 1535px) {
       .vm-main-layout [class~="max-w-[1600px]"] > [class~="grid-cols-1"][class~="gap-4"][class~="xl:grid-cols-4"],
       .vm-main-layout [class~="max-w-[1600px]"] > [class~="grid-cols-1"][class~="gap-4"][class~="xl:grid-cols-5"] {

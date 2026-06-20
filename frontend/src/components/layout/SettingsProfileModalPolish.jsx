@@ -34,7 +34,7 @@ function getCover() {
 
 function clearMarkers() {
   document.querySelectorAll('.vm-settings-modal-overlay, .vm-settings-modal-panel, .vm-settings-modal-footer, .vm-settings-modal-form').forEach((node) => {
-    node.classList.remove('vm-settings-modal-overlay', 'vm-settings-modal-panel', 'vm-settings-modal-footer', 'vm-settings-modal-form', 'vm-settings-modal-light', 'vm-settings-modal-dark');
+    node.classList.remove('vm-settings-modal-overlay', 'vm-settings-modal-panel', 'vm-settings-modal-footer', 'vm-settings-modal-form', 'vm-settings-modal-dark', 'vm-settings-modal-mobile');
   });
 }
 
@@ -54,17 +54,21 @@ export default function SettingsProfileModalPolish() {
         return;
       }
 
+      const isMobile = window.matchMedia('(max-width: 767px)').matches;
+      const backdrop = isMobile ? '#ffffff' : MODAL_BACKDROP;
+      const blur = isMobile ? 'none' : 'blur(3px)';
+
       modal.overlay.style.setProperty('position', 'fixed', 'important');
       modal.overlay.style.setProperty('inset', '0', 'important');
       modal.overlay.style.setProperty('width', '100vw', 'important');
       modal.overlay.style.setProperty('height', '100dvh', 'important');
       modal.overlay.style.setProperty('min-height', '100dvh', 'important');
       modal.overlay.style.setProperty('z-index', '9999', 'important');
-      modal.overlay.style.setProperty('background', MODAL_BACKDROP, 'important');
-      modal.overlay.style.setProperty('backdrop-filter', 'blur(3px)', 'important');
-      modal.overlay.style.setProperty('-webkit-backdrop-filter', 'blur(3px)', 'important');
+      modal.overlay.style.setProperty('background', backdrop, 'important');
+      modal.overlay.style.setProperty('backdrop-filter', blur, 'important');
+      modal.overlay.style.setProperty('-webkit-backdrop-filter', blur, 'important');
 
-      modal.overlay.classList.add('vm-settings-modal-overlay', 'vm-settings-modal-dark');
+      modal.overlay.classList.add('vm-settings-modal-overlay', isMobile ? 'vm-settings-modal-mobile' : 'vm-settings-modal-dark');
       modal.panel.classList.add('vm-settings-modal-panel');
       modal.footer?.classList.add('vm-settings-modal-footer');
       modal.form?.classList.add('vm-settings-modal-form');
@@ -73,9 +77,9 @@ export default function SettingsProfileModalPolish() {
       const topGap = Math.max(0, Math.ceil(modal.overlay.getBoundingClientRect().top));
       const cover = getCover();
       cover.style.height = `${topGap}px`;
-      cover.style.background = MODAL_BACKDROP;
-      cover.style.backdropFilter = 'blur(3px)';
-      cover.style.webkitBackdropFilter = 'blur(3px)';
+      cover.style.background = backdrop;
+      cover.style.backdropFilter = blur;
+      cover.style.webkitBackdropFilter = blur;
       cover.style.display = topGap > 0 ? 'block' : 'none';
     };
 

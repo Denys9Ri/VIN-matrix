@@ -52,7 +52,7 @@ export default function NotificationBell() {
 
   const activeSections = useMemo(() => {
     const sections = summary?.active_sections || summary?.sections || [];
-    return sections.filter((s) => Number(s.count || 0) > 0);
+    return sections.filter((section) => Number(section.count || 0) > 0);
   }, [summary]);
 
   const total = Number(summary?.total || 0);
@@ -92,7 +92,7 @@ export default function NotificationBell() {
   };
 
   return <div className="relative">
-    <button onClick={() => setOpen(true)} className="relative w-9 h-9 md:w-10 md:h-10 rounded-full bg-slate-100 hover:bg-blue-50 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-all" title="Центр повідомлень">
+    <button onClick={() => setOpen(true)} className="relative w-11 h-11 md:w-10 md:h-10 rounded-full bg-slate-100 hover:bg-blue-50 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-all" title="Центр повідомлень" aria-label="Відкрити центр повідомлень">
       <Bell size={18} />
       {total > 0 && <span className={`absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full text-[10px] font-black flex items-center justify-center shadow-sm ${hasCritical ? toneMap.critical.badge : toneMap.warning.badge}`}>{total > 99 ? '99+' : total}</span>}
     </button>
@@ -101,7 +101,7 @@ export default function NotificationBell() {
       <div className="bg-white w-full h-full md:h-auto md:max-h-[80vh] md:rounded-3xl md:border md:border-slate-200 md:shadow-2xl overflow-hidden flex flex-col">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-gradient-to-r from-white to-blue-50">
           <div><p className="font-black text-slate-900 uppercase">Центр повідомлень</p><p className="text-xs font-bold text-slate-500">Що потребує уваги зараз</p></div>
-          <div className="flex items-center gap-2"><button onClick={loadSummary} className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-blue-700 flex items-center justify-center" title="Оновити"><RefreshCcw size={16} className={loading ? 'animate-spin' : ''} /></button><button onClick={() => setOpen(false)} className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center"><X size={18} /></button></div>
+          <div className="flex items-center gap-2"><button onClick={loadSummary} className="w-11 h-11 md:w-9 md:h-9 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-blue-700 flex items-center justify-center" title="Оновити" aria-label="Оновити повідомлення"><RefreshCcw size={16} className={loading ? 'animate-spin' : ''} /></button><button onClick={() => setOpen(false)} className="w-11 h-11 md:w-9 md:h-9 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center" aria-label="Закрити центр повідомлень"><X size={18} /></button></div>
         </div>
         <div className="p-4 grid grid-cols-3 gap-2 border-b border-slate-100"><MiniStat label="Усього" value={total} tone="text-slate-900" /><MiniStat label="Критично" value={summary?.critical || 0} tone="text-rose-600" /><MiniStat label="Увага" value={summary?.warning || 0} tone="text-amber-600" /></div>
         <div className="p-3 overflow-y-auto flex-1 md:max-h-[520px] space-y-2">
@@ -112,13 +112,15 @@ export default function NotificationBell() {
             const items = section.items || [];
             const isOpen = !!expanded[section.key];
             const visibleItems = isOpen ? items : items.slice(0, 3);
-            return <button key={section.key} onClick={() => goTo(section.url)} className={`w-full text-left rounded-2xl border border-slate-100 bg-white p-3 transition ${tone.card}`}>
-              <div className="flex gap-3"><SectionIcon section={section} /><div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2"><p className="font-black text-slate-900 leading-tight">{section.title}</p><span className="bg-slate-100 text-slate-700 rounded-xl px-2 py-1 text-xs font-black shrink-0">{section.count}</span></div>
-                <p className="text-xs font-bold text-slate-500 mt-1">{formatAmount(section.amount) || section.subtitle || 'Потребує уваги'}</p>
-                {items.length > 0 && <div className="mt-3 space-y-1.5">{visibleItems.map((item) => <button type="button" onClick={(e) => itemClick(e, section, item)} key={`${section.key}-${item.id}-${item.title}`} className="w-full text-left bg-slate-50 hover:bg-white hover:ring-2 hover:ring-blue-100 rounded-xl p-2 transition group"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-black text-slate-800 truncate">{item.title}</p><p className="text-[11px] font-bold text-slate-500 truncate">{item.subtitle}</p></div><ExternalLink size={12} className="text-slate-300 group-hover:text-blue-600 shrink-0 mt-0.5" /></div></button>)}{items.length > 3 && <button type="button" onClick={(e) => toggleExpand(e, section.key)} className="w-full text-[10px] font-black uppercase text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl px-3 py-2">{isOpen ? 'Згорнути' : `Показати всі: ще ${items.length - 3}`}</button>}</div>}
-              </div></div>
-            </button>;
+            return <section key={section.key} className={`w-full rounded-2xl border border-slate-100 bg-white p-3 transition ${tone.card}`}>
+              <button type="button" onClick={() => goTo(section.url)} className="w-full text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <div className="flex gap-3"><SectionIcon section={section} /><div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2"><p className="font-black text-slate-900 leading-tight break-words">{section.title}</p><span className="bg-slate-100 text-slate-700 rounded-xl px-2 py-1 text-xs font-black shrink-0">{section.count}</span></div>
+                  <p className="text-xs font-bold text-slate-500 mt-1 break-words">{formatAmount(section.amount) || section.subtitle || 'Потребує уваги'}</p>
+                </div></div>
+              </button>
+              {items.length > 0 && <div className="mt-3 space-y-1.5">{visibleItems.map((item) => <button type="button" onClick={(event) => itemClick(event, section, item)} key={`${section.key}-${item.id}-${item.title}`} className="w-full min-h-[44px] text-left bg-slate-50 hover:bg-white hover:ring-2 hover:ring-blue-100 rounded-xl p-2 transition group"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-black text-slate-800 truncate">{item.title}</p><p className="text-[11px] font-bold text-slate-500 truncate">{item.subtitle}</p></div><ExternalLink size={12} className="text-slate-300 group-hover:text-blue-600 shrink-0 mt-0.5" /></div></button>)}{items.length > 3 && <button type="button" onClick={(event) => toggleExpand(event, section.key)} className="w-full min-h-[40px] text-[10px] font-black uppercase text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl px-3 py-2">{isOpen ? 'Згорнути' : `Показати всі: ще ${items.length - 3}`}</button>}</div>}
+            </section>;
           })}
         </div>
       </div>

@@ -57,8 +57,8 @@ export default function GlobalSearchBox({ compact = false }) {
         setGroups(res.data?.groups || {});
         setActiveIndex(0);
         setOpen(true);
-      } catch (e) {
-        console.error('Global search error', e);
+      } catch (error) {
+        console.error('Global search error', error);
         setResults([]);
         setGroups({});
       } finally {
@@ -118,17 +118,18 @@ export default function GlobalSearchBox({ compact = false }) {
         className="w-full pl-10 pr-10 py-2.5 bg-slate-100 border border-slate-200 rounded-full text-xs md:text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all font-bold text-slate-800 placeholder:normal-case placeholder:font-semibold"
         value={query}
         onFocus={() => query.trim().length >= 2 && setOpen(true)}
-        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
         onKeyDown={handleKeyDown}
+        aria-label="Глобальний пошук"
       />
       {loading && <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-blue-600 animate-spin" size={16} />}
-      {!loading && query && <button onClick={() => { setQuery(''); setResults([]); setOpen(false); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full hover:bg-slate-200 text-slate-400 flex items-center justify-center"><X size={14}/></button>}
+      {!loading && query && <button onClick={() => { setQuery(''); setResults([]); setOpen(false); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full hover:bg-slate-200 text-slate-400 flex items-center justify-center" aria-label="Очистити пошук"><X size={14}/></button>}
 
       {open && query.trim().length >= 2 && (
-        <div className="absolute left-0 top-[calc(100%+10px)] w-[min(92vw,760px)] bg-white border border-slate-200 rounded-[26px] shadow-2xl z-[80] overflow-hidden">
+        <div className="fixed inset-x-3 top-[72px] z-[80] max-h-[calc(100dvh-88px)] overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-2xl md:absolute md:left-0 md:right-auto md:top-[calc(100%+10px)] md:max-h-none md:w-[min(92vw,760px)]">
           <div className="p-4 border-b border-slate-100 bg-slate-50/70">
             <div className="flex items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="font-black text-slate-900 uppercase text-sm">Глобальний пошук</p>
                 <p className="text-xs font-semibold text-slate-500 mt-1">Шукає по замовленнях, клієнтах, складу, товарах, ТТН і постачальниках.</p>
               </div>
@@ -141,7 +142,7 @@ export default function GlobalSearchBox({ compact = false }) {
             )}
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto p-2">
+          <div className="max-h-[calc(100dvh-190px)] overflow-y-auto p-2 md:max-h-[60vh]">
             {loading && <div className="p-8 text-center text-slate-400 font-black uppercase text-xs">Шукаємо...</div>}
             {!loading && results.length === 0 && (
               <div className="p-8 text-center">
@@ -158,7 +159,7 @@ export default function GlobalSearchBox({ compact = false }) {
                   const Icon = iconMap[item.icon] || Search;
                   const active = globalIndex === activeIndex;
                   return (
-                    <button key={`${item.kind}-${item.url}-${item.title}-${globalIndex}`} onClick={() => openResult(item)} onMouseEnter={() => setActiveIndex(globalIndex)} className={`w-full text-left rounded-2xl p-3 flex items-center gap-3 transition ${active ? 'bg-blue-50 border-blue-100' : 'hover:bg-slate-50 border-transparent'} border`}>
+                    <button key={`${item.kind}-${item.url}-${item.title}-${globalIndex}`} onClick={() => openResult(item)} onMouseEnter={() => setActiveIndex(globalIndex)} className={`w-full min-h-[56px] text-left rounded-2xl p-3 flex items-center gap-3 transition ${active ? 'bg-blue-50 border-blue-100' : 'hover:bg-slate-50 border-transparent'} border`}>
                       <span className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${active ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}><Icon size={18}/></span>
                       <span className="min-w-0 flex-1">
                         <span className="block font-black text-slate-900 truncate">{item.title}</span>

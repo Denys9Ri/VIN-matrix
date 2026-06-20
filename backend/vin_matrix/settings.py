@@ -183,7 +183,7 @@ LOGGING = {
     },
     'formatters': {
         'vin_matrix': {
-            'format': '{asctime} {levelname} request_id={request_id} logger={name} {message}',
+            'format': '{asctime} {levelname} request_id={request_id} method={method} path={path} status={status_code} duration_ms={duration_ms} user_id={user_id} logger={name} {message}',
             'style': '{',
         },
     },

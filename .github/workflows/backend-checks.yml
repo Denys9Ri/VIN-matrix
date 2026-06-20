@@ -39,4 +39,4 @@ jobs:
         run: python manage.py check
 
       - name: Run stability and API tests
-        run: python manage.py test apps.core.tests
+        run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_system_stability

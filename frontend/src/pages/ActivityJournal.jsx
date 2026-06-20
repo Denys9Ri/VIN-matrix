@@ -91,7 +91,7 @@ export default function ActivityJournal() {
     setFilters((p) => ({ ...p, date_from: d, date_to: d }));
   };
 
-  return <div className="w-full max-w-[1500px] mx-auto p-4 md:p-8 md:pl-72 min-h-screen bg-slate-50/40">
+  return <div className="w-full max-w-[1500px] mx-auto p-4 md:p-8 min-h-screen bg-slate-50/40">
     <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-5">
       <div>
         <h1 className="text-2xl md:text-3xl font-black uppercase italic text-slate-900 flex items-center gap-3"><History className="text-blue-600"/> Журнал дій</h1>

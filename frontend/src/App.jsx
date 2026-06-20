@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
-import Dashboard from './pages/Dashboard';
+import DashboardOnboarding from './pages/DashboardOnboarding';
 import UniversalSearch from './pages/UniversalSearch';
 import Inventory from './pages/InventoryStage6';
 import Settings from './pages/Settings';
@@ -60,11 +60,7 @@ const ProtectedRoute = ({ children }) => {
         } else {
           setAccessAllowed(true);
         }
-        if (onboardingRes.status === 'fulfilled') {
-          setOnboardingRequired(onboardingRes.value.data?.onboarding_required === true);
-        } else {
-          setOnboardingRequired(false);
-        }
+        setOnboardingRequired(onboardingRes.status === 'fulfilled' && onboardingRes.value.data?.onboarding_required === true);
       } catch {
         setAccessAllowed(true);
         setOnboardingRequired(false);
@@ -133,7 +129,7 @@ function App() {
         <Route path="/register" element={<RegisterOnboarding />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
         <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<DashboardOnboarding />} />
           <Route path="search" element={<UniversalSearch />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="billing" element={<Billing />} />

@@ -71,6 +71,9 @@ class RegisterView(APIView):
         with transaction.atomic():
             user = User.objects.create_user(username=username, password=password, first_name=full_name, email=email)
             company = ensure_user_company(user, company_name or full_name or username)
+            if not company.phone:
+                company.phone = phone
+                company.save(update_fields=['phone'])
             owner = partner.user if partner else get_default_assigned_owner(exclude_user=user)
             client = PlatformClient.objects.create(
                 user=user,

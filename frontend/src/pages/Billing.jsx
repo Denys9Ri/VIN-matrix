@@ -94,26 +94,26 @@ export default function Billing() {
             <h1 className="mt-2 text-3xl md:text-5xl font-black uppercase italic text-slate-950">Тариф і доступ</h1>
             <p className="mt-2 max-w-2xl text-sm md:text-base font-bold text-slate-500">Статус підписки, оплата і заявка на підтвердження в одному місці.</p>
           </div>
-          <button onClick={() => { localStorage.clear(); navigate('/login'); }} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-5 py-3 text-xs font-black uppercase text-rose-600 hover:bg-rose-100"><LogOut size={16}/> Вийти</button>
+          <button onClick={() => { localStorage.clear(); navigate('/login'); }} className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-5 py-3 text-xs font-black uppercase text-rose-600 hover:bg-rose-100"><LogOut size={16}/> Вийти</button>
         </div>
 
-        {notice && <div className="rounded-[24px] border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">{notice}</div>}
+        {notice && <div className="rounded-[24px] border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800 break-words">{notice}</div>}
         {activeAccess && rawPendingCount > 0 && <div className="rounded-[24px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">Доступ активний. Старі заявки залишені тільки в історії й не блокують роботу.</div>}
 
         <section className={`overflow-hidden rounded-[38px] bg-gradient-to-r ${tone.gradient} text-white shadow-2xl shadow-slate-200`}>
           <div className="p-5 md:p-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_420px] gap-6 items-stretch">
             <div className="min-w-0">
-              <div className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/15 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white/90"><Icon size={16}/> {billing.label || 'Активний'}</div>
-              <h2 className="mt-5 text-3xl md:text-5xl font-black uppercase leading-tight">{plan.name || billing.plan_name || 'VIN-matrix Full'}</h2>
-              <p className="mt-4 max-w-2xl text-sm md:text-base font-bold text-white/85 leading-relaxed">{billing.message || 'Усі функції VIN-matrix включені в тариф.'}</p>
+              <div className="inline-flex max-w-full items-center gap-2 rounded-2xl border border-white/20 bg-white/15 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white/90"><Icon size={16} className="shrink-0"/> <span className="break-words">{billing.label || 'Активний'}</span></div>
+              <h2 className="mt-5 text-3xl md:text-5xl font-black uppercase leading-tight break-words">{plan.name || billing.plan_name || 'VIN-matrix Full'}</h2>
+              <p className="mt-4 max-w-2xl text-sm md:text-base font-bold text-white/85 leading-relaxed break-words">{billing.message || 'Усі функції VIN-matrix включені в тариф.'}</p>
               <div className="mt-6 flex flex-wrap gap-2">
-                {(plan.features || []).map((feature) => <span key={feature} className="rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-black uppercase text-white/85">{feature}</span>)}
+                {(plan.features || []).map((feature) => <span key={feature} className="max-w-full break-words rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-black uppercase text-white/85">{feature}</span>)}
               </div>
             </div>
             <div className="rounded-[30px] border border-white/20 bg-white/15 p-4 md:p-5 backdrop-blur-sm">
               <div className="grid grid-cols-2 gap-3">
                 <Metric label="Ціна" value={money(billing.price || plan.price || paymentSettings.monthly_value || 2000, billing.currency || plan.currency || 'UAH')} icon={<Wallet size={16}/>} />
-                <Metric label="Статус" value={billing.label || 'Активний'} icon={<ShieldCheck size={16}/>} />
+                <Metric label="Статус" value={billing.label || 'Активний'} icon={<ShieldCheck size={16}/>} wrap />
                 <Metric label="До дати" value={mainDate} icon={<CalendarDays size={16}/>} />
                 <Metric label="Днів" value={billing.days_left !== null && billing.days_left !== undefined ? `${billing.days_left} дн.` : billing.grace_days_left ? `${billing.grace_days_left} дн.` : '—'} icon={<Clock3 size={16}/>} />
               </div>
@@ -126,8 +126,8 @@ export default function Billing() {
           <div className="border-t border-white/15 bg-white/10 p-4 md:px-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <p className="text-xs md:text-sm font-bold text-white/80">Натисніть “Оплатити” — заявка автоматично потрапить адміну на підтвердження. Якщо є посилання, воно відкриється в новій вкладці.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full lg:w-auto">
-              <button disabled={Boolean(busy)} onClick={() => createPaymentRequest('monobank_jar')} className="rounded-2xl bg-white px-5 py-3 text-xs font-black uppercase text-slate-950 shadow-lg hover:bg-slate-50 disabled:opacity-60">{busy === 'monobank_jar' ? 'Створюємо...' : tone.action}</button>
-              <button disabled={Boolean(busy)} onClick={() => createPaymentRequest('cash')} className="rounded-2xl border border-white/20 bg-slate-950/25 px-5 py-3 text-xs font-black uppercase text-white hover:bg-slate-950/35 disabled:opacity-60">{busy === 'cash' ? 'Створюємо...' : 'Оплата готівкою'}</button>
+              <button disabled={Boolean(busy)} onClick={() => createPaymentRequest('monobank_jar')} className="min-h-[48px] rounded-2xl bg-white px-5 py-3 text-xs font-black uppercase text-slate-950 shadow-lg hover:bg-slate-50 disabled:opacity-60">{busy === 'monobank_jar' ? 'Створюємо...' : tone.action}</button>
+              <button disabled={Boolean(busy)} onClick={() => createPaymentRequest('cash')} className="min-h-[48px] rounded-2xl border border-white/20 bg-slate-950/25 px-5 py-3 text-xs font-black uppercase text-white hover:bg-slate-950/35 disabled:opacity-60">{busy === 'cash' ? 'Створюємо...' : 'Оплата готівкою'}</button>
             </div>
           </div>
         </section>
@@ -146,7 +146,7 @@ export default function Billing() {
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Історія</p>
               <h3 className="text-2xl font-black uppercase text-slate-950">Заявки на оплату</h3>
             </div>
-            <button type="button" onClick={load} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase text-slate-600 hover:bg-slate-50"><RefreshCcw size={15}/> Оновити</button>
+            <button type="button" onClick={load} className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase text-slate-600 hover:bg-slate-50"><RefreshCcw size={15}/> Оновити</button>
           </div>
           {payments.length ? <div className="space-y-3">{payments.map((payment) => <PaymentRow key={payment.id} payment={payment} activeAccess={activeAccess} />)}</div> : <div className="rounded-[26px] border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-bold text-slate-400">Заявок на оплату ще немає.</div>}
         </section>
@@ -165,15 +165,15 @@ function PaymentInstructions({ settings }) {
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Куди оплатити</p>
           <h3 className="mt-1 text-2xl font-black uppercase text-slate-950">Реквізити оплати</h3>
-          <p className="mt-2 text-sm font-bold text-slate-500">Після оплати заявка вже буде в адмінці. Адміністратор підтвердить її і доступ стане активним.</p>
+          <p className="mt-2 text-sm font-bold text-slate-500 break-words">Після оплати заявка вже буде в адмінці. Адміністратор підтвердить її і доступ стане активним.</p>
         </div>
-        {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-xs font-black uppercase text-white shadow-lg shadow-blue-100"><ExternalLink size={15}/> Відкрити оплату</a>}
+        {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex min-h-[44px] w-full sm:w-auto items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-xs font-black uppercase text-white shadow-lg shadow-blue-100"><ExternalLink size={15}/> Відкрити оплату</a>}
       </div>
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
         <InfoBox label="Посилання" value={url || 'Адмін ще не вказав посилання на оплату'} />
         <InfoBox label="Інструкція" value={instruction || 'Вкажіть ваш код клієнта в коментарі до оплати'} />
       </div>
-      {note && <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800 whitespace-pre-wrap">{note}</div>}
+      {note && <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800 whitespace-pre-wrap break-words">{note}</div>}
     </section>
   );
 }
@@ -182,8 +182,8 @@ function InfoBox({ label, value }) {
   return <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 break-words text-sm font-black text-slate-800">{value}</p></div>;
 }
 
-function Metric({ label, value, icon }) {
-  return <div className="rounded-2xl border border-white/15 bg-white/10 p-3 min-w-0"><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/70">{icon}{label}</div><p className="mt-2 truncate text-lg font-black text-white">{value}</p></div>;
+function Metric({ label, value, icon, wrap = false }) {
+  return <div className="rounded-2xl border border-white/15 bg-white/10 p-3 min-w-0"><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/70">{icon}{label}</div><p className={`mt-2 font-black text-white ${wrap ? 'min-h-[2.5rem] break-words text-sm leading-tight' : 'truncate text-lg'}`}>{value}</p></div>;
 }
 
 function SmallCard({ icon, label, value, tone = 'blue' }) {
@@ -194,5 +194,5 @@ function SmallCard({ icon, label, value, tone = 'blue' }) {
 function PaymentRow({ payment, activeAccess }) {
   const effectiveStatus = payment.status === 'pending' && activeAccess ? 'covered' : payment.status;
   const meta = paymentStatus[effectiveStatus] || { label: payment.status || 'Статус', cls: 'bg-slate-50 text-slate-600 border-slate-100' };
-  return <div className="rounded-[24px] border border-slate-100 bg-slate-50 p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 md:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-black text-slate-950">{money(payment.amount, payment.currency)}</p><span className={`rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase ${meta.cls}`}>{meta.label}</span></div><p className="mt-1 text-sm font-bold text-slate-500">{payment.method_label} · {payment.comment || 'Заявка на оплату'}</p>{payment.rejected_reason && <p className="mt-1 text-xs font-bold text-rose-600">Причина: {payment.rejected_reason}</p>}</div><div className="text-left md:text-right text-xs font-bold text-slate-400"><p>Створено: {fmt(payment.created_at)}</p>{payment.confirmed_at && <p>Підтверджено: {fmt(payment.confirmed_at)}</p>}</div></div>;
+  return <div className="rounded-[24px] border border-slate-100 bg-slate-50 p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 md:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-black text-slate-950">{money(payment.amount, payment.currency)}</p><span className={`rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase ${meta.cls}`}>{meta.label}</span></div><p className="mt-1 break-words text-sm font-bold text-slate-500">{payment.method_label} · {payment.comment || 'Заявка на оплату'}</p>{payment.rejected_reason && <p className="mt-1 break-words text-xs font-bold text-rose-600">Причина: {payment.rejected_reason}</p>}</div><div className="text-left md:text-right text-xs font-bold text-slate-400"><p>Створено: {fmt(payment.created_at)}</p>{payment.confirmed_at && <p>Підтверджено: {fmt(payment.confirmed_at)}</p>}</div></div>;
 }

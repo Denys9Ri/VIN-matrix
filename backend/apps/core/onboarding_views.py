@@ -186,13 +186,15 @@ def onboarding_payload(company, request=None):
     state = row['state'] or {}
     business_done = bool(state.get('business_type_selected'))
     profile_done = bool(company.name and company.phone)
-    documents_done = has_document_data(company) or bool(state.get('documents_skipped'))
+    # Skipping an optional step lets a person complete the wizard, but does not
+    # pretend the business setup is finished. The dashboard checklist keeps it visible.
+    documents_done = has_document_data(company)
     delivery_count = novapost_profiles_count(company.id)
-    delivery_done = delivery_count > 0 or bool(state.get('delivery_skipped'))
+    delivery_done = delivery_count > 0
     inventory_count = non_demo_inventory_count(company)
     visit_count = non_demo_visit_count(company)
     demo_seeded = bool(state.get('demo_seeded'))
-    first_action_done = bool(state.get('first_action_done')) or inventory_count > 0 or visit_count > 0 or demo_seeded or bool(state.get('first_action_skipped'))
+    first_action_done = bool(state.get('first_action_done')) or inventory_count > 0 or visit_count > 0 or demo_seeded
 
     checklist = [
         {'id': 'business', 'title': 'Оберіть тип бізнесу', 'subtitle': 'СТО або магазин — система підлаштує статуси та стартові дії.', 'done': business_done, 'required': True, 'route': '/onboarding?step=1'},
@@ -261,7 +263,11 @@ def seed_company_demo(company):
         )
         return {'message': 'Демо-магазин додано: товар, клієнт і приклад замовлення.'}
 
-    post, _ = WorkPost.objects.get_or_create(company=company, number=999, defaults={'name': 'Демо пост VIN-matrix', 'description': DEMO_MARKER})
+    post, _ = WorkPost.objects.get_or_create(
+        company=company,
+        name='Демо пост VIN-matrix',
+        defaults={'number': 999, 'description': DEMO_MARKER},
+    )
     service, _ = ServiceCatalog.objects.get_or_create(company=company, name='Демо: заміна масла', defaults={'price': 500})
     visit, _ = Visit.objects.get_or_create(
         company=company,
@@ -291,7 +297,7 @@ def remove_company_demo(company):
     InventoryItem.objects.filter(company=company, article__startswith='VM-DEMO-').delete()
     ServiceCatalog.objects.filter(company=company, name__startswith='Демо:').delete()
     WorkPost.objects.filter(company=company, name='Демо пост VIN-matrix', description=DEMO_MARKER, visits__isnull=True).delete()
-    # Supplier/category can be safely left empty. Removing them could affect data a user later linked to them.
+    # Supplier/category remain intentionally: removing them can affect user-linked data.
 
 
 class OnboardingView(APIView):

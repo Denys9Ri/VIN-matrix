@@ -11,7 +11,7 @@ function findTabsBarByLabels(requiredLabels = []) {
   return candidates.find((el) => {
     const buttons = Array.from(el.children).filter((node) => node.tagName === 'BUTTON');
     if (buttons.length < required.length) return false;
-    const labels = norm(buttons.map((b) => b.innerText || '').join('|'));
+    const labels = norm(buttons.map((button) => button.innerText || '').join('|'));
     return required.every((label) => labels.includes(label));
   }) || null;
 }
@@ -76,24 +76,24 @@ export default function ActivityDock() {
 
   const tabButton = useMemo(() => {
     if (!visible) return null;
-    return <button type="button" onClick={() => setOpen(true)} className={`rounded-xl p-3 font-black uppercase text-xs flex items-center justify-center gap-2 whitespace-nowrap ${open ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'text-slate-500 hover:bg-white bg-white/70 border border-slate-100'}`}>
+    return <button type="button" onClick={() => setOpen(true)} className={`min-h-[44px] rounded-xl px-4 py-3 font-black uppercase text-xs flex items-center justify-center gap-2 whitespace-nowrap ${open ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'text-slate-500 hover:bg-white bg-white/70 border border-slate-100'}`}>
       <History size={15}/>{buttonLabel}
     </button>;
   }, [visible, open, buttonLabel]);
 
   if (!visible) return null;
 
-  const panel = open ? <div className="fixed inset-0 z-[95] bg-slate-900/45 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+  const panel = open ? <div className="fixed inset-0 z-[95] bg-slate-900/45 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
     <div className="bg-white w-full md:max-w-4xl h-[92dvh] md:h-auto md:max-h-[88dvh] rounded-t-[28px] md:rounded-[28px] shadow-2xl overflow-hidden flex flex-col">
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 text-white p-4 flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Журнал довіри</p>
-          <h2 className="text-xl md:text-2xl font-black uppercase">{ctx.title}</h2>
-          <p className="text-xs font-bold text-blue-100 mt-1">Усі важливі дії: статуси, товари, склад, оплати, повернення.</p>
+          <h2 className="text-xl md:text-2xl font-black uppercase break-words">{ctx.title}</h2>
+          <p className="text-xs font-bold text-blue-100 mt-1 break-words">Усі важливі дії: статуси, товари, склад, оплати, повернення.</p>
         </div>
-        <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center"><X size={18}/></button>
+        <button onClick={() => setOpen(false)} className="w-11 h-11 md:w-10 md:h-10 shrink-0 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center" aria-label="Закрити історію"><X size={18}/></button>
       </div>
-      <div className="p-3 md:p-5 overflow-y-auto bg-slate-50/60">
+      <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:p-5 overflow-y-auto bg-slate-50/60">
         <ActivityTimeline visitId={ctx.visitId} phone={ctx.phone} mode={mode} limit={100} title={ctx.kind === 'client' ? 'Активність клієнта' : 'Історія картки'} />
       </div>
     </div>

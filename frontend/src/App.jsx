@@ -10,7 +10,7 @@ import Onboarding from './pages/Onboarding';
 import DocumentSettings from './pages/DocumentSettings';
 import ServicesSettings from './pages/ServicesSettings';
 import DictionarySettings from './pages/DictionarySettings';
-import DeliverySettings from './pages/DeliverySettings';
+import DeliverySettings from './pages/DeliverySettingsPro';
 import Login from './pages/Login';
 import RegisterOnboarding from './pages/RegisterOnboarding';
 import Visits from './pages/Visits';

@@ -17,6 +17,7 @@ from apps.core.billing_views import (
     BillingAdminRejectPaymentView,
 )
 from apps.core.onboarding_views import OnboardingView
+from apps.core.system_health_views import SystemHealthView
 
 from apps.core.data_exchange_views import (
     OrdersExportView,
@@ -128,19 +129,20 @@ router.register(r'partners', PartnerManagementViewSet, basename='partner')
 
 def openapi_schema(request):
     return JsonResponse({
-        "openapi": "3.0.3",
-        "info": {"title": "VIN-matrix API", "version": "1.0.0"},
-        "paths": {
-            "/token/": {"post": {"summary": "Obtain JWT token pair"}},
-            "/token/refresh/": {"post": {"summary": "Refresh JWT access token"}},
-            "/api/visits/": {"get": {"summary": "List visits"}, "post": {"summary": "Create visit"}},
-            "/api/payments/": {"get": {"summary": "List visit payments"}},
-            "/api/inventory/": {"get": {"summary": "List inventory"}, "post": {"summary": "Create inventory item"}},
-            "/api/inventory/insights/": {"get": {"summary": "Inventory purchasing and margin insights"}},
-            "/api/onboarding/": {"get": {"summary": "Get company onboarding state"}, "patch": {"summary": "Save onboarding step"}},
-            "/api/billing/admin/clients/": {"get": {"summary": "SaaS billing clients overview"}},
-            "/api/billing/admin/partner-payouts/": {"get": {"summary": "Partner payout analytics"}},
-            "/api/documents/visits/{visit_id}/{doc_type}/": {"get": {"summary": "Render visit document"}},
+        'openapi': '3.0.3',
+        'info': {'title': 'VIN-matrix API', 'version': '1.0.0'},
+        'paths': {
+            '/token/': {'post': {'summary': 'Obtain JWT token pair'}},
+            '/token/refresh/': {'post': {'summary': 'Refresh JWT access token'}},
+            '/api/visits/': {'get': {'summary': 'List visits'}, 'post': {'summary': 'Create visit'}},
+            '/api/payments/': {'get': {'summary': 'List visit payments'}},
+            '/api/inventory/': {'get': {'summary': 'List inventory'}, 'post': {'summary': 'Create inventory item'}},
+            '/api/inventory/insights/': {'get': {'summary': 'Inventory purchasing and margin insights'}},
+            '/api/onboarding/': {'get': {'summary': 'Get company onboarding state'}, 'patch': {'summary': 'Save onboarding step'}},
+            '/api/system/health/': {'get': {'summary': 'Platform health status (platform admin only)'}},
+            '/api/billing/admin/clients/': {'get': {'summary': 'SaaS billing clients overview'}},
+            '/api/billing/admin/partner-payouts/': {'get': {'summary': 'Partner payout analytics'}},
+            '/api/documents/visits/{visit_id}/{doc_type}/': {'get': {'summary': 'Render visit document'}},
         },
     })
 
@@ -154,10 +156,11 @@ def swagger_ui(request):
         content_type='text/html',
     )
 
+
 def api_root(request):
     return JsonResponse({
-        "message": "VIN-matrix API is running!",
-        "status": "stable",
+        'message': 'VIN-matrix API is running!',
+        'status': 'stable',
     })
 
 
@@ -173,6 +176,7 @@ urlpatterns = [
     path('api/logout/', LogoutView.as_view(), name='logout'),
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/onboarding/', OnboardingView.as_view(), name='onboarding'),
+    path('api/system/health/', SystemHealthView.as_view(), name='system-health'),
 
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/profile/settings/', ProfileSettingsView.as_view(), name='profile-settings-alt'),

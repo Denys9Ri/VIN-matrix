@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 
 from apps.core.billing_client_link_views import BillingAdminClientLinkView
-from apps.core.billing_views import (
+from apps.core.billing_runtime_views import (
     BillingMeView,
     BillingPaymentRequestView,
     BillingAdminClientsView,
@@ -44,54 +44,33 @@ from apps.core.safe_crm_views import (
     ServiceCatalogViewSet,
     OrderPartViewSet,
     OrderServiceViewSet,
-    VehicleRecommendationViewSet,
-    CRMTaskViewSet,
+    OrderViewSet,
+    WorkPostAvailabilityView,
+    PartSearchView,
 )
-from apps.core.communication_views import (
-    CRMCommunicationViewSet,
-    CRMClientStatusViewSet,
-    CRMServiceReminderViewSet,
+from apps.core.inventory_views import (
+    InventoryViewSet,
+    CategoryViewSet,
+    SupplierViewSet,
 )
-from apps.core.visit_workflow_views import (
-    VisitAcceptanceActView,
-    VisitDiagnosticChecklistView,
-)
-from apps.core.document_views import VisitDocumentView
-from apps.core.ocr_views import RecognizeDocumentView
-from apps.core.complex_views import ServiceComplexViewSet
-from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
-from apps.core.inventory_insights_views import InventoryInsightsView
-from apps.core.stock_actions import (
+from apps.core.stock_views import (
+    StockReceiveViewSet,
     StockMinQuantityView,
     StockReserveView,
     StockReleaseView,
     StockWriteOffVisitView,
 )
-from apps.core.crm_client_views import StoreClientListView, StoreClientDetailView
-from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
-from apps.core.notification_views import NotificationsSummaryView
-from apps.core.dashboard_views import DashboardSummaryView
-from apps.core.analytics_views import AnalyticsSummaryView
-from apps.core.expense_views import StoExpenseViewSet
-from apps.core.activity_views import ActivityLogView
-from apps.core.payment_views import (
-    VisitAddPaymentView,
-    VisitDebtReminderView,
-    VisitMarkPaidView,
-    VisitPaymentListView,
-)
-from apps.core.paid_views import (
-    PartSearchView,
-    MechanicViewSet,
-    CategoryViewSet,
-    InventoryItemViewSet,
-    SupplierViewSet,
-)
+from apps.core.inventory_insights_views import InventoryInsightsView
 from apps.core.partner_views import PartnerManagementViewSet
-from apps.core.platform_auth_views import RegisterView
 from apps.core.platform_client_views import SecurePlatformClientViewSet
 from apps.core.profile_views import ProfileSettingsView
-
+from apps.core.platform_auth_views import RegisterView
+from apps.core.activity_views import ActivityLogView
+from apps.core.dashboard_views import DashboardSummaryView
+from apps.core.analytics_views import AnalyticsSummaryView
+from apps.core.notifications_views import NotificationsSummaryView
+from apps.core.payment_views import VisitPaymentListView, VisitAddPaymentView, VisitMarkPaidView, VisitDebtReminderView
+from apps.core.document_views import VisitDocumentView, RecognizeDocumentView, VisitAcceptanceActView, VisitDiagnosticChecklistView
 from apps.core.novapost_views import (
     NovaPostProfileListCreateView,
     NovaPostProfileDetailView,
@@ -103,73 +82,25 @@ from apps.core.novapost_views import (
     NovaPostDeliveryRefreshActiveView,
 )
 from apps.core.novapost_hardened_views import NovaPostDeliveryCreateHardenedView
+from apps.core.store_client_views import StoreClientListView, StoreClientDetailView, StoreClientUpdateView, StoreClientRepeatSaleView
 
 
 router = DefaultRouter()
-router.register(r'visits', VisitViewSet, basename='visit')
-router.register(r'work-posts', WorkPostViewSet, basename='work-post')
-router.register(r'services', ServiceCatalogViewSet, basename='service')
-router.register(r'complexes', ServiceComplexViewSet, basename='complex')
-router.register(r'recommendations', VehicleRecommendationViewSet, basename='recommendation')
-router.register(r'crm-tasks', CRMTaskViewSet, basename='crm-task')
-router.register(r'crm-communications', CRMCommunicationViewSet, basename='crm-communication')
-router.register(r'crm-client-statuses', CRMClientStatusViewSet, basename='crm-client-status')
-router.register(r'crm-service-reminders', CRMServiceReminderViewSet, basename='crm-service-reminder')
-router.register(r'mechanics', MechanicViewSet, basename='mechanic')
-router.register(r'order-parts', OrderPartViewSet, basename='order-part')
-router.register(r'order-services', OrderServiceViewSet, basename='order-service')
-router.register(r'categories', CategoryViewSet, basename='category')
-router.register(r'inventory', InventoryItemViewSet, basename='inventory')
-router.register(r'suppliers', SupplierViewSet, basename='supplier')
-router.register(r'stock-movements', StockMovementViewSet, basename='stock-movement')
-router.register(r'expenses', StoExpenseViewSet, basename='expense')
-router.register(r'platform-clients', SecurePlatformClientViewSet, basename='platform-client')
-router.register(r'partners', PartnerManagementViewSet, basename='partner')
-
-
-def openapi_schema(request):
-    return JsonResponse({
-        'openapi': '3.0.3',
-        'info': {'title': 'VIN-matrix API', 'version': '1.0.0'},
-        'paths': {
-            '/token/': {'post': {'summary': 'Obtain JWT token pair'}},
-            '/token/refresh/': {'post': {'summary': 'Refresh JWT access token'}},
-            '/api/visits/': {'get': {'summary': 'List visits'}, 'post': {'summary': 'Create visit'}},
-            '/api/payments/': {'get': {'summary': 'List visit payments'}},
-            '/api/inventory/': {'get': {'summary': 'List inventory'}, 'post': {'summary': 'Create inventory item'}},
-            '/api/inventory/insights/': {'get': {'summary': 'Inventory purchasing and margin insights'}},
-            '/api/onboarding/': {'get': {'summary': 'Get company onboarding state'}, 'patch': {'summary': 'Save onboarding step'}},
-            '/api/system/health/': {'get': {'summary': 'Platform health status (platform admin only)'}},
-            '/api/billing/admin/clients/': {'get': {'summary': 'SaaS billing clients overview'}},
-            '/api/billing/admin/partner-payouts/': {'get': {'summary': 'Partner payout analytics'}},
-            '/api/documents/visits/{visit_id}/{doc_type}/': {'get': {'summary': 'Render visit document'}},
-        },
-    })
-
-
-def swagger_ui(request):
-    return HttpResponse(
-        """<!doctype html><html><head><title>VIN-matrix API docs</title>
-        <link rel='stylesheet' href='https://unpkg.com/swagger-ui-dist@5/swagger-ui.css'></head>
-        <body><div id='swagger-ui'></div><script src='https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js'></script>
-        <script>SwaggerUIBundle({url:'/schema/',dom_id:'#swagger-ui'});</script></body></html>""",
-        content_type='text/html',
-    )
-
-
-def api_root(request):
-    return JsonResponse({
-        'message': 'VIN-matrix API is running!',
-        'status': 'stable',
-    })
+router.register(r'visits', VisitViewSet, basename='visits')
+router.register(r'orders', OrderViewSet, basename='orders')
+router.register(r'order-parts', OrderPartViewSet, basename='order-parts')
+router.register(r'order-services', OrderServiceViewSet, basename='order-services')
+router.register(r'work-posts', WorkPostViewSet, basename='work-posts')
+router.register(r'services', ServiceCatalogViewSet, basename='services')
+router.register(r'inventory', InventoryViewSet, basename='inventory')
+router.register(r'categories', CategoryViewSet, basename='categories')
+router.register(r'suppliers', SupplierViewSet, basename='suppliers')
+router.register(r'partners', PartnerManagementViewSet, basename='partners')
+router.register(r'platform-clients', SecurePlatformClientViewSet, basename='platform-clients')
 
 
 urlpatterns = [
-    path('', api_root),
     path('admin/', admin.site.urls),
-    path('schema/', openapi_schema, name='schema'),
-    path('docs/', swagger_ui, name='swagger-ui'),
-
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 

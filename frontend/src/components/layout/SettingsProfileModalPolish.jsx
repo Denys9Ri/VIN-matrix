@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 
 const PROFILE_TITLE = 'ПРОФІЛЬ КОМПАНІЇ';
 const LEGACY_VEIL_ID = 'vm-profile-modal-top-veil';
+const BODY_CLASS = 'vm-profile-modal-open';
 
 function findProfileModal() {
   const heading = Array.from(document.querySelectorAll('h2')).find((node) => (
@@ -40,7 +41,10 @@ export default function SettingsProfileModalPolish() {
     const sync = () => {
       clearMarkers();
       const modal = findProfileModal();
-      if (!modal) return;
+      if (!modal) {
+        document.body.classList.remove(BODY_CLASS);
+        return;
+      }
 
       modal.overlay.style.setProperty('position', 'fixed', 'important');
       modal.overlay.style.setProperty('inset', '0', 'important');
@@ -49,6 +53,7 @@ export default function SettingsProfileModalPolish() {
       modal.overlay.style.setProperty('min-height', '100dvh', 'important');
       modal.overlay.style.setProperty('z-index', '9999', 'important');
 
+      document.body.classList.add(BODY_CLASS);
       modal.overlay.classList.add('vm-profile-modal-overlay');
       modal.panel?.classList.add('vm-profile-modal-panel');
       modal.footer?.classList.add('vm-profile-modal-footer');
@@ -63,6 +68,7 @@ export default function SettingsProfileModalPolish() {
       const modal = findProfileModal();
       clearOverlayGeometry(modal?.overlay);
       clearMarkers();
+      document.body.classList.remove(BODY_CLASS);
       document.getElementById(LEGACY_VEIL_ID)?.remove();
     };
   }, []);

@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .onboarding_views import initialize_onboarding
 from .partner_views import (
     ensure_user_company,
     find_partner_by_code,
@@ -69,7 +70,7 @@ class RegisterView(APIView):
 
         with transaction.atomic():
             user = User.objects.create_user(username=username, password=password, first_name=full_name, email=email)
-            ensure_user_company(user, company_name or full_name or username)
+            company = ensure_user_company(user, company_name or full_name or username)
             owner = partner.user if partner else get_default_assigned_owner(exclude_user=user)
             client = PlatformClient.objects.create(
                 user=user,
@@ -81,5 +82,9 @@ class RegisterView(APIView):
                 is_access_enabled=True,
             )
             activate_trial(client)
+            initialize_onboarding(company)
 
-        return Response({'message': 'Акаунт створено. Пробний доступ активовано на 14 днів.'}, status=201)
+        return Response({
+            'message': 'Акаунт створено. Пробний доступ активовано на 14 днів.',
+            'onboarding_required': True,
+        }, status=201)

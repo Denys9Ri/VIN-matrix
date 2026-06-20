@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 const PROFILE_TITLE = 'ПРОФІЛЬ КОМПАНІЇ';
+const LEGACY_VEIL_ID = 'vm-profile-modal-top-veil';
 
 function findProfileModal() {
   const heading = Array.from(document.querySelectorAll('h2')).find((node) => (
@@ -29,6 +30,8 @@ function clearMarkers() {
 
 export default function SettingsProfileModalPolish() {
   useEffect(() => {
+    document.getElementById(LEGACY_VEIL_ID)?.remove();
+
     const sync = () => {
       clearMarkers();
       const modal = findProfileModal();
@@ -45,6 +48,7 @@ export default function SettingsProfileModalPolish() {
     return () => {
       observer.disconnect();
       clearMarkers();
+      document.getElementById(LEGACY_VEIL_ID)?.remove();
     };
   }, []);
 

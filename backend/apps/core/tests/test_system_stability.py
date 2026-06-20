@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -5,7 +7,11 @@ from rest_framework.test import APIClient
 from apps.core.models import Category, Company, InventoryItem, PlatformClient, Supplier, Visit
 
 
-@override_settings(SECRET_KEY='test-secret-key', DEBUG=False, ALLOWED_HOSTS=['testserver'])
+@override_settings(
+    SECRET_KEY='test-secret-key-that-is-long-enough-for-hs256-signing',
+    DEBUG=False,
+    ALLOWED_HOSTS=['testserver'],
+)
 class SystemStabilityTests(TestCase):
     def setUp(self):
         self.owner_a = User.objects.create_user(username='owner_a', password='pass12345')
@@ -19,6 +25,9 @@ class SystemStabilityTests(TestCase):
         self.assertEqual(token_response.status_code, 200)
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {token_response.data['access']}")
         return client
+
+    def json_body(self, response):
+        return json.loads(response.content.decode('utf-8'))
 
     def make_blocked_client(self):
         user = User.objects.create_user(username='blocked_client', password='pass12345')
@@ -85,8 +94,9 @@ class SystemStabilityTests(TestCase):
             with self.subTest(path=path):
                 response = client.post(path, payload, format='json')
                 self.assertEqual(response.status_code, 402)
-                self.assertEqual(response.data['code'], 'billing_access_required')
-                self.assertTrue(response.data['billing_required'])
+                body = self.json_body(response)
+                self.assertEqual(body['code'], 'billing_access_required')
+                self.assertTrue(body['billing_required'])
 
         self.assertEqual(Visit.objects.filter(company__owner=blocked_user).count(), 0)
         self.assertEqual(InventoryItem.objects.filter(company__owner=blocked_user).count(), 0)

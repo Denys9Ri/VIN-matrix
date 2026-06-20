@@ -10,9 +10,17 @@ const LEGACY_API_ORIGINS = [
 const NEW_STORE_ORDER_PREFIX = 'NEW_STORE_ORDER::';
 const FALLBACK_PHONE = '0000000000';
 
+const isLocalBrowser = () => {
+  if (typeof window === 'undefined') return false;
+  return ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname);
+};
+
+// On the deployed site API calls must stay on the public application origin.
+// Nginx proxies /api and /token to Django, avoiding browser CORS entirely.
 const DEFAULT_API_ORIGIN =
-  import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined' ? window.location.origin : LEGACY_API_ORIGINS[0]);
+  typeof window !== 'undefined' && !isLocalBrowser()
+    ? window.location.origin
+    : (import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : LEGACY_API_ORIGINS[0]));
 
 const normalizeBaseUrl = (rawUrl) => {
   let url = String(rawUrl || DEFAULT_API_ORIGIN).trim();

@@ -12,9 +12,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 def env_bool(name, default=False):
     return str(os.getenv(name, str(default))).strip().lower() in {'1', 'true', 'yes', 'on'}
 
+
 def env_list(name, default=''):
     raw = os.getenv(name, default)
     return [item.strip() for item in raw.split(',') if item.strip()]
+
+
+def env_int(name, default=0):
+    try:
+        return int(str(os.getenv(name, default)).strip())
+    except (TypeError, ValueError):
+        return default
+
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = env_bool('DEBUG', False)
@@ -25,6 +34,7 @@ if not SECRET_KEY:
         raise RuntimeError('SECRET_KEY must be set when DEBUG=False')
 
 ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
+APP_VERSION = os.getenv('APP_VERSION', 'unknown')
 
 # Реєструємо сторонні бібліотеки та наші модулі
 INSTALLED_APPS = [
@@ -35,13 +45,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
     # Сторонні
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
-    
+
     # Наші модулі
     'apps.core.apps.CoreConfig',
     'apps.integrations.apps.IntegrationsConfig',
@@ -65,6 +75,9 @@ TEMPLATES = [
 ]
 
 MIDDLEWARE = [
+    # Request id must be outermost so every API failure can be correlated in logs and support.
+    'apps.core.request_context.RequestIdMiddleware',
+    'apps.core.request_context.ApiExceptionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -86,16 +99,34 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
 CORS_ALLOWED_ORIGIN_REGEXES = env_list('CORS_ALLOWED_ORIGIN_REGEXES')
 CORS_ALLOW_HEADERS = [
-    "accept",
-    "authorization",
-    "content-type",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
+    'accept',
+    'authorization',
+    'content-type',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-request-id',
 ]
-CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
+CORS_EXPOSE_HEADERS = ['X-Request-ID']
+CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
 
 CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000')
+
+# Transport and browser hardening remain opt-in for the current HTTP deployment.
+SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', False)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if env_bool('USE_X_FORWARDED_PROTO', False) else None
+SESSION_COOKIE_SECURE = SECURE_SSL_REDIRECT
+CSRF_COOKIE_SECURE = SECURE_SSL_REDIRECT
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_HSTS_SECONDS = env_int('SECURE_HSTS_SECONDS', 0) if SECURE_SSL_REDIRECT else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', False)
+SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', False)
 
 # Налаштування Бази Даних
 if env_bool('USE_POSTGRES', False):
@@ -107,13 +138,12 @@ if env_bool('USE_POSTGRES', False):
             'PASSWORD': os.getenv('DB_PASSWORD'),
             'HOST': os.getenv('DB_HOST'),
             'PORT': os.getenv('DB_PORT'),
+            'CONN_MAX_AGE': env_int('DB_CONN_MAX_AGE', 60),
         }
     }
 else:
-    # НОВИЙ КОД ДЛЯ SQLITE:
     DB_FOLDER = BASE_DIR / 'database_data'
-    DB_FOLDER.mkdir(exist_ok=True) # Автоматично створює папку
-
+    DB_FOLDER.mkdir(exist_ok=True)
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -129,6 +159,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'EXCEPTION_HANDLER': 'apps.core.api_errors.vin_matrix_exception_handler',
 }
 
 # Налаштування часу життя токенів
@@ -141,10 +172,46 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': False,
 }
 
+# Structured server-side logs. API keys, passwords and JWT values are never logged by our handlers.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'request_context': {
+            '()': 'apps.core.request_context.RequestContextFilter',
+        },
+    },
+    'formatters': {
+        'vin_matrix': {
+            'format': '{asctime} {levelname} request_id={request_id} logger={name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'filters': ['request_context'],
+            'formatter': 'vin_matrix',
+        },
+    },
+    'loggers': {
+        'vin_matrix': {
+            'handlers': ['console'],
+            'level': os.getenv('LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
+
 # Статичні файли (CSS, JS)
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Медіа файли (Логотипи)
 MEDIA_URL = '/media/'
@@ -164,14 +231,14 @@ LANGUAGES = [
 ]
 
 JAZZMIN_SETTINGS = {
-    "site_title": "VIN-Matrix Admin",
-    "site_header": "VIN-Matrix",
-    "show_ui_builder": False,
-    "hide_models": [
-        "auth.Group",
-        "token_blacklist.OutstandingToken",
-        "token_blacklist.BlacklistedToken",
-        "sessions.Session",
+    'site_title': 'VIN-Matrix Admin',
+    'site_header': 'VIN-Matrix',
+    'show_ui_builder': False,
+    'hide_models': [
+        'auth.Group',
+        'token_blacklist.OutstandingToken',
+        'token_blacklist.BlacklistedToken',
+        'sessions.Session',
     ],
-    "order_with_respect_to": ["crm", "core"],
+    'order_with_respect_to': ['crm', 'core'],
 }

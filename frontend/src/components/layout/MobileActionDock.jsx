@@ -43,7 +43,7 @@ export default function MobileActionDock({ onOpenMenu }) {
   ];
 
   return (
-    <nav aria-label="Швидка мобільна навігація" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
+    <nav aria-label="Швидка мобільна навігація" className="vm-mobile-action-dock fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
       <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon;

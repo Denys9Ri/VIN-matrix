@@ -20,11 +20,15 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def configured_backup_dir():
+    return str(os.getenv('BACKUP_DIR') or os.getenv('POSTGRES_BACKUP_DIR') or '').strip()
+
+
 class Command(BaseCommand):
     help = 'Create an on-server VIN-matrix backup with a checksum manifest.'
 
     def add_arguments(self, parser):
-        parser.add_argument('--output-dir', default=os.getenv('BACKUP_DIR', ''))
+        parser.add_argument('--output-dir', default=configured_backup_dir())
         parser.add_argument('--include-media', action='store_true')
         parser.add_argument('--keep', type=int, default=int(os.getenv('BACKUP_KEEP', '7')))
 

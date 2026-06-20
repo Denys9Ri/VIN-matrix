@@ -18,7 +18,6 @@ function findSettingsModal() {
 function getCover() {
   let cover = document.getElementById(COVER_ID);
   if (cover) return cover;
-
   cover = document.createElement('div');
   cover.id = COVER_ID;
   cover.setAttribute('aria-hidden', 'true');
@@ -43,9 +42,24 @@ function resetOverlayGeometry(overlay) {
   ['position', 'inset', 'width', 'height', 'min-height', 'z-index', 'background', 'backdrop-filter', '-webkit-backdrop-filter'].forEach((property) => overlay.style.removeProperty(property));
 }
 
+function reset() {
+  const modal = findSettingsModal();
+  resetOverlayGeometry(modal?.overlay);
+  clearMarkers();
+  document.body.classList.remove(BODY_CLASS);
+  document.getElementById(COVER_ID)?.remove();
+}
+
 export default function SettingsProfileModalPolish() {
   useEffect(() => {
     const sync = () => {
+      // The legacy compatibility layer belongs only to /settings.
+      // Nested Settings pages (Nova Poshta, documents, dictionaries) use their own modal systems.
+      if (window.location.pathname !== '/settings') {
+        reset();
+        return;
+      }
+
       clearMarkers();
       const modal = findSettingsModal();
       if (!modal) {
@@ -88,16 +102,14 @@ export default function SettingsProfileModalPolish() {
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     window.addEventListener('resize', sync);
     window.addEventListener('scroll', sync, true);
+    window.addEventListener('popstate', sync);
 
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', sync);
       window.removeEventListener('scroll', sync, true);
-      const modal = findSettingsModal();
-      resetOverlayGeometry(modal?.overlay);
-      clearMarkers();
-      document.body.classList.remove(BODY_CLASS);
-      document.getElementById(COVER_ID)?.remove();
+      window.removeEventListener('popstate', sync);
+      reset();
     };
   }, []);
 

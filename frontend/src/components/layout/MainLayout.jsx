@@ -5,11 +5,40 @@ import Header from './Header';
 import MobileActionDock from './MobileActionDock';
 import MobileTablePolish from './MobileTablePolish';
 
+const DesktopLayoutCompatibility = () => (
+  <style>{`
+    @media (min-width: 768px) {
+      .vm-main-layout [class~="md:pl-72"] { padding-left: 2rem; }
+      .vm-main-layout [class~="max-w-[1680px]"] .sticky.top-2.z-20 { top: 5rem; }
+    }
+
+    @media (min-width: 1280px) and (max-width: 1535px) {
+      .vm-main-layout [class~="max-w-[1600px]"] > [class~="grid-cols-1"][class~="gap-4"][class~="xl:grid-cols-4"],
+      .vm-main-layout [class~="max-w-[1600px]"] > [class~="grid-cols-1"][class~="gap-4"][class~="xl:grid-cols-5"] {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 1536px) {
+      .vm-main-layout [class~="max-w-[1600px]"] > [class~="grid-cols-1"][class~="gap-4"][class~="xl:grid-cols-5"] {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 1800px) {
+      .vm-main-layout [class~="max-w-[1600px]"] > [class~="grid-cols-1"][class~="gap-4"][class~="xl:grid-cols-5"] {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+    }
+  `}</style>
+);
+
 const MainLayout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 overflow-x-hidden">
+    <div className="vm-main-layout min-h-screen bg-slate-50 overflow-x-hidden">
+      <DesktopLayoutCompatibility />
       <Sidebar isOpen={isMobileMenuOpen} closeMenu={() => setIsMobileMenuOpen(false)} />
       <div className="min-h-screen w-full md:pl-64 flex flex-col transition-all duration-300">
         <Header />

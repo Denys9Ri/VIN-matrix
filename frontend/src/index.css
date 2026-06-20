@@ -21,9 +21,58 @@ body {
   overflow-x: hidden;
 }
 
+/* Legacy analytics expense fields: aligned with the modern stock receipt form. */
+.input {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 14px;
+  background: rgb(248 250 252);
+  padding: 0.75rem 0.9rem;
+  color: rgb(15 23 42);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.35;
+  outline: none;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.input::placeholder {
+  color: rgb(148 163 184);
+  font-weight: 600;
+}
+
+.input:hover {
+  border-color: rgb(203 213 225);
+  background: white;
+}
+
+.input:focus {
+  border-color: rgb(244 63 94);
+  background: white;
+  box-shadow: 0 0 0 4px rgb(255 228 230);
+}
+
+textarea.input {
+  min-height: 112px;
+  resize: vertical;
+  padding-top: 0.8rem;
+}
+
+select.input {
+  appearance: auto;
+  cursor: pointer;
+}
+
 @media (max-width: 767px) {
   /* A focused card, drawer or modal owns the screen and must not compete with navigation. */
   body:has(.fixed.inset-0) .vm-mobile-action-dock {
     display: none;
+  }
+
+  .input {
+    min-height: 50px;
+    font-size: 16px;
   }
 }

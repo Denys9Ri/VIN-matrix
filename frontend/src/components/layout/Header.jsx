@@ -117,7 +117,7 @@ const Header = ({ toggleMenu }) => {
     <>
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 sticky top-0 z-30 shadow-sm w-full">
         <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-          <button onClick={toggleMenu} className="md:hidden p-1.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors shrink-0">
+          <button onClick={toggleMenu} className="md:hidden min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-slate-500 hover:bg-slate-100 rounded-xl transition-colors shrink-0" aria-label="Відкрити меню">
             <Menu size={24} />
           </button>
 
@@ -153,7 +153,7 @@ const Header = ({ toggleMenu }) => {
 
           {role !== 'partner' && <NotificationBell />}
 
-          <button onClick={() => setMenuOpen(!menuOpen)} className="w-8 h-8 md:w-9 md:h-9 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shrink-0 shadow-md shadow-blue-200">
+          <button onClick={() => setMenuOpen(!menuOpen)} className="w-10 h-10 md:w-9 md:h-9 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shrink-0 shadow-md shadow-blue-200" aria-label="Профіль">
             {initials}
           </button>
 
@@ -201,23 +201,23 @@ const Header = ({ toggleMenu }) => {
         <button
           type="button"
           onClick={() => navigate('/settings')}
-          className={`sm:hidden fixed bottom-4 left-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full border text-[11px] font-black shadow-xl ${badgeClass[billingBadge.tone] || badgeClass.success}`}
+          className={`sm:hidden fixed bottom-[calc(4.8rem+env(safe-area-inset-bottom))] left-3 z-40 inline-flex max-w-[calc(100vw-1.5rem)] items-center gap-1.5 px-3 py-2 rounded-full border text-[11px] font-black shadow-xl ${badgeClass[billingBadge.tone] || badgeClass.success}`}
         >
           {billingBadge.icon}
-          <span>{billingBadge.text}</span>
+          <span className="truncate">{billingBadge.text}</span>
         </button>
       )}
 
       {toastVisible && (
-        <div className="fixed bottom-5 right-5 z-50 w-[320px] bg-white border border-amber-200 shadow-2xl rounded-2xl p-4">
+        <div className="fixed bottom-[calc(5.1rem+env(safe-area-inset-bottom))] left-3 right-3 z-50 w-auto bg-white border border-amber-200 shadow-2xl rounded-2xl p-4 sm:bottom-5 sm:left-auto sm:right-5 sm:w-[320px]">
           <div className="flex gap-3">
             <UserRound className="text-amber-600 shrink-0" size={22} />
-            <div>
+            <div className="min-w-0">
               <p className="font-black text-slate-900">Нагадування про оплату</p>
-              <p className="text-sm text-slate-600 mt-1">{profile?.billing?.message || `Ваш доступ закінчується ${profile?.subscription_end_display || 'скоро'}. Щоб не втратити доступ, продовжіть оплату.`}</p>
-              <div className="mt-3 flex gap-2">
-                <button onClick={() => navigate('/settings')} className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 font-bold text-xs">Оплата</button>
-                <button onClick={() => setToastVisible(false)} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs">Закрити</button>
+              <p className="text-sm text-slate-600 mt-1 break-words">{profile?.billing?.message || `Ваш доступ закінчується ${profile?.subscription_end_display || 'скоро'}. Щоб не втратити доступ, продовжіть оплату.`}</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:flex">
+                <button onClick={() => navigate('/settings')} className="px-3 py-2 rounded-lg bg-amber-50 text-amber-800 font-bold text-xs">Оплата</button>
+                <button onClick={() => setToastVisible(false)} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs">Закрити</button>
               </div>
             </div>
           </div>

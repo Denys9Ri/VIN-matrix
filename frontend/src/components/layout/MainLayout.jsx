@@ -21,6 +21,10 @@ const DesktopLayoutCompatibility = () => (
       .vm-main-layout [class~="max-w-[1600px]"] > [class~="grid-cols-1"][class~="gap-4"][class~="xl:grid-cols-5"] {
         grid-template-columns: repeat(3, minmax(0, 1fr));
       }
+
+      .vm-main-layout [class~="2xl:grid-cols-[320px_minmax(0,1fr)]"] {
+        grid-template-columns: 280px minmax(0, 1fr);
+      }
     }
 
     @media (min-width: 1536px) {

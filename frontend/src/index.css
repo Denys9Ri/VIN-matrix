@@ -20,3 +20,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
+
+@media (max-width: 767px) {
+  /* A focused card, drawer or modal owns the screen and must not compete with navigation. */
+  body:has(.fixed.inset-0) .vm-mobile-action-dock {
+    display: none;
+  }
+}

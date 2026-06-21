@@ -1,5 +1,6 @@
 import FinalLanding, { FinalDemoTour } from './LandingFinal';
 import FinalCapabilitiesPortal from './FinalCapabilitiesPortal';
+import FinalDemoLinkGuard from './FinalDemoLinkGuard';
 import './FinalBase.css';
 import './FinalFrame.css';
 import './FinalScenesVisits.css';
@@ -13,5 +14,5 @@ export function DemoTour() {
 }
 
 export default function Landing() {
-  return <><FinalLanding /><FinalCapabilitiesPortal /></>;
+  return <><FinalLanding /><FinalCapabilitiesPortal /><FinalDemoLinkGuard /></>;
 }

@@ -1,0 +1,193 @@
+/* Additional motion layer: a little more movement, without making the interface feel like a game. */
+
+/* The hero CRM screen now has a slower three-point drift in addition to pointer parallax. */
+.hero-frame {
+  animation: futureFloat 6.6s cubic-bezier(.42,0,.22,1) infinite !important;
+}
+
+.live-product-showcase {
+  transform-style: preserve-3d;
+}
+
+.live-product-showcase .product-frame {
+  will-change: translate, rotate, transform;
+}
+
+/* A second optical plane adds depth under the “floating” CRM window. */
+.live-product-showcase .live-product-tabs::before {
+  position: absolute;
+  z-index: -1;
+  right: 2%;
+  bottom: 120%;
+  left: 2%;
+  height: 1px;
+  content: '';
+  opacity: .8;
+  background: linear-gradient(90deg, transparent, rgba(137,239,255,.9), transparent);
+  box-shadow: 0 0 14px rgba(137,239,255,.45);
+  animation: horizonPulse 4.6s ease-in-out infinite;
+}
+
+/* The “workday scenario” becomes a second projection, not a static set of cards. */
+.landing-showcase {
+  position: relative;
+  isolation: isolate;
+}
+
+.landing-showcase::before {
+  position: absolute;
+  z-index: 0;
+  right: -11%;
+  bottom: -42%;
+  width: 78%;
+  height: 102%;
+  border: 1px solid rgba(122,221,255,.16);
+  border-radius: 50%;
+  content: '';
+  background:
+    repeating-linear-gradient(90deg, rgba(133,222,255,.08) 0 1px, transparent 1px 38px),
+    repeating-linear-gradient(0deg, rgba(133,222,255,.06) 0 1px, transparent 1px 38px);
+  transform: perspective(900px) rotateX(63deg) rotateZ(-4deg);
+  mask-image: radial-gradient(ellipse at center, rgba(0,0,0,.92), transparent 72%);
+  animation: showcaseProjection 9s ease-in-out infinite;
+}
+
+.landing-showcase::after {
+  position: absolute;
+  z-index: 1;
+  top: -10%;
+  bottom: -10%;
+  left: -16%;
+  width: 11%;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(181,246,255,.22), transparent);
+  transform: skewX(-17deg);
+  animation: showcaseScan 10.5s ease-in-out infinite;
+}
+
+.landing-showcase-copy,
+.showcase-flow { position: relative; z-index: 2; }
+
+.showcase-flow article i {
+  animation: processBeacon 2.8s calc(var(--i) * .28s) ease-in-out infinite;
+}
+
+.showcase-flow article::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  content: '';
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, #73eafb, transparent);
+  transform: translateX(-110%);
+}
+
+.showcase-flow article:hover::before {
+  opacity: 1;
+  animation: cardSignal 1.2s ease-out both;
+}
+
+/* Add motion to the little process marquee without changing its text or layout. */
+.landing-strip {
+  position: relative;
+}
+
+.landing-strip::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -18%;
+  width: 15%;
+  content: '';
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(48,102,237,.14), transparent);
+  transform: skewX(-18deg);
+  animation: stripSweep 7.5s ease-in-out infinite;
+}
+
+/* The price card gets a restrained reflection to make the sales block feel more physical. */
+.landing-price-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-price-card::after {
+  position: absolute;
+  top: -30%;
+  bottom: -30%;
+  left: -24%;
+  width: 14%;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(180,225,255,.42), transparent);
+  transform: skewX(-18deg);
+  animation: cardReflection 11s ease-in-out infinite;
+}
+
+@keyframes futureFloat {
+  0%, 100% { translate: 0 0; rotate: -.12deg; }
+  27% { translate: 3px -12px; rotate: .18deg; }
+  56% { translate: -4px -7px; rotate: -.16deg; }
+  79% { translate: 2px -14px; rotate: .1deg; }
+}
+
+@keyframes horizonPulse {
+  0%,100% { opacity: .18; transform: scaleX(.58); }
+  50% { opacity: .95; transform: scaleX(1); }
+}
+
+@keyframes showcaseProjection {
+  0%,100% { opacity: .28; translate: 0 0; rotate: 0deg; }
+  50% { opacity: .62; translate: -22px -13px; rotate: 2deg; }
+}
+
+@keyframes showcaseScan {
+  0%, 60% { transform: translateX(0) skewX(-17deg); opacity: 0; }
+  64% { opacity: .75; }
+  80% { transform: translateX(1300%) skewX(-17deg); opacity: .52; }
+  86%,100% { opacity: 0; }
+}
+
+@keyframes processBeacon {
+  0%,100% { opacity: .45; transform: scale(.8); box-shadow: 0 0 0 rgba(117,233,251,0); }
+  48% { opacity: 1; transform: scale(1.35); box-shadow: 0 0 14px rgba(117,233,251,.92); }
+}
+
+@keyframes cardSignal {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(110%); }
+}
+
+@keyframes stripSweep {
+  0%, 56% { transform: translateX(0) skewX(-18deg); opacity: 0; }
+  60% { opacity: 1; }
+  76% { transform: translateX(800%) skewX(-18deg); opacity: 1; }
+  84%,100% { opacity: 0; }
+}
+
+@keyframes cardReflection {
+  0%, 68% { transform: translateX(0) skewX(-18deg); opacity: 0; }
+  72% { opacity: .9; }
+  86% { transform: translateX(880%) skewX(-18deg); opacity: .62; }
+  92%,100% { opacity: 0; }
+}
+
+@media (max-width: 680px) {
+  .hero-frame { animation-duration: 7.6s !important; }
+  .landing-showcase::before { right: -55%; width: 145%; opacity: .55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-frame,
+  .live-product-tabs::before,
+  .landing-showcase::before,
+  .landing-showcase::after,
+  .showcase-flow article i,
+  .landing-strip::before,
+  .landing-price-card::after { animation: none !important; }
+}

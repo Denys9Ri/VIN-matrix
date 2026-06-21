@@ -1,0 +1,294 @@
+/* Final polish layer for the public landing. Scoped to landing classes only. */
+
+/* The real product logo is wider and calmer than the condensed display face. */
+.vin-logo {
+  gap: 0;
+  font-family: 'Manrope', sans-serif;
+  font-size: 23px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: -0.075em;
+  transform: scaleX(1.04);
+  transform-origin: left center;
+}
+.vin-logo b { color: #2e66ed; font-style: normal; font-weight: 800; }
+.vin-logo em { color: var(--vm-navy); font-size: .94em; font-style: italic; font-weight: 800; letter-spacing: -0.09em; }
+.vin-logo.inverse em { color: #fff; }
+.landing-nav .vin-logo,
+.landing-demo-header .vin-logo { font-size: 23px; }
+.landing-footer .vin-logo { font-size: 21px; }
+.product-app-logo .vin-logo { transform: none; letter-spacing: -0.07em; }
+
+/* Holographic stage around the product UI. */
+.live-product-showcase {
+  isolation: isolate;
+  padding: 22px 10px 14px;
+  perspective: 1400px;
+}
+.live-product-showcase::before {
+  position: absolute;
+  z-index: -2;
+  inset: 5% -8% 1%;
+  border-radius: 50%;
+  content: '';
+  opacity: .78;
+  background:
+    repeating-linear-gradient(90deg, rgba(111,226,255,.14) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(0deg, rgba(111,226,255,.12) 0 1px, transparent 1px 32px),
+    radial-gradient(ellipse at center, rgba(89,217,255,.2), transparent 64%);
+  transform: perspective(780px) rotateX(64deg) translateY(36%);
+  mask-image: radial-gradient(ellipse at center, #000 0%, rgba(0,0,0,.7) 45%, transparent 73%);
+  animation: projectionFloor 8s ease-in-out infinite;
+}
+.live-product-showcase::after {
+  position: absolute;
+  z-index: -1;
+  left: 12%;
+  right: 12%;
+  top: 12%;
+  height: 70%;
+  border: 1px solid rgba(136,236,255,.3);
+  border-radius: 50%;
+  box-shadow: 0 0 80px rgba(47,167,255,.13), inset 0 0 45px rgba(52,193,255,.08);
+  content: '';
+  filter: blur(.1px);
+  animation: hologramHalo 7s ease-in-out infinite;
+}
+.live-product-meta { position: relative; z-index: 3; }
+.live-product-meta::after {
+  width: 64px;
+  height: 1px;
+  margin-left: 10px;
+  content: '';
+  background: linear-gradient(90deg, rgba(134,234,255,.85), transparent);
+  animation: signalSweep 2.6s ease-in-out infinite;
+}
+.hero-frame {
+  position: relative;
+  z-index: 2;
+  animation: productHover 5.8s ease-in-out infinite;
+}
+.hero-frame::before {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  bottom: 0;
+  left: -24%;
+  width: 18%;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(191,248,255,.31), transparent);
+  transform: skewX(-16deg);
+  animation: interfaceSweep 8.5s ease-in-out infinite;
+}
+.hero-frame::after {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(154,241,255,.18), 0 0 38px rgba(87,166,255,.18);
+}
+.live-product-tabs { position: relative; z-index: 3; }
+.live-product-tabs button.active { animation: activeTabBreath 2.7s ease-in-out infinite; }
+
+/* More product narrative, displayed as part of the layout rather than a generic marketing slogan. */
+.landing-features .landing-section-heading::after {
+  display: block;
+  max-width: 465px;
+  margin-top: 23px;
+  color: #7489aa;
+  content: 'VIN-matrix обʼєднує щоденну роботу сервісу в одну систему: від першого контакту з клієнтом і пошуку деталі до грошей, документів та наступного продажу.';
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.7;
+}
+.landing-showcase-copy::after {
+  display: block;
+  max-width: 455px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(185,222,255,.22);
+  color: #9fbee8;
+  content: 'Система не змушує команду змінюватися заради інтерфейсу. Вона повторює реальний ритм бізнесу — тільки робить його прозорим.';
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.65;
+}
+.landing-pricing .landing-section-heading::after {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 20px;
+  padding: 8px 10px;
+  border: 1px solid #dbe7f6;
+  border-radius: 9px;
+  color: #4f70ac;
+  content: '✓ Старт без прихованої складності';
+  background: #eef5ff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* Scroll direction and depth. Modern Chrome uses view timelines; all other browsers keep the reveal animations. */
+@supports (animation-timeline: view()) {
+  .landing-showcase {
+    animation: showcaseDepth linear both;
+    animation-timeline: view();
+    animation-range: entry 10% cover 46%;
+  }
+  .landing-pricing .landing-price-card {
+    animation: priceRise linear both;
+    animation-timeline: view();
+    animation-range: entry 12% cover 42%;
+  }
+  .landing-request {
+    animation: requestIlluminate linear both;
+    animation-timeline: view();
+    animation-range: entry 12% cover 44%;
+  }
+}
+
+/* Precise app-proportion corrections for the CRM previews. */
+.product-app-sidebar { width: 108px; flex-basis: 108px; }
+.product-app-logo { margin-bottom: 15px; }
+.product-nav-item { min-height: 24px; font-size: 6.6px; }
+.product-nav-caption { font-size: 4.9px; }
+.product-topbar { height: 41px; }
+.product-app-content { padding: 13px; }
+.product-frame { border-radius: 15px; }
+.product-browser-bar { height: 31px; }
+.dashboard-hero-card { min-height: 80px; }
+.dashboard-ocr-card { margin-top: 8px; }
+.demo-frame-wrap .product-app-sidebar { width: 148px; flex-basis: 148px; }
+.demo-frame-wrap .product-app-shell { min-height: 545px; }
+.demo-frame-wrap .product-app-content { padding: 18px; }
+.demo-frame-wrap .product-topbar { height: 50px; }
+.demo-frame-wrap .product-nav-item { min-height: 29px; font-size: 8.3px; }
+.demo-frame-wrap .product-nav-caption { font-size: 5.8px; }
+.demo-frame-wrap .product-app-logo .vin-logo { font-size: 20px; }
+
+/* Make the CRM interface itself feel powered on, not static. */
+.product-scene-dashboard .dashboard-mini-kpis article,
+.product-scene-analytics .analytics-color-kpis article {
+  animation: cardBoot .65s calc(var(--card-delay, 0) * 1ms) cubic-bezier(.2,.8,.2,1) both;
+}
+.product-scene-dashboard .dashboard-mini-kpis article:nth-child(1) { --card-delay: 0; }
+.product-scene-dashboard .dashboard-mini-kpis article:nth-child(2) { --card-delay: 90; }
+.product-scene-dashboard .dashboard-mini-kpis article:nth-child(3) { --card-delay: 180; }
+.product-scene-dashboard .dashboard-mini-kpis article:nth-child(4) { --card-delay: 270; }
+.product-scene-analytics .analytics-color-kpis article:nth-child(1) { --card-delay: 0; }
+.product-scene-analytics .analytics-color-kpis article:nth-child(2) { --card-delay: 65; }
+.product-scene-analytics .analytics-color-kpis article:nth-child(3) { --card-delay: 130; }
+.product-scene-analytics .analytics-color-kpis article:nth-child(4) { --card-delay: 195; }
+.product-scene-analytics .analytics-color-kpis article:nth-child(5) { --card-delay: 260; }
+.product-scene-clients .client-list-card article { animation: selectedClient 1.9s ease-in-out infinite; }
+.product-scene-dashboard .dashboard-search-widget { animation: searchBreath 3.6s ease-in-out infinite; }
+
+/* Subtle section staging once IntersectionObserver declares it visible. */
+.landing-features.is-visible .landing-feature-list article { animation: featureSlide .6s var(--delay) cubic-bezier(.2,.8,.2,1) both; }
+.landing-showcase.is-visible .showcase-flow article { animation: flowBoot .55s calc(var(--i) * 110ms) cubic-bezier(.2,.8,.2,1) both; }
+.landing-pricing.is-visible .landing-price-card { animation: priceCardEnter .72s .12s cubic-bezier(.2,.8,.2,1) both; }
+.landing-request.is-visible .landing-lead-form { animation: formEnter .72s .12s cubic-bezier(.2,.8,.2,1) both; }
+
+@keyframes projectionFloor {
+  0%, 100% { opacity: .5; transform: perspective(780px) rotateX(64deg) translateY(36%) scale(.96); }
+  50% { opacity: .95; transform: perspective(780px) rotateX(64deg) translateY(30%) scale(1.04); }
+}
+@keyframes hologramHalo {
+  0%, 100% { opacity: .36; transform: scale(.94) rotate(-4deg); }
+  50% { opacity: .84; transform: scale(1.07) rotate(3deg); }
+}
+@keyframes productHover {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
+}
+@keyframes interfaceSweep {
+  0%, 62% { transform: translateX(0) skewX(-16deg); opacity: 0; }
+  66% { opacity: .9; }
+  82% { transform: translateX(750%) skewX(-16deg); opacity: .72; }
+  88%, 100% { opacity: 0; }
+}
+@keyframes signalSweep {
+  0%, 100% { opacity: .2; transform: scaleX(.35); transform-origin: left; }
+  50% { opacity: 1; transform: scaleX(1); transform-origin: left; }
+}
+@keyframes activeTabBreath {
+  0%, 100% { box-shadow: 0 0 0 rgba(112,233,251,0); }
+  50% { box-shadow: 0 0 20px rgba(112,233,251,.22); }
+}
+@keyframes cardBoot {
+  from { opacity: 0; transform: translateY(11px) scale(.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes selectedClient {
+  0%, 100% { box-shadow: inset 0 0 0 rgba(38, 225, 148, 0); }
+  50% { box-shadow: inset 0 0 28px rgba(38, 225, 148, .12); }
+}
+@keyframes searchBreath {
+  0%,100% { box-shadow: 0 0 0 rgba(61,123,244,0); }
+  50% { box-shadow: 0 0 0 3px rgba(61,123,244,.07); }
+}
+@keyframes featureSlide {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes flowBoot {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes priceCardEnter {
+  from { opacity: 0; transform: translateY(28px) rotate(1deg); }
+  to { opacity: 1; transform: translateY(0) rotate(0); }
+}
+@keyframes formEnter {
+  from { opacity: 0; transform: translateX(24px) scale(.97); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes showcaseDepth {
+  from { transform: perspective(1700px) rotateX(5deg) translateY(42px); filter: saturate(.86); }
+  to { transform: perspective(1700px) rotateX(0deg) translateY(0); filter: saturate(1); }
+}
+@keyframes priceRise {
+  from { transform: translateY(38px) rotate(2deg); opacity: .55; }
+  to { transform: translateY(0) rotate(0); opacity: 1; }
+}
+@keyframes requestIlluminate {
+  from { filter: brightness(.78) saturate(.82); transform: translateY(32px); }
+  to { filter: brightness(1) saturate(1); transform: translateY(0); }
+}
+
+@media (max-width: 980px) {
+  .live-product-showcase::before { inset: 8% -18% 2%; }
+  .product-app-sidebar { width: 96px; flex-basis: 96px; }
+  .demo-frame-wrap .product-app-sidebar { width: 112px; flex-basis: 112px; }
+}
+@media (max-width: 680px) {
+  .vin-logo,
+  .landing-nav .vin-logo,
+  .landing-demo-header .vin-logo { font-size: 21px; transform: none; }
+  .live-product-showcase { padding: 8px 0 10px; }
+  .live-product-showcase::before { inset: 4% -25% -8%; transform: perspective(680px) rotateX(67deg) translateY(42%); }
+  .live-product-showcase::after { inset: 4% -8% 6%; }
+  .product-app-sidebar,
+  .demo-frame-wrap .product-app-sidebar { width: 37px; flex-basis: 37px; }
+  .landing-features .landing-section-heading::after { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-product-showcase::before,
+  .live-product-showcase::after,
+  .hero-frame,
+  .hero-frame::before,
+  .live-product-tabs button.active,
+  .product-scene-dashboard .dashboard-mini-kpis article,
+  .product-scene-analytics .analytics-color-kpis article,
+  .product-scene-clients .client-list-card article,
+  .product-scene-dashboard .dashboard-search-widget,
+  .landing-features.is-visible .landing-feature-list article,
+  .landing-showcase.is-visible .showcase-flow article,
+  .landing-pricing.is-visible .landing-price-card,
+  .landing-request.is-visible .landing-lead-form { animation: none !important; }
+}

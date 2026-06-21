@@ -25,6 +25,7 @@ import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
 import AttentionAction from './pages/AttentionAction';
+import LandingRoute, { DemoTour } from './pages/Landing';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import ActivityDock from './components/activity/ActivityDock';
@@ -125,6 +126,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/landing" element={<LandingRoute />} />
+        <Route path="/demo" element={<DemoTour />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterOnboarding />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />

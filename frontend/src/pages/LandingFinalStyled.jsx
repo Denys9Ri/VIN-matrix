@@ -5,6 +5,7 @@ import './FinalFrame.css';
 import './FinalScenesVisits.css';
 import './FinalScenesData.css';
 import './FinalMarketingAll.css';
+import './FinalLandingFix.css';
 
 export function DemoTour() {
   return <FinalDemoTour />;

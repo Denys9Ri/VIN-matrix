@@ -1,77 +1,157 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
+  Bell,
+  Boxes,
+  CalendarDays,
   Check,
   ChevronRight,
   ClipboardList,
+  LayoutDashboard,
+  LineChart,
   Menu,
   Package,
   Phone,
   Play,
+  Search,
+  Settings,
   ShieldCheck,
-  Wrench,
+  ShoppingCart,
+  Users,
   X,
 } from 'lucide-react';
 import api from '../api/axios';
 import './Landing.css';
 
-const orderRows = [
-  { initials: 'АК', name: 'Андрій Коваль', car: 'Skoda Octavia A7', plate: 'AA 2481 KT', status: 'Діагностика', statusClass: 'diagnostic' },
-  { initials: 'ІМ', name: 'Ірина Марченко', car: 'Toyota RAV4', plate: 'KA 7304 HC', status: 'Запчастини', statusClass: 'parts' },
-  { initials: 'СД', name: 'Сергій Дяченко', car: 'BMW X5', plate: 'AI 9108 MM', status: 'Готово', statusClass: 'ready' },
+const DEMO_SCREENS = [
+  { id: 'dashboard', label: 'Панель', kicker: 'ЩОДЕННА РОБОТА', title: 'Панель, з якої починається день', text: 'Гроші, замовлення, склад, доставка та проблеми — в одному робочому просторі.' },
+  { id: 'clients', label: 'Клієнти', kicker: 'CRM ПОВТОРНИХ ПРОДАЖІВ', title: 'Клієнти, які повертаються', text: 'Історія, замовлення, борги, нагадування й наступна дія в картці покупця.' },
+  { id: 'analytics', label: 'Аналітика', kicker: 'PREMIUM DASHBOARD', title: 'Цифри, за якими можна діяти', text: 'Виручка, прибуток, товари та замовлення без ручних зведень у таблицях.' },
 ];
 
-const features = [
-  { icon: ClipboardList, number: '01', title: 'Замовлення в одному місці', text: 'Авто, клієнт, роботи, запчастини, оплата, документи та відповідальний майстер — в одному сценарії.' },
-  { icon: Package, number: '02', title: 'Склад без сюрпризів', text: 'Резерви, прихід, списання й маржа видно до того, як менеджер пообіцяє деталь, якої немає.' },
-  { icon: BarChart3, number: '03', title: 'Картина для керівника', text: 'Дивись на гроші, навантаження, борги й результат команди без ручних зведень у таблицях.' },
+const FEATURES = [
+  { number: '01', icon: ClipboardList, title: 'Замовлення в одному місці', text: 'Авто, клієнт, роботи, запчастини, оплата, документи й відповідальний майстер живуть в одному сценарії.' },
+  { number: '02', icon: Package, title: 'Склад без сюрпризів', text: 'Резерви, прихід, списання та маржа видно до того, як менеджер пообіцяє деталь, якої вже немає.' },
+  { number: '03', icon: BarChart3, title: 'Картина для керівника', text: 'Дивись на гроші, навантаження, борги та результат команди без ручних зведень у таблицях.' },
 ];
 
-const demoScreens = [
-  { label: 'Замовлення', title: 'Від заявки до видачі авто', text: 'Статус роботи, запчастини, гроші й документи не розлітаються між чатами.', accent: 'order' },
-  { label: 'Склад', title: 'Запчастини під контролем', text: 'Знаєш, що є в наявності, що зарезервовано і на чому заробляєш.', accent: 'stock' },
-  { label: 'Аналітика', title: 'Дані, за якими можна діяти', text: 'Не просто цифри за місяць, а точки, де ти втрачаєш час або маржу.', accent: 'analytics' },
-];
-
-const faqs = [
+const FAQS = [
   ['Кому підійде VIN-matrix?', 'СТО, шиномонтажу, магазину запчастин або змішаному бізнесу, де вже не вистачає Viber, Excel і пам’яті адміністратора.'],
-  ['Що я побачу в демо?', 'Реальний сценарій роботи: замовлення, клієнтів, склад, запчастини, оплати та управлінські показники.'],
+  ['Що я побачу в демо?', 'Панель керівника, CRM клієнтів, замовлення, склад і аналітику на навчальному сценарії, а не на порожньому шаблоні.'],
   ['Що входить у тариф?', 'Замовлення, CRM, склад, документи, оплати, аналітика, оновлення та підтримка. Без прихованих модулів у базовому сценарії.'],
 ];
 
-function ProductPreview({ compact = false, activeScreen = 0 }) {
-  const screen = demoScreens[activeScreen] || demoScreens[0];
-  return <div className={`landing-product ${compact ? 'landing-product-compact' : ''}`}>
-    <div className="landing-window-bar">
-      <div className="landing-window-dots"><i /><i /><i /></div>
-      <span>VIN-matrix · {screen.label}</span>
-      <div className="landing-window-user">AG</div>
-    </div>
-    <div className="landing-workspace">
-      <aside className="landing-side-nav">
-        <div className="landing-side-logo">V<span>/</span></div>
-        <span className="active" /><span /><span /><span /><span />
-        <div className="landing-side-bottom">?</div>
-      </aside>
-      <section className="landing-workspace-main">
-        <header className="landing-workspace-header">
-          <div><small>{screen.label} · Apex Garage</small><h3>{screen.title}</h3></div>
-          <button type="button">+ Створити</button>
-        </header>
-        <div className="landing-kpi-row">
-          <article><span>В роботі</span><strong>08</strong><em>2 нових сьогодні</em></article>
-          <article><span>План на сьогодні</span><strong>₴ 64 810</strong><em>72% виконано</em></article>
-          <article><span>Маржа місяця</span><strong>₴ 184 260</strong><em className="positive">+18.4%</em></article>
-        </div>
-        <div className={`landing-workspace-panel ${screen.accent}`}>
-          <div className="landing-panel-heading"><div><b>{activeScreen === 0 ? 'Активні замовлення' : activeScreen === 1 ? 'Склад і резерви' : 'Результат за місяць'}</b><span>{screen.text}</span></div><a href="/demo">Відкрити <ChevronRight size={15} /></a></div>
-          {activeScreen === 0 && <div className="landing-order-list">{orderRows.map((row) => <div className="landing-order-row" key={row.plate}><div className="landing-avatar">{row.initials}</div><div><b>{row.car}</b><span>{row.name} · {row.plate}</span></div><em className={row.statusClass}>{row.status}</em><ChevronRight size={16} /></div>)}</div>}
-          {activeScreen === 1 && <div className="landing-stock-list"><div><span>Фільтр масляний</span><b>MANN W 712/95</b><em>7 шт.</em></div><div><span>Колодки передні</span><b>BOSCH 0 986 494 526</b><em className="warn">2 у резерві</em></div><div><span>Моторна олива 5W-30</span><b>MOBIL 152053</b><em>9 шт.</em></div></div>}
-          {activeScreen === 2 && <div className="landing-chart-wrap"><div className="landing-chart-bars"><i /><i /><i /><i /><i /><i /><i /><i /></div><div className="landing-chart-note"><span>Середній чек</span><b>₴ 4 870</b><em>за 30 днів</em></div></div>}
-        </div>
-      </section>
-    </div>
+function useRevealOnScroll() {
+  useEffect(() => {
+    const nodes = Array.from(document.querySelectorAll('[data-reveal]'));
+    if (!nodes.length) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -48px 0px' });
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+}
+
+function VinLogo({ inverse = false, compact = false }) {
+  return <span className={`vin-logo ${inverse ? 'inverse' : ''} ${compact ? 'compact' : ''}`}><b>VIN</b><em>-matrix</em></span>;
+}
+
+function SceneSidebar({ active = 'dashboard' }) {
+  const items = [
+    { id: 'orders', icon: ShoppingCart, label: 'Замовлення' },
+    { id: 'search', icon: Search, label: 'Пошук запчастин' },
+    { id: 'clients', icon: Users, label: 'Клієнти' },
+    { id: 'stock', icon: Package, label: 'Склад' },
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Панель' },
+    { id: 'analytics', icon: LineChart, label: 'Аналітика' },
+  ];
+
+  return <aside className="product-app-sidebar">
+    <div className="product-app-logo"><VinLogo inverse compact /></div>
+    <span className="product-nav-caption">ЩОДЕННА РОБОТА</span>
+    {items.slice(0, 4).map(({ id, icon: Icon, label }) => <div className={`product-nav-item ${active === id ? 'active' : ''}`} key={id}><Icon size={13} /><span>{label}</span></div>)}
+    <span className="product-nav-caption control">КОНТРОЛЬ</span>
+    {items.slice(4).map(({ id, icon: Icon, label }) => <div className={`product-nav-item ${active === id ? 'active' : ''}`} key={id}><Icon size={13} /><span>{label}</span></div>)}
+    <div className="product-nav-bottom"><Settings size={13} /><span>Налаштування</span></div>
+  </aside>;
+}
+
+function ProductTopbar() {
+  return <div className="product-topbar">
+    <div className="product-search"><Search size={13} /><span>Пошук: №, телефон, клієнт, VIN, авто, артикул...</span></div>
+    <div className="product-topbar-actions"><div className="product-code">ВАШ КОД: <b>A6000</b></div><div className="product-bell"><Bell size={14} /><i>22</i></div><div className="product-avatar">ДЕ</div></div>
+  </div>;
+}
+
+function DashboardScene() {
+  return <div className="product-scene product-scene-dashboard">
+    <div className="dashboard-title-row"><div><span className="scene-badge"><LayoutDashboard size={13} /> ПАНЕЛЬ</span><small>Бізнес-огляд: магазин автозапчастин · 13 активних віджетів</small></div><div className="scene-actions"><button><span>↻</span> ОНОВИТИ</button><button>НАЛАШТУВАТИ ВІДЖЕТИ</button></div></div>
+    <div className="dashboard-hero-card"><div><span>ДОБРИЙ ДЕНЬ,</span><h3>Денис</h3><p>R16.com.ua · Це ваша бізнес-панель: гроші, замовлення, склад, доставка і проблеми в одному місці.</p></div><div className="dashboard-search-widget"><Search size={17} /><span>Швидкий пошук запчастин...</span></div><i className="dashboard-orb orb-a" /><i className="dashboard-orb orb-b" /></div>
+    <div className="dashboard-ocr-card"><span className="ocr-chip">ШІ-МОДУЛЬ</span><b>▣ ШВИДКИЙ OCR СКАН</b><p>Завантажте техпаспорт для миттєвого заповнення картки</p><div><button>▣ КАМЕРА</button><button>▧ ГАЛЕРЕЯ</button></div></div>
+    <div className="dashboard-mini-kpis"><article className="mint"><span>ВИРУЧКА СЬОГОДНІ</span><b>0 ₴</b><em>0 замовлень</em></article><article className="blue"><span>ПРИБУТОК СЬОГОДНІ</span><b>0 ₴</b><em>Товари + роботи</em></article><article className="rose"><span>БОРГИ</span><b>0 ₴</b><em>0 проблемних замовлень</em></article><article className="amber"><span>У РОБОТІ</span><b>21</b><em>Прострочено: 18</em></article></div>
+  </div>;
+}
+
+function ClientsScene() {
+  return <div className="product-scene product-scene-clients">
+    <div className="clients-banner"><div><span className="scene-badge dark"><Users size={13} /> CRM ПОВТОРНИХ ПРОДАЖІВ</span><h3>ПОКУПЦІ</h3><p>Картка покупця, pipeline, борги, прибуток, історія, повторні продажі, задачі й нагадування в одному робочому екрані.</p></div><button>↻ ОНОВИТИ CRM</button><div className="clients-banner-kpis"><span><b>16</b>ПОКУПЦІВ</span><span><b>29</b>ЗАМОВЛЕНЬ</span><span><b>32 988 ₴</b>ВИРУЧКА</span><span><b className="green">15 412 ₴</b>ПРИБУТОК</span></div></div>
+    <div className="clients-search"><Search size={15} /><span>Пошук: № замовлення, телефон, ПІБ, авто, VIN, артикул або товар...</span><button>ЗНАЙТИ</button></div>
+    <div className="clients-tabs"><b>УСІ <i>16</i></b><span>НОВИЙ <i>0</i></span><span>АКТИВНИЙ <i>11</i></span><span>ПОСТІЙНИЙ <i>2</i></span><span>З БОРГОМ <i>3</i></span></div>
+    <div className="clients-workspace"><div className="client-list-card"><strong>СПИСОК ПОКУПЦІВ</strong><small>Натисніть, щоб відкрити картку</small><article><div><b>Skoda Octavia / Олександр</b><span>⌕ 0997663274</span></div><em>ПОСТІЙНИЙ</em><div className="client-small-stats"><span>ЗАМ.<b>4</b></span><span>СУМА<b>9 097,1 ₴</b></span><span>БОРГ<b>0 ₴</b></span></div></article></div><div className="client-empty"><Users size={31} /><b>ОБЕРІТЬ ПОКУПЦЯ ЗІ СПИСКУ</b></div></div>
+  </div>;
+}
+
+function AnalyticsScene() {
+  return <div className="product-scene product-scene-analytics">
+    <div className="analytics-banner"><div><span className="scene-badge dark"><BarChart3 size={13} /> PREMIUM DASHBOARD</span><h3>АНАЛІТИКА</h3><p>Товари, оборот, постачальники, склад, клієнти, борги та витрати магазину</p><div className="analytics-filter">МАГАЗИН <i>30 ДНІВ · 2026-05-23 — 2026-06-21</i></div></div><div className="analytics-head-kpis"><span>ВИРУЧКА<b>23 194 ₴</b></span><span>ЧИСТИЙ ПРИБУТОК<b className="green">-38 570 ₴</b></span><span>БОРГИ<b>0 ₴</b></span></div></div>
+    <div className="analytics-tabs"><b>ОГЛЯД</b><span>ЗАМОВЛЕННЯ</span><span>ТОВАРИ</span><span>ПОСТАЧАЛЬНИКИ</span><span>СКЛАД</span><span>КЛІЄНТИ</span></div>
+    <div className="analytics-color-kpis"><article className="k-blue"><span>ВИРУЧКА</span><b>23 194 ₴</b></article><article className="k-navy"><span>ЗАКУПКА ПРОДАНОГО</span><b>10 950 ₴</b></article><article className="k-teal"><span>ВАЛОВИЙ ПРИБУТОК</span><b>12 244 ₴</b></article><article className="k-green"><span>ЧИСТИЙ ПРИБУТОК</span><b>-38 570 ₴</b></article><article className="k-red"><span>ВИТРАТИ МАГАЗИНУ</span><b>50 000 ₴</b></article></div>
+    <div className="analytics-chart-card"><div><b>▣ ДИНАМІКА</b><span>Виручка і чистий прибуток у вибраному періоді.</span></div><div className="analytics-bars">{[12, 8, 10, 84, 36, 10, 8, 45, 39, 8].map((value, index) => <i style={{ '--bar': `${value}%`, '--delay': `${index * 70}ms` }} key={index} />)}</div><aside><span>ОПЛАЧЕНО</span><b>31 884 ₴</b><span>НЕЗАКРИТА СУМА</span><b>7 768 ₴</b></aside></div>
+  </div>;
+}
+
+function ProductFrame({ screenId = 'dashboard', hero = false, onPointerMove, onPointerLeave }) {
+  const activeLabel = DEMO_SCREENS.find((screen) => screen.id === screenId)?.label || 'Панель';
+  const scene = screenId === 'clients' ? <ClientsScene /> : screenId === 'analytics' ? <AnalyticsScene /> : <DashboardScene />;
+  return <div className={`product-frame ${hero ? 'hero-frame' : ''}`} onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
+    <div className="product-browser-bar"><div className="product-browser-dots"><i /><i /><i /></div><span>VIN-matrix · {activeLabel}</span><div className="product-browser-live"><i /> LIVE</div></div>
+    <div className="product-app-shell"><SceneSidebar active={screenId} /><div className="product-app-main"><ProductTopbar /><div className="product-app-content" key={screenId}>{scene}</div></div></div>
+  </div>;
+}
+
+function LiveProductShowcase() {
+  const [active, setActive] = useState(0);
+  const frameRef = useRef(null);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setActive((current) => (current + 1) % DEMO_SCREENS.length), 6200);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const parallax = (event) => {
+    if (!frameRef.current || window.matchMedia('(max-width: 980px)').matches) return;
+    const rect = frameRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+    const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+    frameRef.current.style.setProperty('--rx', `${-y * 1.6}deg`);
+    frameRef.current.style.setProperty('--ry', `${x * 2.3}deg`);
+  };
+  const resetParallax = () => {
+    frameRef.current?.style.setProperty('--rx', '0deg');
+    frameRef.current?.style.setProperty('--ry', '0deg');
+  };
+
+  return <div className="live-product-showcase" ref={frameRef}>
+    <div className="live-product-meta"><span><i /> ЖИВИЙ ІНТЕРФЕЙС</span><b>{DEMO_SCREENS[active].label}</b></div>
+    <ProductFrame screenId={DEMO_SCREENS[active].id} hero onPointerMove={parallax} onPointerLeave={resetParallax} />
+    <div className="live-product-tabs">{DEMO_SCREENS.map((screen, index) => <button type="button" onClick={() => setActive(index)} className={active === index ? 'active' : ''} key={screen.id}><small>0{index + 1}</small><span>{screen.label}</span><i /></button>)}</div>
   </div>;
 }
 
@@ -80,8 +160,8 @@ function LeadForm() {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-
   const update = (key, value) => setForm((state) => ({ ...state, [key]: value }));
+
   const submit = async (event) => {
     event.preventDefault();
     if (!form.name.trim() || !form.phone.trim()) {
@@ -101,75 +181,58 @@ function LeadForm() {
     }
   };
 
-  if (sent) return <div className="landing-form-success"><div className="landing-success-mark"><Check size={22} /></div><h3>Заявку надіслано</h3><p>Ми зв’яжемося, щоб показати VIN-matrix на твоєму сценарії. А базове демо вже можна відкрити прямо зараз.</p><a href="/demo">Відкрити демо <ArrowRight size={17} /></a></div>;
-
+  if (sent) return <div className="landing-form-success"><span className="form-success-icon"><Check size={20} /></span><h3>Заявку надіслано</h3><p>Ми зв’яжемося, щоб провести показ на твоєму сценарії. Поки що можеш відкрити живе демо.</p><a href="/demo">Відкрити демо <ArrowRight size={16} /></a></div>;
   return <form className="landing-lead-form" onSubmit={submit}>
     <label><span>Ім’я</span><input value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Як до тебе звертатись" /></label>
     <label><span>Телефон</span><input value={form.phone} onChange={(event) => update('phone', event.target.value)} placeholder="+38 (0__) ___ __ __" inputMode="tel" /></label>
-    <div className="landing-form-pair">
-      <label><span>Тип бізнесу</span><select value={form.type} onChange={(event) => update('type', event.target.value)}><option>СТО</option><option>Магазин запчастин</option><option>СТО + магазин</option><option>Шиномонтаж</option></select></label>
-      <label><span>Команда</span><select value={form.team} onChange={(event) => update('team', event.target.value)}><option>1–3</option><option>4–10</option><option>11+</option></select></label>
-    </div>
+    <div className="landing-form-pair"><label><span>Тип бізнесу</span><select value={form.type} onChange={(event) => update('type', event.target.value)}><option>СТО</option><option>Магазин запчастин</option><option>СТО + магазин</option><option>Шиномонтаж</option></select></label><label><span>Команда</span><select value={form.team} onChange={(event) => update('team', event.target.value)}><option>1–3</option><option>4–10</option><option>11+</option></select></label></div>
     {error && <p className="landing-form-error">{error}</p>}
-    <button type="submit" disabled={sending}>{sending ? 'Надсилаємо…' : 'Записатися на показ'} <ArrowRight size={17} /></button>
-    <small>Заявка — для персонального показу. Публічне демо доступне без очікування.</small>
+    <button type="submit" disabled={sending}>{sending ? 'Надсилаємо…' : 'Записатися на показ'} <ArrowRight size={16} /></button>
+    <small>Публічне демо відкривається одразу. Заявка — для персонального показу під твій бізнес.</small>
   </form>;
 }
 
 export function DemoTour() {
+  useRevealOnScroll();
   const [active, setActive] = useState(0);
+  const current = DEMO_SCREENS[active];
+
   return <div className="landing-demo-page">
-    <header className="landing-demo-header"><a href="/landing" className="landing-brand">VIN<span>/</span>MATRIX</a><a href="/landing#request">Записатися на показ <ArrowRight size={16} /></a></header>
+    <header className="landing-demo-header"><a href="/landing" className="header-logo"><VinLogo inverse /></a><a href="/landing#request">Записатися на показ <ArrowRight size={16} /></a></header>
     <main className="landing-demo-main">
-      <div className="landing-demo-intro"><p>ІНТЕРАКТИВНЕ ДЕМО</p><h1>Подивись, як виглядає порядок у роботі.</h1><span>Це навчальний сценарій. Тут можна спокійно подивитися логіку системи до персонального показу.</span></div>
-      <div className="landing-demo-tabs">{demoScreens.map((screen, index) => <button type="button" key={screen.label} onClick={() => setActive(index)} className={active === index ? 'active' : ''}><small>0{index + 1}</small>{screen.label}</button>)}</div>
-      <ProductPreview activeScreen={active} />
-      <div className="landing-demo-bottom"><div><b>{demoScreens[active].title}</b><span>{demoScreens[active].text}</span></div><a href="/landing#request">Хочу показ для свого бізнесу <ArrowRight size={17} /></a></div>
+      <section className="demo-intro" data-reveal><span className="eyebrow"><i /> ІНТЕРАКТИВНЕ ДЕМО</span><h1>Подивись на систему <em>в роботі.</em></h1><p>Перемикай реальні сценарії VIN-matrix: панель керівника, CRM клієнтів і аналітику.</p></section>
+      <div className="demo-screen-picker" data-reveal>{DEMO_SCREENS.map((screen, index) => <button type="button" key={screen.id} onClick={() => setActive(index)} className={active === index ? 'active' : ''}><small>0{index + 1}</small><span>{screen.label}</span></button>)}</div>
+      <div className="demo-frame-wrap" data-reveal><ProductFrame screenId={current.id} /><div className="demo-frame-caption"><div><span>{current.kicker}</span><h2>{current.title}</h2><p>{current.text}</p></div><a href="/landing#request">Хочу показ для свого бізнесу <ArrowRight size={16} /></a></div></div>
     </main>
   </div>;
 }
 
 export function Landing() {
+  useRevealOnScroll();
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeFaq, setActiveFaq] = useState(0);
   const currentYear = useMemo(() => new Date().getFullYear(), []);
 
   return <div className="landing-page">
-    <nav className="landing-nav">
-      <a className="landing-brand" href="/landing">VIN<span>/</span>MATRIX</a>
-      <div className={`landing-nav-links ${menuOpen ? 'open' : ''}`}><a href="#product">Можливості</a><a href="#tariff">Тариф</a><a href="#request">Показ</a><a href="/login">Увійти</a></div>
-      <div className="landing-nav-actions"><a href="/demo">Відкрити демо <ArrowRight size={16} /></a><button type="button" aria-label="Відкрити меню" onClick={() => setMenuOpen((state) => !state)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button></div>
-    </nav>
+    <nav className="landing-nav"><a href="/landing" className="header-logo"><VinLogo inverse /></a><div className={`landing-nav-links ${menuOpen ? 'open' : ''}`}><a href="#product">Можливості</a><a href="#tariff">Тариф</a><a href="#request">Показ</a><a href="/login">Увійти</a></div><div className="landing-nav-actions"><a href="/demo">Відкрити демо <ArrowRight size={16} /></a><button type="button" aria-label="Відкрити меню" onClick={() => setMenuOpen((state) => !state)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button></div></nav>
 
     <main>
-      <section className="landing-hero">
-        <div className="landing-hero-copy">
-          <p className="landing-eyebrow"><i /> СИСТЕМА УПРАВЛІННЯ ДЛЯ АВТОБІЗНЕСУ</p>
-          <h1>Менше хаосу.<br /><em>Більше контролю.</em></h1>
-          <p className="landing-hero-description">VIN-matrix збирає замовлення, склад, клієнтів, оплату й команду в один робочий простір. Ти бачиш процес, а не шукаєш його по чатах.</p>
-          <div className="landing-hero-actions"><a className="primary" href="/demo"><Play size={16} fill="currentColor" /> Відкрити демо</a><a className="secondary" href="#request">Записатися на показ <ArrowRight size={16} /></a></div>
-          <div className="landing-hero-note"><ShieldCheck size={18} /><span>Без реальних клієнтів, оплат і підключених інтеграцій у демо.</span></div>
-        </div>
-        <div className="landing-hero-product"><div className="landing-hero-caption"><span>ОПЕРАЦІЙНИЙ ЕКРАН</span><b>Усе, що відбувається сьогодні</b></div><ProductPreview /></div>
-      </section>
+      <section className="landing-hero" data-reveal><div className="landing-hero-copy"><span className="eyebrow"><i /> СИСТЕМА УПРАВЛІННЯ ДЛЯ АВТОБІЗНЕСУ</span><h1>Менше хаосу.<br /><em>Більше контролю.</em></h1><p>VIN-matrix збирає замовлення, склад, клієнтів, оплату й команду в один робочий простір. Ти бачиш процес, а не шукаєш його по чатах.</p><div className="landing-hero-actions"><a className="primary" href="/demo"><Play size={15} fill="currentColor" /> Відкрити демо</a><a className="secondary" href="#request">Записатися на показ <ArrowRight size={16} /></a></div><div className="landing-hero-note"><ShieldCheck size={17} /><span>Демо працює на навчальних даних: без реальних клієнтів, оплат та інтеграцій.</span></div><div className="hero-scroll-cue"><i /><span>SCROLL TO EXPLORE</span></div></div><LiveProductShowcase /></section>
 
-      <section className="landing-strip"><span>СТО</span><i>•</i><span>МАГАЗИН ЗАПЧАСТИН</span><i>•</i><span>ШИНОМОНТАЖ</span><i>•</i><span>КЕРІВНИК</span><i>•</i><span>АДМІНІСТРАТОР</span></section>
+      <section className="landing-strip" data-reveal><span>СТО</span><i>•</i><span>МАГАЗИН ЗАПЧАСТИН</span><i>•</i><span>ШИНОМОНТАЖ</span><i>•</i><span>КЕРІВНИК</span><i>•</i><span>АДМІНІСТРАТОР</span></section>
 
-      <section id="product" className="landing-features">
-        <div className="landing-section-heading"><p>НЕ ЩЕ ОДНА CRM</p><h2>Від першого дзвінка до виданого авто — без розривів у процесі.</h2></div>
-        <div className="landing-feature-list">{features.map(({ icon: Icon, number, title, text }) => <article key={number}><div className="landing-feature-number">{number}</div><div className="landing-feature-icon"><Icon size={22} /></div><div><h3>{title}</h3><p>{text}</p></div></article>)}</div>
-      </section>
+      <section id="product" className="landing-features" data-reveal><div className="landing-section-heading"><span className="eyebrow"><i /> НЕ ЩЕ ОДНА CRM</span><h2>Від першого дзвінка до виданого авто — без розривів у процесі.</h2></div><div className="landing-feature-list">{FEATURES.map(({ number, icon: Icon, title, text }, index) => <article style={{ '--delay': `${index * 100}ms` }} key={number}><small>{number}</small><span><Icon size={20} /></span><div><h3>{title}</h3><p>{text}</p></div><ArrowRight size={17} /></article>)}</div></section>
 
-      <section className="landing-showcase"><div className="landing-showcase-copy"><p>НЕ “ПОДИВІТЬСЯ НА НАШІ ФУНКЦІЇ”</p><h2>Покажи людині її робочий день у системі.</h2><p>У демо є не порожній шаблон, а зрозумілий сценарій: прийняли авто, додали роботи, зарезервували деталі, отримали оплату, подивилися результат.</p><a href="/demo">Переглянути демо-сценарій <ArrowRight size={17} /></a></div><div className="landing-showcase-steps"><div><span>1</span><b>Новий запис</b><em>Клієнт і авто</em></div><div><span>2</span><b>Робота</b><em>Майстер і послуги</em></div><div><span>3</span><b>Запчастини</b><em>Резерв і маржа</em></div><div><span>4</span><b>Видача</b><em>Оплата й документ</em></div></div></section>
+      <section className="landing-showcase" data-reveal><div className="landing-showcase-copy"><span className="eyebrow"><i /> ЖИВИЙ СЦЕНАРІЙ, НЕ СЛАЙДИ</span><h2>Людина бачить не функції. Вона бачить свій робочий день.</h2><p>Прийняли авто, створили замовлення, додали роботи, зарезервували запчастини, отримали оплату й побачили результат — саме в такій послідовності працює система.</p><a href="/demo">Відкрити живе демо <ArrowRight size={16} /></a></div><div className="showcase-flow">{[['01','Новий запис','Клієнт і авто'],['02','Робота','Майстер і послуги'],['03','Запчастини','Резерв і маржа'],['04','Видача','Оплата і документ']].map(([number, title, text], index) => <article style={{ '--i': index }} key={number}><small>{number}</small><b>{title}</b><span>{text}</span><i /></article>)}</div></section>
 
-      <section id="tariff" className="landing-pricing"><div className="landing-section-heading"><p>ЗРОЗУМІЛИЙ СТАРТ</p><h2>Один тариф, у якому є основне для щоденної роботи.</h2></div><article className="landing-price-card"><div className="landing-price-card-top"><span>VIN-matrix</span><small>Стандарт</small></div><div className="landing-price"><small>від</small><strong>2 000</strong><span>грн / місяць</span></div><ul><li><Check size={16} /> Замовлення, клієнти та авто</li><li><Check size={16} /> Склад, резерви та маржа</li><li><Check size={16} /> Документи, оплати, аналітика</li><li><Check size={16} /> Оновлення й підтримка</li></ul><a href="#request">Записатися на показ <ArrowRight size={17} /></a></article></section>
+      <section id="tariff" className="landing-pricing" data-reveal><div className="landing-section-heading"><span className="eyebrow"><i /> ЗРОЗУМІЛИЙ СТАРТ</span><h2>Один тариф, у якому є основне для щоденної роботи.</h2><p>14 днів безкоштовно. Потім — фіксована щомісячна оплата без окремих модулів за базові процеси.</p></div><article className="landing-price-card"><header><span>VIN-matrix</span><b>СТАНДАРТ</b></header><div className="price-main"><small>від</small><strong>2 000</strong><span>грн / місяць</span></div><ul><li><Check size={16} /> Замовлення, клієнти та авто</li><li><Check size={16} /> Склад, резерви та маржа</li><li><Check size={16} /> Документи, оплати, аналітика</li><li><Check size={16} /> Оновлення й підтримка</li></ul><a href="#request">Записатися на показ <ArrowRight size={16} /></a></article></section>
 
-      <section id="request" className="landing-request"><div className="landing-request-copy"><p>ПЕРСОНАЛЬНИЙ ПОКАЗ</p><h2>Не вибирай систему навмання.</h2><p>Залиш контакти — покажемо VIN-matrix саме на тому, що важливо для твого бізнесу: замовлення, склад, команда або фінанси.</p><div><Phone size={18} /><span>А публічне демо можна відкрити одразу — без форми.</span></div><a href="/demo">Відкрити демо зараз <ArrowRight size={16} /></a></div><LeadForm /></section>
+      <section id="request" className="landing-request" data-reveal><div className="landing-request-copy"><span className="eyebrow"><i /> ПЕРСОНАЛЬНИЙ ПОКАЗ</span><h2>Не вибирай систему навмання.</h2><p>Залиш контакти — покажемо VIN-matrix саме на тому, що важливо для твого бізнесу: замовлення, склад, команда або фінанси.</p><div className="request-note"><Phone size={17} /><span>Публічне демо відкривається одразу. Заявка — щоб підготувати персональний показ.</span></div><a href="/demo">Відкрити демо зараз <ArrowRight size={16} /></a></div><LeadForm /></section>
 
-      <section className="landing-faq"><div className="landing-section-heading"><p>ПЕРЕД СТАРТОМ</p><h2>Відповіді без дрібного шрифту.</h2></div><div>{faqs.map(([question, answer], index) => <button type="button" key={question} onClick={() => setActiveFaq(activeFaq === index ? -1 : index)} className={activeFaq === index ? 'open' : ''}><div><strong>{question}</strong>{activeFaq === index && <p>{answer}</p>}</div><ChevronRight size={18} /></button>)}</div></section>
+      <section className="landing-faq" data-reveal><div className="landing-section-heading"><span className="eyebrow"><i /> ПЕРЕД СТАРТОМ</span><h2>Відповіді без дрібного шрифту.</h2></div><div className="faq-list">{FAQS.map(([question, answer], index) => <button type="button" key={question} onClick={() => setActiveFaq(activeFaq === index ? -1 : index)} className={activeFaq === index ? 'open' : ''}><div><strong>{question}</strong>{activeFaq === index && <p>{answer}</p>}</div><ChevronRight size={18} /></button>)}</div></section>
     </main>
 
-    <footer className="landing-footer"><a className="landing-brand" href="/landing">VIN<span>/</span>MATRIX</a><span>© {currentYear} · Система управління для автобізнесу</span><a href="/login">Увійти <ArrowRight size={15} /></a></footer>
+    <footer className="landing-footer"><a href="/landing"><VinLogo /></a><span>© {currentYear} · Система управління для автобізнесу</span><a href="/login">Увійти <ArrowRight size={15} /></a></footer>
   </div>;
 }
 

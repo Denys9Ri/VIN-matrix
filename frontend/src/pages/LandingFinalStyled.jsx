@@ -10,6 +10,7 @@ import './FinalMarketingAll.css';
 import './FinalLandingFix.css';
 import './FinalMobilePolish.css';
 import './FinalMobileDemoExtra.css';
+import './FinalLogoPolish.css';
 
 export function DemoTour() {
   return <><FinalDemoTour /><FinalMobileDemoPortal /></>;

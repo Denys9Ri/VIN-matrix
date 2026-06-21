@@ -1,0 +1,84 @@
+/* Give the mobile system preview the same light, floating presence as desktop. */
+@media (max-width: 680px) {
+  .vfh-preview {
+    position: relative;
+    padding: 9px 6px 22px;
+    perspective: 1100px;
+  }
+
+  .vfh-preview::before {
+    position: absolute;
+    z-index: -2;
+    right: -18%;
+    bottom: -4%;
+    left: -18%;
+    height: 58%;
+    border-radius: 50%;
+    background:
+      repeating-linear-gradient(90deg, rgba(118, 232, 255, .17) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(0deg, rgba(118, 232, 255, .13) 0 1px, transparent 1px 28px),
+      radial-gradient(ellipse at center, rgba(58, 191, 255, .28), transparent 68%);
+    content: '';
+    opacity: .78;
+    transform: perspective(700px) rotateX(65deg) translateY(35%);
+    mask-image: radial-gradient(ellipse at center, #000 4%, rgba(0, 0, 0, .72) 47%, transparent 74%);
+    animation: vfhFloor 7.2s ease-in-out infinite;
+  }
+
+  .vfh-preview::after {
+    position: absolute;
+    z-index: -1;
+    top: 12%;
+    right: 8%;
+    bottom: 10%;
+    left: 8%;
+    border: 1px solid rgba(137, 234, 255, .29);
+    border-radius: 50%;
+    box-shadow: 0 0 48px rgba(56, 171, 255, .16), inset 0 0 30px rgba(65, 201, 255, .08);
+    content: '';
+    animation: vfhHalo 7.2s ease-in-out infinite;
+  }
+
+  .vfh-caption {
+    position: relative;
+    z-index: 2;
+  }
+
+  .vfh-phone {
+    transform-style: preserve-3d;
+    will-change: transform;
+    animation: vfhFloat 6.6s cubic-bezier(.42, 0, .22, 1) infinite;
+  }
+
+  .vfh-phone::after {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px rgba(168, 242, 255, .18), 0 0 34px rgba(74, 167, 255, .19);
+    content: '';
+    pointer-events: none;
+  }
+}
+
+@keyframes vfhFloat {
+  0%, 100% { transform: perspective(1200px) rotateX(0deg) rotateY(-1deg) translate3d(0, 0, 0); }
+  30% { transform: perspective(1200px) rotateX(1.2deg) rotateY(1.7deg) translate3d(4px, -13px, 0); }
+  58% { transform: perspective(1200px) rotateX(-.8deg) rotateY(-1.8deg) translate3d(-4px, -8px, 0); }
+  79% { transform: perspective(1200px) rotateX(.7deg) rotateY(.9deg) translate3d(2px, -15px, 0); }
+}
+
+@keyframes vfhFloor {
+  0%, 100% { opacity: .5; transform: perspective(700px) rotateX(65deg) translateY(35%) scale(.96); }
+  50% { opacity: .95; transform: perspective(700px) rotateX(65deg) translateY(29%) scale(1.05); }
+}
+
+@keyframes vfhHalo {
+  0%, 100% { opacity: .34; transform: scale(.94) rotate(-4deg); }
+  50% { opacity: .86; transform: scale(1.07) rotate(3deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vfh-preview::before,
+  .vfh-preview::after,
+  .vfh-phone { animation: none !important; }
+}

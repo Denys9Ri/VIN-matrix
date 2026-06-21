@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MapPin, Star } from 'lucide-react';
+import { MapPin, Star, UserRound } from 'lucide-react';
 import './LandingTestimonials.css';
 
 const testimonials = [
@@ -28,7 +28,7 @@ function Testimonials() {
         </div>
         <blockquote>“{testimonial.text}”</blockquote>
         <footer>
-          <span className="vft-avatar">{testimonial.name.slice(0, 1).toUpperCase()}</span>
+          <span className="vft-avatar" aria-label={`Аватар ${testimonial.name}`}><UserRound size={22} strokeWidth={2.2} /></span>
           <div>
             <b>{testimonial.name}</b>
             <span>{testimonial.business} <i>•</i> <MapPin size={12} /> {testimonial.location}</span>

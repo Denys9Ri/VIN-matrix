@@ -18,6 +18,7 @@ from apps.core.billing_views import (
 )
 from apps.core.onboarding_views import OnboardingView
 from apps.core.system_health_views import SystemHealthView
+from apps.core.landing_views import LandingLeadView
 
 from apps.core.data_exchange_views import (
     OrdersExportView,
@@ -143,6 +144,7 @@ def openapi_schema(request):
             '/api/billing/admin/clients/': {'get': {'summary': 'SaaS billing clients overview'}},
             '/api/billing/admin/partner-payouts/': {'get': {'summary': 'Partner payout analytics'}},
             '/api/documents/visits/{visit_id}/{doc_type}/': {'get': {'summary': 'Render visit document'}},
+            '/api/landing/leads/': {'post': {'summary': 'Create public sales-demo request'}},
         },
     })
 
@@ -175,6 +177,7 @@ urlpatterns = [
 
     path('api/logout/', LogoutView.as_view(), name='logout'),
     path('api/register/', RegisterView.as_view(), name='register'),
+    path('api/landing/leads/', LandingLeadView.as_view(), name='landing-leads'),
     path('api/onboarding/', OnboardingView.as_view(), name='onboarding'),
     path('api/system/health/', SystemHealthView.as_view(), name='system-health'),
 

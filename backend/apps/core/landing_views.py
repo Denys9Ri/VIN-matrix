@@ -8,6 +8,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .partner_views import is_platform_admin
+
 logger = logging.getLogger(__name__)
 
 PHONE_DIGITS = re.compile(r"\D+")
@@ -54,10 +56,44 @@ def _client_ip(request):
 
 
 class LandingLeadView(APIView):
-    """Accept a concise sales-demo request from the public landing page."""
+    """Accept public demo requests and expose the lead inbox to the platform admin."""
 
     permission_classes = [AllowAny]
-    authentication_classes = []
+
+    def get(self, request):
+        if not is_platform_admin(request.user):
+            return Response({'error': 'Доступ лише для адміністратора.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            _create_lead_table()
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    SELECT id, name, phone, business_type, team_size, source, created_at
+                    FROM core_landing_lead
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 200
+                    '''
+                )
+                rows = cursor.fetchall()
+        except Exception:
+            logger.exception('Landing leads could not be loaded')
+            return Response({'error': 'Не вдалося завантажити заявки.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        return Response({
+            'results': [
+                {
+                    'id': row[0],
+                    'name': row[1],
+                    'phone': row[2],
+                    'business_type': row[3],
+                    'team_size': row[4],
+                    'source': row[5],
+                    'created_at': row[6],
+                }
+                for row in rows
+            ],
+            'count': len(rows),
+        })
 
     def post(self, request):
         ip = _client_ip(request)
@@ -101,9 +137,6 @@ class LandingLeadView(APIView):
             )
 
         return Response(
-            {
-                'ok': True,
-                'message': 'Заявку прийнято. Ми підготуємо демо під ваш тип бізнесу.'
-            },
+            {'ok': True, 'message': 'Заявку прийнято. Ми підготуємо демо під ваш тип бізнесу.'},
             status=status.HTTP_201_CREATED,
         )

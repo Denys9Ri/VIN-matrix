@@ -1,0 +1,189 @@
+/* Final mobile polish. This file is imported last on the landing page. */
+
+/* Keep the primary actions above the preview on wide screens too. */
+.vf-hero {
+  isolation: isolate;
+}
+
+.vf-hero-copy {
+  z-index: 12 !important;
+}
+
+.vf-hero .vf-demo-link,
+.vf-hero .vf-register-cta {
+  position: relative;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.vf-hero .vf-aerial-stage {
+  z-index: 2;
+}
+
+@media (max-width: 900px) {
+  .vf-header {
+    min-height: 66px;
+    padding: 0 16px;
+  }
+
+  .vf-header nav {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 16px;
+    z-index: 100;
+    display: none !important;
+    width: min(280px, calc(100vw - 32px));
+    padding: 8px;
+    border: 1px solid rgba(121, 161, 226, .32);
+    border-radius: 14px;
+    background: #101f3b;
+    box-shadow: 0 18px 38px rgba(2, 10, 31, .34);
+  }
+
+  .vf-header nav.open {
+    display: flex !important;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .vf-header nav a {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 13px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: #e4efff;
+    background: rgba(255, 255, 255, .035);
+    font-size: 12px;
+  }
+
+  .vf-header nav a:hover,
+  .vf-header nav a:focus-visible {
+    border-color: rgba(126, 193, 255, .35);
+    background: rgba(81, 130, 236, .2);
+  }
+
+  .vf-menu {
+    display: inline-flex !important;
+    width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(176, 205, 250, .18);
+    border-radius: 9px;
+  }
+
+  .vf-header-actions .vf-login {
+    display: none !important;
+  }
+
+  .vf-header-actions .vf-register-cta {
+    padding: 10px 12px;
+    font-size: 10px;
+  }
+
+  /* A full desktop dashboard cannot be squeezed into a phone width.
+     Replace the cropped preview with a clean, focused hero. */
+  .vf-hero {
+    display: block !important;
+    width: min(100% - 24px, 760px);
+    min-height: 0;
+    margin-top: 16px;
+    padding: 34px 22px 30px;
+    border-radius: 18px;
+  }
+
+  .vf-hero-copy {
+    max-width: 560px;
+  }
+
+  .vf-aerial-stage {
+    display: none !important;
+  }
+
+  .vf-hero h1 {
+    max-width: 540px;
+    font-size: clamp(38px, 10vw, 52px) !important;
+    line-height: 1.06 !important;
+  }
+
+  .vf-hero-copy > p {
+    max-width: 520px;
+    margin-top: 22px;
+  }
+
+  .vf-hero-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    max-width: 360px;
+    margin-top: 25px;
+  }
+
+  .vf-hero-actions .vf-register-cta,
+  .vf-hero-actions .vf-demo-link {
+    width: 100%;
+    min-height: 48px;
+    justify-content: center;
+  }
+
+  .vf-hero-note {
+    max-width: 360px;
+    align-items: flex-start;
+    margin-top: 19px;
+    line-height: 1.5;
+  }
+
+  .vf-hero:before {
+    right: -330px;
+    bottom: -390px;
+    opacity: .52;
+  }
+
+  .vf-business-strip {
+    width: min(100% - 24px, 760px);
+    justify-content: flex-start;
+    gap: 14px;
+    margin-top: 14px;
+    padding: 13px 16px;
+    overflow-x: auto;
+    border-radius: 12px;
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 430px) {
+  .vf-header {
+    padding: 0 12px;
+  }
+
+  .vf-header .vf-logo {
+    font-size: 20px;
+  }
+
+  .vf-header-actions {
+    gap: 6px;
+  }
+
+  .vf-header-actions .vf-register-cta {
+    padding: 9px 10px;
+    font-size: 9px;
+  }
+
+  .vf-hero {
+    width: calc(100% - 20px);
+    padding: 30px 18px 26px;
+  }
+
+  .vf-hero h1 {
+    font-size: clamp(36px, 10.4vw, 46px) !important;
+    letter-spacing: -0.052em !important;
+  }
+
+  .vf-hero-copy > p {
+    font-size: 12px;
+    line-height: 1.65;
+  }
+}

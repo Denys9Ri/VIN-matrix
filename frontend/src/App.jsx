@@ -26,6 +26,7 @@ import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
 import AttentionAction from './pages/AttentionAction';
 import LandingRoute, { DemoTour } from './pages/Landing';
+import LandingLeads from './pages/LandingLeads';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import ActivityDock from './components/activity/ActivityDock';
@@ -151,6 +152,7 @@ function App() {
           <Route path="partner-clients" element={<PartnerClients />} />
           <Route path="partners" element={<Partners />} />
           <Route path="complexes" element={<Complexes />} />
+          <Route path="sales-leads" element={<LandingLeads />} />
           <Route path="crm" element={<CRMByBusinessType />} />
           <Route path="crm/clients" element={<CRMByBusinessType />} />
           <Route path="crm/:tab" element={<CRMByBusinessType />} />

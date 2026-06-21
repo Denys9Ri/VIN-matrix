@@ -1,0 +1,295 @@
+/*
+  Aerial Interface System
+  The public product pages are intentionally cinematic. The lead inbox shares the
+  same depth language, but keeps motion restrained so it remains a practical work screen.
+*/
+
+:root {
+  --aerial-blue: #4a8cff;
+  --aerial-cyan: #8eeeff;
+  --aerial-shadow: 0 20px 44px rgba(7, 21, 54, .18), 0 6px 12px rgba(33, 90, 197, .08);
+  --aerial-text-shadow: 0 2px 0 rgba(255,255,255,.08), 0 12px 28px rgba(6, 18, 48, .28);
+}
+
+/* ── shared floating language for landing and demo ── */
+.landing-page .vin-logo,
+.landing-demo-page .vin-logo {
+  filter: drop-shadow(0 6px 12px rgba(0,0,0,.24));
+  animation: aerialLogo 7.4s ease-in-out infinite;
+}
+
+.landing-page .landing-hero h1,
+.landing-page .landing-section-heading h2,
+.landing-page .landing-showcase-copy h2,
+.landing-page .landing-request-copy h2,
+.landing-demo-page .demo-intro h1 {
+  text-shadow: var(--aerial-text-shadow);
+}
+
+.landing-page .landing-hero h1 em,
+.landing-demo-page .demo-intro h1 em {
+  text-shadow: 0 0 18px rgba(133, 238, 255, .28), 0 14px 30px rgba(6, 28, 86, .22);
+}
+
+.landing-page .landing-hero-actions a,
+.landing-page .landing-nav-actions > a,
+.landing-page .landing-price-card > a,
+.landing-page .landing-request-copy > a,
+.landing-demo-page .landing-demo-header > a:last-child,
+.landing-demo-page .demo-frame-caption > a {
+  transform: translateZ(0);
+  box-shadow: 0 10px 22px rgba(11, 43, 112, .18);
+  transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease, filter .25s ease;
+}
+
+.landing-page .landing-hero-actions a:hover,
+.landing-page .landing-nav-actions > a:hover,
+.landing-page .landing-price-card > a:hover,
+.landing-page .landing-request-copy > a:hover,
+.landing-demo-page .landing-demo-header > a:last-child:hover,
+.landing-demo-page .demo-frame-caption > a:hover {
+  transform: translateY(-4px) translateZ(12px);
+  box-shadow: 0 18px 32px rgba(8, 41, 113, .29), 0 0 18px rgba(112, 226, 255, .16);
+  filter: brightness(1.06);
+}
+
+.landing-page .landing-strip,
+.landing-page .landing-price-card,
+.landing-page .landing-request,
+.landing-page .landing-showcase,
+.landing-demo-page .demo-frame-wrap .product-frame {
+  box-shadow: var(--aerial-shadow);
+}
+
+.landing-page .landing-price-card {
+  animation: aerialCardOne 8.8s ease-in-out infinite;
+}
+
+.landing-page .landing-request {
+  animation: aerialCardTwo 10.6s ease-in-out infinite;
+}
+
+.landing-page .landing-showcase {
+  animation: aerialCardThree 11.4s ease-in-out infinite;
+}
+
+.landing-page .landing-feature-list article,
+.landing-page .faq-list button {
+  transition: transform .26s cubic-bezier(.2,.8,.2,1), filter .26s ease, background .26s ease;
+}
+
+.landing-page .landing-feature-list article:hover,
+.landing-page .faq-list button:hover {
+  transform: translateX(9px) translateY(-2px);
+  filter: drop-shadow(0 12px 18px rgba(32, 74, 151, .12));
+}
+
+/* ── sales-leads: same air and depth, restrained for real work ── */
+.aerial-leads-page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 90% 6%, rgba(61, 132, 255, .14), transparent 28%),
+    radial-gradient(circle at 7% 90%, rgba(22, 190, 208, .10), transparent 26%),
+    #f4f7fc !important;
+}
+
+.aerial-leads-page::before {
+  position: absolute;
+  z-index: -2;
+  top: -15%;
+  right: -6%;
+  width: 54%;
+  height: 82%;
+  border: 1px solid rgba(54, 118, 228, .12);
+  border-radius: 50%;
+  content: '';
+  box-shadow: 0 0 0 55px rgba(54, 118, 228, .025), 0 0 0 110px rgba(54, 118, 228, .018);
+  animation: aerialOrb 14s ease-in-out infinite;
+}
+
+.aerial-leads-page::after {
+  position: absolute;
+  z-index: -1;
+  right: -12%;
+  bottom: -35%;
+  width: 78%;
+  height: 58%;
+  content: '';
+  opacity: .52;
+  background:
+    repeating-linear-gradient(90deg, rgba(50, 113, 225, .07) 0 1px, transparent 1px 36px),
+    repeating-linear-gradient(0deg, rgba(45, 121, 231, .06) 0 1px, transparent 1px 36px);
+  transform: perspective(850px) rotateX(65deg) rotateZ(-3deg);
+  mask-image: radial-gradient(ellipse at center, #000 0%, rgba(0,0,0,.72) 42%, transparent 74%);
+  animation: aerialGrid 12s ease-in-out infinite;
+}
+
+.aerial-leads-shell { position: relative; }
+
+.aerial-leads-header h1 {
+  letter-spacing: -.055em !important;
+  text-shadow: 0 9px 22px rgba(22, 50, 103, .13);
+}
+
+.aerial-leads-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #2e66ed !important;
+}
+
+.aerial-leads-kicker::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 3px;
+  content: '';
+  background: #51dffa;
+  box-shadow: 0 0 11px rgba(81,223,250,.8);
+}
+
+.aerial-leads-action,
+.aerial-leads-stat,
+.aerial-leads-table,
+.aerial-leads-empty,
+.aerial-leads-error {
+  border-color: rgba(211, 224, 241, .95) !important;
+  box-shadow: 0 15px 29px rgba(25, 63, 129, .09), 0 3px 8px rgba(25, 63, 129, .05) !important;
+}
+
+.aerial-leads-action {
+  position: relative;
+  overflow: hidden;
+  transition: transform .22s ease, box-shadow .22s ease !important;
+}
+
+.aerial-leads-action::after {
+  position: absolute;
+  top: -40%;
+  bottom: -40%;
+  left: -28%;
+  width: 14%;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(130, 215, 255, .55), transparent);
+  transform: skewX(-18deg);
+  animation: aerialButtonSweep 8.5s ease-in-out infinite;
+}
+
+.aerial-leads-action:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 21px 35px rgba(28, 70, 147, .15), 0 0 17px rgba(70, 147, 255, .13) !important;
+}
+
+.aerial-leads-stat {
+  position: relative;
+  overflow: hidden;
+  transition: transform .28s cubic-bezier(.2,.8,.2,1), box-shadow .28s ease;
+}
+
+.aerial-leads-stat:nth-child(1) { animation: aerialStatOne 8s ease-in-out infinite; }
+.aerial-leads-stat:nth-child(2) { animation: aerialStatTwo 8.8s ease-in-out infinite; }
+.aerial-leads-stat:nth-child(3) { animation: aerialStatThree 9.6s ease-in-out infinite; }
+
+.aerial-leads-stat::before {
+  position: absolute;
+  top: -26px;
+  right: -22px;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  content: '';
+  opacity: .14;
+  background: #5ca5ff;
+}
+
+.aerial-leads-stat:hover { transform: translateY(-6px); box-shadow: 0 24px 42px rgba(27, 71, 151, .16) !important; }
+
+.aerial-leads-table { backdrop-filter: blur(10px); }
+.aerial-leads-table article {
+  transition: transform .22s ease, background .22s ease, box-shadow .22s ease;
+}
+.aerial-leads-table article:hover {
+  position: relative;
+  z-index: 2;
+  background: linear-gradient(90deg, rgba(240, 246, 255, .96), rgba(255,255,255,.96));
+  transform: translateX(5px) translateY(-1px);
+  box-shadow: 0 11px 23px rgba(40, 83, 158, .08);
+}
+
+.aerial-leads-table a:hover { filter: drop-shadow(0 4px 7px rgba(51, 95, 177, .2)); }
+
+@keyframes aerialLogo {
+  0%,100% { translate: 0 0; filter: drop-shadow(0 6px 12px rgba(0,0,0,.24)); }
+  50% { translate: 0 -2px; filter: drop-shadow(0 12px 16px rgba(0,0,0,.30)); }
+}
+
+@keyframes aerialCardOne {
+  0%,100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+
+@keyframes aerialCardTwo {
+  0%,100% { translate: 0 0; }
+  52% { translate: 0 -4px; }
+}
+
+@keyframes aerialCardThree {
+  0%,100% { translate: 0 0; }
+  48% { translate: 0 -6px; }
+}
+
+@keyframes aerialOrb {
+  0%,100% { transform: translate3d(0,0,0) scale(1); opacity: .55; }
+  50% { transform: translate3d(-26px, 18px, 0) scale(1.06); opacity: .95; }
+}
+
+@keyframes aerialGrid {
+  0%,100% { opacity: .30; translate: 0 0; }
+  50% { opacity: .66; translate: -17px -9px; }
+}
+
+@keyframes aerialButtonSweep {
+  0%, 64% { transform: translateX(0) skewX(-18deg); opacity: 0; }
+  68% { opacity: .85; }
+  82% { transform: translateX(850%) skewX(-18deg); opacity: .58; }
+  90%,100% { opacity: 0; }
+}
+
+@keyframes aerialStatOne {
+  0%,100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+
+@keyframes aerialStatTwo {
+  0%,100% { translate: 0 -2px; }
+  50% { translate: 0 -7px; }
+}
+
+@keyframes aerialStatThree {
+  0%,100% { translate: 0 0; }
+  50% { translate: 0 -4px; }
+}
+
+@media (max-width: 680px) {
+  .landing-page .landing-price-card,
+  .landing-page .landing-request,
+  .landing-page .landing-showcase { animation: none; }
+  .aerial-leads-page::before { width: 105%; right: -45%; }
+  .aerial-leads-page::after { width: 135%; right: -54%; }
+  .aerial-leads-stat { animation: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-page .vin-logo,
+  .landing-page .landing-price-card,
+  .landing-page .landing-request,
+  .landing-page .landing-showcase,
+  .aerial-leads-page::before,
+  .aerial-leads-page::after,
+  .aerial-leads-action::after,
+  .aerial-leads-stat { animation: none !important; }
+}

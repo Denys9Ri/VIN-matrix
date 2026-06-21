@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, Check, ChevronRight, Play, ClipboardCheck, Gauge, Menu, PackageCheck, ShieldCheck, Sparkles, X } from 'lucide-react';
+import api from '../api/axios';
 import './Landing.css';
 
 const demoRows = [
@@ -62,18 +63,26 @@ function LeadForm() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const update = (key, value) => setForm((state) => ({ ...state, [key]: value }));
+
   const submit = async (event) => {
     event.preventDefault();
-    if (!form.name.trim() || !form.phone.trim()) { setError('Залиш ім’я та номер телефону — цього достатньо, щоб почати.'); return; }
-    setSending(true); setError('');
+    if (!form.name.trim() || !form.phone.trim()) {
+      setError('Залиш ім’я та номер телефону — цього достатньо, щоб почати.');
+      return;
+    }
+    setSending(true);
+    setError('');
     try {
-      const response = await fetch('/api/landing/leads/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
-      if (!response.ok) throw new Error('request failed');
+      const response = await api.post('/api/landing/leads/', form);
+      if (!response.data?.ok) throw new Error('lead request was not accepted');
       setSent(true);
-    } catch {
-      setError('Форма ще не підключена до сервера. Збережи контакт і передай його менеджеру після deploy backend.');
-    } finally { setSending(false); }
+    } catch (requestError) {
+      setError(requestError?.response?.data?.error || 'Не вдалося надіслати заявку. Спробуйте ще раз трохи пізніше.');
+    } finally {
+      setSending(false);
+    }
   };
+
   if (sent) return <div className="vm-lead-success"><Sparkles size={28} /><h3>Заявку прийнято</h3><p>Підготуємо демо під твій тип бізнесу та покажемо систему на живому сценарії.</p></div>;
   return <form className="vm-lead-form" onSubmit={submit}>
     <label><span>Як до тебе звертатись</span><input value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Ім’я" /></label>
@@ -95,7 +104,7 @@ function DemoTour() {
     ['Склад', 'Ти бачиш резерви та маржу раніше, ніж менеджер пообіцяє деталь, якої немає.'],
     ['Аналітика', 'Система не просто зберігає дії. Вона показує, де втрачаються гроші та час.'],
   ];
-  return <section className="vm-demo-page"><div className="vm-demo-grid" /><header><a href="/landing" className="vm-wordmark">VIN<span>/</span>matrix</a><a className="vm-demo-login" href="/login">Увійти в систему <ArrowUpRight size={15} /></a></header><main><p className="vm-kicker">ІНТЕРАКТИВНЕ ДЕМО</p><h1>Побач, що відбувається <em>після</em> хаосу.</h1><div className="vm-demo-layout"><div className="vm-demo-nav">{slides.map(([title], index) => <button type="button" key={title} onClick={() => setActive(index)} className={index === active ? 'active' : ''}><span>0{index + 1}</span>{title}</button>)}</div><div className="vm-demo-stage"><DashboardPreview /><div className="vm-demo-copy"><span>0{active + 1} / 03</span><h2>{slides[active][0]}</h2><p>{slides[active][1]}</p><a href="#request">Хочу такий робочий простір <ArrowDownRight size={18} /></a></div></div></div></main></section>;
+  return <section className="vm-demo-page"><div className="vm-demo-grid" /><header><a href="/landing" className="vm-wordmark">VIN<span>/</span>matrix</a><a className="vm-demo-login" href="/login">Увійти в систему <ArrowUpRight size={15} /></a></header><main><p className="vm-kicker">ІНТЕРАКТИВНЕ ДЕМО</p><h1>Побач, що відбувається <em>після</em> хаосу.</h1><div className="vm-demo-layout"><div className="vm-demo-nav">{slides.map(([title], index) => <button type="button" key={title} onClick={() => setActive(index)} className={index === active ? 'active' : ''}><span>0{index + 1}</span>{title}</button>)}</div><div className="vm-demo-stage"><DashboardPreview /><div className="vm-demo-copy"><span>0{active + 1} / 03</span><h2>{slides[active][0]}</h2><p>{slides[active][1]}</p><a href="/landing#request">Хочу такий робочий простір <ArrowDownRight size={18} /></a></div></div></div></main></section>;
 }
 
 export function Landing() {

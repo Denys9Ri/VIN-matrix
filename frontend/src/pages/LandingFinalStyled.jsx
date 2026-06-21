@@ -12,6 +12,7 @@ import './FinalLandingFix.css';
 import './FinalMobilePolish.css';
 import './FinalMobileDemoExtra.css';
 import './FinalLogoPolish.css';
+import './FinalMobileHeroFloat.css';
 
 export function DemoTour() {
   return <><FinalDemoTour /><FinalMobileDemoPortal /></>;

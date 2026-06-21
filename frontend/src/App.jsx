@@ -25,6 +25,8 @@ import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
 import AttentionAction from './pages/AttentionAction';
+import MarketingLanding from './pages/MarketingLanding';
+import DemoWorkspace from './pages/DemoWorkspace';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import ActivityDock from './components/activity/ActivityDock';
@@ -71,7 +73,7 @@ const ProtectedRoute = ({ children }) => {
     checkAccess();
   }, [token, location.pathname]);
 
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token) return <Navigate to="/landing" replace />;
   if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Готуємо робочий простір...</div>;
 
   const isAllowedRoute = allowedWhenBlocked.some((path) => location.pathname === path || location.pathname.startsWith(path + '/'));
@@ -125,6 +127,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/landing" element={<MarketingLanding />} />
+        <Route path="/demo" element={<DemoWorkspace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterOnboarding />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />

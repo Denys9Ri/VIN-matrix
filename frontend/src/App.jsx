@@ -27,6 +27,7 @@ import SupplierOrders from './pages/SupplierOrders';
 import AttentionAction from './pages/AttentionAction';
 import LandingRoute, { DemoTour } from './pages/LandingFinalStyled';
 import LandingLeads from './pages/LandingLeads';
+import SolutionSeoPage from './pages/SolutionSeoPage';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
 import ActivityDock from './components/activity/ActivityDock';
@@ -129,6 +130,12 @@ function App() {
       <Routes>
         <Route path="/landing" element={<LandingRoute />} />
         <Route path="/demo" element={<DemoTour />} />
+        <Route path="/crm-dlya-sto" element={<SolutionSeoPage slug="crm-dlya-sto" />} />
+        <Route path="/programma-dlya-avtoservisu" element={<SolutionSeoPage slug="programma-dlya-avtoservisu" />} />
+        <Route path="/programma-dlya-shynomontazhu" element={<SolutionSeoPage slug="programma-dlya-shynomontazhu" />} />
+        <Route path="/oblik-avtozapchastyn" element={<SolutionSeoPage slug="oblik-avtozapchastyn" />} />
+        <Route path="/sklad-ta-zakupky-avtozapchastyn" element={<SolutionSeoPage slug="sklad-ta-zakupky-avtozapchastyn" />} />
+        <Route path="/naryad-zamovlennya-sto" element={<SolutionSeoPage slug="naryad-zamovlennya-sto" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterOnboarding />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />

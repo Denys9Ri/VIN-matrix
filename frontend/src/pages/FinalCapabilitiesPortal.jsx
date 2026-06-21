@@ -113,5 +113,31 @@ export default function FinalCapabilitiesPortal() {
     };
   }, []);
 
+  useEffect(() => {
+    const scrollToSection = (id) => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    const handleLandingLinkClick = (event) => {
+      if (!(event.target instanceof Element)) return;
+
+      const demoLink = event.target.closest('.vf-demo-link');
+      if (demoLink) {
+        event.preventDefault();
+        scrollToSection('demo');
+        return;
+      }
+
+      const capabilitiesLink = event.target.closest('.vf-header nav a[href="#features"]');
+      if (capabilitiesLink) {
+        event.preventDefault();
+        scrollToSection('capabilities');
+      }
+    };
+
+    document.addEventListener('click', handleLandingLinkClick);
+    return () => document.removeEventListener('click', handleLandingLinkClick);
+  }, []);
+
   return target ? createPortal(<CapabilityCatalog />, target) : null;
 }

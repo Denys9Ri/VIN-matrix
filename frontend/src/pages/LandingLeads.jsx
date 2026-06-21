@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, Inbox, Phone, RefreshCw, UsersRound } from 'lucide-react';
 import api from '../api/axios';
+import './AerialInterface.css';
 
 const formatDate = (value) => {
   if (!value) return '—';

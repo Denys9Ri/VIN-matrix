@@ -6,6 +6,7 @@ import './FinalScenesVisits.css';
 import './FinalScenesData.css';
 import './FinalMarketingAll.css';
 import './FinalLandingFix.css';
+import './FinalMobilePolish.css';
 
 export function DemoTour() {
   return <FinalDemoTour />;

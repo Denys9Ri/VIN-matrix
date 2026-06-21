@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Check, ChevronRight, PlayCircle, ClipboardCheck, Gauge, Layers3, Menu, PackageCheck, ShieldCheck, Sparkles, Wrench, X } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Check, ChevronRight, Play, ClipboardCheck, Gauge, Menu, PackageCheck, ShieldCheck, Sparkles, X } from 'lucide-react';
 import './Landing.css';
 
 const demoRows = [
@@ -61,7 +61,6 @@ function LeadForm() {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-
   const update = (key, value) => setForm((state) => ({ ...state, [key]: value }));
   const submit = async (event) => {
     event.preventDefault();
@@ -75,9 +74,7 @@ function LeadForm() {
       setError('Форма ще не підключена до сервера. Збережи контакт і передай його менеджеру після deploy backend.');
     } finally { setSending(false); }
   };
-
   if (sent) return <div className="vm-lead-success"><Sparkles size={28} /><h3>Заявку прийнято</h3><p>Підготуємо демо під твій тип бізнесу та покажемо систему на живому сценарії.</p></div>;
-
   return <form className="vm-lead-form" onSubmit={submit}>
     <label><span>Як до тебе звертатись</span><input value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Ім’я" /></label>
     <label><span>Телефон</span><input value={form.phone} onChange={(event) => update('phone', event.target.value)} placeholder="+38 (0__) ___ __ __" inputMode="tel" /></label>
@@ -109,7 +106,7 @@ export function Landing() {
     <div className="vm-grid-surface" />
     <nav className="vm-nav"><a className="vm-wordmark" href="/landing">VIN<span>/</span>matrix</a><div className={`vm-nav-links ${menu ? 'open' : ''}`}><a href="#workflows">Можливості</a><a href="#tariff">Тариф</a><a href="#request">Демо</a><a href="/login">Увійти</a></div><button type="button" aria-label="Меню" className="vm-menu" onClick={() => setMenu((state) => !state)}>{menu ? <X /> : <Menu />}</button><a href="#request" className="vm-nav-cta">Запустити демо <ArrowUpRight size={16} /></a></nav>
     <main>
-      <section className="vm-hero"><div className="vm-hero-copy"><p className="vm-kicker">ОПЕРАЦІЙНА СИСТЕМА ДЛЯ АВТОБІЗНЕСУ</p><h1>Менше “де це?”, більше <em>“готово”</em>.</h1><p className="vm-hero-text">VIN-matrix збирає замовлення, склад, клієнтів, оплату та команду в один робочий контур — без Excel, хаосу в чатах і втрат на деталях.</p><div className="vm-hero-actions"><a className="vm-cta vm-cta-primary" href="#request">Отримати демо <ArrowUpRight size={18} /></a><a className="vm-cta vm-cta-quiet" href="/demo"><PlayCircle size={18} /> Подивитись у дії</a></div><div className="vm-hero-proof"><div><b>01</b><span>екран<br />контролю</span></div><div><b>14</b><span>днів<br />на старт</span></div><div><b>∞</b><span>порядку<br />в процесах</span></div></div></div><div className="vm-hero-product"><div className="vm-orbit vm-orbit-a" /><div className="vm-orbit vm-orbit-b" /><DashboardPreview /><div className="vm-stamp"><span>СТВОРЕНО ДЛЯ</span><b>СТО · СКЛАД · CRM</b></div></div></section>
+      <section className="vm-hero"><div className="vm-hero-copy"><p className="vm-kicker">ОПЕРАЦІЙНА СИСТЕМА ДЛЯ АВТОБІЗНЕСУ</p><h1>Менше “де це?”, більше <em>“готово”</em>.</h1><p className="vm-hero-text">VIN-matrix збирає замовлення, склад, клієнтів, оплату та команду в один робочий контур — без Excel, хаосу в чатах і втрат на деталях.</p><div className="vm-hero-actions"><a className="vm-cta vm-cta-primary" href="#request">Отримати демо <ArrowUpRight size={18} /></a><a className="vm-cta vm-cta-quiet" href="/demo"><Play size={18} /> Подивитись у дії</a></div><div className="vm-hero-proof"><div><b>01</b><span>екран<br />контролю</span></div><div><b>14</b><span>днів<br />на старт</span></div><div><b>∞</b><span>порядку<br />в процесах</span></div></div></div><div className="vm-hero-product"><div className="vm-orbit vm-orbit-a" /><div className="vm-orbit vm-orbit-b" /><DashboardPreview /><div className="vm-stamp"><span>СТВОРЕНО ДЛЯ</span><b>СТО · СКЛАД · CRM</b></div></div></section>
       <section className="vm-marquee"><div>СТО <i>✳</i> МАГАЗИН ЗАПЧАСТИН <i>✳</i> ШИНОМОНТАЖ <i>✳</i> КЕРІВНИК <i>✳</i> МАЙСТЕР <i>✳</i> АДМІНІСТРАТОР <i>✳</i></div></section>
       <section id="workflows" className="vm-workflows"><div className="vm-section-side"><p className="vm-kicker">НЕ ЩЕ ОДНА CRM</p><h2>Робочий день без сліпих зон.</h2><p>Ти не купуєш десяток окремих програм. Ти отримуєш один зрозумілий маршрут: від першого дзвінка до оплати та повторного візиту.</p></div><div className="vm-flow-list">{workflows.map(({ number, icon: Icon, title, text }) => <article key={number} className="vm-flow"><span className="vm-flow-no">{number}</span><Icon size={27} /><div><h3>{title}</h3><p>{text}</p></div><ArrowDownRight className="vm-flow-arrow" size={22} /></article>)}</div></section>
       <section className="vm-proof-panel"><div className="vm-proof-copy"><p className="vm-kicker">ДЕМО НЕ ПОВИННО БУТИ СЛАЙДАМИ</p><h2>Покажи бізнесу його завтрашній робочий день.</h2><p>У демо — не порожній кабінет. Там є замовлення, клієнти, запчастини, оплати й задачі. Можна натискати, дивитися логіку та ставити незручні питання.</p><a className="vm-text-link" href="/demo">Відкрити інтерактивний тур <ArrowUpRight size={17} /></a></div><div className="vm-proof-numbers"><div><span>08</span><b>замовлень у роботі</b></div><div><span>36</span><b>позицій у резерві</b></div><div><span>₴184k</span><b>маржа за місяць</b></div></div></section>

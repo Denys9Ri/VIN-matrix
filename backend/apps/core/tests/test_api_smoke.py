@@ -45,3 +45,12 @@ class ApiSmokeTests(TestCase):
         response = self.client.get('/api/inventory/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
+
+    def test_public_landing_lead_is_accepted(self):
+        response = self.client.post(
+            '/api/landing/leads/',
+            {'name': 'Ірина', 'phone': '+380501112233', 'type': 'СТО', 'team': '4–10'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data['ok'])

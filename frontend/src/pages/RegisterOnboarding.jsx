@@ -5,9 +5,24 @@ import api from '../api/axios';
 
 const initialForm = { full_name: '', phone: '', email: '', company_name: '', referral_code: '', username: '', password: '' };
 
+function landingLeadDraft() {
+  try {
+    const raw = localStorage.getItem('vin_matrix_marketing_lead_draft');
+    if (!raw) return {};
+    const lead = JSON.parse(raw);
+    return {
+      full_name: String(lead.name || '').trim(),
+      phone: String(lead.phone || '').trim(),
+      company_name: lead.business === 'store' ? 'Магазин запчастин' : lead.business === 'both' ? 'СТО + магазин' : '',
+    };
+  } catch {
+    return {};
+  }
+}
+
 export default function RegisterOnboarding() {
   const navigate = useNavigate();
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(() => ({ ...initialForm, ...landingLeadDraft() }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -22,6 +37,7 @@ export default function RegisterOnboarding() {
       const auth = await api.post('/token/', { username: form.username, password: form.password });
       localStorage.setItem('access_token', auth.data.access);
       localStorage.setItem('refresh_token', auth.data.refresh);
+      localStorage.removeItem('vin_matrix_marketing_lead_draft');
       navigate('/onboarding', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'Не вдалося створити акаунт. Спробуйте ще раз.');

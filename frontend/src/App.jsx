@@ -25,7 +25,7 @@ import Complexes from './pages/Complexes';
 import CRM from './pages/CRM';
 import SupplierOrders from './pages/SupplierOrders';
 import AttentionAction from './pages/AttentionAction';
-import LandingRoute, { DemoTour } from './pages/Landing';
+import LandingRoute, { DemoTour } from './pages/LandingFinalStyled';
 import LandingLeads from './pages/LandingLeads';
 import VisitCrmBridge from './components/visits/VisitCrmBridge';
 import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';

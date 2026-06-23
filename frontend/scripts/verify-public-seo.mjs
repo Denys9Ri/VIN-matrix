@@ -13,6 +13,7 @@ const paths = [
   '/sklad-ta-zakupky-avtozapchastyn',
   '/naryad-zamovlennya-sto',
 ];
+const trustPaths = ['/contacts', '/privacy', '/terms'];
 
 function fail(message) {
   console.error(`SEO build check failed: ${message}`);
@@ -29,6 +30,7 @@ for (const path of paths) {
   if (!html.includes('<h1>')) fail(`static H1 is missing for ${path}`);
   if (!html.includes('application/ld+json')) fail(`structured data is missing for ${path}`);
   if (!html.includes('vin-static-enrichment')) fail(`helpful static content is missing for ${path}`);
+  if (!html.includes('vin-static-legal-footer')) fail(`trust links are missing for ${path}`);
   if (path !== '/' && !html.includes('vin-matrix-breadcrumb-jsonld')) fail(`breadcrumb markup is missing for ${path}`);
 }
 
@@ -47,9 +49,19 @@ if (robots.includes('Disallow: /login')) fail('robots.txt must not block pages t
 if (!notFound.includes('noindex,nofollow,noarchive')) fail('404 page must be noindex');
 if (!notFound.includes('Сторінку не знайдено')) fail('404 page content is missing');
 
-for (const path of paths) {
+for (const path of [...paths, ...trustPaths]) {
   const canonical = `${origin}${path === '/' ? '/' : path}`;
   if (!sitemap.includes(`<loc>${canonical}</loc>`)) fail(`sitemap is missing ${path}`);
 }
 
-console.log(`SEO build check passed for ${paths.length} public pages and the 404 page.`);
+for (const path of trustPaths) {
+  const file = join(distDir, path.slice(1), 'index.html');
+  if (!existsSync(file)) fail(`trust page is missing: ${path}`);
+  const html = readFileSync(file, 'utf8');
+  const canonical = `${origin}${path}`;
+  if (!html.includes(`rel="canonical" href="${canonical}"`)) fail(`trust page canonical is missing: ${path}`);
+  if (!html.includes('<h1>')) fail(`trust page H1 is missing: ${path}`);
+  if (!html.includes('RDmatrix Company')) fail(`trust page owner data is missing: ${path}`);
+}
+
+console.log(`SEO build check passed for ${paths.length} public pages, ${trustPaths.length} trust pages and the 404 page.`);

@@ -9,7 +9,26 @@ const LEGACY_API_ORIGINS = [
 
 const NEW_STORE_ORDER_PREFIX = 'NEW_STORE_ORDER::';
 const FALLBACK_PHONE = '0000000000';
-const DEFAULT_API_ORIGIN = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : LEGACY_API_ORIGINS[0]);
+const CONFIGURED_API_ORIGIN = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '';
+
+const getApiOrigin = () => {
+  const browserOrigin = typeof window !== 'undefined' ? window.location.origin : LEGACY_API_ORIGINS[0];
+  const candidate = CONFIGURED_API_ORIGIN || browserOrigin;
+
+  try {
+    const url = new URL(candidate, browserOrigin);
+    // A page served over HTTPS must never send credentials or API requests to HTTP.
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.protocol === 'http:') {
+      url.protocol = 'https:';
+      console.warn('VIN-matrix: insecure API URL was upgraded to HTTPS. Configure VITE_API_URL with an HTTPS API domain.');
+    }
+    return url.origin;
+  } catch {
+    return browserOrigin;
+  }
+};
+
+const DEFAULT_API_ORIGIN = getApiOrigin();
 
 const normalizeBaseUrl = (rawUrl) => {
   let url = String(rawUrl || DEFAULT_API_ORIGIN).trim();

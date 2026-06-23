@@ -1,0 +1,32 @@
+/* Keep the mobile hero demo at one reserved height so scene changes never move the page. */
+@media (max-width: 680px) {
+  .vf-hero .vf-demo-hero-frame {
+    height: 353px !important;
+    overflow: hidden !important;
+    contain: layout paint;
+  }
+
+  .vf-hero .vf-demo-hero-frame .vf-app-shell {
+    height: 320px !important;
+    min-height: 320px !important;
+    max-height: 320px !important;
+    overflow: hidden !important;
+  }
+
+  .vf-hero .vf-demo-hero-frame .vf-app-main,
+  .vf-hero .vf-demo-hero-frame .vf-app-content {
+    height: 278px !important;
+    min-height: 278px !important;
+    max-height: 278px !important;
+    overflow: hidden !important;
+  }
+
+  /* The dedicated phone preview already reserves its own fixed stage height. */
+  .vfh-stage,
+  .vfh-screen {
+    height: 395px;
+    min-height: 395px;
+    max-height: 395px;
+    overflow: hidden;
+  }
+}

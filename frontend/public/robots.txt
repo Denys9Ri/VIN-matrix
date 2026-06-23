@@ -21,4 +21,4 @@ Disallow: /partners
 Disallow: /complexes
 Disallow: /crm
 
-Sitemap: https://vin-matrix.com/sitemap.xml
+Sitemap: https://vin-matrix.com/sitemap.txt

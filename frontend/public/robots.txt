@@ -1,24 +1,4 @@
 User-agent: *
 Allow: /
 
-Disallow: /login
-Disallow: /register
-Disallow: /onboarding
-Disallow: /settings
-Disallow: /billing
-Disallow: /sales-leads
-Disallow: /search
-Disallow: /inventory
-Disallow: /visits
-Disallow: /attention
-Disallow: /clients
-Disallow: /analytics
-Disallow: /activity
-Disallow: /journal
-Disallow: /data
-Disallow: /partner-clients
-Disallow: /partners
-Disallow: /complexes
-Disallow: /crm
-
-Sitemap: https://vin-matrix.com/sitemap.txt
+Sitemap: https://vin-matrix.com/sitemap.xml

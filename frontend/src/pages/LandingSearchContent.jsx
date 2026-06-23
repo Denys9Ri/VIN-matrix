@@ -44,17 +44,32 @@ function SearchContent() {
       <div><b>Покажи процес, а не обіцянку.</b><span>У демо можна перемикати реальні сценарії: дошку візитів, скан техпаспорта, картку клієнта, склад і аналітику.</span></div>
       <a href="/demo">Відкрити демо <ArrowRight size={16} /></a>
     </div>
-    <nav className="vfs-legal-links" aria-label="Інформаційні сторінки">
-      <span>RDmatrix Company</span>
-      <a href="/contacts">Контакти</a>
-      <a href="/privacy">Політика конфіденційності</a>
-      <a href="/terms">Умови використання</a>
-    </nav>
+  </section>;
+}
+
+function LegalFooter() {
+  return <section className="vfs-legal-footer" aria-label="Інформація про компанію">
+    <div className="vfs-legal-footer__inner">
+      <div className="vfs-legal-footer__brand">
+        <span className="vfs-legal-footer__mark">R</span>
+        <div><strong>RDmatrix Company</strong><small>Розробник і власник VIN-matrix</small></div>
+      </div>
+      <nav className="vfs-legal-footer__links" aria-label="Правова інформація">
+        <a href="/contacts">Контакти</a>
+        <a href="/privacy">Конфіденційність</a>
+        <a href="/terms">Умови використання</a>
+      </nav>
+    </div>
+    <div className="vfs-legal-footer__bottom">
+      <span>© 2026 RDmatrix Company</span>
+      <span>Київ, Україна</span>
+    </div>
   </section>;
 }
 
 export default function LandingSearchContentPortal() {
   const [target, setTarget] = useState(null);
+  const [legalTarget, setLegalTarget] = useState(null);
 
   useEffect(() => {
     const footer = document.querySelector('.vf-footer');
@@ -71,5 +86,20 @@ export default function LandingSearchContentPortal() {
     };
   }, []);
 
-  return target ? createPortal(<SearchContent />, target) : null;
+  useEffect(() => {
+    const footer = document.querySelector('.vf-footer');
+    if (!footer || !footer.parentElement) return undefined;
+    let host = document.getElementById('vfs-legal-footer-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'vfs-legal-footer-host';
+      footer.insertAdjacentElement('afterend', host);
+    }
+    setLegalTarget(host);
+    return () => {
+      if (host?.parentElement) host.remove();
+    };
+  }, []);
+
+  return <>{target ? createPortal(<SearchContent />, target) : null}{legalTarget ? createPortal(<LegalFooter />, legalTarget) : null}</>;
 }

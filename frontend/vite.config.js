@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 function canonicalLandingLinks() {
   return {
     name: 'canonical-landing-links',
+    enforce: 'pre',
     transform(code, id) {
       if (!/\.jsx?$/.test(id)) return null;
       const transformed = code
@@ -15,5 +16,5 @@ function canonicalLandingLinks() {
 }
 
 export default defineConfig({
-  plugins: [react(), canonicalLandingLinks()],
+  plugins: [canonicalLandingLinks(), react()],
 });

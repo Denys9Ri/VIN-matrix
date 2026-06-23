@@ -48,11 +48,11 @@ function SearchContent() {
 }
 
 function LegalFooter() {
-  return <section className="vfs-legal-footer" aria-label="Інформація про компанію">
+  return <footer className="vfs-legal-footer" aria-label="Інформація про компанію">
     <div className="vfs-legal-footer__inner">
-      <div className="vfs-legal-footer__brand">
-        <span className="vfs-legal-footer__mark">R</span>
-        <div><strong>RDmatrix Company</strong><small>Розробник і власник VIN-matrix</small></div>
+      <div className="vfs-legal-footer__identity">
+        <strong>VIN-matrix</strong>
+        <span>© 2026 · RDmatrix Company</span>
       </div>
       <nav className="vfs-legal-footer__links" aria-label="Правова інформація">
         <a href="/contacts">Контакти</a>
@@ -60,11 +60,7 @@ function LegalFooter() {
         <a href="/terms">Умови використання</a>
       </nav>
     </div>
-    <div className="vfs-legal-footer__bottom">
-      <span>© 2026 RDmatrix Company</span>
-      <span>Київ, Україна</span>
-    </div>
-  </section>;
+  </footer>;
 }
 
 export default function LandingSearchContentPortal() {

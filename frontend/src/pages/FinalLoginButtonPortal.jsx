@@ -1,49 +1,45 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { LogIn } from 'lucide-react';
+import { useEffect } from 'react';
 import './FinalLoginButton.css';
 
-function openLogin(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  event.nativeEvent?.stopImmediatePropagation?.();
-  window.location.assign('/login');
-}
+const LOGIN_URL = 'https://vin-matrix.com/login';
 
 export default function FinalLoginButtonPortal() {
-  const [target, setTarget] = useState(null);
-
   useEffect(() => {
-    let host = null;
-    const attach = () => {
+    let loginLink = null;
+
+    const mountNativeLoginLink = () => {
       const actions = document.querySelector('.vf-page.vf-landing .vf-header-actions') || document.querySelector('.vf-header-actions');
       if (!actions) return;
 
-      let nextHost = actions.querySelector('#vf-new-login-host');
-      if (!nextHost) {
-        nextHost = document.createElement('span');
-        nextHost.id = 'vf-new-login-host';
-        actions.prepend(nextHost);
+      // The old landing link is removed. The replacement below is a regular browser anchor.
+      actions.querySelector('.vf-login')?.remove();
+
+      loginLink = actions.querySelector('#vf-direct-login');
+      if (!loginLink) {
+        loginLink = document.createElement('a');
+        loginLink.id = 'vf-direct-login';
+        loginLink.className = 'vf-direct-login';
+        loginLink.href = LOGIN_URL;
+        loginLink.setAttribute('aria-label', 'Увійти в VIN-matrix');
+        loginLink.innerHTML = '<span class="vf-direct-login-icon" aria-hidden="true">↪</span><span>Увійти</span>';
+        const register = actions.querySelector('.vf-register-cta');
+        actions.insertBefore(loginLink, register || null);
       }
-      host = nextHost;
-      setTarget(nextHost);
+
+      loginLink.style.pointerEvents = 'auto';
+      loginLink.style.position = 'relative';
+      loginLink.style.zIndex = '1000';
     };
 
-    attach();
-    const observer = new MutationObserver(attach);
+    mountNativeLoginLink();
+    const observer = new MutationObserver(mountNativeLoginLink);
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
       observer.disconnect();
-      if (host?.parentElement) host.remove();
+      loginLink?.remove();
     };
   }, []);
 
-  return target ? createPortal(
-    <button type="button" className="vf-new-login" onClick={openLogin} aria-label="Увійти в VIN-matrix">
-      <LogIn size={15} />
-      <span>Увійти</span>
-    </button>,
-    target,
-  ) : null;
+  return null;
 }

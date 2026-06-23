@@ -9,12 +9,31 @@
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="uk_UA" />
     <meta property="og:site_name" content="VIN-matrix" />
-    <meta property="og:title" content="VIN-matrix — CRM для СТО, шиномонтажу та магазину запчастин" />
+    <meta property="og:title" content="VIN-matrix — CRM для СТО, шиномонтажу та автозапчастин" />
     <meta property="og:description" content="Візити, клієнти, склад, закупки, документи, оплати, Нова пошта та аналітика в одному робочому просторі." />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="VIN-matrix — CRM для автобізнесу" />
     <meta name="twitter:description" content="Система управління для СТО, шиномонтажу та магазину автозапчастин." />
-    <title>VIN-matrix — CRM для СТО, шиномонтажу та магазину запчастин</title>
+    <title>VIN-matrix — CRM для СТО, шиномонтажу та автозапчастин</title>
+    <script>
+      (() => {
+        const origin = 'https://vin-matrix.com';
+        const path = window.location.pathname === '/landing' ? '/' : window.location.pathname;
+        const privatePrefixes = ['/login', '/register', '/onboarding', '/settings', '/billing', '/sales-leads', '/search', '/inventory', '/visits', '/attention', '/clients', '/analytics', '/activity', '/journal', '/data', '/partner-clients', '/partners', '/complexes', '/crm'];
+        const isPrivate = privatePrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+        const robots = document.querySelector('meta[name="robots"]');
+
+        if (isPrivate) {
+          robots?.setAttribute('content', 'noindex,nofollow,noarchive');
+          return;
+        }
+
+        const canonical = document.createElement('link');
+        canonical.rel = 'canonical';
+        canonical.href = `${origin}${path === '/' ? '/' : path}`;
+        document.head.appendChild(canonical);
+      })();
+    </script>
     <style>
       .bm-parts-badge {
         background: linear-gradient(90deg, #d71920 0 34%, #e5e7eb 34% 52%, #ffffff 52% 100%) !important;
@@ -22,9 +41,7 @@
         border: 1px solid #cbd5e1 !important;
         box-shadow: 0 4px 6px -1px rgba(148, 163, 184, 0.28), 0 2px 4px -2px rgba(148, 163, 184, 0.28) !important;
       }
-      .bm-parts-badge svg {
-        color: #0f172a !important;
-      }
+      .bm-parts-badge svg { color: #0f172a !important; }
     </style>
   </head>
   <body>
@@ -35,19 +52,14 @@
           const value = String(text || '').toUpperCase();
           return value.includes('BM-PARTS') || value.includes('BM PARTS') || value.includes('BM‑PARTS');
         };
-
         const applyBmBadgeStyle = () => {
           document.querySelectorAll('span, div').forEach((el) => {
             if (!isBmBadgeText(el.textContent)) return;
             const className = String(el.className || '');
-            const looksLikeBadge =
-              className.includes('rounded-lg') ||
-              className.includes('rounded-bl-xl') ||
-              className.includes('tracking-widest');
+            const looksLikeBadge = className.includes('rounded-lg') || className.includes('rounded-bl-xl') || className.includes('tracking-widest');
             if (looksLikeBadge) el.classList.add('bm-parts-badge');
           });
         };
-
         const observer = new MutationObserver(() => window.requestAnimationFrame(applyBmBadgeStyle));
         window.addEventListener('DOMContentLoaded', () => {
           applyBmBadgeStyle();

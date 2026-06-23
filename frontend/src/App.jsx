@@ -77,7 +77,7 @@ const ProtectedRoute = ({ children }) => {
     checkAccess();
   }, [token, location.pathname]);
 
-  if (location.pathname === '/') return <LandingRoute />;
+  if (location.pathname === '/') return token ? <Navigate to="/app" replace /> : <LandingRoute />;
   if (!token) return <Navigate to="/login" replace />;
   if (checking) return <PageLoader />;
 
@@ -149,6 +149,9 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<RegisterOnboarding />} />
           <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+          <Route path="/app" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+            <Route index element={<DashboardOnboarding />} />
+          </Route>
           <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
             <Route index element={<DashboardOnboarding />} />
             <Route path="search" element={<UniversalSearch />} />

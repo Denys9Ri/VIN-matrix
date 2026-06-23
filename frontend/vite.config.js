@@ -7,9 +7,7 @@ function canonicalLandingLinks() {
     enforce: 'pre',
     transform(code, id) {
       if (!/\.jsx?$/.test(id)) return null;
-      const transformed = code
-        .replaceAll('href="/landing"', 'href="/"')
-        .replaceAll("href='/landing'", "href='/'");
+      const transformed = code.replace(/href=(["'])\/landing((?:[?#][^"']*)?)\1/g, 'href=$1/$2$1');
       return transformed === code ? null : { code: transformed, map: null };
     },
   };

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow,noarchive" />
+  <meta name="theme-color" content="#0d1931" />
+  <title>Вхід у VIN-matrix</title>
+  <style>
+    :root{font-family:Manrope,Arial,sans-serif;background:#0d1931;color:#142645}*{box-sizing:border-box}body{min-height:100vh;margin:0;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 18% 15%,#1f5cc955,transparent 32%),radial-gradient(circle at 84% 82%,#0cb7c655,transparent 30%),#0d1931}.card{width:min(100%,430px);padding:38px;border-radius:28px;background:#fff;box-shadow:0 28px 78px #0208198c}.brand{text-align:center}.mark{display:grid;place-items:center;width:54px;height:54px;margin:0 auto 16px;border-radius:17px;background:linear-gradient(145deg,#3e7cff,#1957df);box-shadow:0 13px 29px #1553cb66;color:#fff;font-size:24px;font-weight:900}.logo{font-size:24px;font-weight:900;letter-spacing:-.07em}.logo b{color:#2865ef}.brand p{margin:7px 0 0;color:#7185a5;font-size:12px;font-weight:700}.error{display:none;margin:24px 0 0;padding:13px 14px;border-radius:13px;background:#fff0f1;color:#df3851;font-size:13px;font-weight:800}.error.show{display:block}form{display:grid;gap:13px;margin-top:28px}label{display:grid;gap:7px;color:#526984;font-size:11px;font-weight:800}input{width:100%;height:49px;border:2px solid #e9eff7;border-radius:13px;padding:0 14px;outline:none;background:#f9fbfe;color:#142645;font:700 14px Manrope,Arial,sans-serif}input:focus{border-color:#2e66ed;background:#fff}button{height:51px;margin-top:5px;border:0;border-radius:13px;color:#fff;background:#2e66ed;box-shadow:0 12px 22px #2e66ed50;font:900 13px Manrope,Arial,sans-serif;cursor:pointer}button:hover{background:#2558d9}button:disabled{cursor:wait;opacity:.72}.links{display:flex;justify-content:center;gap:8px;margin-top:20px;color:#7488a6;font-size:12px;font-weight:700}.links a{color:#2865ef;text-decoration:none;font-weight:900}.back{display:block;margin-top:24px;color:#7890ad;font-size:11px;font-weight:800;text-align:center;text-decoration:none}.back:hover{color:#2865ef}@media(max-width:460px){body{padding:16px}.card{padding:30px 22px;border-radius:23px}}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand"><div class="mark">V</div><div class="logo">VIN-<b>matrix</b></div><p>Система управління автобізнесом</p></div>
+    <div id="error" class="error" role="alert"></div>
+    <form id="login-form">
+      <label>Логін<input id="username" name="username" autocomplete="username" required /></label>
+      <label>Пароль<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
+      <button id="submit" type="submit">УВІЙТИ</button>
+    </form>
+    <div class="links"><span>Ще не з нами?</span><a href="/register">Зареєструвати бізнес</a></div>
+    <a class="back" href="https://vin-matrix.com/">← Повернутися на головну</a>
+  </main>
+  <script>
+    const form = document.getElementById('login-form');
+    const errorBox = document.getElementById('error');
+    const submit = document.getElementById('submit');
+    const api = 'https://api.vin-matrix.com/token/';
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      errorBox.classList.remove('show');
+      submit.disabled = true;
+      submit.textContent = 'ВХІД…';
+      try {
+        const response = await fetch(api, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: document.getElementById('username').value.trim(), password: document.getElementById('password').value }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.access) throw new Error(data.detail || 'Невірний логін або пароль');
+        localStorage.setItem('access_token', data.access);
+        if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
+        window.location.replace('https://vin-matrix.com/app');
+      } catch (error) {
+        errorBox.textContent = error.message || 'Не вдалося виконати вхід. Спробуйте ще раз.';
+        errorBox.classList.add('show');
+      } finally {
+        submit.disabled = false;
+        submit.textContent = 'УВІЙТИ';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -6,16 +6,19 @@ import './LandingSearchContent.css';
 const audiences = [
   {
     title: 'CRM для СТО',
+    href: '/crm-dlya-sto',
     text: 'Запис клієнта, дошка візитів, майстри, роботи, запчастини, наряд-замовлення, акт і оплата — в одному сценарії.',
     points: ['Планування зміни та пости', 'Історія клієнта й автомобіля', 'Документи без повторного введення'],
   },
   {
     title: 'Програма для шиномонтажу',
+    href: '/programma-dlya-shynomontazhu',
     text: 'Контролюй чергу, завантаження майстрів, послуги, оплату та повторні звернення в сезон без таблиць і повідомлень у чатах.',
     points: ['Швидкий запис', 'Контроль навантаження', 'Повторні візити й нагадування'],
   },
   {
     title: 'Облік автозапчастин',
+    href: '/oblik-avtozapchastyn',
     text: 'Склад, резерви, закупки, постачальники, маржа й замовлення деталей пов’язані з конкретним клієнтом або візитом.',
     points: ['Мінімальні залишки', 'API постачальників', 'Нова пошта та доставка'],
   },
@@ -29,11 +32,12 @@ function SearchContent() {
       <p>VIN-matrix створений для щоденної роботи автобізнесу: коли важливо не просто зберігати дані, а бачити наступну дію, гроші та відповідального.</p>
     </div>
     <div className="vfs-search-grid">
-      {audiences.map(({ title, text, points }) => <article key={title}>
+      {audiences.map(({ title, href, text, points }) => <article key={title}>
         <span><Wrench size={19} /></span>
         <h3>{title}</h3>
         <p>{text}</p>
         <ul>{points.map((point) => <li key={point}><Check size={15} />{point}</li>)}</ul>
+        <a className="vfs-search-card-link" href={href}>Детальніше <ArrowRight size={14} /></a>
       </article>)}
     </div>
     <div className="vfs-search-bottom">

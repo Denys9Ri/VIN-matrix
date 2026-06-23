@@ -22,11 +22,17 @@ function fail(message) {
 for (const path of paths) {
   const file = path === '/' ? join(distDir, 'index.html') : join(distDir, path.slice(1), 'index.html');
   if (!existsSync(file)) fail(`missing static page ${path}`);
+
   const html = readFileSync(file, 'utf8');
   const canonical = `${origin}${path === '/' ? '/' : path}`;
   if (!html.includes(`rel="canonical" href="${canonical}"`)) fail(`canonical is missing for ${path}`);
   if (!html.includes('<h1>')) fail(`static H1 is missing for ${path}`);
   if (!html.includes('application/ld+json')) fail(`structured data is missing for ${path}`);
+  if (!html.includes('vin-static-enrichment')) fail(`helpful static content is missing for ${path}`);
+
+  if (path !== '/' && !html.includes('vin-matrix-breadcrumb-jsonld')) {
+    fail(`breadcrumb markup is missing for ${path}`);
+  }
 }
 
 const robotsPath = join(distDir, 'robots.txt');
@@ -38,6 +44,7 @@ const robots = readFileSync(robotsPath, 'utf8');
 const sitemap = readFileSync(sitemapPath, 'utf8');
 if (!robots.includes(`Sitemap: ${origin}/sitemap.xml`)) fail('robots.txt does not reference sitemap.xml');
 if (robots.includes('Disallow: /login')) fail('robots.txt must not block pages that use noindex headers');
+
 for (const path of paths) {
   const canonical = `${origin}${path === '/' ? '/' : path}`;
   if (!sitemap.includes(`<loc>${canonical}</loc>`)) fail(`sitemap is missing ${path}`);

@@ -1,41 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import MainLayout from './components/layout/MainLayout';
-import DashboardOnboarding from './pages/DashboardOnboarding';
-import UniversalSearch from './pages/UniversalSearch';
-import Inventory from './pages/InventoryStage6';
-import Settings from './pages/Settings';
-import Billing from './pages/Billing';
-import Onboarding from './pages/Onboarding';
-import DocumentSettings from './pages/DocumentSettings';
-import ServicesSettings from './pages/ServicesSettings';
-import DictionarySettings from './pages/DictionarySettings';
-import DeliverySettings from './pages/DeliverySettingsPro';
-import Login from './pages/Login';
-import RegisterOnboarding from './pages/RegisterOnboarding';
-import Visits from './pages/Visits';
-import StoreOrders from './pages/StoreOrders';
-import ClientsCRM from './pages/ClientsCRMStage5';
-import Analytics from './pages/Analytics';
-import ActivityJournal from './pages/ActivityJournal';
-import DataExchange from './pages/DataExchange';
-import PartnerClients from './pages/PartnerClients';
-import Partners from './pages/Partners';
-import Complexes from './pages/Complexes';
-import CRM from './pages/CRM';
-import SupplierOrders from './pages/SupplierOrders';
-import AttentionAction from './pages/AttentionAction';
-import LandingRoute, { DemoTour } from './pages/LandingFinalStyled';
-import LandingLeads from './pages/LandingLeads';
-import SolutionSeoPage from './pages/SolutionSeoPage';
-import VisitCrmBridge from './components/visits/VisitCrmBridge';
-import VisitDeepLinkBridge from './components/visits/VisitDeepLinkBridge';
-import ActivityDock from './components/activity/ActivityDock';
-import DocumentDock from './components/documents/DocumentDock';
+import LandingRoute from './pages/LandingFinalStyled';
 import api from './api/axios';
+
+const DemoTour = lazy(() => import('./pages/LandingFinalStyled').then((module) => ({ default: module.DemoTour })));
+const MainLayout = lazy(() => import('./components/layout/MainLayout'));
+const DashboardOnboarding = lazy(() => import('./pages/DashboardOnboarding'));
+const UniversalSearch = lazy(() => import('./pages/UniversalSearch'));
+const Inventory = lazy(() => import('./pages/InventoryStage6'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Billing = lazy(() => import('./pages/Billing'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const DocumentSettings = lazy(() => import('./pages/DocumentSettings'));
+const ServicesSettings = lazy(() => import('./pages/ServicesSettings'));
+const DictionarySettings = lazy(() => import('./pages/DictionarySettings'));
+const DeliverySettings = lazy(() => import('./pages/DeliverySettingsPro'));
+const Login = lazy(() => import('./pages/Login'));
+const RegisterOnboarding = lazy(() => import('./pages/RegisterOnboarding'));
+const Visits = lazy(() => import('./pages/Visits'));
+const StoreOrders = lazy(() => import('./pages/StoreOrders'));
+const ClientsCRM = lazy(() => import('./pages/ClientsCRMStage5'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const ActivityJournal = lazy(() => import('./pages/ActivityJournal'));
+const DataExchange = lazy(() => import('./pages/DataExchange'));
+const PartnerClients = lazy(() => import('./pages/PartnerClients'));
+const Partners = lazy(() => import('./pages/Partners'));
+const Complexes = lazy(() => import('./pages/Complexes'));
+const SupplierOrders = lazy(() => import('./pages/SupplierOrders'));
+const AttentionAction = lazy(() => import('./pages/AttentionAction'));
+const LandingLeads = lazy(() => import('./pages/LandingLeads'));
+const SolutionSeoPage = lazy(() => import('./pages/SolutionSeoPage'));
+const VisitCrmBridge = lazy(() => import('./components/visits/VisitCrmBridge'));
+const VisitDeepLinkBridge = lazy(() => import('./components/visits/VisitDeepLinkBridge'));
+const ActivityDock = lazy(() => import('./components/activity/ActivityDock'));
+const DocumentDock = lazy(() => import('./components/documents/DocumentDock'));
 
 const allowedWhenBlocked = ['/settings', '/billing', '/onboarding'];
 const allowedDuringOnboarding = ['/onboarding', '/settings/delivery'];
+
+const PageLoader = () => <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження…</div>;
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('access_token');
@@ -76,7 +79,7 @@ const ProtectedRoute = ({ children }) => {
 
   if (location.pathname === '/') return <LandingRoute />;
   if (!token) return <Navigate to="/login" replace />;
-  if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Готуємо робочий простір...</div>;
+  if (checking) return <PageLoader />;
 
   const isAllowedRoute = allowedWhenBlocked.some((path) => location.pathname === path || location.pathname.startsWith(path + '/'));
   const isBlockedClient = accessAllowed === false && role === 'client';
@@ -86,6 +89,11 @@ const ProtectedRoute = ({ children }) => {
   if (onboardingRequired && !isOnboardingRoute) return <Navigate to="/onboarding" replace />;
   return children;
 };
+
+function LegacyLandingRedirect() {
+  const location = useLocation();
+  return <Navigate to={{ pathname: '/', search: location.search, hash: location.hash }} replace />;
+}
 
 function VisitsWithCrm() {
   const location = useLocation();
@@ -99,7 +107,7 @@ function VisitsWithCrm() {
     return () => { cancelled = true; };
   }, []);
 
-  if (!businessType) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження режиму...</div>;
+  if (!businessType) return <PageLoader />;
 
   if (businessType === 'store') {
     const params = new URLSearchParams(location.search);
@@ -121,52 +129,54 @@ function CRMByBusinessType() {
     return () => { cancelled = true; };
   }, []);
 
-  if (!businessType) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Завантаження CRM...</div>;
+  if (!businessType) return <PageLoader />;
   return <><ClientsCRM mode={businessType} /><ActivityDock /></>;
 }
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/landing" element={<LandingRoute />} />
-        <Route path="/demo" element={<DemoTour />} />
-        <Route path="/crm-dlya-sto" element={<SolutionSeoPage slug="crm-dlya-sto" />} />
-        <Route path="/programma-dlya-avtoservisu" element={<SolutionSeoPage slug="programma-dlya-avtoservisu" />} />
-        <Route path="/programma-dlya-shynomontazhu" element={<SolutionSeoPage slug="programma-dlya-shynomontazhu" />} />
-        <Route path="/oblik-avtozapchastyn" element={<SolutionSeoPage slug="oblik-avtozapchastyn" />} />
-        <Route path="/sklad-ta-zakupky-avtozapchastyn" element={<SolutionSeoPage slug="sklad-ta-zakupky-avtozapchastyn" />} />
-        <Route path="/naryad-zamovlennya-sto" element={<SolutionSeoPage slug="naryad-zamovlennya-sto" />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<RegisterOnboarding />} />
-        <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-        <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-          <Route index element={<DashboardOnboarding />} />
-          <Route path="search" element={<UniversalSearch />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="billing" element={<Billing />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="settings/services" element={<ServicesSettings />} />
-          <Route path="settings/documents" element={<DocumentSettings />} />
-          <Route path="settings/dictionaries" element={<DictionarySettings />} />
-          <Route path="settings/delivery" element={<DeliverySettings />} />
-          <Route path="visits" element={<VisitsWithCrm />} />
-          <Route path="attention" element={<AttentionAction />} />
-          <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="activity" element={<ActivityJournal />} />
-          <Route path="journal" element={<ActivityJournal />} />
-          <Route path="data" element={<DataExchange />} />
-          <Route path="partner-clients" element={<PartnerClients />} />
-          <Route path="partners" element={<Partners />} />
-          <Route path="complexes" element={<Complexes />} />
-          <Route path="sales-leads" element={<LandingLeads />} />
-          <Route path="crm" element={<CRMByBusinessType />} />
-          <Route path="crm/clients" element={<CRMByBusinessType />} />
-          <Route path="crm/:tab" element={<CRMByBusinessType />} />
-          <Route path="crm/supplier-orders" element={<SupplierOrders />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/landing" element={<LegacyLandingRedirect />} />
+          <Route path="/demo" element={<DemoTour />} />
+          <Route path="/crm-dlya-sto" element={<SolutionSeoPage slug="crm-dlya-sto" />} />
+          <Route path="/programma-dlya-avtoservisu" element={<SolutionSeoPage slug="programma-dlya-avtoservisu" />} />
+          <Route path="/programma-dlya-shynomontazhu" element={<SolutionSeoPage slug="programma-dlya-shynomontazhu" />} />
+          <Route path="/oblik-avtozapchastyn" element={<SolutionSeoPage slug="oblik-avtozapchastyn" />} />
+          <Route path="/sklad-ta-zakupky-avtozapchastyn" element={<SolutionSeoPage slug="sklad-ta-zakupky-avtozapchastyn" />} />
+          <Route path="/naryad-zamovlennya-sto" element={<SolutionSeoPage slug="naryad-zamovlennya-sto" />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<RegisterOnboarding />} />
+          <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+            <Route index element={<DashboardOnboarding />} />
+            <Route path="search" element={<UniversalSearch />} />
+            <Route path="inventory" element={<Inventory />} />
+            <Route path="billing" element={<Billing />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="settings/services" element={<ServicesSettings />} />
+            <Route path="settings/documents" element={<DocumentSettings />} />
+            <Route path="settings/dictionaries" element={<DictionarySettings />} />
+            <Route path="settings/delivery" element={<DeliverySettings />} />
+            <Route path="visits" element={<VisitsWithCrm />} />
+            <Route path="attention" element={<AttentionAction />} />
+            <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="activity" element={<ActivityJournal />} />
+            <Route path="journal" element={<ActivityJournal />} />
+            <Route path="data" element={<DataExchange />} />
+            <Route path="partner-clients" element={<PartnerClients />} />
+            <Route path="partners" element={<Partners />} />
+            <Route path="complexes" element={<Complexes />} />
+            <Route path="sales-leads" element={<LandingLeads />} />
+            <Route path="crm" element={<CRMByBusinessType />} />
+            <Route path="crm/clients" element={<CRMByBusinessType />} />
+            <Route path="crm/:tab" element={<CRMByBusinessType />} />
+            <Route path="crm/supplier-orders" element={<SupplierOrders />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/prerender-public.mjs && node scripts/verify-public-seo.mjs",
+    "build": "vite build && node scripts/prerender-public.mjs && node scripts/enhance-public-seo.mjs && node scripts/verify-public-seo.mjs",
     "seo:check": "node scripts/verify-public-seo.mjs",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

@@ -44,6 +44,12 @@ function SearchContent() {
       <div><b>Покажи процес, а не обіцянку.</b><span>У демо можна перемикати реальні сценарії: дошку візитів, скан техпаспорта, картку клієнта, склад і аналітику.</span></div>
       <a href="/demo">Відкрити демо <ArrowRight size={16} /></a>
     </div>
+    <nav className="vfs-legal-links" aria-label="Інформаційні сторінки">
+      <span>RDmatrix Company</span>
+      <a href="/contacts">Контакти</a>
+      <a href="/privacy">Політика конфіденційності</a>
+      <a href="/terms">Умови використання</a>
+    </nav>
   </section>;
 }
 

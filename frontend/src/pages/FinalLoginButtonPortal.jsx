@@ -11,7 +11,7 @@ export default function FinalLoginButtonPortal() {
       const actions = document.querySelector('.vf-page.vf-landing .vf-header-actions') || document.querySelector('.vf-header-actions');
       if (!actions) return;
 
-      // The old landing link is removed. The replacement below is a regular browser anchor.
+      // Replace the legacy landing link with a plain native browser link.
       actions.querySelector('.vf-login')?.remove();
 
       loginLink = actions.querySelector('#vf-direct-login');
@@ -21,7 +21,7 @@ export default function FinalLoginButtonPortal() {
         loginLink.className = 'vf-direct-login';
         loginLink.href = LOGIN_URL;
         loginLink.setAttribute('aria-label', 'Увійти в VIN-matrix');
-        loginLink.innerHTML = '<span class="vf-direct-login-icon" aria-hidden="true">↪</span><span>Увійти</span>';
+        loginLink.textContent = 'Увійти';
         const register = actions.querySelector('.vf-register-cta');
         actions.insertBefore(loginLink, register || null);
       }

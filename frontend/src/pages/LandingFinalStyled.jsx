@@ -1,6 +1,7 @@
 import FinalLanding, { FinalDemoTour } from './LandingFinal';
 import FinalCapabilitiesPortal from './FinalCapabilitiesPortal';
 import FinalDemoLinkGuard from './FinalDemoLinkGuard';
+import FinalLoginLinkGuard from './FinalLoginLinkGuard';
 import FinalMobileDemoPortal from './FinalMobileDemoPortal';
 import FinalMobileHeroPreviewPortal from './FinalMobileHeroPreviewPortal';
 import LandingSearchContentPortal from './LandingSearchContent';
@@ -21,5 +22,5 @@ export function DemoTour() {
 }
 
 export default function Landing() {
-  return <><FinalLanding /><FinalCapabilitiesPortal /><LandingSearchContentPortal /><LandingTestimonialsPortal /><FinalDemoLinkGuard /><FinalMobileHeroPreviewPortal /></>;
+  return <><FinalLanding /><FinalCapabilitiesPortal /><LandingSearchContentPortal /><LandingTestimonialsPortal /><FinalDemoLinkGuard /><FinalLoginLinkGuard /><FinalMobileHeroPreviewPortal /></>;
 }

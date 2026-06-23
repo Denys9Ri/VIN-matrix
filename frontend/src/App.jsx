@@ -74,6 +74,7 @@ const ProtectedRoute = ({ children }) => {
     checkAccess();
   }, [token, location.pathname]);
 
+  if (location.pathname === '/') return <Navigate to="/landing" replace />;
   if (!token) return <Navigate to="/login" replace />;
   if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Готуємо робочий простір...</div>;
 

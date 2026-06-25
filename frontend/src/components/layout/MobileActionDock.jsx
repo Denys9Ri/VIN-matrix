@@ -5,7 +5,7 @@ import api from '../../api/axios';
 
 const activeClass = 'text-blue-700';
 const inactiveClass = 'text-slate-500';
-const excludedPrefixes = ['/billing', '/onboarding', '/login', '/register', '/attention'];
+const excludedPrefixes = ['/onboarding', '/login', '/register', '/attention'];
 
 export default function MobileActionDock({ onOpenMenu }) {
   const location = useLocation();

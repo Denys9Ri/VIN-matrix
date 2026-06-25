@@ -1,0 +1,70 @@
+/* Mobile-only density adjustments for operational screens.
+   Scoped to the exact existing component structures so desktop layouts and page logic remain unchanged. */
+@media (max-width: 639px) {
+  /* Billing: show the three summary metrics in one compact row. */
+  .min-h-screen.bg-slate-50.px-3.py-5.md\:px-8.md\:py-8 > .mx-auto.max-w-6xl.space-y-6 > .grid.grid-cols-1.gap-4.md\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .min-h-screen.bg-slate-50.px-3.py-5.md\:px-8.md\:py-8 > .mx-auto.max-w-6xl.space-y-6 > .grid.grid-cols-1.gap-4.md\:grid-cols-3 > div {
+    padding: 0.75rem;
+    border-radius: 1.25rem;
+  }
+
+  .min-h-screen.bg-slate-50.px-3.py-5.md\:px-8.md\:py-8 > .mx-auto.max-w-6xl.space-y-6 > .grid.grid-cols-1.gap-4.md\:grid-cols-3 > div > div:first-child {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin-bottom: 0.5rem;
+    border-radius: 0.8rem;
+  }
+
+  .min-h-screen.bg-slate-50.px-3.py-5.md\:px-8.md\:py-8 > .mx-auto.max-w-6xl.space-y-6 > .grid.grid-cols-1.gap-4.md\:grid-cols-3 > div > p:nth-child(2) {
+    font-size: 0.48rem;
+    line-height: 1.2;
+    letter-spacing: 0.06em;
+    overflow-wrap: anywhere;
+  }
+
+  .min-h-screen.bg-slate-50.px-3.py-5.md\:px-8.md\:py-8 > .mx-auto.max-w-6xl.space-y-6 > .grid.grid-cols-1.gap-4.md\:grid-cols-3 > div > p:nth-child(3) {
+    margin-top: 0.2rem;
+    font-size: 1.45rem;
+    line-height: 1.1;
+  }
+
+  /* Inventory: keep the four money metrics visible sooner on a phone. */
+  .space-y-5 > section[class*="rounded-[34px]"][class*="bg-slate-950"] .relative[class*="p-5"] {
+    padding: 1rem;
+  }
+
+  .space-y-5 > section[class*="rounded-[34px]"][class*="bg-slate-950"] h2 {
+    margin-top: 0.8rem;
+    font-size: 1.85rem;
+    line-height: 1;
+  }
+
+  .space-y-5 > section[class*="rounded-[34px]"][class*="bg-slate-950"] h2 + p {
+    margin-top: 0.7rem;
+    line-height: 1.45;
+  }
+
+  .space-y-5 > section[class*="rounded-[34px]"][class*="bg-slate-950"] .grid.grid-cols-2.gap-3.sm\:min-w-\[420px\] {
+    min-width: 0;
+    gap: 0.5rem;
+  }
+
+  .space-y-5 > section[class*="rounded-[34px]"][class*="bg-slate-950"] .grid.grid-cols-2.gap-3.sm\:min-w-\[420px\] > div {
+    padding: 0.75rem;
+    border-radius: 1rem;
+  }
+
+  .space-y-5 > section[class*="rounded-[34px]"][class*="bg-slate-950"] .grid.grid-cols-2.gap-3.sm\:min-w-\[420px\] > div > p:first-child {
+    font-size: 0.52rem;
+    line-height: 1.2;
+  }
+
+  .space-y-5 > section[class*="rounded-[34px]"][class*="bg-slate-950"] .grid.grid-cols-2.gap-3.sm\:min-w-\[420px\] > div > p:last-child {
+    font-size: 1.25rem;
+    line-height: 1.15;
+  }
+}

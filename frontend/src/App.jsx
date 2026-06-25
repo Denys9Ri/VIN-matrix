@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import LandingRoute from './pages/LandingFinalStyled';
 import api from './api/axios';
+import GoogleAnalytics from './components/analytics/GoogleAnalytics';
 
 const DemoTour = lazy(() => import('./pages/LandingFinalStyled').then((module) => ({ default: module.DemoTour })));
 const MainLayout = lazy(() => import('./components/layout/MainLayout'));
@@ -136,6 +137,7 @@ function CRMByBusinessType() {
 function App() {
   return (
     <BrowserRouter>
+      <GoogleAnalytics />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/landing" element={<LegacyLandingRedirect />} />

@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
@@ -11,6 +12,7 @@ from .services import create_pending_action, require_agent_member, write_audit
 
 
 ADD_PART_ACTION = 'add_order_part'
+CREATE_VISIT_ACTION = 'create_visit'
 
 
 def _money(value, field_name):
@@ -31,6 +33,23 @@ def _quantity(value):
     if amount <= 0:
         raise ValidationError('Кількість має бути більшою за нуль.')
     return amount
+
+
+def _scheduled_datetime(value):
+    if isinstance(value, datetime):
+        scheduled = value
+    else:
+        raw = str(value or '').strip()
+        if not raw:
+            raise ValidationError('Вкажіть дату та час запису.')
+        try:
+            scheduled = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        except ValueError:
+            raise ValidationError('Некоректна дата запису.')
+
+    if timezone.is_naive(scheduled):
+        scheduled = timezone.make_aware(scheduled, timezone.get_current_timezone())
+    return scheduled
 
 
 def _visit_for_agent(company, user, access, visit_id):
@@ -89,6 +108,102 @@ def create_add_part_draft(user, visit_id, offer, quantity=1, sell_price=None):
     )
 
 
+def create_visit_draft(user, client, plate, phone, scheduled_datetime, comment='', conversation=None):
+    company, _, access = require_agent_member(user)
+    if not access.can_create_visits:
+        raise PermissionDenied('У вас немає права створювати записи через Agent.')
+
+    client = str(client or '').strip()[:100]
+    plate = str(plate or '').strip().upper()[:20]
+    phone = str(phone or '').strip()[:20]
+    comment = str(comment or '').strip()[:2000]
+    scheduled = _scheduled_datetime(scheduled_datetime)
+
+    if not client:
+        raise ValidationError('Вкажіть ім’я клієнта.')
+    if not plate:
+        raise ValidationError('Вкажіть номер автомобіля або позначте, що його немає.')
+
+    payload = {
+        'visit': {
+            'client': client,
+            'plate': plate,
+            'phone': phone,
+            'scheduled_datetime': scheduled.isoformat(),
+            'comment': comment,
+        },
+    }
+    phone_text = phone or 'не вказано'
+    comment_text = f' Коментар: {comment}' if comment else ''
+    summary = (
+        f'Створити запис: {client}, авто {plate}, телефон {phone_text}, '
+        f'на {timezone.localtime(scheduled).strftime("%d.%m.%Y %H:%M")}.{comment_text}'
+    )
+    return create_pending_action(
+        user=user,
+        action_type=CREATE_VISIT_ACTION,
+        payload=payload,
+        summary_text=summary,
+        conversation=conversation,
+    )
+
+
+def _execute_add_part_action(company, user, access, action):
+    if not access.can_add_parts:
+        raise PermissionDenied('У вас немає права виконати цю дію.')
+
+    visit = _visit_for_agent(company, user, access, action.payload.get('visit_id'))
+    part_data = action.payload.get('part') or {}
+    part = OrderPart.objects.create(
+        visit=visit,
+        brand=str(part_data.get('brand') or '')[:100],
+        article=str(part_data.get('article') or '')[:100],
+        name=str(part_data.get('name') or '')[:255],
+        supplier=str(part_data.get('supplier') or '')[:100],
+        supplier_color=str(part_data.get('supplier_color') or '')[:80] or None,
+        buy_price=_money(part_data.get('buy_price'), 'buy_price'),
+        sell_price=_money(part_data.get('sell_price'), 'sell_price'),
+        quantity=_quantity(part_data.get('quantity')),
+        status='WAITING',
+    )
+    return {
+        'order_part_id': part.id,
+        'visit_id': visit.id,
+    }
+
+
+def _execute_create_visit_action(company, user, access, action):
+    if not access.can_create_visits:
+        raise PermissionDenied('У вас немає права виконати цю дію.')
+
+    visit_data = action.payload.get('visit') or {}
+    scheduled = _scheduled_datetime(visit_data.get('scheduled_datetime'))
+    client = str(visit_data.get('client') or '').strip()[:100]
+    plate = str(visit_data.get('plate') or '').strip().upper()[:20]
+    phone = str(visit_data.get('phone') or '').strip()[:20]
+    comment = str(visit_data.get('comment') or '').strip()[:2000]
+
+    if not client or not plate:
+        raise ValidationError('У чернетці бракує клієнта або номера автомобіля.')
+
+    visit = Visit.objects.create(
+        company=company,
+        client=client,
+        plate=plate,
+        phone=phone,
+        scheduled_datetime=scheduled,
+        comment=comment,
+        status='SELECTION',
+        delivery_type='pickup',
+        payment_status='unpaid',
+    )
+    return {
+        'visit_id': visit.id,
+        'client': visit.client,
+        'plate': visit.plate,
+    }
+
+
 def execute_confirmed_action(user, action_id):
     company, _, access = require_agent_member(user)
 
@@ -110,39 +225,29 @@ def execute_confirmed_action(user, action_id):
             action.status = AgentPendingAction.STATUS_EXPIRED
             action.save(update_fields=['status'])
             raise ValidationError('Час виконання чернетки сплив.')
-        if action.action_type != ADD_PART_ACTION:
-            raise ValidationError('Для цього типу дії ще немає виконавця.')
-        if not access.can_add_parts:
-            raise PermissionDenied('У вас немає права виконати цю дію.')
 
-        visit = _visit_for_agent(company, user, access, action.payload.get('visit_id'))
-        part_data = action.payload.get('part') or {}
-        part = OrderPart.objects.create(
-            visit=visit,
-            brand=str(part_data.get('brand') or '')[:100],
-            article=str(part_data.get('article') or '')[:100],
-            name=str(part_data.get('name') or '')[:255],
-            supplier=str(part_data.get('supplier') or '')[:100],
-            supplier_color=str(part_data.get('supplier_color') or '')[:80] or None,
-            buy_price=_money(part_data.get('buy_price'), 'buy_price'),
-            sell_price=_money(part_data.get('sell_price'), 'sell_price'),
-            quantity=_quantity(part_data.get('quantity')),
-            status='WAITING',
-        )
+        if action.action_type == ADD_PART_ACTION:
+            result = _execute_add_part_action(company, user, access, action)
+        elif action.action_type == CREATE_VISIT_ACTION:
+            result = _execute_create_visit_action(company, user, access, action)
+        else:
+            raise ValidationError('Для цього типу дії ще немає виконавця.')
+
         action.status = AgentPendingAction.STATUS_EXECUTED
         action.executed_at = timezone.now()
-        action.save(update_fields=['status', 'executed_at'])
+        action.error_message = ''
+        action.save(update_fields=['status', 'executed_at', 'error_message'])
 
     write_audit(
         company=company,
         user=user,
         conversation=action.conversation,
         recognized_intent='pending_action_executed',
-        tool_name=ADD_PART_ACTION,
-        tool_result={'pending_action_id': action.id, 'order_part_id': part.id, 'visit_id': visit.id},
+        tool_name=action.action_type,
+        tool_result={'pending_action_id': action.id, **result},
     )
     return {
         'action_id': action.id,
         'status': action.status,
-        'result': {'order_part_id': part.id, 'visit_id': visit.id},
+        'result': result,
     }

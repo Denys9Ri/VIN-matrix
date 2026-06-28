@@ -142,7 +142,7 @@ def openapi_schema(request):
             '/api/onboarding/': {'get': {'summary': 'Get company onboarding state'}, 'patch': {'summary': 'Save onboarding step'}},
             '/api/system/health/': {'get': {'summary': 'Platform health status (platform admin only)'}},
             '/api/billing/admin/clients/': {'get': {'summary': 'SaaS billing clients overview'}},
-            '/api/billing/admin/partner-payouts/': {'get': {'summary': 'Partner payout analytics'}},
+            '/api/billing/admin/partner-payouts/': {'get': {'summary': 'SaaS partner payout analytics'}},
             '/api/documents/visits/{visit_id}/{doc_type}/': {'get': {'summary': 'Render visit document'}},
             '/api/landing/leads/': {'post': {'summary': 'Create public sales-demo request'}},
         },
@@ -153,7 +153,7 @@ def swagger_ui(request):
     return HttpResponse(
         """<!doctype html><html><head><title>VIN-matrix API docs</title>
         <link rel='stylesheet' href='https://unpkg.com/swagger-ui-dist@5/swagger-ui.css'></head>
-        <body><div id='swagger-ui'></div><script src='https://unpkg.com/swagger-ui-bundle.js'></script>
+        <body><div id='swagger-ui'></div><script src='https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js'></script>
         <script>SwaggerUIBundle({url:'/schema/',dom_id:'#swagger-ui'});</script></body></html>""",
         content_type='text/html',
     )

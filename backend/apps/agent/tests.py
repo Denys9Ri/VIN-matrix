@@ -7,7 +7,14 @@ from apps.core.models import Company, Employee, Visit
 
 from .models import AgentAuditLog, AgentPendingAction, AgentUserChannel
 from .services import create_connection_code, get_company_settings, get_member_access
-from .telegram import process_update
+from .telegram import (
+    BUTTON_CANCEL,
+    BUTTON_NEW_VISIT,
+    BUTTON_SEARCH,
+    MAIN_REPLY_MARKUP,
+    WORKFLOW_REPLY_MARKUP,
+    process_update,
+)
 from .tools.visits import find_visits
 
 
@@ -171,5 +178,33 @@ class TelegramVisitWizardTests(TestCase):
         self.assertEqual(action.payload['visit']['client'], 'Іван Петренко')
         self.assertEqual(action.payload['visit']['plate'], 'AA5555AA')
         self.assertEqual(Visit.objects.filter(company=self.company).count(), 0)
+        self.channel.refresh_from_db()
+        self.assertEqual(self.channel.conversation.context, {})
+
+    def test_quick_action_menu_uses_workflow_keyboard_and_cancels(self):
+        start = self._send(1, BUTTON_NEW_VISIT)
+        self.assertIn('Як звати клієнта', start['text'])
+        self.assertEqual(start['reply_markup'], WORKFLOW_REPLY_MARKUP)
+
+        cancelled = self._send(2, BUTTON_CANCEL)
+        self.assertIn('скасовано', cancelled['text'])
+        self.assertEqual(cancelled['reply_markup'], MAIN_REPLY_MARKUP)
+
+    def test_search_button_collects_query_then_restores_main_menu(self):
+        Visit.objects.create(
+            company=self.company,
+            plate='AA1234AA',
+            client='Іван Петренко',
+            phone='0501234567',
+            scheduled_datetime=timezone.now(),
+        )
+
+        start = self._send(1, BUTTON_SEARCH)
+        self.assertIn('Що знайти', start['text'])
+        self.assertEqual(start['reply_markup'], WORKFLOW_REPLY_MARKUP)
+
+        found = self._send(2, 'AA1234AA')
+        self.assertIn('Іван Петренко', found['text'])
+        self.assertEqual(found['reply_markup'], MAIN_REPLY_MARKUP)
         self.channel.refresh_from_db()
         self.assertEqual(self.channel.conversation.context, {})

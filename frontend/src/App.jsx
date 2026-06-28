@@ -23,6 +23,7 @@ const StoreOrders = lazy(() => import('./pages/StoreOrders'));
 const ClientsCRM = lazy(() => import('./pages/ClientsCRMStage5'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const ActivityJournal = lazy(() => import('./pages/ActivityJournal'));
+const Agent = lazy(() => import('./pages/Agent'));
 const DataExchange = lazy(() => import('./pages/DataExchange'));
 const PartnerClients = lazy(() => import('./pages/PartnerClients'));
 const Partners = lazy(() => import('./pages/Partners'));
@@ -169,6 +170,7 @@ function App() {
             <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="activity" element={<ActivityJournal />} />
+            <Route path="agent" element={<Agent />} />
             <Route path="journal" element={<ActivityJournal />} />
             <Route path="data" element={<DataExchange />} />
             <Route path="partner-clients" element={<PartnerClients />} />

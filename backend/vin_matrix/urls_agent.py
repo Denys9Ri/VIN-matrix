@@ -10,4 +10,5 @@ urlpatterns = [
     path('api/agent/', include('apps.agent.urls')),
     path('api/agent/', include('apps.agent.routes_read')),
     path('api/agent/', include('apps.agent.routes_tg')),
+    path('api/agent/', include('apps.agent.routes_catalog')),
 ]

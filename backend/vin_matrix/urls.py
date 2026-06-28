@@ -184,7 +184,7 @@ urlpatterns = [
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/profile/settings/', ProfileSettingsView.as_view(), name='profile-settings-alt'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
-    path('api/profile/change-password/', ChangePasswordView.as_view(), name='change-password-alt'),
+    path('api/profile/change-password/', ChangePasswordView.as_view(), name='profile-change-password-alt'),
 
     path('api/settings/dictionaries/', CompanyDictionariesView.as_view(), name='settings-dictionaries'),
     path('api/settings/options/', CompanyOptionListCreateView.as_view(), name='settings-options'),

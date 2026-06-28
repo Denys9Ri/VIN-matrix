@@ -212,36 +212,48 @@ class AgentConnectionCodeView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
-class AgentPendingActionListView(APIView):
+class AgentPendingActionMixin:
+    def _scope_actions(self, company, user):
+        actions = AgentPendingAction.objects.filter(company=company)
+        if not is_company_owner(user, company):
+            actions = actions.filter(user=user)
+        return actions
+
+    @staticmethod
+    def _serialize_action(action):
+        author = action.user
+        return {
+            'id': action.id,
+            'action_type': action.action_type,
+            'summary_text': action.summary_text,
+            'payload': action.payload,
+            'expires_at': action.expires_at,
+            'created_at': action.created_at,
+            'created_by': {
+                'user_id': author.id,
+                'name': author.get_full_name() or author.username,
+            },
+        }
+
+
+class AgentPendingActionListView(AgentPendingActionMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         company, _, _ = require_agent_member(request.user)
-        AgentPendingAction.objects.filter(
-            company=company,
-            user=request.user,
+        actions_scope = self._scope_actions(company, request.user)
+        actions_scope.filter(
             status=AgentPendingAction.STATUS_PENDING,
             expires_at__lte=timezone.now(),
         ).update(status=AgentPendingAction.STATUS_EXPIRED)
 
-        actions = AgentPendingAction.objects.filter(
-            company=company,
-            user=request.user,
+        actions = actions_scope.filter(
             status=AgentPendingAction.STATUS_PENDING,
-        ).order_by('-created_at')[:50]
-        return Response([
-            {
-                'id': action.id,
-                'action_type': action.action_type,
-                'summary_text': action.summary_text,
-                'payload': action.payload,
-                'expires_at': action.expires_at,
-            }
-            for action in actions
-        ])
+        ).select_related('user').order_by('-created_at')[:50]
+        return Response([self._serialize_action(action) for action in actions])
 
 
-class AgentPendingActionDecisionView(APIView):
+class AgentPendingActionDecisionView(AgentPendingActionMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def _mark_failed(self, action, error):
@@ -263,11 +275,7 @@ class AgentPendingActionDecisionView(APIView):
 
         company, _, _ = require_agent_member(request.user)
         try:
-            action = AgentPendingAction.objects.get(
-                id=action_id,
-                company=company,
-                user=request.user,
-            )
+            action = self._scope_actions(company, request.user).select_related('user').get(id=action_id)
         except AgentPendingAction.DoesNotExist:
             return Response(
                 {'detail': 'Чернетку не знайдено.'},
@@ -287,6 +295,11 @@ class AgentPendingActionDecisionView(APIView):
                 status=status.HTTP_410_GONE,
             )
 
+        actor_data = {
+            'pending_action_id': action.id,
+            'created_by_user_id': action.user_id,
+            'approved_by_user_id': request.user.id,
+        }
         if decision == 'cancel':
             action.status = AgentPendingAction.STATUS_CANCELLED
             action.save(update_fields=['status'])
@@ -296,7 +309,7 @@ class AgentPendingActionDecisionView(APIView):
                 conversation=action.conversation,
                 recognized_intent='pending_action_cancelled',
                 tool_name=action.action_type,
-                tool_result={'pending_action_id': action.id},
+                tool_result=actor_data,
             )
             return Response({'status': action.status, 'detail': 'Дію скасовано.'})
 
@@ -309,11 +322,11 @@ class AgentPendingActionDecisionView(APIView):
             conversation=action.conversation,
             recognized_intent='pending_action_confirmed',
             tool_name=action.action_type,
-            tool_result={'pending_action_id': action.id},
+            tool_result=actor_data,
         )
 
         try:
-            execution = execute_confirmed_action(request.user, action.id)
+            execution = execute_confirmed_action(action.user, action.id)
         except PermissionDenied as error:
             failed_action = self._mark_failed(action, error)
             write_audit(
@@ -324,7 +337,7 @@ class AgentPendingActionDecisionView(APIView):
                 tool_name=action.action_type,
                 success=False,
                 error_message=failed_action.error_message,
-                tool_result={'pending_action_id': action.id},
+                tool_result=actor_data,
             )
             return Response(
                 {'status': failed_action.status, 'detail': failed_action.error_message},
@@ -340,7 +353,7 @@ class AgentPendingActionDecisionView(APIView):
                 tool_name=action.action_type,
                 success=False,
                 error_message=failed_action.error_message,
-                tool_result={'pending_action_id': action.id},
+                tool_result=actor_data,
             )
             return Response(
                 {'status': failed_action.status, 'detail': failed_action.error_message or 'Не вдалося виконати дію.'},
@@ -351,4 +364,6 @@ class AgentPendingActionDecisionView(APIView):
             'status': execution['status'],
             'detail': 'Дію підтверджено і виконано.',
             'result': execution['result'],
+            'created_by': action.user.get_full_name() or action.user.username,
+            'approved_by': request.user.get_full_name() or request.user.username,
         })

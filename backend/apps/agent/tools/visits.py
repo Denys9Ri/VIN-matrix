@@ -2,6 +2,7 @@ from datetime import date
 
 from django.db.models import Q
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from apps.core.models import Visit
 
@@ -39,6 +40,20 @@ def _serialize_visit(visit, access):
         ),
         'comment': visit.comment or '',
     }
+
+
+def get_visit(user, visit_id):
+    company, _, access = require_agent_member(user)
+    try:
+        visit_id = int(visit_id)
+    except (TypeError, ValueError):
+        raise ValidationError('Некоректний номер запису.')
+
+    try:
+        visit = _scope_visits(company, user, access).get(id=visit_id)
+    except Visit.DoesNotExist:
+        raise ValidationError('Запис не знайдено або у вас немає до нього доступу.')
+    return _serialize_visit(visit, access)
 
 
 def find_visits(user, query, limit=5):

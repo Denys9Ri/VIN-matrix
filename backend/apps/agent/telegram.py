@@ -9,6 +9,13 @@ from rest_framework.exceptions import APIException, PermissionDenied, Validation
 
 from .models import AgentConversation, AgentInboundMessage, AgentUserChannel
 from .services import link_channel_by_code, write_audit
+from .telegram_visit_actions import (
+    handle_visit_callback,
+    handle_visit_lifecycle_text,
+    pop_inline_markup,
+    schedule_markup,
+    visit_results_markup,
+)
 from .telegram_visit_flow import handle_visit_creation_flow
 from .tools.visits import daily_schedule, find_visits
 
@@ -53,23 +60,38 @@ def webhook_secret_is_valid(supplied_secret):
     return hmac.compare_digest(expected_secret, str(supplied_secret or ''))
 
 
-def send_message(chat_id, text, reply_markup=None):
+def _telegram_request(method, payload):
     token = _bot_token()
     if not token:
         raise APIException('Telegram Agent не налаштований: немає TELEGRAM_AGENT_BOT_TOKEN.')
-
     response = requests.post(
-        f'{TELEGRAM_API_BASE}/bot{token}/sendMessage',
-        json={
-            'chat_id': str(chat_id),
-            'text': str(text)[:4096],
-            'disable_web_page_preview': True,
-            'reply_markup': reply_markup or MAIN_REPLY_MARKUP,
-        },
+        f'{TELEGRAM_API_BASE}/bot{token}/{method}',
+        json=payload,
         timeout=TELEGRAM_TIMEOUT_SECONDS,
     )
     if not response.ok:
-        raise APIException('Не вдалося надіслати відповідь у Telegram.')
+        raise APIException(f'Не вдалося виконати дію Telegram: {method}.')
+    return response
+
+
+def send_message(chat_id, text, reply_markup=None, inline_markup=None):
+    markup = inline_markup if inline_markup is not None else (reply_markup or MAIN_REPLY_MARKUP)
+    _telegram_request('sendMessage', {
+        'chat_id': str(chat_id),
+        'text': str(text)[:4096],
+        'disable_web_page_preview': True,
+        'reply_markup': markup,
+    })
+
+
+def answer_callback_query(callback_query_id, text=''):
+    if not callback_query_id:
+        return
+    _telegram_request('answerCallbackQuery', {
+        'callback_query_id': str(callback_query_id),
+        'text': str(text)[:200],
+        'show_alert': False,
+    })
 
 
 def _format_datetime(value):
@@ -111,7 +133,7 @@ def _help_text():
         '• «Розклад» — записи на сьогодні\n'
         '• «Знайти запис» — номер, VIN, клієнт або телефон\n'
         '• «Новий запис» — створення чернетки з підтвердженням у VIN-matrix\n\n'
-        'Пошук запчастин, голосові та фото будуть підключені наступними модулями.'
+        'У результатах пошуку або розкладі натисніть на запис, щоб відкрити картку та доступні дії.'
     )
 
 
@@ -145,7 +167,11 @@ def _search_visits(channel, query):
         return f'За запитом «{query}» нічого не знайдено.', 'find_visit', {'query': query, 'count': 0}
 
     body = '\n\n'.join(_format_visit(item) for item in results)
-    return body, 'find_visit', {'query': query, 'count': len(results)}
+    return body, 'find_visit', {
+        'query': query,
+        'count': len(results),
+        '_telegram_inline_markup': visit_results_markup(results),
+    }
 
 
 def _handle_search_flow(channel, conversation, normalized, lowered):
@@ -168,6 +194,10 @@ def _handle_text(channel, text, conversation=None):
     lowered = normalized.lower()
 
     if conversation:
+        lifecycle_response = handle_visit_lifecycle_text(channel, conversation, normalized)
+        if lifecycle_response is not None:
+            return lifecycle_response
+
         search_flow_response = _handle_search_flow(channel, conversation, normalized, lowered)
         if search_flow_response is not None:
             return search_flow_response
@@ -202,7 +232,11 @@ def _handle_text(channel, text, conversation=None):
     if lowered in {'розклад', 'сьогодні', 'сегодня', 'schedule'} or lowered.startswith('розклад '):
         target_date = _parse_schedule_date(normalized)
         result = daily_schedule(channel.user, target_date=target_date)
-        return _format_schedule(result), 'daily_schedule', {'date': result['date']}
+        return _format_schedule(result), 'daily_schedule', {
+            'date': result['date'],
+            'count': result['count'],
+            '_telegram_inline_markup': schedule_markup(result),
+        }
 
     search_prefixes = ('знайди ', 'поиск ', 'пошук ', 'find ')
     for prefix in search_prefixes:
@@ -255,9 +289,83 @@ def _find_or_link_channel(message):
     return channel, 'Готово, Telegram підключено до VIN-matrix.\n\n' + _help_text()
 
 
+def _find_callback_channel(callback):
+    sender = callback.get('from') or {}
+    message = callback.get('message') or {}
+    chat = message.get('chat') or {}
+    external_user_id = str(sender.get('id') or '').strip()
+    chat_id = str(chat.get('id') or '').strip()
+    if not external_user_id or not chat_id:
+        raise ValidationError('Telegram не передав дані користувача або чату.')
+
+    channel = AgentUserChannel.objects.filter(
+        channel_type=AgentUserChannel.CHANNEL_TELEGRAM,
+        external_user_id=external_user_id,
+        chat_id=chat_id,
+        is_active=True,
+    ).select_related('company', 'user').first()
+    if not channel:
+        raise PermissionDenied('Telegram не підключений до VIN-matrix для цього користувача.')
+    channel.last_seen_at = timezone.now()
+    channel.save(update_fields=['last_seen_at'])
+    return channel
+
+
+def _process_callback(callback):
+    callback_id = str(callback.get('id') or '').strip()
+    channel = _find_callback_channel(callback)
+    conversation, _ = AgentConversation.objects.get_or_create(
+        channel=channel,
+        defaults={'company': channel.company, 'user': channel.user},
+    )
+    conversation.last_message_at = timezone.now()
+    conversation.save(update_fields=['last_message_at'])
+
+    try:
+        reply, intent, result = handle_visit_callback(
+            channel,
+            conversation,
+            callback.get('data'),
+        )
+    except (PermissionDenied, ValidationError) as exc:
+        reply = str(exc.detail if hasattr(exc, 'detail') else exc)
+        intent = 'callback_access_or_validation_error'
+        result = {}
+    except Exception:
+        reply = 'Сталася технічна помилка. Відкрийте запис ще раз або зверніться до адміністратора.'
+        intent = 'callback_internal_error'
+        result = {}
+
+    inline_markup, audit_result = pop_inline_markup(result)
+    write_audit(
+        company=channel.company,
+        user=channel.user,
+        conversation=conversation,
+        request_text=str(callback.get('data') or ''),
+        recognized_intent=intent,
+        tool_name='telegram_callback_router',
+        tool_result=audit_result,
+        success=intent != 'callback_internal_error',
+    )
+    return {
+        'chat_id': channel.chat_id,
+        'text': reply,
+        'reply_markup': _reply_markup_for(conversation),
+        'inline_markup': inline_markup,
+        'callback_query_id': callback_id,
+    }
+
+
 def process_update(payload):
-    """Processes a Telegram update and returns a response text when needed."""
-    message = payload.get('message') if isinstance(payload, dict) else None
+    """Processes a Telegram update and returns a response payload when needed."""
+    if not isinstance(payload, dict):
+        return None
+
+    callback = payload.get('callback_query')
+    if isinstance(callback, dict):
+        return _process_callback(callback)
+
+    message = payload.get('message')
     if not isinstance(message, dict):
         return None
 
@@ -312,6 +420,7 @@ def process_update(payload):
             intent = 'internal_error'
             result = {}
 
+    inline_markup, audit_result = pop_inline_markup(result)
     inbound.processed_at = timezone.now()
     inbound.save(update_fields=['processed_at'])
     write_audit(
@@ -321,11 +430,12 @@ def process_update(payload):
         request_text=str(message.get('text') or ''),
         recognized_intent=intent,
         tool_name='telegram_text_router',
-        tool_result=result,
+        tool_result=audit_result,
         success=intent != 'internal_error',
     )
     return {
         'chat_id': channel.chat_id,
         'text': reply,
         'reply_markup': _reply_markup_for(conversation),
+        'inline_markup': inline_markup,
     }

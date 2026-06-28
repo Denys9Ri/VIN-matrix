@@ -9,6 +9,7 @@ from rest_framework.exceptions import APIException, PermissionDenied, Validation
 
 from .models import AgentConversation, AgentInboundMessage, AgentUserChannel
 from .services import link_channel_by_code, write_audit
+from .telegram_visit_flow import handle_visit_creation_flow
 from .tools.visits import daily_schedule, find_visits
 
 
@@ -83,8 +84,9 @@ def _help_text():
         'Напиши:\n'
         '• «розклад» — записи на сьогодні\n'
         '• «розклад 2026-06-30» — записи на дату\n'
-        '• «знайди Ауді Андрія» — пошук за номером, VIN, клієнтом або телефоном\n\n'
-        'Пошук запчастин, голосові, фото та підтверджувані дії будуть підключені наступними модулями.'
+        '• «знайди Ауді Андрія» — пошук за номером, VIN, клієнтом або телефоном\n'
+        '• «новий запис» — створення чернетки запису з підтвердженням у VIN-matrix\n\n'
+        'Пошук запчастин, голосові та фото будуть підключені наступними модулями.'
     )
 
 
@@ -98,9 +100,14 @@ def _parse_schedule_date(text):
         raise ValidationError('Вкажи дату у форматі РРРР-ММ-ДД, наприклад: розклад 2026-06-30.')
 
 
-def _handle_text(channel, text):
+def _handle_text(channel, text, conversation=None):
     normalized = str(text or '').strip()
     lowered = normalized.lower()
+
+    if conversation:
+        visit_flow_response = handle_visit_creation_flow(channel, conversation, normalized)
+        if visit_flow_response is not None:
+            return visit_flow_response
 
     if lowered in {'розклад', 'сьогодні', 'сегодня', 'schedule'} or lowered.startswith('розклад '):
         target_date = _parse_schedule_date(normalized)
@@ -167,7 +174,6 @@ def _find_or_link_channel(message):
 
 def process_update(payload):
     """Processes a Telegram update and returns a response text when needed."""
-
     message = payload.get('message') if isinstance(payload, dict) else None
     if not isinstance(message, dict):
         return None
@@ -213,7 +219,7 @@ def process_update(payload):
         result = {}
     else:
         try:
-            reply, intent, result = _handle_text(channel, message['text'])
+            reply, intent, result = _handle_text(channel, message['text'], conversation=conversation)
         except (PermissionDenied, ValidationError) as exc:
             reply = str(exc.detail if hasattr(exc, 'detail') else exc)
             intent = 'access_or_validation_error'

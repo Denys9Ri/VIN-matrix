@@ -97,11 +97,13 @@ def _offer_list_markup(offers, callback_prefix):
     return _markup(rows)
 
 
-def _selected_offer_markup(can_add):
+def _selected_offer_markup(can_add, back_buttons=None):
     rows = []
     if can_add:
         rows.append([_button('➕ Додати до запису', 'p:add')])
     rows.append([_button('🔁 Показати аналоги', 'p:analogs')])
+    for label, callback_data in (back_buttons or []):
+        rows.append([_button(label, callback_data)])
     rows.append([_button('✖️ Скасувати', 'p:cancel')])
     return _markup(rows)
 
@@ -137,9 +139,12 @@ def _clear_context(conversation):
     conversation.save(update_fields=['context'])
 
 
+def _part_context(context):
+    return context.get('part') if isinstance(context.get('part'), dict) else {}
+
+
 def _selected_offer(context):
-    part = context.get('part') if isinstance(context.get('part'), dict) else {}
-    offer = part.get('selected_offer')
+    offer = _part_context(context).get('selected_offer')
     if not isinstance(offer, dict):
         raise ValidationError('Пропозиція запчастини вже неактуальна. Почніть пошук ще раз.')
     return offer
@@ -187,10 +192,11 @@ def handle_part_text(channel, conversation, text):
                 'part_original_not_found',
                 {'article': normalized},
             )
+        offers = offers[:MAX_OFFERS]
         _save_context(
             conversation,
             FLOW_ORIGINAL_RESULTS,
-            part={'original_offers': offers[:MAX_OFFERS]},
+            part={'original_offers': offers},
         )
         return (
             f'Знайдено {len(offers)} пропозицій. Оберіть потрібну:',
@@ -251,6 +257,53 @@ def _create_add_part_draft(channel, conversation, quantity):
     )
 
 
+def _restore_original_list(conversation, part):
+    offers = part.get('original_offers')
+    if not isinstance(offers, list) or not offers:
+        raise ValidationError('Список пропозицій уже неактуальний. Почніть пошук ще раз.')
+    _save_context(conversation, FLOW_ORIGINAL_RESULTS, part={'original_offers': offers})
+    return (
+        f'Знайдено {len(offers)} пропозицій. Оберіть потрібну:',
+        'part_original_list_restored',
+        _with_inline({'count': len(offers)}, _offer_list_markup(offers, 'p:original')),
+    )
+
+
+def _restore_analog_offer_list(conversation, part):
+    offers = part.get('analog_offers')
+    if not isinstance(offers, list) or not offers:
+        raise ValidationError('Список пропозицій аналога вже неактуальний. Почніть пошук ще раз.')
+    restored_part = {
+        'original_offers': part.get('original_offers') or [],
+        'analogs': part.get('analogs') or [],
+        'selected_analog': part.get('selected_analog') or {},
+        'analog_offers': offers,
+    }
+    _save_context(conversation, FLOW_ANALOG_OFFER_RESULTS, part=restored_part)
+    return (
+        f'Пропозиції для аналога {_offer_title(restored_part["selected_analog"])}. Оберіть потрібну:',
+        'part_analog_offer_list_restored',
+        _with_inline({'count': len(offers)}, _offer_list_markup(offers, 'p:analog_offer')),
+    )
+
+
+def _restore_analog_list(conversation, part):
+    analogs = part.get('analogs')
+    if not isinstance(analogs, list) or not analogs:
+        raise ValidationError('Список аналогів уже неактуальний. Почніть пошук ще раз.')
+    restored_part = {
+        'original_offers': part.get('original_offers') or [],
+        'selected_offer': part.get('source_offer') or {},
+        'analogs': analogs,
+    }
+    _save_context(conversation, FLOW_ANALOG_RESULTS, part=restored_part)
+    return (
+        f'Знайдено {len(analogs)} аналогів. Оберіть аналог для пошуку пропозицій:',
+        'part_analog_list_restored',
+        _with_inline({'count': len(analogs)}, _offer_list_markup(analogs, 'p:analog')),
+    )
+
+
 def handle_part_callback(channel, conversation, callback_data):
     data = str(callback_data or '').strip()
     if not data.startswith('p:'):
@@ -259,22 +312,46 @@ def handle_part_callback(channel, conversation, callback_data):
     parts = data.split(':')
     command = parts[1] if len(parts) > 1 else ''
     context = dict(conversation.context or {})
+    part = _part_context(context)
 
     if command == 'cancel':
         _clear_context(conversation)
         return 'Пошук запчастини скасовано.', 'part_flow_cancelled', {}
 
+    if command == 'back' and len(parts) == 3:
+        if parts[2] == 'original':
+            return _restore_original_list(conversation, part)
+        if parts[2] == 'analog_offers':
+            return _restore_analog_offer_list(conversation, part)
+        if parts[2] == 'analogs':
+            return _restore_analog_list(conversation, part)
+        raise ValidationError('Цей список уже неактуальний. Почніть пошук ще раз.')
+
     if command == 'original' and len(parts) == 3:
-        offers = (context.get('part') or {}).get('original_offers')
+        offers = part.get('original_offers')
         try:
             offer = offers[int(parts[2])]
         except (TypeError, ValueError, IndexError):
             raise ValidationError('Ця пропозиція вже неактуальна. Почніть пошук ще раз.')
-        _save_context(conversation, FLOW_SELECTED_OFFER, part={'selected_offer': offer, 'origin': 'original'})
+        _save_context(
+            conversation,
+            FLOW_SELECTED_OFFER,
+            part={
+                'original_offers': offers,
+                'selected_offer': offer,
+                'origin': 'original',
+            },
+        )
         return (
             _format_offer(offer, 'Обрана пропозиція'),
             'part_offer_selected',
-            _with_inline({'article': offer.get('article'), 'source': offer.get('source')}, _selected_offer_markup(True)),
+            _with_inline(
+                {'article': offer.get('article'), 'source': offer.get('source')},
+                _selected_offer_markup(
+                    True,
+                    back_buttons=[('← До списку пропозицій', 'p:back:original')],
+                ),
+            ),
         )
 
     if command == 'analogs':
@@ -284,12 +361,23 @@ def handle_part_callback(channel, conversation, callback_data):
             return (
                 'Аналогів для цієї пропозиції не знайдено.',
                 'part_analogs_not_found',
-                _with_inline({}, _selected_offer_markup(True)),
+                _with_inline(
+                    {},
+                    _selected_offer_markup(
+                        True,
+                        back_buttons=[('← До списку пропозицій', 'p:back:original')],
+                    ),
+                ),
             )
+        analogs = analogs[:MAX_OFFERS]
         _save_context(
             conversation,
             FLOW_ANALOG_RESULTS,
-            part={'selected_offer': offer, 'analogs': analogs[:MAX_OFFERS]},
+            part={
+                'original_offers': part.get('original_offers') or [],
+                'source_offer': offer,
+                'analogs': analogs,
+            },
         )
         return (
             f'Знайдено {len(analogs)} аналогів. Оберіть аналог для пошуку пропозицій:',
@@ -298,7 +386,7 @@ def handle_part_callback(channel, conversation, callback_data):
         )
 
     if command == 'analog' and len(parts) == 3:
-        analogs = (context.get('part') or {}).get('analogs')
+        analogs = part.get('analogs')
         try:
             analog = analogs[int(parts[2])]
         except (TypeError, ValueError, IndexError):
@@ -313,12 +401,19 @@ def handle_part_callback(channel, conversation, callback_data):
             return (
                 'За цим аналогом немає актуальних пропозицій у підключених постачальників.',
                 'part_analog_offers_not_found',
-                {},
+                _with_inline({}, _offer_list_markup(analogs, 'p:analog')),
             )
+        offers = offers[:MAX_OFFERS]
         _save_context(
             conversation,
             FLOW_ANALOG_OFFER_RESULTS,
-            part={'analog_offers': offers[:MAX_OFFERS]},
+            part={
+                'original_offers': part.get('original_offers') or [],
+                'source_offer': part.get('source_offer') or {},
+                'analogs': analogs,
+                'selected_analog': analog,
+                'analog_offers': offers,
+            },
         )
         return (
             f'Пропозиції для аналога {_offer_title(analog)}. Оберіть потрібну:',
@@ -327,16 +422,37 @@ def handle_part_callback(channel, conversation, callback_data):
         )
 
     if command == 'analog_offer' and len(parts) == 3:
-        offers = (context.get('part') or {}).get('analog_offers')
+        offers = part.get('analog_offers')
         try:
             offer = offers[int(parts[2])]
         except (TypeError, ValueError, IndexError):
             raise ValidationError('Ця пропозиція вже неактуальна. Почніть пошук ще раз.')
-        _save_context(conversation, FLOW_SELECTED_OFFER, part={'selected_offer': offer, 'origin': 'analog'})
+        _save_context(
+            conversation,
+            FLOW_SELECTED_OFFER,
+            part={
+                'original_offers': part.get('original_offers') or [],
+                'source_offer': part.get('source_offer') or {},
+                'analogs': part.get('analogs') or [],
+                'selected_analog': part.get('selected_analog') or {},
+                'analog_offers': offers,
+                'selected_offer': offer,
+                'origin': 'analog',
+            },
+        )
         return (
             _format_offer(offer, 'Обраний аналог'),
             'part_analog_offer_selected',
-            _with_inline({'article': offer.get('article'), 'source': offer.get('source')}, _selected_offer_markup(True)),
+            _with_inline(
+                {'article': offer.get('article'), 'source': offer.get('source')},
+                _selected_offer_markup(
+                    True,
+                    back_buttons=[
+                        ('← До пропозицій аналога', 'p:back:analog_offers'),
+                        ('← До аналогів', 'p:back:analogs'),
+                    ],
+                ),
+            ),
         )
 
     if command == 'add':

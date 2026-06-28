@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from apps.core.models import Company, OrderPart, Visit, WorkPost
+from apps.core.models import Company, Employee, OrderPart, Visit, WorkPost
 
 from .actions import (
     create_add_part_draft,
@@ -30,6 +30,8 @@ class AgentConfirmedActionTests(TestCase):
             owner=self.owner,
             global_margin_percent='20.00',
         )
+        self.mechanic = User.objects.create_user(username='agent-mechanic', password='test-pass')
+        Employee.objects.create(user=self.mechanic, company=self.company, role='mechanic')
         settings = get_company_settings(self.company)
         settings.is_enabled = True
         settings.save()
@@ -98,7 +100,7 @@ class AgentConfirmedActionTests(TestCase):
         self.assertEqual(Visit.objects.filter(company=self.company, plate='AA7777AA').count(), 1)
 
         created_visit = Visit.objects.get(company=self.company, plate='AA7777AA')
-        self.assertEqual(created_visit.client, 'Іван Петренko'.replace('ko', 'ко'))
+        self.assertEqual(created_visit.client, 'Іван Петренко')
         self.assertEqual(created_visit.phone, '0507777777')
         self.assertEqual(created_visit.comment, 'Заміна мастила')
 
@@ -131,13 +133,13 @@ class AgentConfirmedActionTests(TestCase):
 
     def test_assign_draft_sets_work_post_and_mechanic(self):
         work_post = WorkPost.objects.create(company=self.company, name='Пост 1', number=1)
-        action = create_assign_visit_draft(self.owner, self.visit.id, work_post_id=work_post.id, mechanic_id=self.owner.id)
+        action = create_assign_visit_draft(self.owner, self.visit.id, work_post_id=work_post.id, mechanic_id=self.mechanic.id)
 
         self._confirm_and_execute(action)
 
         self.visit.refresh_from_db()
         self.assertEqual(self.visit.work_post_id, work_post.id)
-        self.assertEqual(self.visit.responsible_mechanic_id, self.owner.id)
+        self.assertEqual(self.visit.responsible_mechanic_id, self.mechanic.id)
 
     def test_stale_visit_draft_is_not_executed(self):
         action = create_reschedule_visit_draft(self.owner, self.visit.id, timezone.now() + timedelta(days=3))

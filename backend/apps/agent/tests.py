@@ -5,8 +5,9 @@ from rest_framework.test import APIClient
 
 from apps.core.models import Company, Employee, Visit
 
-from .models import AgentAuditLog
+from .models import AgentAuditLog, AgentPendingAction, AgentUserChannel
 from .services import create_connection_code, get_company_settings, get_member_access
+from .telegram import process_update
 from .tools.visits import find_visits
 
 
@@ -126,3 +127,49 @@ class AgentAuditLogApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['scope'], 'personal')
         self.assertEqual([item['id'] for item in response.data['items']], [self.worker_log.id])
+
+
+class TelegramVisitWizardTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username='telegram-owner', password='test-pass')
+        self.company = Company.objects.create(name='Telegram STO', owner=self.owner)
+        config = get_company_settings(self.company)
+        config.is_enabled = True
+        config.telegram_enabled = True
+        config.save()
+        self.channel = AgentUserChannel.objects.create(
+            company=self.company,
+            user=self.owner,
+            channel_type=AgentUserChannel.CHANNEL_TELEGRAM,
+            external_user_id='1001',
+            chat_id='2002',
+            display_name='Тестовий користувач',
+        )
+
+    def _send(self, message_id, text):
+        return process_update({
+            'update_id': message_id,
+            'message': {
+                'message_id': message_id,
+                'text': text,
+                'from': {'id': 1001, 'first_name': 'Тестовий'},
+                'chat': {'id': 2002},
+            },
+        })
+
+    def test_wizard_creates_visit_draft_without_creating_visit(self):
+        self.assertIn('Як звати клієнта', self._send(1, 'новий запис')['text'])
+        self.assertIn('Номер автомобіля', self._send(2, 'Іван Петренко')['text'])
+        self.assertIn('Телефон', self._send(3, 'AA5555AA')['text'])
+        self.assertIn('Коли записати', self._send(4, '0505555555')['text'])
+        self.assertIn('коментар', self._send(5, '2030-06-30 10:30')['text'])
+        self.assertIn('Чернетку запису створено', self._send(6, 'Заміна мастила')['text'])
+
+        action = AgentPendingAction.objects.get(company=self.company)
+        self.assertEqual(action.action_type, 'create_visit')
+        self.assertEqual(action.status, AgentPendingAction.STATUS_PENDING)
+        self.assertEqual(action.payload['visit']['client'], 'Іван Петренко')
+        self.assertEqual(action.payload['visit']['plate'], 'AA5555AA')
+        self.assertEqual(Visit.objects.filter(company=self.company).count(), 0)
+        self.channel.refresh_from_db()
+        self.assertEqual(self.channel.conversation.context, {})

@@ -153,7 +153,7 @@ def swagger_ui(request):
     return HttpResponse(
         """<!doctype html><html><head><title>VIN-matrix API docs</title>
         <link rel='stylesheet' href='https://unpkg.com/swagger-ui-dist@5/swagger-ui.css'></head>
-        <body><div id='swagger-ui'></div><script src='https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js'></script>
+        <body><div id='swagger-ui'></div><script src='https://unpkg.com/swagger-ui-bundle.js'></script>
         <script>SwaggerUIBundle({url:'/schema/',dom_id:'#swagger-ui'});</script></body></html>""",
         content_type='text/html',
     )
@@ -184,7 +184,7 @@ urlpatterns = [
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/profile/settings/', ProfileSettingsView.as_view(), name='profile-settings-alt'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
-    path('api/profile/change-password/', ChangePasswordView.as_view(), name='profile-change-password-alt'),
+    path('api/profile/change-password/', ChangePasswordView.as_view(), name='profile-settings-alt'),
 
     path('api/settings/dictionaries/', CompanyDictionariesView.as_view(), name='settings-dictionaries'),
     path('api/settings/options/', CompanyOptionListCreateView.as_view(), name='settings-options'),

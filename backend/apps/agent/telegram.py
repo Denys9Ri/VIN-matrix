@@ -22,6 +22,7 @@ from .tools.visits import daily_schedule, find_visits
 
 TELEGRAM_API_BASE = 'https://api.telegram.org'
 TELEGRAM_TIMEOUT_SECONDS = 10
+TELEGRAM_ALLOWED_UPDATES = ['message', 'callback_query']
 
 BUTTON_SCHEDULE = '🗓 Розклад'
 BUTTON_SEARCH = '🔎 Знайти запис'
@@ -53,8 +54,12 @@ def _bot_token():
     return os.getenv('TELEGRAM_AGENT_BOT_TOKEN', '').strip()
 
 
+def _webhook_secret():
+    return os.getenv('TELEGRAM_AGENT_WEBHOOK_SECRET', '').strip()
+
+
 def webhook_secret_is_valid(supplied_secret):
-    expected_secret = os.getenv('TELEGRAM_AGENT_WEBHOOK_SECRET', '')
+    expected_secret = _webhook_secret()
     if not expected_secret:
         return False
     return hmac.compare_digest(expected_secret, str(supplied_secret or ''))
@@ -72,6 +77,39 @@ def _telegram_request(method, payload):
     if not response.ok:
         raise APIException(f'Не вдалося виконати дію Telegram: {method}.')
     return response
+
+
+def _telegram_result(method, payload=None):
+    response = _telegram_request(method, payload or {})
+    try:
+        data = response.json()
+    except ValueError:
+        raise APIException(f'Telegram повернув некоректну відповідь для {method}.')
+    if not data.get('ok'):
+        raise APIException(str(data.get('description') or f'Не вдалося виконати дію Telegram: {method}.'))
+    return data.get('result')
+
+
+def get_telegram_webhook_info():
+    result = _telegram_result('getWebhookInfo')
+    return result if isinstance(result, dict) else {}
+
+
+def sync_telegram_webhook(webhook_url):
+    webhook_url = str(webhook_url or '').strip()
+    if not webhook_url.startswith('https://'):
+        raise ValidationError('Webhook Telegram має використовувати HTTPS.')
+    secret = _webhook_secret()
+    if not secret:
+        raise APIException('Telegram Agent не налаштований: немає TELEGRAM_AGENT_WEBHOOK_SECRET.')
+
+    _telegram_result('setWebhook', {
+        'url': webhook_url,
+        'secret_token': secret,
+        'allowed_updates': TELEGRAM_ALLOWED_UPDATES,
+        'drop_pending_updates': False,
+    })
+    return get_telegram_webhook_info()
 
 
 def send_message(chat_id, text, reply_markup=None, inline_markup=None):

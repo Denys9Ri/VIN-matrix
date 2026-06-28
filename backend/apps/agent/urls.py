@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .audit_views import AgentAuditLogListView
 from .views import (
     AgentConnectionCodeView,
     AgentMemberAccessListView,
@@ -14,6 +15,7 @@ urlpatterns = [
     path('settings/', AgentSettingsView.as_view(), name='agent-settings'),
     path('member-access/', AgentMemberAccessListView.as_view(), name='agent-member-access'),
     path('connect-code/', AgentConnectionCodeView.as_view(), name='agent-connect-code'),
+    path('audit-log/', AgentAuditLogListView.as_view(), name='agent-audit-log'),
     path('pending-actions/', AgentPendingActionListView.as_view(), name='agent-pending-actions'),
     path(
         'pending-actions/<int:action_id>/decision/',

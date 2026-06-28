@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
+  Bot,
   Boxes,
   CreditCard,
   History,
@@ -65,6 +66,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     { name: 'Панель', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
     { name: 'Журнал дій', icon: <History size={20} />, path: '/activity' },
+    { name: 'AI Agent', icon: <Bot size={20} />, path: '/agent' },
   ];
 
   const accessItems = [

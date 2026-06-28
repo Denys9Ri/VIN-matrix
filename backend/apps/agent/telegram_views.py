@@ -19,7 +19,11 @@ class TelegramWebhookView(APIView):
         try:
             result = process_update(payload)
             if result and result.get('chat_id') and result.get('text'):
-                send_message(result['chat_id'], result['text'])
+                send_message(
+                    result['chat_id'],
+                    result['text'],
+                    reply_markup=result.get('reply_markup'),
+                )
         except Exception:
             # Return 200 to prevent Telegram from retrying malformed or unsupported updates.
             # Internal request logging captures the server-side exception.

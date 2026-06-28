@@ -1,0 +1,39 @@
+name: VIN-matrix Agent checks
+
+on:
+  pull_request:
+    paths:
+      - 'backend/apps/agent/**'
+      - 'backend/vin_matrix/settings.py'
+      - 'backend/vin_matrix/urls_agent.py'
+      - '.github/workflows/agent-checks.yml'
+  push:
+    paths:
+      - 'backend/apps/agent/**'
+      - 'backend/vin_matrix/settings.py'
+      - 'backend/vin_matrix/urls_agent.py'
+      - '.github/workflows/agent-checks.yml'
+
+jobs:
+  agent-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      SECRET_KEY: ci-agent-check-secret-key-long-enough-for-hs256-signing
+      DEBUG: 'False'
+      USE_POSTGRES: 'False'
+      ALLOWED_HOSTS: testserver,localhost
+      APP_VERSION: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: mkdir -p staticfiles
+      - run: python manage.py check
+      - run: python manage.py test apps.agent.tests apps.agent.test_parts apps.agent.test_actions --verbosity 2

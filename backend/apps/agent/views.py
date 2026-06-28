@@ -1,10 +1,12 @@
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .actions import execute_confirmed_action
 from .models import AgentMemberAccess, AgentPendingAction, AgentUserChannel
 from .services import (
     ACCESS_FIELDS,
@@ -242,6 +244,15 @@ class AgentPendingActionListView(APIView):
 class AgentPendingActionDecisionView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def _mark_failed(self, action, error):
+        action.refresh_from_db()
+        if action.status != AgentPendingAction.STATUS_CONFIRMED:
+            return action
+        action.status = AgentPendingAction.STATUS_FAILED
+        action.error_message = str(getattr(error, 'detail', error))[:2000]
+        action.save(update_fields=['status', 'error_message'])
+        return action
+
     def post(self, request, action_id):
         decision = str(request.data.get('decision') or '').strip().lower()
         if decision not in {'confirm', 'cancel'}:
@@ -279,21 +290,65 @@ class AgentPendingActionDecisionView(APIView):
         if decision == 'cancel':
             action.status = AgentPendingAction.STATUS_CANCELLED
             action.save(update_fields=['status'])
-            intent = 'pending_action_cancelled'
-            detail = 'Дію скасовано.'
-        else:
-            action.status = AgentPendingAction.STATUS_CONFIRMED
-            action.confirmed_at = timezone.now()
-            action.save(update_fields=['status', 'confirmed_at'])
-            intent = 'pending_action_confirmed'
-            detail = 'Дію підтверджено.'
+            write_audit(
+                company=company,
+                user=request.user,
+                conversation=action.conversation,
+                recognized_intent='pending_action_cancelled',
+                tool_name=action.action_type,
+                tool_result={'pending_action_id': action.id},
+            )
+            return Response({'status': action.status, 'detail': 'Дію скасовано.'})
 
+        action.status = AgentPendingAction.STATUS_CONFIRMED
+        action.confirmed_at = timezone.now()
+        action.save(update_fields=['status', 'confirmed_at'])
         write_audit(
             company=company,
             user=request.user,
             conversation=action.conversation,
-            recognized_intent=intent,
+            recognized_intent='pending_action_confirmed',
             tool_name=action.action_type,
             tool_result={'pending_action_id': action.id},
         )
-        return Response({'status': action.status, 'detail': detail})
+
+        try:
+            execution = execute_confirmed_action(request.user, action.id)
+        except PermissionDenied as error:
+            failed_action = self._mark_failed(action, error)
+            write_audit(
+                company=company,
+                user=request.user,
+                conversation=action.conversation,
+                recognized_intent='pending_action_failed',
+                tool_name=action.action_type,
+                success=False,
+                error_message=failed_action.error_message,
+                tool_result={'pending_action_id': action.id},
+            )
+            return Response(
+                {'status': failed_action.status, 'detail': failed_action.error_message},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except Exception as error:
+            failed_action = self._mark_failed(action, error)
+            write_audit(
+                company=company,
+                user=request.user,
+                conversation=action.conversation,
+                recognized_intent='pending_action_failed',
+                tool_name=action.action_type,
+                success=False,
+                error_message=failed_action.error_message,
+                tool_result={'pending_action_id': action.id},
+            )
+            return Response(
+                {'status': failed_action.status, 'detail': failed_action.error_message or 'Не вдалося виконати дію.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({
+            'status': execution['status'],
+            'detail': 'Дію підтверджено і виконано.',
+            'result': execution['result'],
+        })

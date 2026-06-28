@@ -8,4 +8,5 @@ from .urls import urlpatterns as core_urlpatterns
 urlpatterns = [
     *core_urlpatterns,
     path('api/agent/', include('apps.agent.urls')),
+    path('api/agent/', include('apps.agent.routes_read')),
 ]

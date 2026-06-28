@@ -18,7 +18,7 @@ class AgentCompanySettings(models.Model):
     viber_enabled = models.BooleanField(default=False)
     allow_voice = models.BooleanField(default=True)
     allow_images = models.BooleanField(default=True)
-    require_confirmation_for_writes = models.BooleanField(default=True)
+    require_confirmation_for_writes = models.BooleanField(default=False)
     monthly_action_limit = models.PositiveIntegerField(
         default=0,
         help_text='0 means no product-level limit.',
@@ -34,7 +34,7 @@ class AgentMemberAccess(models.Model):
     """Explicit Agent permissions for each company member.
 
     Existing CRM permissions are not changed. This model only limits what the
-    messenger Agent may expose or prepare for confirmation.
+    messenger Agent may expose or execute.
     """
 
     company = models.ForeignKey(

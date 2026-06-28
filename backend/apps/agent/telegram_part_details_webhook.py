@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from . import telegram_parts_webhook as base
 from .models import AgentConversation, AgentUserChannel
 from .telegram_part_list_details import enrich_part_offer_list
+from .telegram_write_execution import finalize_telegram_write
 
 
 def _conversation_for_chat(chat_id):
@@ -63,6 +64,7 @@ class TelegramPartDetailsWebhookView(APIView):
                     )
                 return Response({'ok': True})
 
+            result = finalize_telegram_write(result)
             result = enrich_part_offer_list(
                 result,
                 _conversation_for_chat(result.get('chat_id')),

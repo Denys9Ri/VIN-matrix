@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import AgentConversation, AgentInboundMessage
+from .models import AgentConversation, AgentInboundMessage, AgentUserChannel
 from .services import write_audit
 from .telegram import (
     BUTTON_CANCEL,
@@ -19,7 +19,6 @@ from .telegram import (
     MAIN_REPLY_MARKUP,
     WORKFLOW_REPLY_MARKUP,
     _find_callback_channel,
-    _find_or_link_channel,
     answer_callback_query,
     process_update,
     send_message,
@@ -63,6 +62,35 @@ def _reply_markup_for(conversation):
 
 def _enhance_main_reply_markup(reply_markup):
     return PARTS_MAIN_REPLY_MARKUP if reply_markup == MAIN_REPLY_MARKUP else reply_markup
+
+
+def _find_linked_channel(message):
+    sender = message.get('from') if isinstance(message, dict) else None
+    chat = message.get('chat') if isinstance(message, dict) else None
+    sender = sender if isinstance(sender, dict) else {}
+    chat = chat if isinstance(chat, dict) else {}
+    external_user_id = str(sender.get('id') or '').strip()
+    chat_id = str(chat.get('id') or '').strip()
+    if not external_user_id or not chat_id:
+        return None
+
+    channel = AgentUserChannel.objects.filter(
+        channel_type=AgentUserChannel.CHANNEL_TELEGRAM,
+        external_user_id=external_user_id,
+        is_active=True,
+    ).select_related('company', 'user').first()
+    if not channel:
+        return None
+
+    display_name = ' '.join(
+        part for part in [sender.get('first_name', ''), sender.get('last_name', '')] if part
+    ).strip() or str(sender.get('username') or '').strip()
+    if channel.chat_id != chat_id or channel.display_name != display_name:
+        channel.chat_id = chat_id
+        channel.display_name = display_name
+        channel.last_seen_at = timezone.now()
+        channel.save(update_fields=['chat_id', 'display_name', 'last_seen_at'])
+    return channel
 
 
 def _process_part_callback(callback):
@@ -120,8 +148,8 @@ def _process_part_message(payload):
     if not normalized:
         return None
 
-    channel, first_reply = _find_or_link_channel(message)
-    if first_reply or not channel:
+    channel = _find_linked_channel(message)
+    if not channel:
         return None
 
     conversation, _ = AgentConversation.objects.get_or_create(

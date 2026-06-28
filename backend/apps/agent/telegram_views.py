@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -11,6 +13,9 @@ from .telegram import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 class TelegramWebhookView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -21,6 +26,10 @@ class TelegramWebhookView(APIView):
             return Response({'detail': 'Webhook secret is invalid.'}, status=status.HTTP_403_FORBIDDEN)
 
         payload = request.data if isinstance(request.data, dict) else {}
+        callback = payload.get('callback_query') if isinstance(payload.get('callback_query'), dict) else {}
+        callback_id = str(callback.get('id') or '').strip()
+        update_id = payload.get('update_id')
+
         try:
             result = process_update(payload)
             if result and result.get('callback_query_id'):
@@ -33,8 +42,23 @@ class TelegramWebhookView(APIView):
                     inline_markup=result.get('inline_markup'),
                 )
         except Exception:
+            logger.exception(
+                'telegram_webhook_processing_failed update_id=%s callback=%s',
+                update_id,
+                bool(callback_id),
+            )
+            if callback_id:
+                try:
+                    answer_callback_query(
+                        callback_id,
+                        'Не вдалося виконати дію. Спробуйте ще раз.',
+                    )
+                except Exception:
+                    logger.exception(
+                        'telegram_callback_error_reply_failed update_id=%s',
+                        update_id,
+                    )
             # Return 200 to prevent Telegram from retrying malformed or unsupported updates.
-            # Internal request logging captures the server-side exception.
             return Response({'ok': True})
 
         return Response({'ok': True})

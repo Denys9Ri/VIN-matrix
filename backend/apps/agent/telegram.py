@@ -16,6 +16,31 @@ from .tools.visits import daily_schedule, find_visits
 TELEGRAM_API_BASE = 'https://api.telegram.org'
 TELEGRAM_TIMEOUT_SECONDS = 10
 
+BUTTON_SCHEDULE = '🗓 Розклад'
+BUTTON_SEARCH = '🔎 Знайти запис'
+BUTTON_NEW_VISIT = '➕ Новий запис'
+BUTTON_HELP = 'ℹ️ Допомога'
+BUTTON_CANCEL = '✖️ Скасувати'
+SEARCH_FLOW = 'find_visit'
+
+MAIN_REPLY_MARKUP = {
+    'keyboard': [
+        [BUTTON_SCHEDULE, BUTTON_SEARCH],
+        [BUTTON_NEW_VISIT, BUTTON_HELP],
+        [BUTTON_CANCEL],
+    ],
+    'resize_keyboard': True,
+    'is_persistent': True,
+    'input_field_placeholder': 'Оберіть дію або введіть запит',
+}
+
+WORKFLOW_REPLY_MARKUP = {
+    'keyboard': [[BUTTON_CANCEL]],
+    'resize_keyboard': True,
+    'is_persistent': True,
+    'input_field_placeholder': 'Відповідайте на питання або скасуйте дію',
+}
+
 
 def _bot_token():
     return os.getenv('TELEGRAM_AGENT_BOT_TOKEN', '').strip()
@@ -28,7 +53,7 @@ def webhook_secret_is_valid(supplied_secret):
     return hmac.compare_digest(expected_secret, str(supplied_secret or ''))
 
 
-def send_message(chat_id, text):
+def send_message(chat_id, text, reply_markup=None):
     token = _bot_token()
     if not token:
         raise APIException('Telegram Agent не налаштований: немає TELEGRAM_AGENT_BOT_TOKEN.')
@@ -39,6 +64,7 @@ def send_message(chat_id, text):
             'chat_id': str(chat_id),
             'text': str(text)[:4096],
             'disable_web_page_preview': True,
+            'reply_markup': reply_markup or MAIN_REPLY_MARKUP,
         },
         timeout=TELEGRAM_TIMEOUT_SECONDS,
     )
@@ -81,11 +107,10 @@ def _format_schedule(result):
 def _help_text():
     return (
         'Я VIN-matrix Agent.\n\n'
-        'Напиши:\n'
-        '• «розклад» — записи на сьогодні\n'
-        '• «розклад 2026-06-30» — записи на дату\n'
-        '• «знайди Ауді Андрія» — пошук за номером, VIN, клієнтом або телефоном\n'
-        '• «новий запис» — створення чернетки запису з підтвердженням у VIN-matrix\n\n'
+        'Користуйтеся кнопками внизу екрана:\n'
+        '• «Розклад» — записи на сьогодні\n'
+        '• «Знайти запис» — номер, VIN, клієнт або телефон\n'
+        '• «Новий запис» — створення чернетки з підтвердженням у VIN-matrix\n\n'
         'Пошук запчастин, голосові та фото будуть підключені наступними модулями.'
     )
 
@@ -100,14 +125,79 @@ def _parse_schedule_date(text):
         raise ValidationError('Вкажи дату у форматі РРРР-ММ-ДД, наприклад: розклад 2026-06-30.')
 
 
+def _clear_conversation_flow(conversation):
+    conversation.context = {}
+    conversation.save(update_fields=['context'])
+
+
+def _reply_markup_for(conversation):
+    context = conversation.context or {}
+    return WORKFLOW_REPLY_MARKUP if context.get('flow') else MAIN_REPLY_MARKUP
+
+
+def _search_visits(channel, query):
+    query = str(query or '').strip()
+    if not query:
+        return 'Напишіть номер авто, VIN, ім’я клієнта або телефон.', 'find_visit', {}
+
+    results = find_visits(channel.user, query=query, limit=5)
+    if not results:
+        return f'За запитом «{query}» нічого не знайдено.', 'find_visit', {'query': query, 'count': 0}
+
+    body = '\n\n'.join(_format_visit(item) for item in results)
+    return body, 'find_visit', {'query': query, 'count': len(results)}
+
+
+def _handle_search_flow(channel, conversation, normalized, lowered):
+    context = dict(conversation.context or {})
+    if context.get('flow') != SEARCH_FLOW:
+        return None
+
+    if lowered in {'/cancel', 'cancel', 'скасувати', 'відміна', BUTTON_CANCEL.lower()}:
+        _clear_conversation_flow(conversation)
+        return 'Пошук скасовано.', 'find_visit_cancelled', {}
+
+    reply, intent, result = _search_visits(channel, normalized)
+    if result.get('query'):
+        _clear_conversation_flow(conversation)
+    return reply, intent, result
+
+
 def _handle_text(channel, text, conversation=None):
     normalized = str(text or '').strip()
     lowered = normalized.lower()
 
     if conversation:
-        visit_flow_response = handle_visit_creation_flow(channel, conversation, normalized)
+        search_flow_response = _handle_search_flow(channel, conversation, normalized, lowered)
+        if search_flow_response is not None:
+            return search_flow_response
+
+        visit_text = '/cancel' if lowered == BUTTON_CANCEL.lower() else normalized
+        visit_flow_response = handle_visit_creation_flow(channel, conversation, visit_text)
         if visit_flow_response is not None:
             return visit_flow_response
+
+    if normalized == BUTTON_SEARCH:
+        if not conversation:
+            return 'Скористайтеся цим меню після підключення Telegram.', 'find_visit', {}
+        conversation.context = {'flow': SEARCH_FLOW, 'step': 'query'}
+        conversation.save(update_fields=['context'])
+        return 'Що знайти? Надішліть номер авто, VIN, ім’я клієнта або телефон.', 'find_visit_started', {}
+
+    if normalized == BUTTON_SCHEDULE:
+        normalized = 'розклад'
+        lowered = normalized
+    elif normalized == BUTTON_NEW_VISIT:
+        normalized = 'новий запис'
+        lowered = normalized
+        if conversation:
+            visit_flow_response = handle_visit_creation_flow(channel, conversation, normalized)
+            if visit_flow_response is not None:
+                return visit_flow_response
+    elif normalized == BUTTON_HELP:
+        return _help_text(), 'help', {}
+    elif normalized == BUTTON_CANCEL:
+        return 'Немає активної дії для скасування. Оберіть потрібний пункт у меню.', 'cancel_no_active_flow', {}
 
     if lowered in {'розклад', 'сьогодні', 'сегодня', 'schedule'} or lowered.startswith('розклад '):
         target_date = _parse_schedule_date(normalized)
@@ -117,14 +207,7 @@ def _handle_text(channel, text, conversation=None):
     search_prefixes = ('знайди ', 'поиск ', 'пошук ', 'find ')
     for prefix in search_prefixes:
         if lowered.startswith(prefix):
-            query = normalized[len(prefix):].strip()
-            if not query:
-                return 'Напиши, що саме знайти: номер, VIN, ім’я клієнта або телефон.', 'find_visit', {}
-            results = find_visits(channel.user, query=query, limit=5)
-            if not results:
-                return f'За запитом «{query}» нічого не знайдено.', 'find_visit', {'query': query, 'count': 0}
-            body = '\n\n'.join(_format_visit(item) for item in results)
-            return body, 'find_visit', {'query': query, 'count': len(results)}
+            return _search_visits(channel, normalized[len(prefix):])
 
     return _help_text(), 'help', {}
 
@@ -181,7 +264,7 @@ def process_update(payload):
     channel, first_reply = _find_or_link_channel(message)
     chat_id = (message.get('chat') or {}).get('id')
     if first_reply:
-        return {'chat_id': chat_id, 'text': first_reply}
+        return {'chat_id': chat_id, 'text': first_reply, 'reply_markup': MAIN_REPLY_MARKUP}
     if not channel:
         return None
 
@@ -241,4 +324,8 @@ def process_update(payload):
         tool_result=result,
         success=intent != 'internal_error',
     )
-    return {'chat_id': channel.chat_id, 'text': reply}
+    return {
+        'chat_id': channel.chat_id,
+        'text': reply,
+        'reply_markup': _reply_markup_for(conversation),
+    }

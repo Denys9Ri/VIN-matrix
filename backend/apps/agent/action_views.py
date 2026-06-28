@@ -1,4 +1,5 @@
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -22,8 +23,9 @@ class AgentAddPartDraftView(APIView):
                 quantity=quantity,
                 sell_price=sell_price,
             )
-        except PermissionError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except (PermissionError, PermissionDenied) as exc:
+            detail = exc.detail if hasattr(exc, 'detail') else str(exc)
+            return Response({'detail': str(detail)}, status=status.HTTP_403_FORBIDDEN)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -41,8 +43,9 @@ class AgentExecuteActionView(APIView):
     def post(self, request, action_id):
         try:
             result = execute_confirmed_action(request.user, action_id)
-        except PermissionError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except (PermissionError, PermissionDenied) as exc:
+            detail = exc.detail if hasattr(exc, 'detail') else str(exc)
+            return Response({'detail': str(detail)}, status=status.HTTP_403_FORBIDDEN)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result)

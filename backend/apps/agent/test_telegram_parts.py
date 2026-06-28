@@ -90,6 +90,7 @@ class TelegramPartsWorkflowTests(TestCase):
         selected = self._callback(1, 'p:original:0')
         self.assertIn('BOSCH 0986494036', selected['text'])
         self.assertIn('p:add', self._callback_data(selected))
+        self.assertIn('p:back:original', self._callback_data(selected))
 
         adding = self._callback(2, 'p:add')
         self.assertIn('До якого запису', adding['text'])
@@ -110,6 +111,25 @@ class TelegramPartsWorkflowTests(TestCase):
         self.assertEqual(action.payload['part']['article'], '0986494036')
         self.assertEqual(action.payload['part']['quantity'], '2.00')
         self.assertEqual(OrderPart.objects.filter(visit=self.visit).count(), 0)
+
+    @patch('apps.agent.telegram_part_actions.search_original')
+    def test_back_from_original_offer_restores_saved_list(self, search_original):
+        second_offer = {**self.offer, 'id': 'supplier-offer-2', 'source': 'Постачальник 2', 'buy_price': '950.00'}
+        search_original.return_value = [self.offer, second_offer]
+
+        self._message(20, BUTTON_PARTS)
+        found = self._message(21, '0986494036')
+        self.assertIn('p:original:1', self._callback_data(found))
+
+        selected = self._callback(20, 'p:original:1')
+        self.assertIn('Постачальник 2', selected['text'])
+
+        restored = self._callback(21, 'p:back:original')
+        self.assertIn('Знайдено 2 пропозицій', restored['text'])
+        callbacks = self._callback_data(restored)
+        self.assertIn('p:original:0', callbacks)
+        self.assertIn('p:original:1', callbacks)
+        search_original.assert_called_once()
 
     @patch('apps.agent.telegram_part_actions.search_selected_analog')
     @patch('apps.agent.telegram_part_actions.search_analogs')
@@ -135,3 +155,15 @@ class TelegramPartsWorkflowTests(TestCase):
         offers = self._callback(12, 'p:analog:0')
         self.assertIn('p:analog_offer:0', self._callback_data(offers))
         self.assertEqual(search_selected_analog.call_args.args[1:], ('GDB1956', 'TRW'))
+
+        selected = self._callback(13, 'p:analog_offer:0')
+        callbacks = self._callback_data(selected)
+        self.assertIn('p:back:analog_offers', callbacks)
+        self.assertIn('p:back:analogs', callbacks)
+
+        restored_offers = self._callback(14, 'p:back:analog_offers')
+        self.assertIn('p:analog_offer:0', self._callback_data(restored_offers))
+
+        self._callback(15, 'p:analog_offer:0')
+        restored_analogs = self._callback(16, 'p:back:analogs')
+        self.assertIn('p:analog:0', self._callback_data(restored_analogs))

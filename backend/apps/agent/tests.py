@@ -1,9 +1,11 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from apps.core.models import Company, Employee, Visit
 
+from .models import AgentAuditLog
 from .services import create_connection_code, get_company_settings, get_member_access
 from .tools.visits import find_visits
 
@@ -68,3 +70,59 @@ class AgentAccessIsolationTests(TestCase):
         code = create_connection_code(self.owner, 'telegram')
         self.assertEqual(code.company_id, self.company.id)
         self.assertTrue(code.is_usable)
+
+
+class AgentAuditLogApiTests(TestCase):
+    def setUp(self):
+        self.api = APIClient()
+        self.owner = User.objects.create_user(username='owner', password='test-pass')
+        self.company = Company.objects.create(name='Main STO', owner=self.owner)
+        self.worker = User.objects.create_user(username='worker', password='test-pass')
+        Employee.objects.create(user=self.worker, company=self.company, role='mechanic')
+
+        self.other_owner = User.objects.create_user(username='other-owner', password='test-pass')
+        self.other_company = Company.objects.create(name='Other STO', owner=self.other_owner)
+
+        config = get_company_settings(self.company)
+        config.is_enabled = True
+        config.save()
+
+        self.owner_log = AgentAuditLog.objects.create(
+            company=self.company,
+            user=self.owner,
+            recognized_intent='connection_code_created',
+            tool_name='create_connection_code',
+        )
+        self.worker_log = AgentAuditLog.objects.create(
+            company=self.company,
+            user=self.worker,
+            recognized_intent='daily_schedule',
+            tool_name='telegram_text_router',
+            request_text='розклад',
+        )
+        self.other_log = AgentAuditLog.objects.create(
+            company=self.other_company,
+            user=self.other_owner,
+            recognized_intent='find_visit',
+            tool_name='telegram_text_router',
+        )
+
+    def test_owner_sees_only_company_audit_log(self):
+        self.api.force_authenticate(user=self.owner)
+
+        response = self.api.get('/api/agent/audit-log/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['scope'], 'company')
+        returned_ids = {item['id'] for item in response.data['items']}
+        self.assertEqual(returned_ids, {self.owner_log.id, self.worker_log.id})
+        self.assertNotIn(self.other_log.id, returned_ids)
+
+    def test_employee_sees_only_personal_audit_log(self):
+        self.api.force_authenticate(user=self.worker)
+
+        response = self.api.get('/api/agent/audit-log/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['scope'], 'personal')
+        self.assertEqual([item['id'] for item in response.data['items']], [self.worker_log.id])

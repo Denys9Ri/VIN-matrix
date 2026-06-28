@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'apps.core.apps.CoreConfig',
     'apps.integrations.apps.IntegrationsConfig',
     'apps.crm.apps.CrmConfig',
+    'apps.agent.apps.AgentConfig',
 ]
 
 TEMPLATES = [
@@ -91,7 +92,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'vin_matrix.urls'
+ROOT_URLCONF = 'vin_matrix.urls_agent'
 WSGI_APPLICATION = 'vin_matrix.wsgi.application'
 
 # Налаштування CORS для React

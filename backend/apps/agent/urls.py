@@ -1,8 +1,8 @@
 from django.urls import path
 
 from .audit_views import AgentAuditLogListView
+from .telegram_connection_views import AgentConnectionCodeView
 from .views import (
-    AgentConnectionCodeView,
     AgentMemberAccessListView,
     AgentPendingActionDecisionView,
     AgentPendingActionListView,

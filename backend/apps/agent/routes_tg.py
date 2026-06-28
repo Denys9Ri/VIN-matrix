@@ -1,8 +1,8 @@
 from django.urls import path
 
-from .telegram_part_details_webhook import TelegramPartDetailsWebhookView
+from .telegram_parts_direct import TelegramPartsDirectWebhookView
 
 
 urlpatterns = [
-    path('telegram/webhook/', TelegramPartDetailsWebhookView.as_view()),
+    path('telegram/webhook/', TelegramPartsDirectWebhookView.as_view()),
 ]

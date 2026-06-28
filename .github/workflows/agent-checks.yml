@@ -36,4 +36,4 @@ jobs:
       - run: pip install -r requirements.txt
       - run: mkdir -p staticfiles
       - run: python manage.py check
-      - run: python manage.py test apps.agent.tests apps.agent.test_parts apps.agent.test_actions --verbosity 2
+      - run: python manage.py test apps.agent.tests apps.agent.test_parts apps.agent.test_actions apps.agent.test_direct_actions apps.agent.test_telegram_direct_override --verbosity 2

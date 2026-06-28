@@ -7,19 +7,12 @@ from .services import require_agent_member, write_audit
 
 
 class DirectAgentActionError(Exception):
-    """Internal marker used only to keep direct Agent execution auditable."""
+    pass
 
 
-def execute_or_queue_action(user, action):
-    """Executes a prepared Agent action now unless company control mode is enabled.
-
-    The existing pending-action record remains the idempotency and audit anchor.
-    When confirmation mode is enabled, callers receive the same pending action
-    behavior as before. When disabled, the record is immediately confirmed and
-    executed with the exact same permission and version checks.
-    """
+def execute_or_queue_action(user, action, immediate=False):
     company, settings, _ = require_agent_member(user)
-    if settings.require_confirmation_for_writes:
+    if settings.require_confirmation_for_writes and not immediate:
         return {
             'requires_confirmation': True,
             'action': action,
@@ -28,10 +21,10 @@ def execute_or_queue_action(user, action):
 
     with transaction.atomic():
         try:
-            locked_action = (
-                AgentPendingAction.objects
-                .select_for_update()
-                .get(id=action.id, company=company, user=user)
+            locked_action = AgentPendingAction.objects.select_for_update().get(
+                id=action.id,
+                company=company,
+                user=user,
             )
         except AgentPendingAction.DoesNotExist as exc:
             raise DirectAgentActionError('Підготовлену дію Agent не знайдено.') from exc

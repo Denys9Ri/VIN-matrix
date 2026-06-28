@@ -71,11 +71,11 @@ def _visit_card_markup(visit, access):
     visit_id = visit['id']
     if access.can_update_visits:
         allowed = STATUS_TRANSITIONS.get(visit['status'], set())
-        if 'IN_PROGRESS' in allowed:
+        if visit['status'] in {'SELECTION', 'PENDING'} and 'IN_PROGRESS' in allowed:
             rows.append([_button('▶️ В роботу', f'st:{visit_id}:IN_PROGRESS')])
-        elif 'DONE' in allowed:
+        elif visit['status'] == 'IN_PROGRESS' and 'DONE' in allowed:
             rows.append([_button('✅ Готово', f'st:{visit_id}:DONE')])
-        elif 'COMPLETED' in allowed:
+        elif visit['status'] == 'DONE' and 'COMPLETED' in allowed:
             rows.append([_button('📦 Видано', f'st:{visit_id}:COMPLETED')])
         elif visit['status'] == 'DONE' and 'IN_PROGRESS' in allowed:
             rows.append([_button('↩️ Повернути в роботу', f'st:{visit_id}:IN_PROGRESS')])
@@ -208,7 +208,7 @@ def _assignment_markup(channel, visit_id):
     for post in posts:
         rows.append([_button(f'Пост: {post.name}', f'ap:{visit_id}:{post.id}')])
 
-    employees = Employee.objects.filter(company=company).select_related('user').order_by('user__first_name', 'user__username')[:8]
+    employees = Employee.objects.filter(company=company, role='mechanic').select_related('user').order_by('user__first_name', 'user__username')[:8]
     for employee in employees:
         name = employee.user.get_full_name() or employee.user.username
         rows.append([_button(f'Майстер: {name}', f'am:{visit_id}:{employee.user_id}')])
@@ -234,6 +234,9 @@ def handle_visit_callback(channel, conversation, callback_data):
         raise ValidationError('Некоректна дія.')
 
     command = parts[0]
+    if command not in {'rs', 'cn'} and (conversation.context or {}).get('flow'):
+        _clear_flow(conversation)
+
     if command == 'v' and len(parts) == 2:
         return _show_visit(channel, parts[1])
 

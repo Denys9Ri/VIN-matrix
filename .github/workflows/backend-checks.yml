@@ -42,5 +42,8 @@ jobs:
       - name: Check Django configuration
         run: python manage.py check
 
-      - name: Run stability, API, and Agent tests
-        run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_system_stability apps.agent
+      - name: Run core stability and API tests
+        run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_system_stability
+
+      - name: Run VIN-matrix Agent tests
+        run: python manage.py test apps.agent --verbosity 2

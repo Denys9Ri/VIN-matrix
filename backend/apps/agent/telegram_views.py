@@ -3,7 +3,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .telegram import process_update, send_message, webhook_secret_is_valid
+from .telegram import (
+    answer_callback_query,
+    process_update,
+    send_message,
+    webhook_secret_is_valid,
+)
 
 
 class TelegramWebhookView(APIView):
@@ -18,11 +23,14 @@ class TelegramWebhookView(APIView):
         payload = request.data if isinstance(request.data, dict) else {}
         try:
             result = process_update(payload)
+            if result and result.get('callback_query_id'):
+                answer_callback_query(result['callback_query_id'])
             if result and result.get('chat_id') and result.get('text'):
                 send_message(
                     result['chat_id'],
                     result['text'],
                     reply_markup=result.get('reply_markup'),
+                    inline_markup=result.get('inline_markup'),
                 )
         except Exception:
             # Return 200 to prevent Telegram from retrying malformed or unsupported updates.

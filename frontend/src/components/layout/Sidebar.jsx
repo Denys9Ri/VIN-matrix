@@ -6,6 +6,7 @@ import {
   CreditCard,
   History,
   LayoutDashboard,
+  LifeBuoy,
   LineChart,
   Package,
   Search,
@@ -77,6 +78,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
   const systemItems = [
     { name: 'Тариф', icon: <CreditCard size={20} />, path: '/billing' },
     { name: 'Налаштування', icon: <Settings size={20} />, path: '/settings' },
+    { name: 'Допомога та підтримка', icon: <LifeBuoy size={20} />, path: '/support' },
   ];
 
   const sections = accessAllowed

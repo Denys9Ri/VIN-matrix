@@ -337,7 +337,12 @@ def handle_visit_callback(channel, conversation, callback_data):
         return format_free_slots(result), 'free_slots_callback', _with_inline({'date': result['date'], 'count': len(result['slots'])}, free_slots_markup(result, prefix='fsi'))
 
     if command == 'fsi' and len(parts) == 4:
+        context = dict(conversation.context or {})
         scheduled = datetime.fromtimestamp(int(parts[1]), tz=timezone.get_current_timezone())
+        if context.get('flow') and (context.get('flow') != 'free_slots' or context.get('step') != 'slots'):
+            raise ValidationError('Ця кнопка вже неактуальна. Натисніть «🟢 Вільні вікна» ще раз.')
+        if context.get('flow') == 'free_slots' and context.get('date') != timezone.localtime(scheduled).date().isoformat():
+            raise ValidationError('Ця кнопка вже неактуальна. Натисніть «🟢 Вільні вікна» ще раз.')
         draft = {
             'scheduled_datetime': scheduled.isoformat(),
             'scheduled_display': timezone.localtime(scheduled).strftime('%d.%m.%Y %H:%M'),

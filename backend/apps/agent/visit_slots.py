@@ -19,9 +19,21 @@ def parse_slot_date(text):
     if tail in {'сьогодні', 'сегодня', 'today'}: return timezone.localdate()
     try: return datetime.strptime(tail, '%Y-%m-%d').date()
     except ValueError: raise ValidationError('Вкажіть дату у форматі 2026-07-10 або напишіть «вільні вікна завтра».')
-def _day_bounds(target_date):
+def _setting_time(value, fallback):
+    return value if isinstance(value, time) else fallback
+
+def get_slot_step_minutes(settings):
+    try: value = int(getattr(settings, 'slot_step_minutes', 30) or 30)
+    except (TypeError, ValueError): value = 30
+    return value if value in {30, 60} else 30
+
+def _day_bounds(target_date, settings):
     tz = timezone.get_current_timezone()
-    return timezone.make_aware(datetime.combine(target_date, time(9, 0)), tz), timezone.make_aware(datetime.combine(target_date, time(18, 0)), tz)
+    start_time = _setting_time(getattr(settings, 'workday_start_time', None), time(9, 0))
+    end_time = _setting_time(getattr(settings, 'workday_end_time', None), time(18, 0))
+    if end_time <= start_time:
+        start_time, end_time = time(9, 0), time(18, 0)
+    return timezone.make_aware(datetime.combine(target_date, start_time), tz), timezone.make_aware(datetime.combine(target_date, end_time), tz)
 def _overlap_filter(start, end, duration_minutes):
     return Q(scheduled_datetime__lt=end, scheduled_datetime__gt=start - timedelta(minutes=duration_minutes))
 def _candidate_mechanics(company, user, access):
@@ -29,14 +41,15 @@ def _candidate_mechanics(company, user, access):
     if not access.can_view_all_visits: qs = qs.filter(user=user)
     return list(qs)
 def _mechanic_name(user): return user.get_full_name() or user.username
-def find_available_slots(user, target_date=None, limit=10):
+def find_available_slots(user, target_date=None, limit=None):
     company, settings, access = require_agent_member(user)
     target_date = target_date or timezone.localdate(); duration = get_default_duration(settings)
-    day_start, day_end = _day_bounds(target_date); now = timezone.now()
+    day_start, day_end = _day_bounds(target_date, settings); now = timezone.now(); step = get_slot_step_minutes(settings)
     posts = list(WorkPost.objects.filter(company=company, is_active=True).order_by('sort_order', 'number', 'id'))
     mechanics = _candidate_mechanics(company, user, access); slots=[]; current=day_start
-    while current + timedelta(minutes=duration) <= day_end and len(slots) < int(limit):
-        if current <= now: current += timedelta(minutes=30); continue
+    max_slots = int(limit) if limit is not None else None
+    while current + timedelta(minutes=duration) <= day_end and (max_slots is None or len(slots) < max_slots):
+        if current <= now: current += timedelta(minutes=step); continue
         end = current + timedelta(minutes=duration)
         busy = Visit.objects.filter(company=company).exclude(status__in=ACTIVE_EXCLUDED_STATUSES).filter(_overlap_filter(current, end, duration))
         busy_posts = set(busy.exclude(work_post__isnull=True).values_list('work_post_id', flat=True))
@@ -46,8 +59,8 @@ def find_available_slots(user, target_date=None, limit=10):
         if (not posts or free_posts) and (access.can_view_all_visits or free_mechanics):
             post = free_posts[0] if free_posts else None; mech = free_mechanics[0] if free_mechanics else None
             slots.append({'start': current, 'end': end, 'duration_minutes': duration, 'work_post_id': post.id if post else None, 'work_post': post.name if post else '', 'mechanic_id': mech.user_id if mech else (user.id if not access.can_view_all_visits else None), 'mechanic': _mechanic_name(mech.user) if mech else (_mechanic_name(user) if not access.can_view_all_visits else ''), 'available_posts': [{'id': p.id, 'name': p.name} for p in free_posts[:8]], 'available_mechanics': [{'id': m.user_id, 'name': _mechanic_name(m.user)} for m in free_mechanics[:8]]})
-        current += timedelta(minutes=30)
-    return {'date': target_date.isoformat(), 'duration_minutes': duration, 'slots': slots}
+        current += timedelta(minutes=step)
+    return {'date': target_date.isoformat(), 'duration_minutes': duration, 'slot_step_minutes': step, 'slots': slots}
 def validate_slot_available(company, start, duration_minutes, work_post_id=None, mechanic_id=None):
     end = start + timedelta(minutes=duration_minutes)
     conflicts = Visit.objects.select_for_update().filter(company=company).exclude(status__in=ACTIVE_EXCLUDED_STATUSES).filter(_overlap_filter(start, end, duration_minutes))

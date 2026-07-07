@@ -5,11 +5,12 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.core.models import Company, OrderPart, Visit
+from apps.core.models import Company, OrderPart, Visit, WorkPost
 
 from .models import AgentPendingAction, AgentUserChannel
 from .services import get_company_settings
-from .telegram_parts_webhook import BUTTON_PARTS, process_agent_update
+from .telegram import BUTTON_FREE_SLOTS
+from .telegram_parts_webhook import BUTTON_PARTS, PARTS_MAIN_REPLY_MARKUP, process_agent_update
 
 
 class TelegramPartsWorkflowTests(TestCase):
@@ -75,6 +76,30 @@ class TelegramPartsWorkflowTests(TestCase):
     def _callback_data(response):
         rows = response['inline_markup']['inline_keyboard']
         return [button['callback_data'] for row in rows for button in row]
+
+    def test_parts_reply_keyboard_contains_free_slots_button(self):
+        flat = [button for row in PARTS_MAIN_REPLY_MARKUP['keyboard'] for button in row]
+        self.assertIn(BUTTON_FREE_SLOTS, flat)
+        self.assertIn(BUTTON_PARTS, flat)
+
+    def test_regular_command_uses_parts_keyboard_and_free_slots_button_shows_slots(self):
+        WorkPost.objects.create(company=self.company, number=1, name='Пост 1', is_active=True)
+
+        help_response = self._message(101, 'допомога')
+        flat = [button for row in help_response['reply_markup']['keyboard'] for button in row]
+        self.assertIn(BUTTON_FREE_SLOTS, flat)
+        self.assertIn(BUTTON_PARTS, flat)
+
+        free_slots = self._message(102, BUTTON_FREE_SLOTS)
+        self.assertIn('Оберіть дату', free_slots['text'])
+        flat = [button for row in free_slots['reply_markup']['keyboard'] for button in row]
+        self.assertIn(BUTTON_FREE_SLOTS, flat)
+        self.assertIn(BUTTON_PARTS, flat)
+
+        today_callback = free_slots['inline_markup']['inline_keyboard'][0][0]['callback_data']
+        slots = self._callback(101, today_callback)
+        self.assertIn('Вільні вікна', slots['text'])
+        self.assertIn('inline_keyboard', slots['inline_markup'])
 
     @patch('apps.agent.telegram_part_actions.search_original')
     def test_search_offer_visit_quantity_creates_part_draft_only(self, search_original):

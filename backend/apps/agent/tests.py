@@ -186,6 +186,7 @@ class TelegramVisitWizardTests(TestCase):
 
         start = self._send(10, BUTTON_FREE_SLOTS)
         self.assertIn('Оберіть дату', start['text'])
+        self.assertEqual(start['reply_markup'], MAIN_REPLY_MARKUP)
         tomorrow_button = start['inline_markup']['inline_keyboard'][0][1]
         self.assertEqual(tomorrow_button['text'], 'Завтра')
 
@@ -194,6 +195,7 @@ class TelegramVisitWizardTests(TestCase):
         self.assertNotIn('Оберіть дату', slots['text'])
         slot_callback = slots['inline_markup']['inline_keyboard'][0][0]['callback_data']
         self.assertTrue(slot_callback.startswith('fsi:'), slot_callback)
+        self.assertEqual(slots['reply_markup'], MAIN_REPLY_MARKUP)
 
         selected = self._callback(12, slot_callback)
         self.assertIn('Як звати клієнта', selected['text'])
@@ -204,6 +206,10 @@ class TelegramVisitWizardTests(TestCase):
         self.assertEqual(context['step'], 'client')
         self.assertIn('scheduled_datetime', context['visit'])
         self.assertIsNotNone(context['visit']['work_post_id'])
+
+        stale = self._callback(13, slot_callback)
+        self.assertIn('неактуальна', stale['text'])
+        self.assertNotIn('Вільні вікна на', stale['text'])
 
     def test_free_slot_flow_creates_one_visit_and_duplicate_update_is_ignored(self):
         WorkPost.objects.create(company=self.company, number=1, name='Пост 1', is_active=True)

@@ -127,6 +127,18 @@ def send_message(chat_id, text, reply_markup=None, inline_markup=None):
     })
 
 
+def _exception_message(exc):
+    detail = getattr(exc, 'detail', exc)
+    if isinstance(detail, (list, tuple)):
+        return ' '.join(str(item) for item in detail)
+    if isinstance(detail, dict):
+        messages = []
+        for value in detail.values():
+            messages.extend(value if isinstance(value, (list, tuple)) else [value])
+        return ' '.join(str(item) for item in messages)
+    return str(detail)
+
+
 def answer_callback_query(callback_query_id, text=''):
     if not callback_query_id:
         return
@@ -198,6 +210,10 @@ def _clear_conversation_flow(conversation):
 
 def _reply_markup_for(conversation):
     context = conversation.context or {}
+    # The free-slots browser uses inline buttons and should not hide the persistent
+    # main Telegram menu: users must always be able to reopen 🟢 Вільні вікна.
+    if context.get('flow') == 'free_slots':
+        return MAIN_REPLY_MARKUP
     return WORKFLOW_REPLY_MARKUP if context.get('flow') else MAIN_REPLY_MARKUP
 
 
@@ -286,7 +302,10 @@ def _handle_text(channel, text, conversation=None):
         from .telegram_visit_actions import free_slots_markup, format_free_slots
         target_date = parse_slot_date(normalized)
         result = find_available_slots(channel.user, target_date=target_date, limit=10)
-        return format_free_slots(result), 'free_slots', {'date': result['date'], 'count': len(result['slots']), '_telegram_inline_markup': free_slots_markup(result)}
+        if conversation:
+            conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date']}
+            conversation.save(update_fields=['context'])
+        return format_free_slots(result), 'free_slots', {'date': result['date'], 'count': len(result['slots']), '_telegram_inline_markup': free_slots_markup(result, prefix='fsi')}
 
     if lowered in {'розклад', 'сьогодні', 'сегодня', 'schedule'} or lowered.startswith('розклад '):
         target_date = _parse_schedule_date(normalized)
@@ -387,7 +406,7 @@ def _process_callback(callback):
             callback.get('data'),
         )
     except (PermissionDenied, ValidationError) as exc:
-        reply = str(exc.detail if hasattr(exc, 'detail') else exc)
+        reply = _exception_message(exc)
         intent = 'callback_access_or_validation_error'
         result = {}
     except Exception:
@@ -471,7 +490,7 @@ def process_update(payload):
         try:
             reply, intent, result = _handle_text(channel, message['text'], conversation=conversation)
         except (PermissionDenied, ValidationError) as exc:
-            reply = str(exc.detail if hasattr(exc, 'detail') else exc)
+            reply = _exception_message(exc)
             intent = 'access_or_validation_error'
             result = {}
         except Exception:

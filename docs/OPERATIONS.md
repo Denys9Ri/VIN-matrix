@@ -16,6 +16,12 @@ Then verify the platform-admin-only endpoint:
 curl -H "Authorization: Bearer <admin_access_token>" https://your-domain/api/system/health/
 ```
 
+For support-access incidents, verify the exact deployed code paths, `core.0007_supportaccesssession` migration state, and the real `core_supportaccesssession` database table from inside the production backend container:
+
+```bash
+python manage.py check_support_access
+```
+
 The response is `ok`, `degraded`, or `down`. `degraded` is actionable: inspect migration, backup, security, billing, and Nova Poshta checks before release.
 
 ## 2. Production environment

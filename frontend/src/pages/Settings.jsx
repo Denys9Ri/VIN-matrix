@@ -16,11 +16,13 @@ import {
   Link as LinkIcon,
   LogOut,
   MapPin,
+  MessageCircle,
   Pencil,
   Phone,
   Plus,
   Save,
   ShieldAlert,
+  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   Truck,
@@ -532,6 +534,8 @@ export default function Settings() {
         <div className="space-y-6 min-w-0">
           <SecurityCard onChangePassword={() => setIsChangingPassword(true)} />
 
+          <SupportCard />
+
           {isSto && (
             <TeamPanel
               mechanics={mechanics}
@@ -727,6 +731,79 @@ function SecurityCard({ onChangePassword }) {
         <span className="text-[11px] font-black uppercase px-2 py-1 rounded-full bg-purple-50 text-purple-700">Акаунт</span>
       </div>
       <Button type="button" variant="secondary" className="w-full" onClick={onChangePassword} icon={<Key size={17}/>}>Змінити пароль</Button>
+    </section>
+  );
+}
+
+
+function SupportCard() {
+  return (
+    <section className="overflow-hidden rounded-[30px] border border-slate-100 bg-white shadow-sm">
+      <div className="bg-gradient-to-r from-slate-950 via-blue-900 to-blue-600 p-5 text-white">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-blue-100">
+            <ShieldCheck size={21} />
+          </span>
+
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-200">
+              VIN-matrix
+            </p>
+            <h3 className="mt-1 text-base font-black uppercase">
+              Допомога та підтримка
+            </h3>
+            <p className="mt-2 text-xs font-semibold leading-relaxed text-blue-100">
+              Напишіть або зателефонуйте, якщо потрібна допомога з доступом,
+              налаштуванням або роботою в системі.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-4">
+        <a
+          href="https://t.me/vin_matrix"
+          target="_blank"
+          rel="noreferrer"
+          className="group flex items-center gap-3 rounded-2xl border border-slate-200 p-3.5 transition hover:border-blue-300 hover:bg-blue-50"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 transition group-hover:bg-blue-600 group-hover:text-white">
+            <MessageCircle size={20} />
+          </span>
+
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Telegram
+            </p>
+            <p className="mt-0.5 truncate text-sm font-black text-slate-900">
+              @vin_matrix
+            </p>
+          </div>
+        </a>
+
+        <a
+          href="tel:+380636699617"
+          className="group flex items-center gap-3 rounded-2xl border border-slate-200 p-3.5 transition hover:border-blue-300 hover:bg-blue-50"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 transition group-hover:bg-blue-600 group-hover:text-white">
+            <Phone size={20} />
+          </span>
+
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Телефон підтримки
+            </p>
+            <p className="mt-0.5 truncate text-sm font-black text-slate-900">
+              +380 63 669 96 17
+            </p>
+          </div>
+        </a>
+      </div>
+
+      <div className="mx-4 mb-4 rounded-2xl bg-slate-50 p-3 text-xs font-semibold leading-relaxed text-slate-600">
+        Підтримка VIN-matrix не просить повідомляти пароль або коди доступу.
+        Для захисту облікового запису не передавайте ці дані третім особам.
+      </div>
     </section>
   );
 }

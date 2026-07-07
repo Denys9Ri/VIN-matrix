@@ -35,17 +35,35 @@ BUTTON_HELP = 'ℹ️ Допомога'
 BUTTON_CANCEL = '✖️ Скасувати'
 SEARCH_FLOW = 'find_visit'
 
-MAIN_REPLY_MARKUP = {
-    'keyboard': [
-        [BUTTON_SCHEDULE, BUTTON_SEARCH],
-        [BUTTON_NEW_VISIT, BUTTON_FREE_SLOTS],
-        [BUTTON_HELP],
-        [BUTTON_CANCEL],
-    ],
-    'resize_keyboard': True,
-    'is_persistent': True,
-    'input_field_placeholder': 'Оберіть дію або введіть запит',
-}
+
+def build_main_reply_markup(parts_button=None):
+    second_row = [BUTTON_NEW_VISIT, BUTTON_FREE_SLOTS]
+    if parts_button:
+        return {
+            'keyboard': [
+                [BUTTON_SCHEDULE, BUTTON_SEARCH],
+                second_row,
+                [parts_button, BUTTON_HELP],
+                [BUTTON_CANCEL],
+            ],
+            'resize_keyboard': True,
+            'is_persistent': True,
+            'input_field_placeholder': 'Оберіть дію або введіть запит',
+        }
+    return {
+        'keyboard': [
+            [BUTTON_SCHEDULE, BUTTON_SEARCH],
+            second_row,
+            [BUTTON_HELP],
+            [BUTTON_CANCEL],
+        ],
+        'resize_keyboard': True,
+        'is_persistent': True,
+        'input_field_placeholder': 'Оберіть дію або введіть запит',
+    }
+
+
+MAIN_REPLY_MARKUP = build_main_reply_markup()
 
 WORKFLOW_REPLY_MARKUP = {
     'keyboard': [[BUTTON_CANCEL]],

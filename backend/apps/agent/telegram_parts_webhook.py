@@ -12,12 +12,14 @@ from .models import AgentConversation, AgentInboundMessage, AgentUserChannel
 from .services import write_audit
 from .telegram import (
     BUTTON_CANCEL,
+    BUTTON_FREE_SLOTS,
     BUTTON_HELP,
     BUTTON_NEW_VISIT,
     BUTTON_SCHEDULE,
     BUTTON_SEARCH,
     MAIN_REPLY_MARKUP,
     WORKFLOW_REPLY_MARKUP,
+    build_main_reply_markup,
     _find_callback_channel,
     answer_callback_query,
     process_update,
@@ -36,16 +38,7 @@ from .telegram_visit_actions import pop_inline_markup
 logger = logging.getLogger('vin_matrix.api')
 BUTTON_PARTS = '🔩 Запчастини'
 
-PARTS_MAIN_REPLY_MARKUP = {
-    'keyboard': [
-        [BUTTON_SCHEDULE, BUTTON_SEARCH],
-        [BUTTON_NEW_VISIT, BUTTON_PARTS],
-        [BUTTON_HELP, BUTTON_CANCEL],
-    ],
-    'resize_keyboard': True,
-    'is_persistent': True,
-    'input_field_placeholder': 'Оберіть дію або введіть запит',
-}
+PARTS_MAIN_REPLY_MARKUP = build_main_reply_markup(parts_button=BUTTON_PARTS)
 
 
 def _callback_chat_id(callback):
@@ -57,6 +50,8 @@ def _callback_chat_id(callback):
 
 def _reply_markup_for(conversation):
     context = conversation.context or {}
+    if context.get('flow') == 'free_slots':
+        return PARTS_MAIN_REPLY_MARKUP
     return WORKFLOW_REPLY_MARKUP if context.get('flow') else PARTS_MAIN_REPLY_MARKUP
 
 
@@ -230,7 +225,11 @@ def process_agent_update(payload):
         result = _process_part_message(payload)
         if result is not None:
             return result
-    return process_update(payload)
+    result = process_update(payload)
+    if result is not None:
+        result = dict(result)
+        result['reply_markup'] = _enhance_main_reply_markup(result.get('reply_markup'))
+    return result
 
 
 class TelegramPartsWebhookView(APIView):

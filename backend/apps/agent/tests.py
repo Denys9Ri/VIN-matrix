@@ -3,12 +3,13 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.core.models import Company, Employee, Visit
+from apps.core.models import Company, Employee, Visit, WorkPost
 
 from .models import AgentAuditLog, AgentPendingAction, AgentUserChannel
 from .services import create_connection_code, get_company_settings, get_member_access
 from .telegram import (
     BUTTON_CANCEL,
+    BUTTON_FREE_SLOTS,
     BUTTON_NEW_VISIT,
     BUTTON_SEARCH,
     MAIN_REPLY_MARKUP,
@@ -163,6 +164,62 @@ class TelegramVisitWizardTests(TestCase):
                 'chat': {'id': 2002},
             },
         })
+
+
+    def _callback(self, update_id, callback_data):
+        return process_update({
+            'update_id': update_id,
+            'callback_query': {
+                'id': f'cb-{update_id}',
+                'data': callback_data,
+                'from': {'id': 1001, 'first_name': 'Тестовий'},
+                'message': {'message_id': update_id, 'chat': {'id': 2002}},
+            },
+        })
+
+    def test_free_slots_button_is_in_reply_keyboard(self):
+        flat = [button for row in MAIN_REPLY_MARKUP['keyboard'] for button in row]
+        self.assertIn(BUTTON_FREE_SLOTS, flat)
+
+    def test_free_slots_tomorrow_shows_slots_and_slot_starts_create_visit(self):
+        WorkPost.objects.create(company=self.company, number=1, name='Пост 1', is_active=True)
+
+        start = self._send(10, BUTTON_FREE_SLOTS)
+        self.assertIn('Оберіть дату', start['text'])
+        tomorrow_button = start['inline_markup']['inline_keyboard'][0][1]
+        self.assertEqual(tomorrow_button['text'], 'Завтра')
+
+        slots = self._callback(11, tomorrow_button['callback_data'])
+        self.assertIn('Вільні вікна', slots['text'])
+        self.assertNotIn('Оберіть дату', slots['text'])
+        slot_callback = slots['inline_markup']['inline_keyboard'][0][0]['callback_data']
+        self.assertTrue(slot_callback.startswith('fsi:'), slot_callback)
+
+        selected = self._callback(12, slot_callback)
+        self.assertIn('Як звати клієнта', selected['text'])
+        self.assertNotIn('Вільні вікна', selected['text'])
+        self.channel.refresh_from_db()
+        context = self.channel.conversation.context
+        self.assertEqual(context['flow'], 'create_visit')
+        self.assertEqual(context['step'], 'client')
+        self.assertIn('scheduled_datetime', context['visit'])
+        self.assertIsNotNone(context['visit']['work_post_id'])
+
+    def test_free_slot_flow_creates_one_visit_and_duplicate_update_is_ignored(self):
+        WorkPost.objects.create(company=self.company, number=1, name='Пост 1', is_active=True)
+        menu = self._send(20, BUTTON_FREE_SLOTS)
+        slots = self._callback(21, menu['inline_markup']['inline_keyboard'][0][1]['callback_data'])
+        self._callback(22, slots['inline_markup']['inline_keyboard'][0][0]['callback_data'])
+
+        self.assertIn('Номер автомобіля', self._send(23, 'Іван Петренко')['text'])
+        self.assertIn('Телефон', self._send(24, 'AA1234AA')['text'])
+        self.assertIn('коментар', self._send(25, '0501234567')['text'])
+        created = self._send(26, 'Без коментаря')
+        duplicate = self._send(26, 'Без коментаря')
+
+        self.assertIn('✅ Запис створено', created['text'])
+        self.assertIsNone(duplicate)
+        self.assertEqual(Visit.objects.filter(company=self.company).count(), 1)
 
     def test_wizard_creates_visit_without_pending_action(self):
         self.assertIn('Як звати клієнта', self._send(1, 'новий запис')['text'])

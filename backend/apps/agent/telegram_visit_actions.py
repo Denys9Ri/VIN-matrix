@@ -139,6 +139,49 @@ def free_slots_markup(result, prefix='fs'):
         rows.append([_button(label, data)])
     return _markup(rows) if rows else None
 
+
+def free_slots_date_markup(prefix='fd'):
+    return _markup([
+        [_button('Сьогодні', f'{prefix}:0'), _button('Завтра', f'{prefix}:1')],
+        [_button('Післязавтра', f'{prefix}:2')],
+        [_button('📅 Інша дата', f'{prefix}:x')],
+    ])
+
+
+def _parse_day_offset(value):
+    if value in {'0', '1', '2'}:
+        return timezone.localdate() + timedelta(days=int(value))
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise ValidationError('Ця кнопка вже неактуальна. Натисніть «🟢 Вільні вікна» ще раз.')
+
+
+def start_free_slots_date_choice(conversation):
+    conversation.context = {'flow': 'free_slots', 'step': 'date_choice'}
+    conversation.save(update_fields=['context'])
+    return 'Оберіть дату для перегляду вільних вікон:', 'free_slots_date_choice', _with_inline({}, free_slots_date_markup())
+
+
+def handle_free_slots_text(channel, conversation, text):
+    context = dict(conversation.context or {})
+    if context.get('flow') != 'free_slots':
+        return None
+    normalized = str(text or '').strip()
+    if normalized.lower() in CANCEL_VALUES:
+        _clear_flow(conversation)
+        return 'Перегляд вільних вікон скасовано.', 'free_slots_cancelled', {}
+    if context.get('step') != 'custom_date':
+        return None
+    try:
+        target_date = date.fromisoformat(normalized)
+    except ValueError:
+        return 'Введіть дату у форматі 2026-07-10 або натисніть «Скасувати».', 'free_slots_date_validation_error', {}
+    result = find_available_slots(channel.user, target_date=target_date, limit=10)
+    conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date']}
+    conversation.save(update_fields=['context'])
+    return format_free_slots(result), 'free_slots_shown', _with_inline({'date': result['date'], 'count': len(result['slots'])}, free_slots_markup(result, prefix='fsi'))
+
 def _format_schedule(result):
     if not result['visits']:
         return f"На {result['date']} записів немає."
@@ -261,7 +304,7 @@ def handle_visit_callback(channel, conversation, callback_data):
         raise ValidationError('Некоректна дія.')
 
     command = parts[0]
-    if command not in {'rs', 'cn', 'cvslot'} and (conversation.context or {}).get('flow'):
+    if command not in {'rs', 'cn', 'cvslot', 'fd', 'fsi'} and (conversation.context or {}).get('flow'):
         _clear_flow(conversation)
 
     if command == 'v' and len(parts) == 2:
@@ -279,10 +322,31 @@ def handle_visit_callback(channel, conversation, callback_data):
             _with_inline({'date': result['date'], 'count': result['count']}, schedule_markup(result)),
         )
 
-    if command == 'fs' and len(parts) >= 2:
-        target_date = timezone.localtime(datetime.fromtimestamp(int(parts[1]), tz=timezone.get_current_timezone())).date()
+    if command == 'fs':
+        raise ValidationError('Ця кнопка вже неактуальна. Натисніть «🟢 Вільні вікна» ще раз.')
+
+    if command == 'fd' and len(parts) == 2:
+        if parts[1] == 'x':
+            conversation.context = {'flow': 'free_slots', 'step': 'custom_date'}
+            conversation.save(update_fields=['context'])
+            return 'Введіть дату у форматі 2026-07-10.', 'free_slots_custom_date_requested', {}
+        target_date = _parse_day_offset(parts[1])
         result = find_available_slots(channel.user, target_date=target_date, limit=10)
-        return format_free_slots(result), 'free_slots_callback', _with_inline({'date': result['date']}, free_slots_markup(result))
+        conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date']}
+        conversation.save(update_fields=['context'])
+        return format_free_slots(result), 'free_slots_callback', _with_inline({'date': result['date'], 'count': len(result['slots'])}, free_slots_markup(result, prefix='fsi'))
+
+    if command == 'fsi' and len(parts) == 4:
+        scheduled = datetime.fromtimestamp(int(parts[1]), tz=timezone.get_current_timezone())
+        draft = {
+            'scheduled_datetime': scheduled.isoformat(),
+            'scheduled_display': timezone.localtime(scheduled).strftime('%d.%m.%Y %H:%M'),
+            'work_post_id': None if parts[2] == '0' else int(parts[2]),
+            'mechanic_id': None if parts[3] == '0' else int(parts[3]),
+        }
+        conversation.context = {'flow': 'create_visit', 'step': 'client', 'visit': draft}
+        conversation.save(update_fields=['context'])
+        return f"Запис на {timezone.localtime(scheduled).strftime('%d.%m.%Y о %H:%M')} обрано. Як звати клієнта?", 'free_slot_selected_create_visit_started', {}
 
     if command == 'cvslot' and len(parts) == 4:
         context = dict(conversation.context or {})

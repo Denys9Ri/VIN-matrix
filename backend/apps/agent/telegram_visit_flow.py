@@ -99,6 +99,9 @@ def handle_visit_creation_flow(channel, conversation, text):
 
     if step == 'phone':
         draft['phone'] = '' if _is_skip(normalized) else normalized[:20]
+        if draft.get('scheduled_datetime'):
+            _save_context(conversation, {'flow': FLOW_NAME, 'step': 'comment', 'visit': draft})
+            return 'Додайте короткий коментар або надішліть «-».', 'visit_create_phone_received', {}
         _save_context(conversation, {'flow': FLOW_NAME, 'step': 'date', 'visit': draft})
         return 'На яку дату шукаємо вільні вікна? Наприклад: завтра або 2026-07-10.', 'visit_create_phone_received', {}
 

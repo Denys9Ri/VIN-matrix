@@ -11,9 +11,11 @@ from .models import AgentConversation, AgentInboundMessage, AgentUserChannel
 from .services import link_channel_by_code, write_audit
 from .telegram_visit_actions import (
     handle_visit_callback,
+    handle_free_slots_text,
     handle_visit_lifecycle_text,
     pop_inline_markup,
     schedule_markup,
+    start_free_slots_date_choice,
     visit_results_markup,
 )
 from .telegram_visit_flow import handle_visit_creation_flow
@@ -240,6 +242,10 @@ def _handle_text(channel, text, conversation=None):
         if lifecycle_response is not None:
             return lifecycle_response
 
+        free_slots_text_response = handle_free_slots_text(channel, conversation, normalized)
+        if free_slots_text_response is not None:
+            return free_slots_text_response
+
         search_flow_response = _handle_search_flow(channel, conversation, normalized, lowered)
         if search_flow_response is not None:
             return search_flow_response
@@ -267,6 +273,8 @@ def _handle_text(channel, text, conversation=None):
             if visit_flow_response is not None:
                 return visit_flow_response
     elif normalized == BUTTON_FREE_SLOTS:
+        if conversation:
+            return start_free_slots_date_choice(conversation)
         normalized = 'вільні вікна'
         lowered = normalized
     elif normalized == BUTTON_HELP:

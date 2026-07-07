@@ -6,7 +6,6 @@ import {
   CreditCard,
   History,
   LayoutDashboard,
-  LifeBuoy,
   LineChart,
   Package,
   Search,
@@ -212,31 +211,6 @@ const Sidebar = ({ isOpen, closeMenu }) => {
             </div>
           )}
         </nav>
-
-        <div className="border-t border-slate-800 p-3">
-          <div className="rounded-xl bg-slate-800/80 p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.1em] text-slate-300">
-              <LifeBuoy size={15} className="text-blue-400" />
-              Допомога та підтримка
-            </div>
-
-            <a
-              href="https://t.me/vin_matrix"
-              target="_blank"
-              rel="noreferrer"
-              className="block text-sm font-bold text-white transition hover:text-blue-300"
-            >
-              Telegram: @vin_matrix
-            </a>
-
-            <a
-              href="tel:+380636699617"
-              className="mt-1 block text-sm font-bold text-white transition hover:text-blue-300"
-            >
-              +380 63 669 96 17
-            </a>
-          </div>
-        </div>
       </aside>
     </>
   );

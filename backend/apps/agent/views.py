@@ -74,6 +74,7 @@ class AgentSettingsView(APIView):
             'allow_images': config.allow_images,
             'require_confirmation_for_writes': config.require_confirmation_for_writes,
             'monthly_action_limit': config.monthly_action_limit,
+            'default_visit_duration_minutes': config.default_visit_duration_minutes,
         })
 
     def patch(self, request):
@@ -89,11 +90,20 @@ class AgentSettingsView(APIView):
             'allow_images',
             'require_confirmation_for_writes',
             'monthly_action_limit',
+            'default_visit_duration_minutes',
         }
         changed = []
         for field in allowed_fields:
             if field in request.data:
-                setattr(config, field, request.data[field])
+                value = request.data[field]
+                if field == 'default_visit_duration_minutes':
+                    try:
+                        value = int(value)
+                    except (TypeError, ValueError):
+                        value = 60
+                    if value not in {30, 60, 90, 120}:
+                        value = 60
+                setattr(config, field, value)
                 changed.append(field)
 
         if changed:

@@ -103,14 +103,14 @@ class TelegramPartsWorkflowTests(TestCase):
         self.assertIn('p:qty:2', self._callback_data(quantity))
 
         drafted = self._callback(4, 'p:qty:2')
-        self.assertIn('Чернетку додавання', drafted['text'])
+        self.assertIn('✅ Запчастину додано', drafted['text'])
 
         action = AgentPendingAction.objects.get(company=self.company, action_type='add_order_part')
-        self.assertEqual(action.status, AgentPendingAction.STATUS_PENDING)
+        self.assertEqual(action.status, AgentPendingAction.STATUS_EXECUTED)
         self.assertEqual(action.payload['visit_id'], self.visit.id)
         self.assertEqual(action.payload['part']['article'], '0986494036')
         self.assertEqual(action.payload['part']['quantity'], '2.00')
-        self.assertEqual(OrderPart.objects.filter(visit=self.visit).count(), 0)
+        self.assertEqual(OrderPart.objects.filter(visit=self.visit).count(), 1)
 
     @patch('apps.agent.telegram_part_actions.search_original')
     def test_back_from_original_offer_restores_saved_list(self, search_original):

@@ -15,6 +15,7 @@ from .actions import (
 )
 from .services import require_agent_member
 from .tools.visits import daily_schedule, get_visit
+from .visit_slots import find_available_slots, parse_slot_date
 
 
 INLINE_MARKUP_KEY = '_telegram_inline_markup'
@@ -111,6 +112,32 @@ def schedule_markup(result):
     ])
     return _markup(rows)
 
+
+
+def format_free_slots(result):
+    slots = result.get('slots', [])
+    if not slots:
+        return f"На {result.get('date')} немає доступних вікон."
+    lines = [f"Вільні вікна на {result.get('date')} · тривалість {result.get('duration_minutes')} хв:"]
+    for slot in slots[:12]:
+        parts = [timezone.localtime(slot['start']).strftime('%H:%M')]
+        if slot.get('work_post'):
+            parts.append(f"пост: {slot['work_post']}")
+        if slot.get('mechanic'):
+            parts.append(f"майстер: {slot['mechanic']}")
+        lines.append('• ' + ' · '.join(parts))
+    return '\n'.join(lines)
+
+
+def free_slots_markup(result, prefix='fs'):
+    rows = []
+    for slot in result.get('slots', [])[:12]:
+        label = timezone.localtime(slot['start']).strftime('%H:%M')
+        if slot.get('work_post'):
+            label += f" · {slot['work_post'][:18]}"
+        data = f"{prefix}:{int(slot['start'].timestamp())}:{slot.get('work_post_id') or 0}:{slot.get('mechanic_id') or 0}"
+        rows.append([_button(label, data)])
+    return _markup(rows) if rows else None
 
 def _format_schedule(result):
     if not result['visits']:
@@ -234,7 +261,7 @@ def handle_visit_callback(channel, conversation, callback_data):
         raise ValidationError('Некоректна дія.')
 
     command = parts[0]
-    if command not in {'rs', 'cn'} and (conversation.context or {}).get('flow'):
+    if command not in {'rs', 'cn', 'cvslot'} and (conversation.context or {}).get('flow'):
         _clear_flow(conversation)
 
     if command == 'v' and len(parts) == 2:
@@ -251,6 +278,25 @@ def handle_visit_callback(channel, conversation, callback_data):
             'daily_schedule_callback',
             _with_inline({'date': result['date'], 'count': result['count']}, schedule_markup(result)),
         )
+
+    if command == 'fs' and len(parts) >= 2:
+        target_date = timezone.localtime(datetime.fromtimestamp(int(parts[1]), tz=timezone.get_current_timezone())).date()
+        result = find_available_slots(channel.user, target_date=target_date, limit=10)
+        return format_free_slots(result), 'free_slots_callback', _with_inline({'date': result['date']}, free_slots_markup(result))
+
+    if command == 'cvslot' and len(parts) == 4:
+        context = dict(conversation.context or {})
+        if context.get('flow') != 'create_visit':
+            raise ValidationError('Ця кнопка вже неактуальна. Почніть новий запис ще раз.')
+        draft = dict(context.get('visit') or {})
+        scheduled = datetime.fromtimestamp(int(parts[1]), tz=timezone.get_current_timezone())
+        draft['scheduled_datetime'] = scheduled.isoformat()
+        draft['scheduled_display'] = timezone.localtime(scheduled).strftime('%d.%m.%Y %H:%M')
+        draft['work_post_id'] = None if parts[2] == '0' else int(parts[2])
+        draft['mechanic_id'] = None if parts[3] == '0' else int(parts[3])
+        conversation.context = {'flow': 'create_visit', 'step': 'comment', 'visit': draft}
+        conversation.save(update_fields=['context'])
+        return 'Слот обрано: ' + draft['scheduled_display'] + '. Додайте короткий коментар або надішліть «-».', 'visit_slot_selected', {}
 
     if command == 'rs' and len(parts) == 2:
         get_visit(channel.user, parts[1])

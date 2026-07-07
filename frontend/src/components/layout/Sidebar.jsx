@@ -94,7 +94,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
   ];
 
   const accessItems = [
-    ...(accessAllowed && role === 'partner' && canManageAccounts
+    ...(accessAllowed && canManageAccounts
       ? [
           {
             name: 'Акаунти',

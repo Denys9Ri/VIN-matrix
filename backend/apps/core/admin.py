@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Company, Employee, PlatformClient
+from .models import Company, Employee, PlatformClient, SupportAccessSession
 
 
 @admin.register(PlatformClient)
@@ -44,3 +44,12 @@ class CompanyAdmin(admin.ModelAdmin):
 class EmployeeAdmin(admin.ModelAdmin):
     list_display = ("user", "company", "role", "partner_code")
     list_filter = ("role",)
+
+
+@admin.register(SupportAccessSession)
+class SupportAccessSessionAdmin(admin.ModelAdmin):
+    list_display = ("session_id", "admin_user", "platform_client", "target_user", "started_at", "expires_at", "ended_at")
+    list_filter = ("started_at", "expires_at", "ended_at")
+    search_fields = ("session_id", "admin_user__username", "target_user__username", "platform_client__client_code", "reason")
+    readonly_fields = ("session_id", "admin_user", "platform_client", "target_user", "reason", "started_at", "expires_at", "ended_at", "ip_address", "user_agent")
+

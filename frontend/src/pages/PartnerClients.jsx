@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BadgeCheck, BadgeX, CheckCircle2, CreditCard, Loader2, Power, RefreshCw, Search, Trash2, Users, X, XCircle } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, BadgeX, CheckCircle2, CreditCard, Headphones, Loader2, Power, RefreshCw, Search, Trash2, Users, X, XCircle } from 'lucide-react';
 import api from '../api/axios';
 import CopyButton from '../components/common/CopyButton';
 
@@ -53,8 +53,11 @@ const PartnerClients = () => {
   const [notice, setNotice] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
   const [rejectPaymentTarget, setRejectPaymentTarget] = useState(null);
+  const [supportTarget, setSupportTarget] = useState(null);
+  const [supportBusy, setSupportBusy] = useState(false);
 
   const showNotice = (type, text) => setNotice({ type, text });
+  const isPlatformAdmin = (settings?.actual_role || settings?.account_role) === 'admin' || Boolean(settings?.admin_code);
 
   const loadPayments = async () => {
     setPaymentsLoading(true);
@@ -186,6 +189,33 @@ const PartnerClients = () => {
       showNotice('error', `Не вдалося відхилити оплату: ${getErrorMessage(error)}`);
     } finally {
       setBusyPaymentId(null);
+    }
+  };
+
+
+  const startSupportSession = async (client, reason) => {
+    setSupportBusy(true);
+    setNotice(null);
+    try {
+      const res = await api.post('/api/support/start/', { client_id: client.id, reason: reason?.trim() || 'Технічна підтримка' });
+      const alreadyInSupport = localStorage.getItem('support_mode') === 'true';
+      if (!alreadyInSupport) {
+        const currentAccess = localStorage.getItem('access_token');
+        const currentRefresh = localStorage.getItem('refresh_token');
+        if (currentAccess) localStorage.setItem('support_original_access_token', currentAccess);
+        if (currentRefresh) localStorage.setItem('support_original_refresh_token', currentRefresh);
+      }
+      localStorage.setItem('support_mode', 'true');
+      localStorage.setItem('support_session_id', res.data.support_session_id || '');
+      localStorage.setItem('support_client_name', res.data.client_name || getClientName(client));
+      localStorage.setItem('support_company_name', res.data.company_name || '');
+      localStorage.setItem('support_expires_at', res.data.expires_at || '');
+      localStorage.setItem('access_token', res.data.access);
+      localStorage.removeItem('refresh_token');
+      window.location.assign('/');
+    } catch (error) {
+      showNotice('error', `Не вдалося увійти в режим підтримки: ${getErrorMessage(error)}`);
+      setSupportBusy(false);
     }
   };
 
@@ -322,6 +352,7 @@ const PartnerClients = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
+                          {isPlatformAdmin && <button disabled={busy || supportBusy} onClick={() => setSupportTarget(client)} className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 font-bold text-blue-700 inline-flex items-center gap-1 disabled:opacity-60"><Headphones size={15} /> Підтримка</button>}
                           <button disabled={busy} onClick={() => renewClient(client)} className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 font-bold text-emerald-700 inline-flex items-center gap-1 disabled:opacity-60"><RefreshCw size={15} /> +1 місяць</button>
                           <button disabled={busy} onClick={() => toggleAccess(client)} className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 inline-flex items-center gap-1 disabled:opacity-60"><Power size={15} /> {client.is_access_enabled ? 'Вимкнути' : 'Увімкнути'}</button>
                           <button disabled={busy} onClick={() => deleteClient(client)} className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 font-bold text-rose-700 inline-flex items-center gap-1 disabled:opacity-60"><Trash2 size={15} /> Видалити</button>
@@ -347,6 +378,7 @@ const PartnerClients = () => {
 
       {confirmAction && <ConfirmDialog action={confirmAction} busy={Boolean(busyClientId || busyPaymentId)} onClose={() => setConfirmAction(null)} />}
       {rejectPaymentTarget && <RejectPaymentDialog payment={rejectPaymentTarget} busy={busyPaymentId === rejectPaymentTarget.id} onClose={() => setRejectPaymentTarget(null)} onConfirm={rejectPayment} />}
+      {supportTarget && <SupportConfirmDialog client={supportTarget} busy={supportBusy} onClose={() => setSupportTarget(null)} onConfirm={startSupportSession} />}
     </div>
   );
 };
@@ -434,6 +466,33 @@ function RejectPaymentDialog({ payment, busy, onClose, onConfirm }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button type="button" disabled={busy} onClick={onClose} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase disabled:opacity-60">Скасувати</button>
             <button disabled={busy} className="rounded-2xl bg-rose-600 text-white px-4 py-3 text-xs font-black uppercase disabled:opacity-60">{busy ? 'Виконується...' : 'Відхилити'}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function SupportConfirmDialog({ client, busy, onClose, onConfirm }) {
+  const [reason, setReason] = useState('Технічна підтримка');
+  return (
+    <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <form onSubmit={(event) => { event.preventDefault(); onConfirm(client, reason); }} className="bg-white rounded-[28px] shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="p-5 bg-blue-50 border-b border-blue-100 flex items-start gap-3">
+          <div className="bg-blue-100 text-blue-700 w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"><Headphones size={22}/></div>
+          <div>
+            <h3 className="text-xl font-black uppercase text-slate-900">Увійти в режим підтримки?</h3>
+            <p className="text-sm font-bold text-slate-600 mt-1">{formatClientCode(client)} · {getClientName(client)} · {client.company_name || client.company || 'Компанія клієнта'}</p>
+          </div>
+        </div>
+        <div className="p-5 space-y-4">
+          <label className="block">
+            <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Причина звернення</span>
+            <textarea value={reason} onChange={(event) => setReason(event.target.value)} className="w-full min-h-[96px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 resize-none" />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button type="button" disabled={busy} onClick={onClose} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase disabled:opacity-60">Скасувати</button>
+            <button disabled={busy} className="rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 text-xs font-black uppercase disabled:opacity-60">{busy ? 'Входимо...' : 'Підтвердити'}</button>
           </div>
         </div>
       </form>

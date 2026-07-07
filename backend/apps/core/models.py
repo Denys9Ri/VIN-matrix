@@ -1,4 +1,5 @@
 from django.db import models
+import uuid
 from django.contrib.auth.models import User
 
 class Company(models.Model):
@@ -530,3 +531,28 @@ class PlatformClient(models.Model):
     last_payment_method = models.CharField(max_length=50, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self): return f"{self.client_code} - {self.user.username}"
+
+
+class SupportAccessSession(models.Model):
+    session_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    admin_user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='started_support_sessions')
+    platform_client = models.ForeignKey(PlatformClient, on_delete=models.CASCADE, related_name='support_sessions')
+    target_user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='targeted_support_sessions')
+    reason = models.TextField()
+    started_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+    ip_address = models.CharField(max_length=255, blank=True)
+    user_agent = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-started_at', '-id']
+        indexes = [
+            models.Index(fields=['ended_at', 'expires_at'], name='support_active_idx'),
+            models.Index(fields=['admin_user', '-started_at'], name='support_admin_recent_idx'),
+            models.Index(fields=['platform_client', '-started_at'], name='support_client_recent_idx'),
+            models.Index(fields=['target_user', '-started_at'], name='support_target_recent_idx'),
+        ]
+
+    def __str__(self):
+        return f"Support {self.admin_user} → {self.platform_client} ({self.started_at:%Y-%m-%d %H:%M})"

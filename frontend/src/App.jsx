@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import LandingRoute from './pages/LandingFinalStyled';
 import api from './api/axios';
 import GoogleAnalytics from './components/analytics/GoogleAnalytics';
+import SupportModeBanner from './components/support/SupportModeBanner';
 
 const DemoTour = lazy(() => import('./pages/LandingFinalStyled').then((module) => ({ default: module.DemoTour })));
 const MainLayout = lazy(() => import('./components/layout/MainLayout'));
@@ -44,6 +45,7 @@ const PageLoader = () => <div className="min-h-screen flex items-center justify-
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('access_token');
+  const supportMode = localStorage.getItem('support_mode') === 'true';
   const location = useLocation();
   const [checking, setChecking] = useState(true);
   const [accessAllowed, setAccessAllowed] = useState(true);
@@ -85,11 +87,11 @@ const ProtectedRoute = ({ children }) => {
 
   const isAllowedRoute = allowedWhenBlocked.some((path) => location.pathname === path || location.pathname.startsWith(path + '/'));
   const isBlockedClient = accessAllowed === false && role === 'client';
-  if (isBlockedClient && !isAllowedRoute) return <Navigate to="/billing" replace state={{ billingStatus }} />;
+  if (!supportMode && isBlockedClient && !isAllowedRoute) return <Navigate to="/billing" replace state={{ billingStatus }} />;
 
   const isOnboardingRoute = allowedDuringOnboarding.some((path) => location.pathname === path || location.pathname.startsWith(path + '/'));
-  if (onboardingRequired && !isOnboardingRoute) return <Navigate to="/onboarding" replace />;
-  return children;
+  if (!supportMode && onboardingRequired && !isOnboardingRoute) return <Navigate to="/onboarding" replace />;
+  return <><SupportModeBanner />{children}</>;
 };
 
 function LegacyLandingRedirect() {

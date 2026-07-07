@@ -92,6 +92,7 @@ from apps.core.partner_views import PartnerManagementViewSet
 from apps.core.platform_auth_views import RegisterView
 from apps.core.platform_client_views import SecurePlatformClientViewSet
 from apps.core.profile_views import ProfileSettingsView
+from apps.core.support_access_views import SupportExitView, SupportStartView, SupportStatusView
 
 from apps.core.novapost_views import (
     NovaPostProfileListCreateView,
@@ -180,6 +181,9 @@ urlpatterns = [
     path('api/landing/leads/', LandingLeadView.as_view(), name='landing-leads'),
     path('api/onboarding/', OnboardingView.as_view(), name='onboarding'),
     path('api/system/health/', SystemHealthView.as_view(), name='system-health'),
+    path('api/support/start/', SupportStartView.as_view(), name='support-start'),
+    path('api/support/exit/', SupportExitView.as_view(), name='support-exit'),
+    path('api/support/status/', SupportStatusView.as_view(), name='support-status'),
 
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/profile/settings/', ProfileSettingsView.as_view(), name='profile-settings-alt'),

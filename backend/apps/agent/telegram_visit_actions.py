@@ -114,12 +114,34 @@ def schedule_markup(result):
 
 
 
-def format_free_slots(result):
+FREE_SLOTS_PAGE_SIZE = 8
+
+
+def _free_slots_page(result, page=1):
+    slots = result.get('slots', [])
+    page = max(1, int(page or 1))
+    start = (page - 1) * FREE_SLOTS_PAGE_SIZE
+    end = start + FREE_SLOTS_PAGE_SIZE
+    return page, slots[start:end], start > 0, end < len(slots)
+
+
+def _free_slots_date_label(result):
+    try:
+        return date.fromisoformat(result.get('date')).strftime('%d.%m')
+    except (TypeError, ValueError):
+        return result.get('date')
+
+
+def format_free_slots(result, page=1):
     slots = result.get('slots', [])
     if not slots:
         return f"На {result.get('date')} немає доступних вікон."
-    lines = [f"Вільні вікна на {result.get('date')} · тривалість {result.get('duration_minutes')} хв:"]
-    for slot in slots[:12]:
+    page, page_slots, _, _ = _free_slots_page(result, page)
+    lines = [
+        f"Вільні вікна на {_free_slots_date_label(result)} · сторінка {page}",
+        f"Тривалість {result.get('duration_minutes')} хв · крок {result.get('slot_step_minutes', 30)} хв:",
+    ]
+    for slot in page_slots:
         parts = [timezone.localtime(slot['start']).strftime('%H:%M')]
         if slot.get('work_post'):
             parts.append(f"пост: {slot['work_post']}")
@@ -129,16 +151,25 @@ def format_free_slots(result):
     return '\n'.join(lines)
 
 
-def free_slots_markup(result, prefix='fs'):
+def free_slots_markup(result, prefix='fs', page=1):
+    page, slots, has_prev, has_next = _free_slots_page(result, page)
     rows = []
-    for slot in result.get('slots', [])[:12]:
+    for slot in slots:
         label = timezone.localtime(slot['start']).strftime('%H:%M')
         if slot.get('work_post'):
-            label += f" · {slot['work_post'][:18]}"
+            label += f" · {slot['work_post'][:16]}"
+        if slot.get('mechanic'):
+            label += f" · {slot['mechanic'][:16]}"
         data = f"{prefix}:{int(slot['start'].timestamp())}:{slot.get('work_post_id') or 0}:{slot.get('mechanic_id') or 0}"
         rows.append([_button(label, data)])
+    nav = []
+    if has_prev:
+        nav.append(_button('← Раніше', f"fsp:{prefix}:{result.get('date')}:{page - 1}"))
+    if has_next:
+        nav.append(_button('Пізніше →', f"fsp:{prefix}:{result.get('date')}:{page + 1}"))
+    if nav:
+        rows.append(nav)
     return _markup(rows) if rows else None
-
 
 def free_slots_date_markup(prefix='fd'):
     return _markup([
@@ -177,10 +208,10 @@ def handle_free_slots_text(channel, conversation, text):
         target_date = date.fromisoformat(normalized)
     except ValueError:
         return 'Введіть дату у форматі 2026-07-10 або натисніть «Скасувати».', 'free_slots_date_validation_error', {}
-    result = find_available_slots(channel.user, target_date=target_date, limit=10)
-    conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date']}
+    result = find_available_slots(channel.user, target_date=target_date)
+    conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date'], 'page': 1}
     conversation.save(update_fields=['context'])
-    return format_free_slots(result), 'free_slots_shown', _with_inline({'date': result['date'], 'count': len(result['slots'])}, free_slots_markup(result, prefix='fsi'))
+    return format_free_slots(result, page=1), 'free_slots_shown', _with_inline({'date': result['date'], 'count': len(result['slots']), 'page': 1}, free_slots_markup(result, prefix='fsi', page=1))
 
 def _format_schedule(result):
     if not result['visits']:
@@ -304,7 +335,7 @@ def handle_visit_callback(channel, conversation, callback_data):
         raise ValidationError('Некоректна дія.')
 
     command = parts[0]
-    if command not in {'rs', 'cn', 'cvslot', 'fd', 'fsi'} and (conversation.context or {}).get('flow'):
+    if command not in {'rs', 'cn', 'cvslot', 'fd', 'fsi', 'fsp'} and (conversation.context or {}).get('flow'):
         _clear_flow(conversation)
 
     if command == 'v' and len(parts) == 2:
@@ -331,10 +362,25 @@ def handle_visit_callback(channel, conversation, callback_data):
             conversation.save(update_fields=['context'])
             return 'Введіть дату у форматі 2026-07-10.', 'free_slots_custom_date_requested', {}
         target_date = _parse_day_offset(parts[1])
-        result = find_available_slots(channel.user, target_date=target_date, limit=10)
-        conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date']}
+        result = find_available_slots(channel.user, target_date=target_date)
+        conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date'], 'page': 1}
         conversation.save(update_fields=['context'])
-        return format_free_slots(result), 'free_slots_callback', _with_inline({'date': result['date'], 'count': len(result['slots'])}, free_slots_markup(result, prefix='fsi'))
+        return format_free_slots(result, page=1), 'free_slots_callback', _with_inline({'date': result['date'], 'count': len(result['slots']), 'page': 1}, free_slots_markup(result, prefix='fsi', page=1))
+
+    if command == 'fsp' and len(parts) == 4:
+        prefix = parts[1]
+        if prefix not in {'fsi', 'cvslot'}:
+            raise ValidationError('Ця кнопка вже неактуальна. Натисніть «🟢 Вільні вікна» ще раз.')
+        target_date = _parse_day_offset(parts[2])
+        try:
+            page = max(1, int(parts[3]))
+        except (TypeError, ValueError):
+            page = 1
+        result = find_available_slots(channel.user, target_date=target_date)
+        if prefix == 'fsi':
+            conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date'], 'page': page}
+            conversation.save(update_fields=['context'])
+        return format_free_slots(result, page=page), 'free_slots_page_callback', _with_inline({'date': result['date'], 'count': len(result['slots']), 'page': page}, free_slots_markup(result, prefix=prefix, page=page))
 
     if command == 'fsi' and len(parts) == 4:
         context = dict(conversation.context or {})

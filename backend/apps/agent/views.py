@@ -1,3 +1,5 @@
+from datetime import time
+
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
@@ -75,6 +77,9 @@ class AgentSettingsView(APIView):
             'require_confirmation_for_writes': config.require_confirmation_for_writes,
             'monthly_action_limit': config.monthly_action_limit,
             'default_visit_duration_minutes': config.default_visit_duration_minutes,
+            'workday_start_time': config.workday_start_time.strftime('%H:%M'),
+            'workday_end_time': config.workday_end_time.strftime('%H:%M'),
+            'slot_step_minutes': config.slot_step_minutes,
         })
 
     def patch(self, request):
@@ -91,6 +96,9 @@ class AgentSettingsView(APIView):
             'require_confirmation_for_writes',
             'monthly_action_limit',
             'default_visit_duration_minutes',
+            'workday_start_time',
+            'workday_end_time',
+            'slot_step_minutes',
         }
         changed = []
         for field in allowed_fields:
@@ -103,6 +111,19 @@ class AgentSettingsView(APIView):
                         value = 60
                     if value not in {30, 60, 90, 120}:
                         value = 60
+                elif field == 'slot_step_minutes':
+                    try:
+                        value = int(value)
+                    except (TypeError, ValueError):
+                        value = 30
+                    if value not in {30, 60}:
+                        value = 30
+                elif field in {'workday_start_time', 'workday_end_time'}:
+                    try:
+                        hour, minute = [int(part) for part in str(value).split(':')[:2]]
+                        value = time(hour=hour, minute=minute)
+                    except (TypeError, ValueError):
+                        continue
                 setattr(config, field, value)
                 changed.append(field)
 

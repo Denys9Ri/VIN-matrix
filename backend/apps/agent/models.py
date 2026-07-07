@@ -24,6 +24,9 @@ class AgentCompanySettings(models.Model):
         help_text='0 means no product-level limit.',
     )
     default_visit_duration_minutes = models.PositiveIntegerField(default=60)
+    workday_start_time = models.TimeField(default='09:00')
+    workday_end_time = models.TimeField(default='18:00')
+    slot_step_minutes = models.PositiveIntegerField(default=30)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

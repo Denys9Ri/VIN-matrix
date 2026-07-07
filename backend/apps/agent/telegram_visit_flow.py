@@ -110,7 +110,7 @@ def handle_visit_creation_flow(channel, conversation, text):
             target_date = parse_slot_date('вільні вікна ' + normalized)
         except ValidationError as exc:
             return str(exc.detail), 'visit_create_validation_error', {}
-        result = find_available_slots(channel.user, target_date=target_date, limit=10)
+        result = find_available_slots(channel.user, target_date=target_date)
         if not result['slots']:
             return f"На {result['date']} немає вільних вікон. Спробуйте іншу дату.", 'visit_slots_empty', {}
         draft['slots_date'] = result['date']
@@ -133,7 +133,7 @@ def handle_visit_creation_flow(channel, conversation, text):
         try:
             visit = create_visit_now(user=channel.user, client=draft.get('client'), plate=draft.get('plate'), phone=draft.get('phone'), scheduled_datetime=draft.get('scheduled_datetime'), comment=comment, work_post_id=draft.get('work_post_id'), mechanic_id=draft.get('mechanic_id'), conversation=conversation)
         except ValidationError:
-            result = find_available_slots(channel.user, target_date=datetime.fromisoformat(draft.get('scheduled_datetime')).date(), limit=10)
+            result = find_available_slots(channel.user, target_date=datetime.fromisoformat(draft.get('scheduled_datetime')).date())
             from .telegram_visit_actions import free_slots_markup, format_free_slots
             return 'Цей час уже зайняли. Ось актуальні вільні вікна\n\n' + format_free_slots(result), 'visit_slot_conflict', {'_telegram_inline_markup': free_slots_markup(result, prefix='cvslot')}
         _clear_context(conversation)

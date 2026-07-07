@@ -319,9 +319,9 @@ def _handle_text(channel, text, conversation=None):
     if lowered.startswith('вільні вікна') or lowered.startswith('свободные окна') or lowered.startswith('слоти'):
         from .telegram_visit_actions import free_slots_markup, format_free_slots
         target_date = parse_slot_date(normalized)
-        result = find_available_slots(channel.user, target_date=target_date, limit=10)
+        result = find_available_slots(channel.user, target_date=target_date)
         if conversation:
-            conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date']}
+            conversation.context = {'flow': 'free_slots', 'step': 'slots', 'date': result['date'], 'page': 1}
             conversation.save(update_fields=['context'])
         return format_free_slots(result), 'free_slots', {'date': result['date'], 'count': len(result['slots']), '_telegram_inline_markup': free_slots_markup(result, prefix='fsi')}
 

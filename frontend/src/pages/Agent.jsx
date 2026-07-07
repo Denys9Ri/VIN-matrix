@@ -125,6 +125,9 @@ export default function Agent() {
   const [savingSetting, setSavingSetting] = useState('');
   const [limitDraft, setLimitDraft] = useState('0');
   const [durationDraft, setDurationDraft] = useState('60');
+  const [workdayStartDraft, setWorkdayStartDraft] = useState('09:00');
+  const [workdayEndDraft, setWorkdayEndDraft] = useState('18:00');
+  const [slotStepDraft, setSlotStepDraft] = useState('30');
   const [connectionCode, setConnectionCode] = useState(null);
   const [creatingCode, setCreatingCode] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
@@ -154,6 +157,9 @@ export default function Agent() {
         setSettings(nextSettings);
         setLimitDraft(String(nextSettings.monthly_action_limit ?? 0));
         setDurationDraft(String(nextSettings.default_visit_duration_minutes ?? 60));
+        setWorkdayStartDraft(String(nextSettings.workday_start_time ?? '09:00').slice(0, 5));
+        setWorkdayEndDraft(String(nextSettings.workday_end_time ?? '18:00').slice(0, 5));
+        setSlotStepDraft(String(nextSettings.slot_step_minutes ?? 30));
       } else {
         setSettings(null);
       }
@@ -222,6 +228,13 @@ export default function Agent() {
     const duration = Number.parseInt(value, 10) || 60;
     setDurationDraft(String(duration));
     await updateSettings({ default_visit_duration_minutes: duration });
+  };
+
+  const saveSlotSchedule = async (patch) => {
+    if (patch.workday_start_time) setWorkdayStartDraft(patch.workday_start_time);
+    if (patch.workday_end_time) setWorkdayEndDraft(patch.workday_end_time);
+    if (patch.slot_step_minutes) setSlotStepDraft(String(patch.slot_step_minutes));
+    await updateSettings(patch);
   };
 
   const saveLimit = async () => {
@@ -494,6 +507,24 @@ export default function Agent() {
               <ToggleRow label="Підтверджувати зміни" description="Залишає всі записи та зміни у статусі чернетки до ручного рішення." checked={Boolean(settings?.require_confirmation_for_writes)} disabled={Boolean(savingSetting)} onChange={(value) => updateSettings({ require_confirmation_for_writes: value })} />
               <ToggleRow label="Голосові повідомлення" description="Залишено вимкненими до підключення голосового модуля." checked={Boolean(settings?.allow_voice)} disabled={Boolean(savingSetting)} onChange={(value) => updateSettings({ allow_voice: value })} />
               <ToggleRow label="Фото та зображення" description="Залишено вимкненими до підключення обробки фото." checked={Boolean(settings?.allow_images)} disabled={Boolean(savingSetting)} onChange={(value) => updateSettings({ allow_images: value })} />
+            </div>
+
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+              <div className="flex items-center gap-2 text-slate-900"><Clock3 className="text-emerald-600" size={18} /><h3 className="text-sm font-black">Графік для вільних вікон</h3></div>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">Окремо керує робочим днем та кроком кнопок у Telegram.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <label className="text-xs font-black text-slate-700">Початок робочого дня
+                  <input type="time" value={workdayStartDraft} disabled={Boolean(savingSetting)} onChange={(event) => saveSlotSchedule({ workday_start_time: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                </label>
+                <label className="text-xs font-black text-slate-700">Кінець робочого дня
+                  <input type="time" value={workdayEndDraft} disabled={Boolean(savingSetting)} onChange={(event) => saveSlotSchedule({ workday_end_time: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                </label>
+                <label className="text-xs font-black text-slate-700">Крок слотів
+                  <select value={slotStepDraft} disabled={Boolean(savingSetting)} onChange={(event) => saveSlotSchedule({ slot_step_minutes: Number.parseInt(event.target.value, 10) })} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                    {[30, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes} хв</option>)}
+                  </select>
+                </label>
+              </div>
             </div>
             <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
               <label htmlFor="agent-visit-duration" className="text-sm font-black text-slate-900">Стандартна тривалість запису</label>

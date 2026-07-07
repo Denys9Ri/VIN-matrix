@@ -124,6 +124,7 @@ export default function Agent() {
   const [pageError, setPageError] = useState('');
   const [savingSetting, setSavingSetting] = useState('');
   const [limitDraft, setLimitDraft] = useState('0');
+  const [durationDraft, setDurationDraft] = useState('60');
   const [connectionCode, setConnectionCode] = useState(null);
   const [creatingCode, setCreatingCode] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
@@ -152,6 +153,7 @@ export default function Agent() {
         const nextSettings = settingsResult.value.data || {};
         setSettings(nextSettings);
         setLimitDraft(String(nextSettings.monthly_action_limit ?? 0));
+        setDurationDraft(String(nextSettings.default_visit_duration_minutes ?? 60));
       } else {
         setSettings(null);
       }
@@ -214,6 +216,12 @@ export default function Agent() {
     } finally {
       setSavingSetting('');
     }
+  };
+
+  const saveDuration = async (value) => {
+    const duration = Number.parseInt(value, 10) || 60;
+    setDurationDraft(String(duration));
+    await updateSettings({ default_visit_duration_minutes: duration });
   };
 
   const saveLimit = async () => {
@@ -486,6 +494,13 @@ export default function Agent() {
               <ToggleRow label="Підтверджувати зміни" description="Залишає всі записи та зміни у статусі чернетки до ручного рішення." checked={Boolean(settings?.require_confirmation_for_writes)} disabled={Boolean(savingSetting)} onChange={(value) => updateSettings({ require_confirmation_for_writes: value })} />
               <ToggleRow label="Голосові повідомлення" description="Залишено вимкненими до підключення голосового модуля." checked={Boolean(settings?.allow_voice)} disabled={Boolean(savingSetting)} onChange={(value) => updateSettings({ allow_voice: value })} />
               <ToggleRow label="Фото та зображення" description="Залишено вимкненими до підключення обробки фото." checked={Boolean(settings?.allow_images)} disabled={Boolean(savingSetting)} onChange={(value) => updateSettings({ allow_images: value })} />
+            </div>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+              <label htmlFor="agent-visit-duration" className="text-sm font-black text-slate-900">Стандартна тривалість запису</label>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">Використовується для пошуку вільних вікон у Telegram і серверної перевірки накладок.</p>
+              <select id="agent-visit-duration" value={durationDraft} disabled={Boolean(savingSetting)} onChange={(event) => saveDuration(event.target.value)} className="mt-3 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                {[30, 60, 90, 120].map((minutes) => <option key={minutes} value={minutes}>{minutes} хвилин</option>)}
+              </select>
             </div>
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <label htmlFor="agent-action-limit" className="text-sm font-black text-slate-900">Ліміт дій на місяць</label>

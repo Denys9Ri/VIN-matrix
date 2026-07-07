@@ -3,7 +3,7 @@ from datetime import datetime
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from .actions import create_visit_draft
+from .visit_slots import create_visit_now, find_available_slots, parse_slot_date
 from .services import require_agent_member
 
 
@@ -99,8 +99,21 @@ def handle_visit_creation_flow(channel, conversation, text):
 
     if step == 'phone':
         draft['phone'] = '' if _is_skip(normalized) else normalized[:20]
-        _save_context(conversation, {'flow': FLOW_NAME, 'step': 'scheduled_datetime', 'visit': draft})
-        return 'Коли записати? Формат: 2026-06-30 10:30 або 30.06.2026 10:30.', 'visit_create_phone_received', {}
+        _save_context(conversation, {'flow': FLOW_NAME, 'step': 'date', 'visit': draft})
+        return 'На яку дату шукаємо вільні вікна? Наприклад: завтра або 2026-07-10.', 'visit_create_phone_received', {}
+
+    if step == 'date':
+        try:
+            target_date = parse_slot_date('вільні вікна ' + normalized)
+        except ValidationError as exc:
+            return str(exc.detail), 'visit_create_validation_error', {}
+        result = find_available_slots(channel.user, target_date=target_date, limit=10)
+        if not result['slots']:
+            return f"На {result['date']} немає вільних вікон. Спробуйте іншу дату.", 'visit_slots_empty', {}
+        draft['slots_date'] = result['date']
+        _save_context(conversation, {'flow': FLOW_NAME, 'step': 'slot', 'visit': draft})
+        from .telegram_visit_actions import free_slots_markup, format_free_slots
+        return format_free_slots(result), 'visit_slots_shown', {'_telegram_inline_markup': free_slots_markup(result, prefix='cvslot')}
 
     if step == 'scheduled_datetime':
         try:
@@ -114,24 +127,16 @@ def handle_visit_creation_flow(channel, conversation, text):
 
     if step == 'comment':
         comment = '' if _is_skip(normalized) else normalized[:2000]
-        action = create_visit_draft(
-            user=channel.user,
-            client=draft.get('client'),
-            plate=draft.get('plate'),
-            phone=draft.get('phone'),
-            scheduled_datetime=draft.get('scheduled_datetime'),
-            comment=comment,
-            conversation=conversation,
-        )
+        try:
+            visit = create_visit_now(user=channel.user, client=draft.get('client'), plate=draft.get('plate'), phone=draft.get('phone'), scheduled_datetime=draft.get('scheduled_datetime'), comment=comment, work_post_id=draft.get('work_post_id'), mechanic_id=draft.get('mechanic_id'), conversation=conversation)
+        except ValidationError:
+            result = find_available_slots(channel.user, target_date=datetime.fromisoformat(draft.get('scheduled_datetime')).date(), limit=10)
+            from .telegram_visit_actions import free_slots_markup, format_free_slots
+            return 'Цей час уже зайняли. Ось актуальні вільні вікна\n\n' + format_free_slots(result), 'visit_slot_conflict', {'_telegram_inline_markup': free_slots_markup(result, prefix='cvslot')}
         _clear_context(conversation)
-        return (
-            'Чернетку запису створено.\n\n'
-            f"{draft.get('client')} · {draft.get('plate')}\n"
-            f"{draft.get('scheduled_display')}\n\n"
-            'Відкрий VIN-matrix → AI Agent → «Підтвердження дій» і підтвердь створення.',
-            'visit_draft_created',
-            {'pending_action_id': action.id},
-        )
+        post = visit.work_post.name if visit.work_post else '—'
+        master = (visit.responsible_mechanic.get_full_name() or visit.responsible_mechanic.username) if visit.responsible_mechanic else '—'
+        return (f"✅ Запис створено\nКлієнт: {visit.client}\nАвто: {visit.plate}\nЧас: {timezone.localtime(visit.scheduled_datetime).strftime('%d.%m.%Y %H:%M')}\nПост: {post}\nМайстер: {master}", 'visit_created', {'visit_id': visit.id})
 
     _clear_context(conversation)
     return 'Створення запису скасовано через неочікуваний крок. Почніть ще раз: «новий запис».', 'visit_create_reset', {}

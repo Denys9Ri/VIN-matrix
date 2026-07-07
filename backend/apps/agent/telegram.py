@@ -18,6 +18,7 @@ from .telegram_visit_actions import (
 )
 from .telegram_visit_flow import handle_visit_creation_flow
 from .tools.visits import daily_schedule, find_visits
+from .visit_slots import find_available_slots, parse_slot_date
 
 
 TELEGRAM_API_BASE = 'https://api.telegram.org'
@@ -27,6 +28,7 @@ TELEGRAM_ALLOWED_UPDATES = ['message', 'callback_query']
 BUTTON_SCHEDULE = '🗓 Розклад'
 BUTTON_SEARCH = '🔎 Знайти запис'
 BUTTON_NEW_VISIT = '➕ Новий запис'
+BUTTON_FREE_SLOTS = '🟢 Вільні вікна'
 BUTTON_HELP = 'ℹ️ Допомога'
 BUTTON_CANCEL = '✖️ Скасувати'
 SEARCH_FLOW = 'find_visit'
@@ -34,7 +36,8 @@ SEARCH_FLOW = 'find_visit'
 MAIN_REPLY_MARKUP = {
     'keyboard': [
         [BUTTON_SCHEDULE, BUTTON_SEARCH],
-        [BUTTON_NEW_VISIT, BUTTON_HELP],
+        [BUTTON_NEW_VISIT, BUTTON_FREE_SLOTS],
+        [BUTTON_HELP],
         [BUTTON_CANCEL],
     ],
     'resize_keyboard': True,
@@ -170,7 +173,8 @@ def _help_text():
         'Користуйтеся кнопками внизу екрана:\n'
         '• «Розклад» — записи на сьогодні\n'
         '• «Знайти запис» — номер, VIN, клієнт або телефон\n'
-        '• «Новий запис» — створення чернетки з підтвердженням у VIN-matrix\n\n'
+        '• «Новий запис» — створення запису одразу після перевірки вільного часу\n'
+        '• «Вільні вікна» — доступні слоти на сьогодні, завтра або дату\n\n'
         'У результатах пошуку або розкладі натисніть на запис, щоб відкрити картку та доступні дії.'
     )
 
@@ -262,10 +266,19 @@ def _handle_text(channel, text, conversation=None):
             visit_flow_response = handle_visit_creation_flow(channel, conversation, normalized)
             if visit_flow_response is not None:
                 return visit_flow_response
+    elif normalized == BUTTON_FREE_SLOTS:
+        normalized = 'вільні вікна'
+        lowered = normalized
     elif normalized == BUTTON_HELP:
         return _help_text(), 'help', {}
     elif normalized == BUTTON_CANCEL:
         return 'Немає активної дії для скасування. Оберіть потрібний пункт у меню.', 'cancel_no_active_flow', {}
+
+    if lowered.startswith('вільні вікна') or lowered.startswith('свободные окна') or lowered.startswith('слоти'):
+        from .telegram_visit_actions import free_slots_markup, format_free_slots
+        target_date = parse_slot_date(normalized)
+        result = find_available_slots(channel.user, target_date=target_date, limit=10)
+        return format_free_slots(result), 'free_slots', {'date': result['date'], 'count': len(result['slots']), '_telegram_inline_markup': free_slots_markup(result)}
 
     if lowered in {'розклад', 'сьогодні', 'сегодня', 'schedule'} or lowered.startswith('розклад '):
         target_date = _parse_schedule_date(normalized)

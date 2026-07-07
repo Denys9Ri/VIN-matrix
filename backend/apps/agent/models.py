@@ -23,6 +23,7 @@ class AgentCompanySettings(models.Model):
         default=0,
         help_text='0 means no product-level limit.',
     )
+    default_visit_duration_minutes = models.PositiveIntegerField(default=60)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

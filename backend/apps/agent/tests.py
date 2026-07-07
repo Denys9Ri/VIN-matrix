@@ -164,20 +164,23 @@ class TelegramVisitWizardTests(TestCase):
             },
         })
 
-    def test_wizard_creates_visit_draft_without_creating_visit(self):
+    def test_wizard_creates_visit_without_pending_action(self):
         self.assertIn('Як звати клієнта', self._send(1, 'новий запис')['text'])
         self.assertIn('Номер автомобіля', self._send(2, 'Іван Петренко')['text'])
         self.assertIn('Телефон', self._send(3, 'AA5555AA')['text'])
-        self.assertIn('Коли записати', self._send(4, '0505555555')['text'])
-        self.assertIn('коментар', self._send(5, '2030-06-30 10:30')['text'])
-        self.assertIn('Чернетку запису створено', self._send(6, 'Заміна мастила')['text'])
+        self.assertIn('На яку дату', self._send(4, '0505555555')['text'])
+        slots = self._send(5, '2030-06-30')
+        self.assertIn('Вільні вікна', slots['text'])
+        callback_data = slots['inline_markup']['inline_keyboard'][0][0]['callback_data']
+        self.assertTrue(callback_data.startswith('cvslot:'), callback_data)
+        from .telegram_visit_actions import handle_visit_callback
+        from .models import AgentConversation
+        conversation = AgentConversation.objects.get(channel=self.channel)
+        self.assertIn('коментар', handle_visit_callback(self.channel, conversation, callback_data)[0])
+        self.assertIn('✅ Запис створено', self._send(6, 'Заміна мастила')['text'])
 
-        action = AgentPendingAction.objects.get(company=self.company)
-        self.assertEqual(action.action_type, 'create_visit')
-        self.assertEqual(action.status, AgentPendingAction.STATUS_PENDING)
-        self.assertEqual(action.payload['visit']['client'], 'Іван Петренко')
-        self.assertEqual(action.payload['visit']['plate'], 'AA5555AA')
-        self.assertEqual(Visit.objects.filter(company=self.company).count(), 0)
+        self.assertFalse(AgentPendingAction.objects.filter(company=self.company).exists())
+        self.assertEqual(Visit.objects.filter(company=self.company).count(), 1)
         self.channel.refresh_from_db()
         self.assertEqual(self.channel.conversation.context, {})
 

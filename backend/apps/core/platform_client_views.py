@@ -1,5 +1,10 @@
+import logging
+import secrets
+import string
+
 from django.contrib.auth.models import User
 from django.db import connection, transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
@@ -15,6 +20,24 @@ from .partner_views import (
     repair_legacy_account,
 )
 from .subscriptions import get_alert_clients, renew_client_30_days, sync_queryset_subscriptions
+
+logger = logging.getLogger(__name__)
+PASSWORD_SPECIAL_CHARS = "!@#$%^&*()-_=+"
+
+
+def generate_temporary_password():
+    alphabet = string.ascii_letters + string.digits + PASSWORD_SPECIAL_CHARS
+    length = secrets.choice(range(12, 17))
+    required = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+        secrets.choice(PASSWORD_SPECIAL_CHARS),
+    ]
+    remaining = [secrets.choice(alphabet) for _ in range(length - len(required))]
+    chars = required + remaining
+    secrets.SystemRandom().shuffle(chars)
+    return ''.join(chars)
 
 
 def resolve_pending_payments_for_client(client, admin_user):
@@ -104,6 +127,44 @@ class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
             return Response({'error': 'Акаунт не видалено.', 'details': 'Користувач залишився у базі після видалення.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({'message': 'Акаунт повністю видалено.', 'deleted_user_id': target_user_id, 'username': target_username}, status=status.HTTP_200_OK)
+
+
+    @transaction.atomic
+    @action(detail=True, methods=['post'], url_path='reset-password')
+    def reset_password(self, request, pk=None):
+        repair_legacy_account(request.user)
+        client = get_object_or_404(PlatformClient.objects.select_related('user', 'assigned_owner'), pk=pk)
+        if not self._can_manage_client(request.user, client):
+            return Response({'error': 'Немає прав скидати пароль цього клієнта.'}, status=status.HTTP_403_FORBIDDEN)
+
+        target_user = client.user
+        if is_main_admin(target_user):
+            return Response({'error': 'Головного адміна захищено від скидання пароля.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not target_user.is_active:
+            return Response({'error': 'Не можна скидати пароль неактивного або видаленого користувача.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        generated_password = generate_temporary_password()
+        target_user.set_password(generated_password)
+        target_user.save(update_fields=['password'])
+
+        logger.info(
+            'admin_password_reset',
+            extra={
+                'audit_event': {
+                    'action': 'admin_password_reset',
+                    'actor_user_id': request.user.id,
+                    'target_user_id': target_user.id,
+                    'platform_client_id': client.id,
+                    'timestamp': timezone.now().isoformat(),
+                }
+            },
+        )
+
+        return Response({
+            'message': 'Пароль успішно скинуто.',
+            'temporary_password': generated_password,
+            'username': target_user.username,
+        })
 
     @transaction.atomic
     @action(detail=True, methods=['post'], url_path='renew-30')

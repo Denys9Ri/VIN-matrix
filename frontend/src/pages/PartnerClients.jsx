@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BadgeCheck, BadgeX, CheckCircle2, CreditCard, Headphones, Loader2, Power, RefreshCw, Search, Trash2, Users, X, XCircle } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, BadgeX, CheckCircle2, CreditCard, Headphones, KeyRound, Loader2, Power, RefreshCw, Search, Trash2, Users, X, XCircle } from 'lucide-react';
 import api from '../api/axios';
 import CopyButton from '../components/common/CopyButton';
 
@@ -55,6 +55,7 @@ const PartnerClients = () => {
   const [rejectPaymentTarget, setRejectPaymentTarget] = useState(null);
   const [supportTarget, setSupportTarget] = useState(null);
   const [supportBusy, setSupportBusy] = useState(false);
+  const [resetPasswordResult, setResetPasswordResult] = useState(null);
 
   const showNotice = (type, text) => setNotice({ type, text });
   const isPlatformAdmin = (settings?.actual_role || settings?.account_role) === 'admin' || Boolean(settings?.admin_code);
@@ -219,6 +220,36 @@ const PartnerClients = () => {
     }
   };
 
+
+  const resetClientPassword = (client) => {
+    setConfirmAction({
+      tone: 'warning',
+      title: 'Скинути пароль?',
+      text: `Для клієнта ${getClientName(client)} буде створено новий тимчасовий пароль. Старий пароль перестане працювати.`,
+      confirmText: 'Згенерувати пароль',
+      onConfirm: async () => {
+        setBusyClientId(client.id);
+        setNotice(null);
+        try {
+          const res = await api.post(`/api/platform-clients/${client.id}/reset-password/`);
+          setResetPasswordResult({
+            username: res.data?.username || client.username || '—',
+            temporaryPassword: res.data?.temporary_password || '',
+          });
+        } catch (error) {
+          showNotice('error', `Не вдалося скинути пароль: ${getErrorMessage(error)}`);
+        } finally {
+          setBusyClientId(null);
+          setConfirmAction(null);
+        }
+      },
+    });
+  };
+
+  const closeResetPasswordResult = () => {
+    setResetPasswordResult(null);
+  };
+
   const deleteClient = (client) => {
     setConfirmAction({
       tone: 'danger',
@@ -355,6 +386,7 @@ const PartnerClients = () => {
                           {isPlatformAdmin && <button disabled={busy || supportBusy} onClick={() => setSupportTarget(client)} className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 font-bold text-blue-700 inline-flex items-center gap-1 disabled:opacity-60"><Headphones size={15} /> Підтримка</button>}
                           <button disabled={busy} onClick={() => renewClient(client)} className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 font-bold text-emerald-700 inline-flex items-center gap-1 disabled:opacity-60"><RefreshCw size={15} /> +1 місяць</button>
                           <button disabled={busy} onClick={() => toggleAccess(client)} className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 inline-flex items-center gap-1 disabled:opacity-60"><Power size={15} /> {client.is_access_enabled ? 'Вимкнути' : 'Увімкнути'}</button>
+                          <button disabled={busy} onClick={() => resetClientPassword(client)} className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 font-bold text-amber-700 inline-flex items-center gap-1 disabled:opacity-60"><KeyRound size={15} /> Скинути пароль</button>
                           <button disabled={busy} onClick={() => deleteClient(client)} className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 font-bold text-rose-700 inline-flex items-center gap-1 disabled:opacity-60"><Trash2 size={15} /> Видалити</button>
                         </div>
                       </td>
@@ -379,6 +411,7 @@ const PartnerClients = () => {
       {confirmAction && <ConfirmDialog action={confirmAction} busy={Boolean(busyClientId || busyPaymentId)} onClose={() => setConfirmAction(null)} />}
       {rejectPaymentTarget && <RejectPaymentDialog payment={rejectPaymentTarget} busy={busyPaymentId === rejectPaymentTarget.id} onClose={() => setRejectPaymentTarget(null)} onConfirm={rejectPayment} />}
       {supportTarget && <SupportConfirmDialog client={supportTarget} busy={supportBusy} onClose={() => setSupportTarget(null)} onConfirm={startSupportSession} />}
+      {resetPasswordResult && <ResetPasswordResultDialog result={resetPasswordResult} onClose={closeResetPasswordResult} />}
     </div>
   );
 };
@@ -469,6 +502,46 @@ function RejectPaymentDialog({ payment, busy, onClose, onConfirm }) {
           </div>
         </div>
       </form>
+    </div>
+  );
+}
+
+
+function ResetPasswordResultDialog({ result, onClose }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(result.temporaryPassword);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch (error) {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="p-5 bg-amber-50 border-b border-amber-100 flex items-start gap-3">
+          <div className="bg-amber-100 text-amber-700 w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"><KeyRound size={22}/></div>
+          <div>
+            <h3 className="text-xl font-black uppercase text-slate-900">Тимчасовий пароль створено</h3>
+            <p className="text-sm font-bold text-amber-700 mt-1">Пароль показується лише зараз. Передайте його клієнту безпечним способом.</p>
+          </div>
+        </div>
+        <div className="p-5 space-y-4">
+          <MiniMetric label="Логін клієнта" value={result.username} />
+          <div className="bg-slate-50 rounded-2xl px-3 py-3">
+            <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Новий тимчасовий пароль</p>
+            <p className="font-black text-slate-900 break-all select-all">{result.temporaryPassword}</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button type="button" onClick={onClose} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-3 text-xs font-black uppercase">Закрити</button>
+            <button type="button" onClick={copyPassword} className="rounded-2xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-3 text-xs font-black uppercase">{copied ? 'Скопійовано' : 'Копіювати пароль'}</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

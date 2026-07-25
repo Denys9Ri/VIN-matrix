@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Building2, CheckCircle2, LockKeyhole, UserRound } from 'lucide-react';
+import { ArrowRight, Building2, CheckCircle2 } from 'lucide-react';
 import api from '../api/axios';
+import {
+  getGrowthAttribution,
+  getGrowthSessionId,
+  trackLandingEvent,
+} from '../growth/landingGrowth';
 
 const initialForm = { full_name: '', phone: '', email: '', company_name: '', referral_code: '', username: '', password: '' };
 
@@ -11,14 +16,31 @@ export default function RegisterOnboarding() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    trackLandingEvent('register_start', { blockKey: 'registration' });
+  }, []);
+
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const submit = async (event) => {
     event.preventDefault();
     setLoading(true);
     setError('');
+    const attribution = getGrowthAttribution();
+    const growthSessionId = getGrowthSessionId();
     try {
-      await api.post('/api/register/', form);
+      await api.post('/api/register/', {
+        ...form,
+        growth_session_id: growthSessionId,
+        growth_experiment_id: attribution?.experiment_id || '',
+        growth_variant: attribution?.variant || 'none',
+      });
+      await trackLandingEvent('register_complete', {
+        internal: false,
+        sessionId: growthSessionId,
+        attribution,
+        blockKey: 'registration',
+      });
       const auth = await api.post('/token/', { username: form.username, password: form.password });
       localStorage.setItem('access_token', auth.data.access);
       localStorage.setItem('refresh_token', auth.data.refresh);

@@ -1,3 +1,4 @@
+import logging
 import re
 
 from django.contrib.auth.models import User
@@ -5,6 +6,8 @@ from django.db import transaction
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.landing_growth.engine import record_registration_conversion
 
 from .onboarding_views import initialize_onboarding
 from .partner_views import (
@@ -16,6 +19,8 @@ from .partner_views import (
 )
 from .models import PlatformClient
 from .subscriptions import activate_trial
+
+logger = logging.getLogger('vin_matrix')
 
 USERNAME_RE = re.compile(r'^(?=(?:.*[A-Za-z]){4,})(?=.*[A-Z])(?=.*\d)[A-Za-z\d]+$')
 PASSWORD_RE = re.compile(r'^(?=(?:.*[A-Za-z]){4,})(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$')
@@ -48,6 +53,8 @@ class RegisterView(APIView):
         phone = (request.data.get('phone') or '').strip()
         email = (request.data.get('email') or '').strip()
         company_name = (request.data.get('company_name') or '').strip()
+        growth_session_id = str(request.data.get('growth_session_id') or '').strip()[:160]
+        growth_experiment_id = str(request.data.get('growth_experiment_id') or '').strip()[:64]
         partner_code = normalize_code(
             request.data.get('partner_code')
             or request.data.get('referral_code')
@@ -86,6 +93,16 @@ class RegisterView(APIView):
             )
             activate_trial(client)
             initialize_onboarding(company)
+
+        # Conversion tracking must never make a successful registration fail.
+        if growth_session_id:
+            try:
+                record_registration_conversion(
+                    growth_session_id,
+                    experiment_id=growth_experiment_id,
+                )
+            except Exception:
+                logger.exception('Landing Growth registration conversion could not be recorded')
 
         return Response({
             'message': 'Акаунт створено. Пробний доступ активовано на 14 днів.',

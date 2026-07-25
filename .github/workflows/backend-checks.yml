@@ -42,6 +42,12 @@ jobs:
       - name: Check Django configuration
         run: python manage.py check
 
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run Landing Growth Engine tests
+        run: python manage.py test apps.landing_growth.tests --verbosity 2
+
       - name: Run core stability and API tests
         run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_system_stability
 

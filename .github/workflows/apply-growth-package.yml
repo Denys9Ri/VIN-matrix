@@ -55,13 +55,15 @@ jobs:
           echo "actual_sha256=$actual"
           test "$actual" = "226c4d187302c5b3ada976c57827dca695bfe15a92dfaa1c2dbdc778a0d8d4a1"
           unzip -t /tmp/vin-matrix-growth.zip
-      - name: Apply production package
+      - name: Apply production package without workflow mutations
         shell: bash
         run: |
           set -euo pipefail
           unzip -o /tmp/vin-matrix-growth.zip -d .
           rm -rf .github/growth-bootstrap
-          rm -f .github/workflows/apply-growth-package.yml
+          # GITHUB_TOKEN cannot safely update workflow files in this PR job.
+          # Keep them unchanged here; the connected GitHub app applies those two files after this commit.
+          git checkout HEAD -- .github/workflows/backend-checks.yml .github/workflows/apply-growth-package.yml
       - name: Run static preflight
         shell: bash
         run: |
@@ -75,7 +77,7 @@ jobs:
           json.loads(Path('frontend/src/growth/generatedLandingConfig.json').read_text())
           print('Generated landing config is valid JSON.')
           PY
-      - name: Commit final integration
+      - name: Commit application code
         shell: bash
         run: |
           set -euo pipefail

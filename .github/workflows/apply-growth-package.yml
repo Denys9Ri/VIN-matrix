@@ -27,7 +27,8 @@ jobs:
           - { file: payload.big004, sha: 19932bcea8cf93489b5a419dbd46b9c3de386112 }
           - { file: payload.big005, sha: 2eec6932ecf17b6bafa85eebe7734affeaf1a260 }
           - { file: payload.big006, sha: 22849966e4863fa6847f9348e849114852467770 }
-          - { file: payload.big007, sha: 039bb4fa80284b8ab461bf38719d093e348108a5 }
+          - { file: payload.big007a, sha: 989492004c214b42393f3fabf81af8755a9646a3 }
+          - { file: payload.big007b, sha: 78653066d7df025b79a5905cc6757c515683423d }
           - { file: payload.big008, sha: 9d03ebffe7c1a069efa198b071ba1ae30eb965d3 }
           - { file: payload.big009, sha: 60ca46b80a846b137e9ecc39f038b43c278aa861 }
           - { file: payload.big010, sha: 4b0b247de5a12bf3bb9b9c7d46745547918cc706 }
@@ -70,7 +71,8 @@ jobs:
             .github/growth-bootstrap/payload.big004 \
             .github/growth-bootstrap/payload.big005 \
             .github/growth-bootstrap/payload.big006 \
-            .github/growth-bootstrap/payload.big007 \
+            .github/growth-bootstrap/payload.big007a \
+            .github/growth-bootstrap/payload.big007b \
             .github/growth-bootstrap/payload.big008 \
             .github/growth-bootstrap/payload.big009 \
             .github/growth-bootstrap/payload.big010 \

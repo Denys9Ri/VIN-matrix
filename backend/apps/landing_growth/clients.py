@@ -28,23 +28,69 @@ def _setting(name, default=''):
     return getattr(settings, name, os.getenv(name, default))
 
 
-def _load_service_account_info(raw_value):
+def _validate_service_account_info(info):
+    if not isinstance(info, dict):
+        raise ExternalServiceError('Google credentials JSON має бути об’єктом.')
+    if info.get('type') != 'service_account':
+        raise ExternalServiceError('Google credentials мають бути JSON-ключем Service Account.')
+    missing = [name for name in ('client_email', 'private_key', 'token_uri') if not info.get(name)]
+    if missing:
+        raise ExternalServiceError(
+            'У Google Service Account JSON відсутні поля: ' + ', '.join(missing) + '.'
+        )
+    return info
+
+
+def _normalize_credentials_value(raw_value):
     raw = str(raw_value or '').strip()
+    prefix = 'GOOGLE_APPLICATION_CREDENTIALS='
+    if raw.startswith(prefix):
+        raw = raw[len(prefix):].strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
+        raw = raw[1:-1].strip()
+    if raw.lower().startswith('base64:'):
+        raw = raw.split(':', 1)[1].strip()
+    return raw
+
+
+def _decode_base64_json(raw):
+    compact = ''.join(raw.split())
+    if not compact:
+        return None
+    normalized = compact.replace('-', '+').replace('_', '/')
+    normalized += '=' * (-len(normalized) % 4)
+    try:
+        decoded = base64.b64decode(normalized, validate=True).decode('utf-8-sig')
+        return json.loads(decoded)
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+def _load_service_account_info(raw_value):
+    raw = _normalize_credentials_value(raw_value)
     if not raw:
         return None
-    if raw.startswith('{'):
-        return json.loads(raw)
+
     if os.path.isfile(raw):
-        with open(raw, 'r', encoding='utf-8') as handle:
-            return json.load(handle)
-    try:
-        decoded = base64.b64decode(raw, validate=True).decode('utf-8')
-        if decoded.lstrip().startswith('{'):
-            return json.loads(decoded)
-    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
-        pass
+        try:
+            with open(raw, 'r', encoding='utf-8-sig') as handle:
+                return _validate_service_account_info(json.load(handle))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ExternalServiceError(f'Не вдалося прочитати Google credentials файл: {exc}') from exc
+
+    if raw.lstrip().startswith('{'):
+        try:
+            return _validate_service_account_info(json.loads(raw))
+        except json.JSONDecodeError as exc:
+            raise ExternalServiceError('GOOGLE_APPLICATION_CREDENTIALS містить невалідний JSON.') from exc
+
+    decoded = _decode_base64_json(raw)
+    if decoded is not None:
+        return _validate_service_account_info(decoded)
+
     raise ExternalServiceError(
-        'GOOGLE_APPLICATION_CREDENTIALS має бути шляхом до JSON, самим JSON або base64(JSON).'
+        'GOOGLE_APPLICATION_CREDENTIALS не розпізнано. Вставте шлях до Service Account JSON, '
+        'сам JSON або Base64 від повного JSON-файлу без назви змінної.'
     )
 
 

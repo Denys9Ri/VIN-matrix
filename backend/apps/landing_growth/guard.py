@@ -30,7 +30,8 @@ class GuardResult:
 def _normalize(value: Any) -> str:
     text = html.unescape(str(value or ''))
     text = _CONTROL_RE.sub('', text)
-    return re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 
 def _mostly_ukrainian_or_neutral(value: str) -> bool:
@@ -38,7 +39,8 @@ def _mostly_ukrainian_or_neutral(value: str) -> bool:
     if not letters:
         return False
     cyrillic = sum('\u0400' <= char <= '\u04ff' for char in letters)
-    latin = sum('a' <= char.lower() <= 'z' for char in letters)
+    latin = sum(('a' <= char.lower() <= 'z') for char in letters)
+    # Brand names and CRM/SaaS terminology are allowed, but Ukrainian text must dominate.
     return cyrillic >= max(4, latin)
 
 
@@ -57,7 +59,11 @@ def validate_candidate(field_path: str, proposed_value: Any, current_value: str 
     if _URL_RE.search(value):
         return GuardResult(False, value, 'URL не можна додавати автоматично.')
     if not rule['min'] <= len(value) <= rule['max']:
-        return GuardResult(False, value, f'Довжина має бути {rule["min"]}–{rule["max"]} символів.')
+        return GuardResult(
+            False,
+            value,
+            f'Довжина має бути {rule["min"]}–{rule["max"]} символів.',
+        )
     if _SPAM_RE.search(value):
         return GuardResult(False, value, 'Текст містить непідтверджену або маніпулятивну обіцянку.')
     if field_path not in {'seo.title', 'seo.description'} and _PRICE_RE.search(value):
@@ -71,15 +77,27 @@ def validate_candidate(field_path: str, proposed_value: Any, current_value: str 
     if field_path == 'seo.description' and 'VIN-matrix' not in value:
         return GuardResult(False, value, 'SEO description має містити VIN-matrix.')
 
-    return GuardResult(True, value, risk_level=rule.get('risk', 'low'), seo_change=bool(rule.get('seo')))
+    return GuardResult(
+        True,
+        value,
+        risk_level=rule.get('risk', 'low'),
+        seo_change=bool(rule.get('seo')),
+    )
 
 
 def sanitize_metadata(raw: Any) -> dict:
     if not isinstance(raw, dict):
         return {}
     allowed = {
-        'utm_source', 'utm_medium', 'utm_campaign', 'utm_content',
-        'referrer_host', 'viewport', 'target', 'source', 'device',
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_content',
+        'referrer_host',
+        'viewport',
+        'target',
+        'source',
+        'device',
     }
     result = {}
     for key in allowed:

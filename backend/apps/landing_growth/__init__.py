@@ -1,1 +1,1 @@
-default_app_config = 'apps.landing_growth.apps.LandingGrowthConfig'
+"""Autonomous landing-page growth engine for VIN-matrix."""

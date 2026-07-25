@@ -6,6 +6,7 @@ import FinalMobileDemoPortal from './FinalMobileDemoPortal';
 import FinalMobileHeroPreviewPortal from './FinalMobileHeroPreviewPortal';
 import LandingSearchContentPortal from './LandingSearchContent';
 import LandingTestimonialsPortal from './LandingTestimonialsPortal';
+import LandingGrowthBridge from '../growth/LandingGrowthBridge';
 import './FinalBase.css';
 import './FinalFrame.css';
 import './FinalScenesVisits.css';
@@ -23,5 +24,5 @@ export function DemoTour() {
 }
 
 export default function Landing() {
-  return <><FinalLanding /><FinalCapabilitiesPortal /><LandingSearchContentPortal /><LandingTestimonialsPortal /><FinalDemoLinkGuard /><FinalLoginButtonPortal /><FinalMobileHeroPreviewPortal /></>;
+  return <><FinalLanding /><FinalCapabilitiesPortal /><LandingSearchContentPortal /><LandingTestimonialsPortal /><FinalDemoLinkGuard /><FinalLoginButtonPortal /><FinalMobileHeroPreviewPortal /><LandingGrowthBridge /></>;
 }

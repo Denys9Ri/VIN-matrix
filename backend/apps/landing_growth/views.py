@@ -16,7 +16,14 @@ from rest_framework.views import APIView
 from .defaults import PUBLIC_EVENT_NAMES
 from .engine import assigned_variant, build_evidence, session_hash
 from .guard import sanitize_metadata
-from .models import LandingChangeLog, LandingEvent, LandingExperiment, LandingGrowthSettings, LandingProposal, LandingSyncRun
+from .models import (
+    LandingChangeLog,
+    LandingEvent,
+    LandingExperiment,
+    LandingGrowthSettings,
+    LandingProposal,
+    LandingSyncRun,
+)
 
 
 def _client_ip(request):
@@ -49,20 +56,30 @@ class LandingGrowthConfigView(APIView):
 
     def get(self, request):
         growth_settings = LandingGrowthSettings.load()
-        experiments = [
-            _public_experiment(experiment)
-            for experiment in LandingExperiment.objects.filter(status=LandingExperiment.STATUS_RUNNING, kind=LandingExperiment.KIND_CONVERSION)[:1]
-        ]
+        active_experiment = LandingExperiment.objects.filter(
+            status=LandingExperiment.STATUS_RUNNING,
+            kind=LandingExperiment.KIND_CONVERSION,
+        ).first()
+        experiments = [_public_experiment(active_experiment)] if active_experiment else []
+        latest_change = LandingChangeLog.objects.only('created_at').first()
+        config_changed_at = latest_change.created_at if latest_change else growth_settings.created_at
+        last_changed_at = max(
+            config_changed_at,
+            active_experiment.updated_at if active_experiment else config_changed_at,
+        )
         payload = {
             'version': growth_settings.config_version,
             'mode': growth_settings.mode,
             'config': growth_settings.active_config,
             'experiments': experiments,
-            'generated_at': timezone.now().isoformat(),
+            'generated_at': last_changed_at.isoformat(),
         }
         payload['signature'] = _signature(payload)
         etag = f'"landing-growth-{growth_settings.config_version}-{payload["signature"][:12]}"'
-        response = Response(status=status.HTTP_304_NOT_MODIFIED) if request.headers.get('If-None-Match') == etag else Response(payload)
+        if request.headers.get('If-None-Match') == etag:
+            response = Response(status=status.HTTP_304_NOT_MODIFIED)
+        else:
+            response = Response(payload)
         response['ETag'] = etag
         response['Cache-Control'] = 'public, max-age=60, stale-while-revalidate=300'
         return response
@@ -74,15 +91,16 @@ class LandingGrowthEventView(APIView):
 
     def post(self, request):
         ip = _client_ip(request)
-        minute = f'{timezone.now():%Y%m%d%H%M}'
-        count_key = f'landing-growth-ip-count:{ip}:{minute}'
-        try:
-            count = cache.incr(count_key)
-        except ValueError:
-            cache.set(count_key, 1, timeout=70)
-            count = 1
-        if count > 300:
-            return Response({'error': 'Забагато подій.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        if not cache.add(f'landing-growth-ip:{ip}:{timezone.now():%Y%m%d%H%M}', '1', timeout=70):
+            # A second key tracks count without persisting raw IP in the database.
+            count_key = f'landing-growth-ip-count:{ip}:{timezone.now():%Y%m%d%H%M}'
+            try:
+                count = cache.incr(count_key)
+            except ValueError:
+                cache.set(count_key, 2, timeout=70)
+                count = 2
+            if count > 300:
+                return Response({'error': 'Забагато подій.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
         event_name = str(request.data.get('event_name') or '').strip()[:64]
         session_id = str(request.data.get('session_id') or '').strip()[:160]
@@ -95,8 +113,9 @@ class LandingGrowthEventView(APIView):
         if not page_path.startswith('/'):
             page_path = '/'
 
+        raw_event_id = request.data.get('event_id')
         try:
-            event_id = uuid.UUID(str(request.data.get('event_id'))) if request.data.get('event_id') else uuid.uuid4()
+            event_id = uuid.UUID(str(raw_event_id)) if raw_event_id else uuid.uuid4()
         except (TypeError, ValueError, AttributeError):
             return Response({'error': 'Некоректний event_id.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -104,7 +123,11 @@ class LandingGrowthEventView(APIView):
         raw_experiment_id = request.data.get('experiment_id')
         if raw_experiment_id:
             try:
-                experiment = LandingExperiment.objects.filter(pk=raw_experiment_id, status=LandingExperiment.STATUS_RUNNING, kind=LandingExperiment.KIND_CONVERSION).first()
+                experiment = LandingExperiment.objects.filter(
+                    pk=raw_experiment_id,
+                    status=LandingExperiment.STATUS_RUNNING,
+                    kind=LandingExperiment.KIND_CONVERSION,
+                ).first()
             except (TypeError, ValueError):
                 experiment = None
         variant = assigned_variant(experiment, session_id) if experiment else LandingEvent.VARIANT_NONE
@@ -134,8 +157,14 @@ class LandingGrowthEventView(APIView):
         except IntegrityError:
             event = LandingEvent.objects.filter(event_id=event_id).first()
             created = False
+
         return Response(
-            {'ok': True, 'created': created, 'variant': event.variant if event else variant, 'experiment_id': str(experiment.pk) if experiment else None},
+            {
+                'ok': True,
+                'created': created,
+                'variant': event.variant if event else variant,
+                'experiment_id': str(experiment.pk) if experiment else None,
+            },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
@@ -156,7 +185,19 @@ class LandingGrowthStatusView(APIView):
             },
             'running_experiment': _public_experiment(running) if running else None,
             'evidence': build_evidence(),
-            'recent_proposals': list(LandingProposal.objects.values('id', 'status', 'field_path', 'proposed_value', 'metric_name', 'source', 'created_at')[:10]),
-            'recent_changes': list(LandingChangeLog.objects.values('id', 'action', 'field_path', 'before_value', 'after_value', 'config_version', 'created_at')[:10]),
-            'recent_sync_runs': list(LandingSyncRun.objects.values('id', 'source', 'status', 'records_processed', 'error', 'started_at', 'finished_at')[:10]),
+            'recent_proposals': list(
+                LandingProposal.objects.values(
+                    'id', 'status', 'field_path', 'proposed_value', 'metric_name', 'source', 'created_at'
+                )[:10]
+            ),
+            'recent_changes': list(
+                LandingChangeLog.objects.values(
+                    'id', 'action', 'field_path', 'before_value', 'after_value', 'config_version', 'created_at'
+                )[:10]
+            ),
+            'recent_sync_runs': list(
+                LandingSyncRun.objects.values(
+                    'id', 'source', 'status', 'records_processed', 'error', 'started_at', 'finished_at'
+                )[:10]
+            ),
         })

@@ -14,7 +14,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         try:
-            result = run_growth_cycle(collect=not options['no_collect'], propose=not options['no_propose'])
+            result = run_growth_cycle(
+                collect=not options['no_collect'],
+                propose=not options['no_propose'],
+            )
         except Exception as exc:
             raise CommandError(str(exc)) from exc
         self.stdout.write(self.style.SUCCESS(json.dumps(result, ensure_ascii=False, default=str, indent=2)))

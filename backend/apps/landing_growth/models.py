@@ -31,6 +31,8 @@ class LandingGrowthSettings(models.Model):
     min_sessions_per_arm = models.PositiveIntegerField(default=100)
     min_conversions_total = models.PositiveIntegerField(default=12)
     experiment_max_days = models.PositiveSmallIntegerField(default=21)
+    cycle_lock_token = models.CharField(max_length=36, blank=True)
+    cycle_locked_until = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -54,7 +56,10 @@ class LandingGrowthSettings(models.Model):
 class LandingExperiment(models.Model):
     KIND_CONVERSION = 'conversion'
     KIND_SEO = 'seo_sequential'
-    KIND_CHOICES = [(KIND_CONVERSION, 'A/B конверсія'), (KIND_SEO, 'Послідовний SEO-тест')]
+    KIND_CHOICES = [
+        (KIND_CONVERSION, 'A/B конверсія'),
+        (KIND_SEO, 'Послідовний SEO-тест'),
+    ]
 
     STATUS_DRAFT = 'draft'
     STATUS_RUNNING = 'running'
@@ -78,7 +83,11 @@ class LandingExperiment(models.Model):
     SOURCE_RULE = 'rule'
     SOURCE_OPENAI = 'openai'
     SOURCE_MANUAL = 'manual'
-    SOURCE_CHOICES = [(SOURCE_RULE, 'Правило'), (SOURCE_OPENAI, 'OpenAI'), (SOURCE_MANUAL, 'Вручну')]
+    SOURCE_CHOICES = [
+        (SOURCE_RULE, 'Правило'),
+        (SOURCE_OPENAI, 'OpenAI'),
+        (SOURCE_MANUAL, 'Вручну'),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=180)
@@ -138,14 +147,24 @@ class LandingEvent(models.Model):
     VARIANT_CONTROL = 'control'
     VARIANT_TEST = 'variant'
     VARIANT_NONE = 'none'
-    VARIANT_CHOICES = [(VARIANT_CONTROL, 'Контроль'), (VARIANT_TEST, 'Варіант'), (VARIANT_NONE, 'Без експерименту')]
+    VARIANT_CHOICES = [
+        (VARIANT_CONTROL, 'Контроль'),
+        (VARIANT_TEST, 'Варіант'),
+        (VARIANT_NONE, 'Без експерименту'),
+    ]
 
     event_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     session_hash = models.CharField(max_length=64, db_index=True)
     event_name = models.CharField(max_length=64, db_index=True)
     page_path = models.CharField(max_length=200, default='/')
     block_key = models.CharField(max_length=40, blank=True)
-    experiment = models.ForeignKey(LandingExperiment, null=True, blank=True, on_delete=models.SET_NULL, related_name='events')
+    experiment = models.ForeignKey(
+        LandingExperiment,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='events',
+    )
     variant = models.CharField(max_length=12, choices=VARIANT_CHOICES, default=VARIANT_NONE, db_index=True)
     metadata = models.JSONField(default=dict, blank=True)
     occurred_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -175,7 +194,9 @@ class LandingSearchMetric(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['date', 'query', 'page', 'device'], name='lg_unique_search_metric')]
+        constraints = [
+            models.UniqueConstraint(fields=['date', 'query', 'page', 'device'], name='lg_unique_search_metric'),
+        ]
         indexes = [models.Index(fields=['page', 'date'], name='lg_search_page_date')]
 
     def __str__(self):
@@ -193,7 +214,9 @@ class LandingAnalyticsMetric(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['date', 'event_name', 'source_medium'], name='lg_unique_analytics_metric')]
+        constraints = [
+            models.UniqueConstraint(fields=['date', 'event_name', 'source_medium'], name='lg_unique_analytics_metric'),
+        ]
         indexes = [models.Index(fields=['event_name', 'date'], name='lg_analytics_event_date')]
 
     def __str__(self):
@@ -204,7 +227,11 @@ class LandingProposal(models.Model):
     STATUS_PENDING = 'pending'
     STATUS_EXPERIMENT = 'experiment_created'
     STATUS_REJECTED = 'rejected'
-    STATUS_CHOICES = [(STATUS_PENDING, 'Очікує'), (STATUS_EXPERIMENT, 'Експеримент створено'), (STATUS_REJECTED, 'Відхилено')]
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Очікує'),
+        (STATUS_EXPERIMENT, 'Експеримент створено'),
+        (STATUS_REJECTED, 'Відхилено'),
+    ]
 
     status = models.CharField(max_length=24, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     field_path = models.CharField(max_length=80)
@@ -218,7 +245,13 @@ class LandingProposal(models.Model):
     input_tokens = models.PositiveIntegerField(default=0)
     output_tokens = models.PositiveIntegerField(default=0)
     rejection_reason = models.TextField(blank=True)
-    experiment = models.ForeignKey(LandingExperiment, null=True, blank=True, on_delete=models.SET_NULL, related_name='proposals')
+    experiment = models.ForeignKey(
+        LandingExperiment,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='proposals',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -233,7 +266,11 @@ class LandingChangeLog(models.Model):
     ACTION_APPLY = 'apply'
     ACTION_ROLLBACK = 'rollback'
     ACTION_DEPLOY = 'deploy'
-    ACTION_CHOICES = [(ACTION_APPLY, 'Застосовано'), (ACTION_ROLLBACK, 'Відкочено'), (ACTION_DEPLOY, 'Deploy')]
+    ACTION_CHOICES = [
+        (ACTION_APPLY, 'Застосовано'),
+        (ACTION_ROLLBACK, 'Відкочено'),
+        (ACTION_DEPLOY, 'Deploy'),
+    ]
 
     action = models.CharField(max_length=16, choices=ACTION_CHOICES)
     field_path = models.CharField(max_length=80, blank=True)
@@ -264,11 +301,17 @@ class LandingSyncRun(models.Model):
         (SOURCE_ENGINE, 'Growth Engine'),
         (SOURCE_DEPLOY, 'Deploy'),
     ]
+
     STATUS_RUNNING = 'running'
     STATUS_SUCCESS = 'success'
     STATUS_SKIPPED = 'skipped'
     STATUS_FAILED = 'failed'
-    STATUS_CHOICES = [(STATUS_RUNNING, 'Виконується'), (STATUS_SUCCESS, 'Успішно'), (STATUS_SKIPPED, 'Пропущено'), (STATUS_FAILED, 'Помилка')]
+    STATUS_CHOICES = [
+        (STATUS_RUNNING, 'Виконується'),
+        (STATUS_SUCCESS, 'Успішно'),
+        (STATUS_SKIPPED, 'Пропущено'),
+        (STATUS_FAILED, 'Помилка'),
+    ]
 
     source = models.CharField(max_length=24, choices=SOURCE_CHOICES)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_RUNNING)

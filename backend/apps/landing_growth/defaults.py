@@ -67,7 +67,6 @@ PUBLIC_EVENT_NAMES = {
     'faq_open',
     'login_click',
     'register_start',
-    'register_complete',
 }
 
 CONVERSION_EVENT_BY_METRIC = {
@@ -79,7 +78,10 @@ CONVERSION_EVENT_BY_METRIC = {
     'register_complete': 'register_complete',
 }
 
-BLOCK_BY_FIELD = {path: path.split('.', 1)[0] for path in ALLOWED_FIELD_RULES}
+BLOCK_BY_FIELD = {
+    path: path.split('.', 1)[0]
+    for path in ALLOWED_FIELD_RULES
+}
 
 
 def default_landing_config():

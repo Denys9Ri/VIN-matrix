@@ -10,7 +10,9 @@ import apps.landing_growth.defaults
 
 class Migration(migrations.Migration):
     initial = True
+
     dependencies = []
+
     operations = [
         migrations.CreateModel(
             name='LandingAIUsage',
@@ -84,6 +86,8 @@ class Migration(migrations.Migration):
                 ('min_sessions_per_arm', models.PositiveIntegerField(default=100)),
                 ('min_conversions_total', models.PositiveIntegerField(default=12)),
                 ('experiment_max_days', models.PositiveSmallIntegerField(default=21)),
+                ('cycle_lock_token', models.CharField(blank=True, max_length=36)),
+                ('cycle_locked_until', models.DateTimeField(blank=True, null=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
@@ -173,12 +177,36 @@ class Migration(migrations.Migration):
             ],
             options={'ordering': ['-created_at']},
         ),
-        migrations.AddIndex(model_name='landingexperiment', index=models.Index(fields=['status', 'created_at'], name='lg_exp_status_created')),
-        migrations.AddIndex(model_name='landingexperiment', index=models.Index(fields=['field_path', 'status'], name='lg_exp_field_status')),
-        migrations.AddIndex(model_name='landingevent', index=models.Index(fields=['experiment', 'variant', 'event_name'], name='lg_evt_exp_variant_name')),
-        migrations.AddIndex(model_name='landingevent', index=models.Index(fields=['occurred_at', 'event_name'], name='lg_evt_time_name')),
-        migrations.AddConstraint(model_name='landingsearchmetric', constraint=models.UniqueConstraint(fields=('date', 'query', 'page', 'device'), name='lg_unique_search_metric')),
-        migrations.AddIndex(model_name='landingsearchmetric', index=models.Index(fields=['page', 'date'], name='lg_search_page_date')),
-        migrations.AddConstraint(model_name='landinganalyticsmetric', constraint=models.UniqueConstraint(fields=('date', 'event_name', 'source_medium'), name='lg_unique_analytics_metric')),
-        migrations.AddIndex(model_name='landinganalyticsmetric', index=models.Index(fields=['event_name', 'date'], name='lg_analytics_event_date')),
+        migrations.AddIndex(
+            model_name='landingexperiment',
+            index=models.Index(fields=['status', 'created_at'], name='lg_exp_status_created'),
+        ),
+        migrations.AddIndex(
+            model_name='landingexperiment',
+            index=models.Index(fields=['field_path', 'status'], name='lg_exp_field_status'),
+        ),
+        migrations.AddIndex(
+            model_name='landingevent',
+            index=models.Index(fields=['experiment', 'variant', 'event_name'], name='lg_evt_exp_variant_name'),
+        ),
+        migrations.AddIndex(
+            model_name='landingevent',
+            index=models.Index(fields=['occurred_at', 'event_name'], name='lg_evt_time_name'),
+        ),
+        migrations.AddConstraint(
+            model_name='landingsearchmetric',
+            constraint=models.UniqueConstraint(fields=('date', 'query', 'page', 'device'), name='lg_unique_search_metric'),
+        ),
+        migrations.AddIndex(
+            model_name='landingsearchmetric',
+            index=models.Index(fields=['page', 'date'], name='lg_search_page_date'),
+        ),
+        migrations.AddConstraint(
+            model_name='landinganalyticsmetric',
+            constraint=models.UniqueConstraint(fields=('date', 'event_name', 'source_medium'), name='lg_unique_analytics_metric'),
+        ),
+        migrations.AddIndex(
+            model_name='landinganalyticsmetric',
+            index=models.Index(fields=['event_name', 'date'], name='lg_analytics_event_date'),
+        ),
     ]

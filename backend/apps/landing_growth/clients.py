@@ -15,6 +15,7 @@ from google.oauth2 import service_account
 from .models import LandingAIUsage
 
 logger = logging.getLogger('vin_matrix')
+
 SEARCH_CONSOLE_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly'
 ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly'
 
@@ -42,7 +43,9 @@ def _load_service_account_info(raw_value):
             return json.loads(decoded)
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
         pass
-    raise ExternalServiceError('GOOGLE_APPLICATION_CREDENTIALS має бути шляхом до JSON, самим JSON або base64(JSON).')
+    raise ExternalServiceError(
+        'GOOGLE_APPLICATION_CREDENTIALS має бути шляхом до JSON, самим JSON або base64(JSON).'
+    )
 
 
 class GoogleAccessTokenProvider:
@@ -67,6 +70,7 @@ class GoogleAccessTokenProvider:
                 client_secret=client_secret,
                 scopes=self.scopes,
             )
+
         raise ExternalServiceError(
             'Не налаштовано Google credentials. Додайте GOOGLE_APPLICATION_CREDENTIALS '
             'або OAuth refresh token разом із client id/client secret.'
@@ -97,19 +101,28 @@ class SearchConsoleClient:
             'type': 'web',
             'aggregationType': 'auto',
             'rowLimit': min(int(row_limit), 25000),
-            'dimensionFilterGroups': [{
-                'groupType': 'and',
-                'filters': [{'dimension': 'page', 'operator': 'equals', 'expression': page_url}],
-            }],
+            'dimensionFilterGroups': [
+                {
+                    'groupType': 'and',
+                    'filters': [
+                        {'dimension': 'page', 'operator': 'equals', 'expression': page_url},
+                    ],
+                }
+            ],
         }
         response = requests.post(
             self.endpoint.format(site=quote(self.site_url, safe='')),
-            headers={'Authorization': f'Bearer {self.token_provider.access_token()}', 'Content-Type': 'application/json'},
+            headers={
+                'Authorization': f'Bearer {self.token_provider.access_token()}',
+                'Content-Type': 'application/json',
+            },
             json=payload,
             timeout=45,
         )
         if response.status_code >= 400:
-            raise ExternalServiceError(f'Search Console API {response.status_code}: {response.text[:500]}')
+            raise ExternalServiceError(
+                f'Search Console API {response.status_code}: {response.text[:500]}'
+            )
         return response.json().get('rows', [])
 
 
@@ -124,24 +137,43 @@ class GA4Client:
             raise ExternalServiceError('GA4_PROPERTY_ID не налаштовано.')
         self.token_provider = GoogleAccessTokenProvider([ANALYTICS_SCOPE])
 
-    def main_page_events(self, start_date, end_date):
-        payload = {
-            'dateRanges': [{'startDate': start_date.isoformat(), 'endDate': end_date.isoformat()}],
-            'dimensions': [{'name': 'date'}, {'name': 'eventName'}, {'name': 'sessionSourceMedium'}],
-            'metrics': [{'name': 'eventCount'}, {'name': 'totalUsers'}, {'name': 'sessions'}],
-            'dimensionFilter': {'filter': {'fieldName': 'pagePath', 'stringFilter': {'matchType': 'EXACT', 'value': '/', 'caseSensitive': False}}},
-            'limit': '100000',
-            'keepEmptyRows': False,
-        }
+    def _run(self, payload):
         response = requests.post(
             self.endpoint.format(property_id=self.property_id),
-            headers={'Authorization': f'Bearer {self.token_provider.access_token()}', 'Content-Type': 'application/json'},
+            headers={
+                'Authorization': f'Bearer {self.token_provider.access_token()}',
+                'Content-Type': 'application/json',
+            },
             json=payload,
             timeout=45,
         )
         if response.status_code >= 400:
             raise ExternalServiceError(f'GA4 Data API {response.status_code}: {response.text[:500]}')
         return response.json()
+
+    def main_page_events(self, start_date, end_date):
+        payload = {
+            'dateRanges': [{'startDate': start_date.isoformat(), 'endDate': end_date.isoformat()}],
+            'dimensions': [
+                {'name': 'date'},
+                {'name': 'eventName'},
+                {'name': 'sessionSourceMedium'},
+            ],
+            'metrics': [
+                {'name': 'eventCount'},
+                {'name': 'totalUsers'},
+                {'name': 'sessions'},
+            ],
+            'dimensionFilter': {
+                'filter': {
+                    'fieldName': 'pagePath',
+                    'stringFilter': {'matchType': 'EXACT', 'value': '/', 'caseSensitive': False},
+                }
+            },
+            'limit': '100000',
+            'keepEmptyRows': False,
+        }
+        return self._run(payload)
 
 
 class OpenAIProposalClient:
@@ -158,8 +190,10 @@ class OpenAIProposalClient:
         today_usage, _ = LandingAIUsage.objects.get_or_create(date=today)
         if today_usage.calls >= growth_settings.daily_openai_limit:
             return False, 'Досягнуто денний ліміт OpenAI.'
-        from django.db.models import Sum
-        month_calls = LandingAIUsage.objects.filter(date__gte=today.replace(day=1), date__lte=today).aggregate(total=Sum('calls'))['total'] or 0
+        month_calls = LandingAIUsage.objects.filter(
+            date__gte=today.replace(day=1),
+            date__lte=today,
+        ).aggregate(total=models_sum('calls'))['total'] or 0
         if month_calls >= growth_settings.monthly_openai_limit:
             return False, 'Досягнуто місячний ліміт OpenAI.'
         return True, ''
@@ -172,12 +206,23 @@ class OpenAIProposalClient:
             raise ExternalServiceError(reason)
 
         schema = {
-            'type': 'object', 'additionalProperties': False,
+            'type': 'object',
+            'additionalProperties': False,
             'required': ['field_path', 'proposed_value', 'metric_name', 'rationale'],
             'properties': {
                 'field_path': {'type': 'string', 'enum': sorted(allowed_fields)},
                 'proposed_value': {'type': 'string'},
-                'metric_name': {'type': 'string', 'enum': ['hero_register_click', 'hero_demo_click', 'pricing_register_click', 'final_register_click', 'search_ctr']},
+                'metric_name': {
+                    'type': 'string',
+                    'enum': [
+                        'hero_register_click',
+                        'hero_demo_click',
+                        'pricing_register_click',
+                        'final_register_click',
+                        'register_complete',
+                        'search_ctr',
+                    ],
+                },
                 'rationale': {'type': 'string'},
             },
         }
@@ -200,9 +245,19 @@ class OpenAIProposalClient:
             'model': self.model,
             'store': False,
             'max_output_tokens': self.max_output_tokens,
-            'instructions': 'Ти обережний growth-аналітик SaaS. Поверни тільки структурований результат, який можна безпечно перевірити A/B або послідовним SEO-тестом.',
+            'instructions': (
+                'Ти обережний growth-аналітик SaaS. Поверни тільки структурований результат, '
+                'який можна безпечно перевірити A/B або послідовним SEO-тестом.'
+            ),
             'input': json.dumps(prompt, ensure_ascii=False),
-            'text': {'format': {'type': 'json_schema', 'name': 'landing_growth_proposal', 'strict': True, 'schema': schema}},
+            'text': {
+                'format': {
+                    'type': 'json_schema',
+                    'name': 'landing_growth_proposal',
+                    'strict': True,
+                    'schema': schema,
+                }
+            },
         }
         response = requests.post(
             self.endpoint,
@@ -229,7 +284,12 @@ class OpenAIProposalClient:
         today_usage.input_tokens += input_tokens
         today_usage.output_tokens += output_tokens
         today_usage.save(update_fields=['calls', 'input_tokens', 'output_tokens', 'updated_at'])
-        return proposal, {'model': self.model, 'input_tokens': input_tokens, 'output_tokens': output_tokens, 'response_id': data.get('id', '')}
+        return proposal, {
+            'model': self.model,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'response_id': data.get('id', ''),
+        }
 
     @staticmethod
     def _extract_output_text(data):
@@ -239,6 +299,13 @@ class OpenAIProposalClient:
                 if content.get('type') in {'output_text', 'text'} and content.get('text'):
                     chunks.append(content['text'])
         return ''.join(chunks)
+
+
+def models_sum(field_name):
+    # Import lazily so clients.py stays importable in tooling that initializes Django partially.
+    from django.db.models import Sum
+
+    return Sum(field_name)
 
 
 def default_collection_window(days=3):

@@ -2,62 +2,59 @@ name: Apply Landing Growth Engine package
 
 on:
   pull_request:
-    branches:
-      - main
-    types:
-      - opened
-      - reopened
-      - synchronize
+    branches: [main]
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  apply-package:
+  verify-payload:
     if: github.head_ref == 'agent/landing-growth-engine'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { file: payload.chunk000, sha: 62b09cad785071ee5e3849df928ad9091f7439c1 }
+          - { file: payload.chunk001, sha: 9b4f6e578088fc785eed4d451ad98a334ea7e62b }
+          - { file: payload.chunk002, sha: 62b841371791d91d14e6f9308e06e539884936e4 }
+          - { file: payload.big000, sha: 205cfd3a2ecdd639e5b315d179263bfaf9893633 }
+          - { file: payload.big001, sha: c4582c0d6d29321ef507484d437b32f80d23e341 }
+          - { file: payload.big002, sha: a991a8cfe5856fb3a9b22ad993f76ae7f08e00bd }
+          - { file: payload.big003, sha: 64eb08db90c24cf41937243c42afe52c2b463442 }
+          - { file: payload.big004, sha: 19932bcea8cf93489b5a419dbd46b9c3de386112 }
+          - { file: payload.big005, sha: 2eec6932ecf17b6bafa85eebe7734affeaf1a260 }
+          - { file: payload.big006, sha: 22849966e4863fa6847f9348e849114852467770 }
+          - { file: payload.big007, sha: 039bb4fa80284b8ab461bf38719d093e348108a5 }
+          - { file: payload.big008, sha: 9d03ebffe7c1a069efa198b071ba1ae30eb965d3 }
+          - { file: payload.big009, sha: 60ca46b80a846b137e9ecc39f038b43c278aa861 }
+          - { file: payload.big010, sha: 4b0b247de5a12bf3bb9b9c7d46745547918cc706 }
+          - { file: payload.big011, sha: 898bcb7533059203dd491750324aba93c7a1f7f8 }
+          - { file: payload.big012, sha: 50a3eb96ac76badfb3fe5e2c4626af5e5b3ff90b }
+    name: verify ${{ matrix.file }}
     steps:
-      - name: Checkout branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: agent/landing-growth-engine
-          fetch-depth: 0
-
-      - name: Verify payload segments
+      - name: Verify Git blob
         shell: bash
         run: |
           set -euo pipefail
-          check_blob() {
-            local expected="$1"
-            local file="$2"
-            local actual
-            actual="$(git hash-object "$file")"
-            if [ "$actual" != "$expected" ]; then
-              echo "Payload segment mismatch: $file"
-              echo "expected=$expected"
-              echo "actual=$actual"
-              exit 1
-            fi
-            echo "OK $file $actual"
-          }
-          check_blob 62b09cad785071ee5e3849df928ad9091f7439c1 .github/growth-bootstrap/payload.chunk000
-          check_blob 9b4f6e578088fc785eed4d451ad98a334ea7e62b .github/growth-bootstrap/payload.chunk001
-          check_blob 62b841371791d91d14e6f9308e06e539884936e4 .github/growth-bootstrap/payload.chunk002
-          check_blob 205cfd3a2ecdd639e5b315d179263bfaf9893633 .github/growth-bootstrap/payload.big000
-          check_blob c4582c0d6d29321ef507484d437b32f80d23e341 .github/growth-bootstrap/payload.big001
-          check_blob a991a8cfe5856fb3a9b22ad993f76ae7f08e00bd .github/growth-bootstrap/payload.big002
-          check_blob 64eb08db90c24cf41937243c42afe52c2b463442 .github/growth-bootstrap/payload.big003
-          check_blob 19932bcea8cf93489b5a419dbd46b9c3de386112 .github/growth-bootstrap/payload.big004
-          check_blob 2eec6932ecf17b6bafa85eebe7734affeaf1a260 .github/growth-bootstrap/payload.big005
-          check_blob 22849966e4863fa6847f9348e849114852467770 .github/growth-bootstrap/payload.big006
-          check_blob 039bb4fa80284b8ab461bf38719d093e348108a5 .github/growth-bootstrap/payload.big007
-          check_blob 9d03ebffe7c1a069efa198b071ba1ae30eb965d3 .github/growth-bootstrap/payload.big008
-          check_blob 60ca46b80a846b137e9ecc39f038b43c278aa861 .github/growth-bootstrap/payload.big009
-          check_blob 4b0b247de5a12bf3bb9b9c7d46745547918cc706 .github/growth-bootstrap/payload.big010
-          check_blob 898bcb7533059203dd491750324aba93c7a1f7f8 .github/growth-bootstrap/payload.big011
-          check_blob 50a3eb96ac76badfb3fe5e2c4626af5e5b3ff90b .github/growth-bootstrap/payload.big012
+          file=".github/growth-bootstrap/${{ matrix.file }}"
+          actual="$(git hash-object "$file")"
+          test "$actual" = "${{ matrix.sha }}" || { echo "expected=${{ matrix.sha }} actual=$actual"; exit 1; }
 
+  apply-package:
+    needs: verify-payload
+    if: github.head_ref == 'agent/landing-growth-engine'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/landing-growth-engine
+          fetch-depth: 0
       - name: Rebuild and verify package
         shell: bash
         run: |
@@ -83,17 +80,13 @@ jobs:
           base64 --decode /tmp/vin-matrix-growth.b64 > /tmp/vin-matrix-growth.zip
           echo '226c4d187302c5b3ada976c57827dca695bfe15a92dfaa1c2dbdc778a0d8d4a1  /tmp/vin-matrix-growth.zip' | sha256sum --check --strict
           unzip -t /tmp/vin-matrix-growth.zip
-
       - name: Apply production package
-        shell: bash
         run: |
           set -euo pipefail
           unzip -o /tmp/vin-matrix-growth.zip -d .
           rm -rf .github/growth-bootstrap
           rm -f .github/workflows/apply-growth-package.yml
-
       - name: Run static preflight
-        shell: bash
         run: |
           set -euo pipefail
           python -m compileall -q backend
@@ -105,17 +98,12 @@ jobs:
           json.loads(Path('frontend/src/growth/generatedLandingConfig.json').read_text())
           print('Generated landing config is valid JSON.')
           PY
-
       - name: Commit final integration
-        shell: bash
         run: |
           set -euo pipefail
           git config user.name 'VIN-matrix Growth Engine Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add -A
-          if git diff --cached --quiet; then
-            echo 'No changes to commit.'
-            exit 0
-          fi
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Complete Landing Growth Engine integration'
           git push origin HEAD:agent/landing-growth-engine

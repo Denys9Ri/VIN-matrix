@@ -24,6 +24,40 @@ jobs:
           ref: agent/landing-growth-engine
           fetch-depth: 0
 
+      - name: Verify payload segments
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_blob() {
+            local expected="$1"
+            local file="$2"
+            local actual
+            actual="$(git hash-object "$file")"
+            if [ "$actual" != "$expected" ]; then
+              echo "Payload segment mismatch: $file"
+              echo "expected=$expected"
+              echo "actual=$actual"
+              exit 1
+            fi
+            echo "OK $file $actual"
+          }
+          check_blob 62b09cad785071ee5e3849df928ad9091f7439c1 .github/growth-bootstrap/payload.chunk000
+          check_blob 9b4f6e578088fc785eed4d451ad98a334ea7e62b .github/growth-bootstrap/payload.chunk001
+          check_blob 62b841371791d91d14e6f9308e06e539884936e4 .github/growth-bootstrap/payload.chunk002
+          check_blob 205cfd3a2ecdd639e5b315d179263bfaf9893633 .github/growth-bootstrap/payload.big000
+          check_blob c4582c0d6d29321ef507484d437b32f80d23e341 .github/growth-bootstrap/payload.big001
+          check_blob a991a8cfe5856fb3a9b22ad993f76ae7f08e00bd .github/growth-bootstrap/payload.big002
+          check_blob 64eb08db90c24cf41937243c42afe52c2b463442 .github/growth-bootstrap/payload.big003
+          check_blob 19932bcea8cf93489b5a419dbd46b9c3de386112 .github/growth-bootstrap/payload.big004
+          check_blob 2eec6932ecf17b6bafa85eebe7734affeaf1a260 .github/growth-bootstrap/payload.big005
+          check_blob 22849966e4863fa6847f9348e849114852467770 .github/growth-bootstrap/payload.big006
+          check_blob 039bb4fa80284b8ab461bf38719d093e348108a5 .github/growth-bootstrap/payload.big007
+          check_blob 9d03ebffe7c1a069efa198b071ba1ae30eb965d3 .github/growth-bootstrap/payload.big008
+          check_blob 60ca46b80a846b137e9ecc39f038b43c278aa861 .github/growth-bootstrap/payload.big009
+          check_blob 4b0b247de5a12bf3bb9b9c7d46745547918cc706 .github/growth-bootstrap/payload.big010
+          check_blob 898bcb7533059203dd491750324aba93c7a1f7f8 .github/growth-bootstrap/payload.big011
+          check_blob 50a3eb96ac76badfb3fe5e2c4626af5e5b3ff90b .github/growth-bootstrap/payload.big012
+
       - name: Rebuild and verify package
         shell: bash
         run: |

@@ -1,11 +1,13 @@
 name: Apply Landing Growth Engine package
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/landing-growth-engine
-    paths:
-      - .github/growth-bootstrap/READY
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
   workflow_dispatch:
 
 permissions:
@@ -13,6 +15,7 @@ permissions:
 
 jobs:
   apply-package:
+    if: github.head_ref == 'agent/landing-growth-engine'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/sync-landing-growth-config.mjs && vite build && node scripts/prerender-public.mjs && node scripts/enhance-public-seo.mjs && node scripts/normalize-public-meta.mjs && node scripts/add-public-legal-links.mjs && node scripts/extend-public-sitemap.mjs && node scripts/apply-landing-growth-seo.mjs && node scripts/verify-public-seo.mjs",
+    "test": "node --test tests/*.test.js",
     "seo:check": "node scripts/verify-public-seo.mjs",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

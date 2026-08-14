@@ -54,12 +54,21 @@ test('detailed client closes every debt without reloading its detail first', asy
     ],
   };
 
-  const result = await closeClientDebt(api, client);
+  const result = await closeClientDebt(api, client, {
+    paymentType: 'card',
+    comment: 'Оплата карткою в CRM',
+  });
 
   assert.equal(result.closed, 2);
-  assert.deepEqual(posts.map(([url]) => url).sort(), [
-    '/api/visits/51/mark-paid/',
-    '/api/visits/52/mark-paid/',
+  assert.deepEqual(posts, [
+    ['/api/visits/51/mark-paid/', {
+      payment_type: 'card',
+      comment: 'Оплата карткою в CRM',
+    }],
+    ['/api/visits/52/mark-paid/', {
+      payment_type: 'card',
+      comment: 'Оплата карткою в CRM',
+    }],
   ]);
   assert.equal(debtOrdersOf(client).length, 2);
 });

@@ -27,10 +27,11 @@ export async function closeClientDebt(api, client, options = {}) {
   const orders = debtOrdersOf(target);
   const clientKey = target?.key || client?.key || options.fallbackClientKey || '';
   const paymentType = options.paymentType || 'cash';
+  const comment = options.comment || 'Закриття боргу з картки клієнта';
 
   await Promise.all(orders.map((order) => api.post(`/api/visits/${order.id}/mark-paid/`, {
     payment_type: paymentType,
-    comment: 'Закриття боргу з картки клієнта',
+    comment,
   })));
 
   return { closed: orders.length, clientKey, orders, target };

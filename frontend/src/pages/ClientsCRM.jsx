@@ -118,6 +118,21 @@ const normalizePaymentLink = (value) => {
   return `https://${link}`;
 };
 
+const fallbackPaymentTypes = [
+  { key: 'cash', label: 'Готівка' },
+  { key: 'card', label: 'Картка' },
+  { key: 'transfer', label: 'Переказ' },
+  { key: 'terminal', label: 'Термінал' },
+  { key: 'other', label: 'Інше' },
+];
+
+const normalizePaymentTypes = (value) => {
+  const source = Array.isArray(value) && value.length ? value : fallbackPaymentTypes;
+  return source
+    .map((item) => ({ key: item?.key || item?.value, label: item?.label || item?.name || item?.key }))
+    .filter((item) => item.key);
+};
+
 export default function ClientsCRM() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -133,6 +148,9 @@ export default function ClientsCRM() {
   const [companyPaymentLink, setCompanyPaymentLink] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
   const [debtBusy, setDebtBusy] = useState(false);
+  const [debtPaymentTarget, setDebtPaymentTarget] = useState(null);
+  const [debtPaymentForm, setDebtPaymentForm] = useState({ payment_type: 'cash', comment: '' });
+  const [paymentTypes, setPaymentTypes] = useState(fallbackPaymentTypes);
 
   const load = async (query = search) => {
     setLoading(true);
@@ -170,6 +188,19 @@ export default function ClientsCRM() {
     api.get('/api/settings/')
       .then((res) => setCompanyPaymentLink(res.data?.company?.payment_link || ''))
       .catch(() => {});
+
+    api.get('/api/settings/dictionaries/?mode=both')
+      .then((res) => {
+        const nextTypes = normalizePaymentTypes(res.data?.payment_type);
+        setPaymentTypes(nextTypes);
+        setDebtPaymentForm((prev) => ({
+          ...prev,
+          payment_type: nextTypes.some((item) => item.key === prev.payment_type)
+            ? prev.payment_type
+            : nextTypes[0]?.key || 'cash',
+        }));
+      })
+      .catch(() => setPaymentTypes(fallbackPaymentTypes));
   }, []);
 
   const showActionNotice = (text) => {
@@ -278,7 +309,7 @@ export default function ClientsCRM() {
     await copyText(paymentLink, showActionNotice, 'Посилання на оплату скопійовано.');
   };
 
-  const handleCloseDebt = async (clientOverride = selected) => {
+  const openDebtPayment = (clientOverride = selected) => {
     const target = clientOverride || selected;
     if (!target || debtBusy) return;
 
@@ -288,15 +319,28 @@ export default function ClientsCRM() {
       return;
     }
 
+    setDebtPaymentTarget(target);
+    setDebtPaymentForm((prev) => ({ ...prev, comment: '' }));
+  };
+
+  const handleCloseDebt = async () => {
+    const target = debtPaymentTarget;
+    if (!target || debtBusy) return;
+
     setDebtBusy(true);
     try {
-      const result = await closeClientDebt(api, target, { fallbackClientKey: selected?.key });
+      const result = await closeClientDebt(api, target, {
+        fallbackClientKey: selected?.key,
+        paymentType: debtPaymentForm.payment_type,
+        comment: debtPaymentForm.comment || 'Закриття боргу з картки клієнта',
+      });
       if (!result.closed) {
         showActionNotice('Не бачу візитів із боргом для закриття. Оновіть картку клієнта і спробуйте ще раз.');
         return;
       }
 
       showActionNotice(`Борг закрито. Оновлено візитів: ${result.closed}.`);
+      setDebtPaymentTarget(null);
       await load(search);
       if (selected?.key && selected.key === result.clientKey) {
         await refreshSelectedClient({ key: result.clientKey });
@@ -404,7 +448,7 @@ export default function ClientsCRM() {
                   client={client}
                   active={selected?.key === client.key}
                   onClick={() => openClient(client)}
-                  onCloseDebt={handleCloseDebt}
+                  onCloseDebt={openDebtPayment}
                   debtBusy={debtBusy}
                 />
               ))}
@@ -419,7 +463,7 @@ export default function ClientsCRM() {
                 tab={tab}
                 setTab={setTab}
                 onEdit={() => openEdit(selected)}
-                onCloseDebt={handleCloseDebt}
+                onCloseDebt={openDebtPayment}
                 onCopy={handleCopy}
                 onPaymentLinkCopy={handlePaymentLinkCopy}
                 debtBusy={debtBusy}
@@ -445,7 +489,7 @@ export default function ClientsCRM() {
               setTab={setTab}
               onClose={() => setSelected(null)}
               onEdit={() => openEdit(selected)}
-              onCloseDebt={handleCloseDebt}
+              onCloseDebt={openDebtPayment}
               onCopy={handleCopy}
               onPaymentLinkCopy={handlePaymentLinkCopy}
               debtBusy={debtBusy}
@@ -467,6 +511,18 @@ export default function ClientsCRM() {
           setForm={setEditClient}
           onClose={() => setEditClient(null)}
           onSubmit={saveClient}
+        />
+      )}
+
+      {debtPaymentTarget && (
+        <DebtPaymentModal
+          client={debtPaymentTarget}
+          form={debtPaymentForm}
+          setForm={setDebtPaymentForm}
+          paymentTypes={paymentTypes}
+          busy={debtBusy}
+          onClose={() => { if (!debtBusy) setDebtPaymentTarget(null); }}
+          onConfirm={handleCloseDebt}
         />
       )}
     </div>
@@ -504,10 +560,17 @@ function MessageBox({ message, onClose }) {
 function ClientCard({ client, active, onClick, onCloseDebt, debtBusy }) {
   const debt = Number(client.debt_amount || 0) > 0;
   return (
-    <button
-      type="button"
+    <article
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`w-full text-left rounded-[24px] p-4 border transition relative overflow-hidden ${active ? 'bg-blue-50 border-blue-200 shadow-lg shadow-blue-100/70' : 'bg-slate-50 border-slate-100 hover:border-blue-100 hover:bg-white hover:shadow-md'}`}
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onClick?.();
+        }
+      }}
+      className={`w-full cursor-pointer text-left rounded-[24px] p-4 border transition relative overflow-hidden ${active ? 'bg-blue-50 border-blue-200 shadow-lg shadow-blue-100/70' : 'bg-slate-50 border-slate-100 hover:border-blue-100 hover:bg-white hover:shadow-md'}`}
     >
       <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${debt ? 'bg-rose-400' : active ? 'bg-blue-500' : 'bg-emerald-400'}`} />
       <div className="pl-1 space-y-3">
@@ -526,16 +589,104 @@ function ClientCard({ client, active, onClick, onCloseDebt, debtBusy }) {
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] font-bold text-slate-400">Останнє: {fmtDate(client.last_order_date)}</p>
           {debt && (
-            <span
+            <button
+              type="button"
+              disabled={debtBusy}
               onClick={(event) => { event.stopPropagation(); onCloseDebt?.(client); }}
-              className="bg-emerald-600 text-white rounded-xl px-3 py-2 text-[11px] font-black uppercase inline-flex items-center gap-1 shadow-sm"
+              className="bg-emerald-600 disabled:bg-slate-300 text-white rounded-xl px-3 py-2 text-[11px] font-black uppercase inline-flex items-center gap-1 shadow-sm"
             >
               <CreditCard size={13} /> {debtBusy ? 'Закриваємо...' : 'Закрити'}
-            </span>
+            </button>
           )}
         </div>
       </div>
-    </button>
+    </article>
+  );
+}
+
+function DebtPaymentModal({ client, form, setForm, paymentTypes, busy, onClose, onConfirm }) {
+  const debtOrders = debtOrdersOf(client);
+  const debt = Number(client?.debt_amount || 0)
+    || debtOrders.reduce((sum, order) => sum + orderDebtAmount(order), 0);
+  const types = normalizePaymentTypes(paymentTypes);
+
+  const submit = (event) => {
+    event.preventDefault();
+    onConfirm?.();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[150] bg-slate-950/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+      onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose?.(); }}
+    >
+      <form onSubmit={submit} className="w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl">
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-blue-600 p-5 text-white flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100">Фінанси СТО</p>
+            <h3 className="mt-1 text-xl md:text-2xl font-black uppercase">Закриття боргу</h3>
+            <p className="mt-1 text-xs font-bold text-emerald-50">{client?.client || client?.phone || 'Клієнт'}</p>
+          </div>
+          <button type="button" disabled={busy} onClick={onClose} className="h-10 w-10 shrink-0 rounded-2xl bg-white/15 hover:bg-white/25 disabled:opacity-50 flex items-center justify-center"><X size={18}/></button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          <div className="rounded-3xl border border-rose-100 bg-rose-50 p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-rose-500">Сума боргу</p>
+              <p className="mt-1 text-3xl font-black text-rose-700">{money(debt)}</p>
+            </div>
+            {debtOrders.length > 0 && (
+              <span className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-xs font-black text-rose-600">
+                Візитів: {debtOrders.length}
+              </span>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-3 text-xs font-black uppercase text-slate-700">Як отримано оплату?</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {types.map((type) => {
+                const active = form.payment_type === type.key;
+                return (
+                  <button
+                    key={type.key}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setForm({ ...form, payment_type: type.key })}
+                    className={`min-h-[50px] rounded-2xl border-2 px-3 py-3 text-xs font-black transition flex items-center justify-center gap-2 disabled:opacity-50 ${active ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50/40'}`}
+                  >
+                    <CreditCard size={15}/> {type.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-slate-700">Коментар до оплати</span>
+            <input
+              value={form.comment}
+              disabled={busy}
+              onChange={(event) => setForm({ ...form, comment: event.target.value })}
+              placeholder="Наприклад: оплата власником авто"
+              className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:bg-white disabled:opacity-50"
+            />
+          </label>
+
+          <p className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-bold leading-relaxed text-blue-700">
+            Оплата буде записана в журнал кожного візиту з вибраним способом. Ці дані можна буде використовувати в аналітиці готівки, картки та інших оплат.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button type="button" disabled={busy} onClick={onClose} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase text-slate-600 disabled:opacity-50">Скасувати</button>
+            <button type="submit" disabled={busy || !form.payment_type} className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-5 py-3 text-xs font-black uppercase text-white shadow-lg shadow-emerald-100 disabled:bg-slate-300 disabled:shadow-none inline-flex items-center justify-center gap-2">
+              <CheckCircle2 size={16}/> {busy ? 'Закриваємо...' : 'Підтвердити оплату'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
 

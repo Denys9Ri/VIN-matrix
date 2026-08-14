@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bell, Car, CheckCircle2, ClipboardList, Copy, CreditCard, History, MessageCircle, Package, Phone, PlusCircle, RefreshCcw, Repeat2, Search, Star, TrendingUp, UserCheck, UserRound, Wrench, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { closeClientDebt, debtOrdersOf, isDebtOrder, orderDebtAmount } from '../utils/clientDebtPayments';
 
 const arr = (value) => (Array.isArray(value) ? value : []);
 const money = (value) => `${Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
@@ -86,6 +87,21 @@ const statusTone = {
   Борг: 'bg-rose-50 text-rose-700 border-rose-100',
 };
 
+const fallbackPaymentTypes = [
+  { key: 'cash', label: 'Готівка' },
+  { key: 'card', label: 'Картка' },
+  { key: 'transfer', label: 'Переказ' },
+  { key: 'terminal', label: 'Термінал' },
+  { key: 'other', label: 'Інше' },
+];
+
+const normalizePaymentTypes = (value) => {
+  const source = Array.isArray(value) && value.length ? value : fallbackPaymentTypes;
+  return source
+    .map((item) => ({ key: item?.key || item?.value, label: item?.label || item?.name || item?.key }))
+    .filter((item) => item.key);
+};
+
 const copyText = async (value, onDone, success = 'Скопійовано.') => {
   const text = String(value || '').trim();
   if (!text) return false;
@@ -116,7 +132,6 @@ const copyText = async (value, onDone, success = 'Скопійовано.') => {
 
 const firstCar = (client) => arr(client?.cars)[0] || {};
 const clientPayload = (client) => ({ client: client?.client || '', phone: client?.phone || '', plate: firstCar(client).plate || '', vin_code: firstCar(client).vin_code || '' });
-const isDebtOrder = (order) => Number(order?.debt_amount || 0) > 0 || ['unpaid', 'debt', 'cod', 'prepaid'].includes(String(order?.payment_status || '').toLowerCase());
 const lastActivity = (client) => client?.last_order_date || arr(client?.orders)[0]?.created_at;
 
 const clientMessage = (client, cfg) => {
@@ -143,6 +158,9 @@ export default function ClientsCRMStage5({ mode }) {
   const [notice, setNotice] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
   const [busy, setBusy] = useState('');
+  const [debtPaymentTarget, setDebtPaymentTarget] = useState(null);
+  const [debtPaymentForm, setDebtPaymentForm] = useState({ payment_type: 'cash', comment: '' });
+  const [paymentTypes, setPaymentTypes] = useState(fallbackPaymentTypes);
   const cfg = modeConfigs[businessType === 'store' ? 'store' : 'sto'];
 
   useEffect(() => {
@@ -153,6 +171,24 @@ export default function ClientsCRMStage5({ mode }) {
       .catch(() => { if (!cancelled) setBusinessType('sto'); });
     return () => { cancelled = true; };
   }, [mode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/api/settings/dictionaries/?mode=both')
+      .then((res) => {
+        if (cancelled) return;
+        const nextTypes = normalizePaymentTypes(res.data?.payment_type);
+        setPaymentTypes(nextTypes);
+        setDebtPaymentForm((prev) => ({
+          ...prev,
+          payment_type: nextTypes.some((item) => item.key === prev.payment_type)
+            ? prev.payment_type
+            : nextTypes[0]?.key || 'cash',
+        }));
+      })
+      .catch(() => { if (!cancelled) setPaymentTypes(fallbackPaymentTypes); });
+    return () => { cancelled = true; };
+  }, []);
 
   const load = async (query = search) => {
     setLoading(true);
@@ -324,16 +360,37 @@ export default function ClientsCRMStage5({ mode }) {
     }
   };
 
-  const closeDebt = async (client = selected) => {
-    if (!client) return;
-    const orders = arr(client.orders).filter(isDebtOrder);
-    if (!orders.length) return showNotice('Боргів по цьому клієнту немає.');
+  const openDebtPayment = (client = selected) => {
+    if (!client || busy === 'debt') return;
+    const knownOrders = Array.isArray(client.orders) ? debtOrdersOf(client) : null;
+    if (knownOrders && !knownOrders.length && Number(client.debt_amount || 0) <= 0) {
+      showNotice('Боргів по цьому клієнту немає.');
+      return;
+    }
+    setDebtPaymentTarget(client);
+    setDebtPaymentForm((prev) => ({ ...prev, comment: '' }));
+  };
+
+  const closeDebt = async () => {
+    const client = debtPaymentTarget;
+    if (!client || busy === 'debt') return;
     setBusy('debt');
     try {
-      await Promise.all(orders.map((order) => api.patch(`/api/visits/${order.id}/`, { payment_status: 'paid', prepayment_amount: Number(order.revenue || order.total_revenue || 0) })));
-      showNotice(`Борг закрито. Оновлено ${cfg.orderPlural}: ${orders.length}.`);
+      const result = await closeClientDebt(api, client, {
+        fallbackClientKey: selected?.key,
+        paymentType: debtPaymentForm.payment_type,
+        comment: debtPaymentForm.comment || 'Закриття боргу з картки клієнта',
+      });
+      if (!result.closed) {
+        showNotice('Не бачу візитів із боргом для закриття. Оновіть картку клієнта і спробуйте ще раз.');
+        return;
+      }
+      showNotice(`Борг закрито. Оновлено ${cfg.orderPlural}: ${result.closed}.`);
+      setDebtPaymentTarget(null);
       await load(search);
-      await refreshSelected(client);
+      if (selected?.key && selected.key === result.clientKey) {
+        await refreshSelected({ key: result.clientKey });
+      }
     } catch (error) {
       setNotice(error.response?.data?.error || 'Не вдалося закрити борг.');
     } finally {
@@ -364,14 +421,25 @@ export default function ClientsCRMStage5({ mode }) {
         <SearchBar value={search} setValue={setSearch} onSubmit={submitSearch} cfg={cfg} />
         <PipelineFilters active={pipelineFilter} setActive={setPipelineFilter} summary={pipelineSummary} total={clients.length} />
         <div className="grid grid-cols-1 xl:grid-cols-[440px_minmax(0,1fr)] 2xl:grid-cols-[480px_minmax(0,1fr)] gap-5 items-start">
-          <ClientList loading={loading} clients={filteredClients} selected={selected} onOpen={openClient} onCloseDebt={closeDebt} busy={busy} cfg={cfg} />
+          <ClientList loading={loading} clients={filteredClients} selected={selected} onOpen={openClient} onCloseDebt={openDebtPayment} busy={busy} cfg={cfg} />
           <section className="hidden xl:block min-w-0 w-full">
-            {selected ? <ClientProfile client={selected} tab={tab} setTab={setTab} busy={busy} onCloseDebt={closeDebt} onQuickAction={quickAction} onSetStatus={setClientStatus} onRepeatPart={repeatPart} onCopy={(v, m) => copyText(v, showNotice, m)} cfg={cfg} /> : <EmptyProfile cfg={cfg} />}
+            {selected ? <ClientProfile client={selected} tab={tab} setTab={setTab} busy={busy} onCloseDebt={openDebtPayment} onQuickAction={quickAction} onSetStatus={setClientStatus} onRepeatPart={repeatPart} onCopy={(v, m) => copyText(v, showNotice, m)} cfg={cfg} /> : <EmptyProfile cfg={cfg} />}
           </section>
         </div>
       </div>
-      {selected && <div className="xl:hidden fixed inset-0 z-[80] bg-slate-900/65 backdrop-blur-sm overflow-y-auto overscroll-contain"><div className="bg-white w-full min-h-[100dvh]"><ClientProfile client={selected} tab={tab} setTab={setTab} busy={busy} onClose={() => setSelected(null)} onCloseDebt={closeDebt} onQuickAction={quickAction} onSetStatus={setClientStatus} onRepeatPart={repeatPart} onCopy={(v, m) => copyText(v, showNotice, m)} cfg={cfg} /></div></div>}
+      {selected && <div className="xl:hidden fixed inset-0 z-[80] bg-slate-900/65 backdrop-blur-sm overflow-y-auto overscroll-contain"><div className="bg-white w-full min-h-[100dvh]"><ClientProfile client={selected} tab={tab} setTab={setTab} busy={busy} onClose={() => setSelected(null)} onCloseDebt={openDebtPayment} onQuickAction={quickAction} onSetStatus={setClientStatus} onRepeatPart={repeatPart} onCopy={(v, m) => copyText(v, showNotice, m)} cfg={cfg} /></div></div>}
       {copyNotice && <CopyNotice message={copyNotice} />}
+      {debtPaymentTarget && (
+        <DebtPaymentModal
+          client={debtPaymentTarget}
+          form={debtPaymentForm}
+          setForm={setDebtPaymentForm}
+          paymentTypes={paymentTypes}
+          busy={busy === 'debt'}
+          onClose={() => { if (busy !== 'debt') setDebtPaymentTarget(null); }}
+          onConfirm={closeDebt}
+        />
+      )}
     </div>
   );
 }
@@ -395,7 +463,68 @@ function ClientList({ loading, clients, selected, onOpen, onCloseDebt, busy, cfg
 
 function ClientCard({ client, active, onClick, onCloseDebt, busy, cfg }) {
   const debt = Number(client.debt_amount || 0) > 0;
-  return <button type="button" onClick={onClick} className={`w-full text-left rounded-[24px] p-4 border transition relative overflow-hidden ${active ? 'bg-blue-50 border-blue-200 shadow-lg shadow-blue-100/70' : 'bg-slate-50 border-slate-100 hover:border-blue-100 hover:bg-white hover:shadow-md'}`}><div className={`absolute left-0 top-0 bottom-0 w-1.5 ${debt ? 'bg-rose-400' : active ? 'bg-blue-500' : 'bg-emerald-400'}`} /><div className="pl-1 space-y-3"><div className="flex justify-between gap-3"><div className="min-w-0"><p className="font-black text-slate-900 leading-tight truncate">{client.client || 'Без імені'}</p><p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1 min-w-0"><Phone size={12} className="shrink-0" /> <span className="truncate">{client.phone || 'Телефон не вказаний'}</span></p></div><Badge status={client.status} /></div><div className="grid grid-cols-3 gap-2"><Mini label={cfg.orderShort} value={client.orders_count || 0} /><Mini label="Сума" value={money(client.total_revenue)} /><Mini label="Борг" value={money(client.debt_amount)} bad={debt} /></div><div className="grid grid-cols-3 gap-2"><Mini label={cfg.mode === 'sto' ? 'Сервіс' : 'Продажі'} value={client.repeat_opportunities_count || 0} good={client.repeat_opportunities_count > 0} /><Mini label="Задачі" value={client.active_tasks_count || 0} /><Mini label="Нагад." value={client.active_reminders_count || 0} /></div><div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold text-slate-400">{cfg.lastContact}: {fmtDate(lastActivity(client))}</p>{debt && <span onClick={(event) => { event.stopPropagation(); onCloseDebt?.(client); }} className="bg-emerald-600 text-white rounded-xl px-3 py-2 text-[11px] font-black uppercase inline-flex items-center gap-1 shadow-sm"><CreditCard size={13} /> {busy === 'debt' ? '...' : 'Закрити'}</span>}</div></div></button>;
+  return <article role="button" tabIndex={0} onClick={onClick} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onClick?.(); } }} className={`w-full cursor-pointer text-left rounded-[24px] p-4 border transition relative overflow-hidden ${active ? 'bg-blue-50 border-blue-200 shadow-lg shadow-blue-100/70' : 'bg-slate-50 border-slate-100 hover:border-blue-100 hover:bg-white hover:shadow-md'}`}><div className={`absolute left-0 top-0 bottom-0 w-1.5 ${debt ? 'bg-rose-400' : active ? 'bg-blue-500' : 'bg-emerald-400'}`} /><div className="pl-1 space-y-3"><div className="flex justify-between gap-3"><div className="min-w-0"><p className="font-black text-slate-900 leading-tight truncate">{client.client || 'Без імені'}</p><p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1 min-w-0"><Phone size={12} className="shrink-0" /> <span className="truncate">{client.phone || 'Телефон не вказаний'}</span></p></div><Badge status={client.status} /></div><div className="grid grid-cols-3 gap-2"><Mini label={cfg.orderShort} value={client.orders_count || 0} /><Mini label="Сума" value={money(client.total_revenue)} /><Mini label="Борг" value={money(client.debt_amount)} bad={debt} /></div><div className="grid grid-cols-3 gap-2"><Mini label={cfg.mode === 'sto' ? 'Сервіс' : 'Продажі'} value={client.repeat_opportunities_count || 0} good={client.repeat_opportunities_count > 0} /><Mini label="Задачі" value={client.active_tasks_count || 0} /><Mini label="Нагад." value={client.active_reminders_count || 0} /></div><div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold text-slate-400">{cfg.lastContact}: {fmtDate(lastActivity(client))}</p>{debt && <button type="button" disabled={busy === 'debt'} onClick={(event) => { event.stopPropagation(); onCloseDebt?.(client); }} className="bg-emerald-600 disabled:bg-slate-300 text-white rounded-xl px-3 py-2 text-[11px] font-black uppercase inline-flex items-center gap-1 shadow-sm"><CreditCard size={13} /> {busy === 'debt' ? 'Закриваємо...' : 'Закрити'}</button>}</div></div></article>;
+}
+
+function DebtPaymentModal({ client, form, setForm, paymentTypes, busy, onClose, onConfirm }) {
+  const debtOrders = debtOrdersOf(client);
+  const debt = Number(client?.debt_amount || 0)
+    || debtOrders.reduce((sum, order) => sum + orderDebtAmount(order), 0);
+  const types = normalizePaymentTypes(paymentTypes);
+
+  const submit = (event) => {
+    event.preventDefault();
+    onConfirm?.();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[150] bg-slate-950/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-3" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose?.(); }}>
+      <form onSubmit={submit} className="w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl">
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-blue-600 p-5 text-white flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100">Фінанси СТО</p>
+            <h3 className="mt-1 text-xl md:text-2xl font-black uppercase">Закриття боргу</h3>
+            <p className="mt-1 text-xs font-bold text-emerald-50">{client?.client || client?.phone || 'Клієнт'}</p>
+          </div>
+          <button type="button" disabled={busy} onClick={onClose} className="h-10 w-10 shrink-0 rounded-2xl bg-white/15 hover:bg-white/25 disabled:opacity-50 flex items-center justify-center"><X size={18}/></button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          <div className="rounded-3xl border border-rose-100 bg-rose-50 p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-rose-500">Сума боргу</p>
+              <p className="mt-1 text-3xl font-black text-rose-700">{money(debt)}</p>
+            </div>
+            {debtOrders.length > 0 && <span className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-xs font-black text-rose-600">Візитів: {debtOrders.length}</span>}
+          </div>
+
+          <div>
+            <p className="mb-3 text-xs font-black uppercase text-slate-700">Як отримано оплату?</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {types.map((type) => {
+                const active = form.payment_type === type.key;
+                return <button key={type.key} type="button" disabled={busy} onClick={() => setForm({ ...form, payment_type: type.key })} className={`min-h-[50px] rounded-2xl border-2 px-3 py-3 text-xs font-black transition flex items-center justify-center gap-2 disabled:opacity-50 ${active ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50/40'}`}><CreditCard size={15}/> {type.label}</button>;
+              })}
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-slate-700">Коментар до оплати</span>
+            <input value={form.comment} disabled={busy} onChange={(event) => setForm({ ...form, comment: event.target.value })} placeholder="Наприклад: оплата власником авто" className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:bg-white disabled:opacity-50" />
+          </label>
+
+          <p className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-bold leading-relaxed text-blue-700">
+            Оплата буде записана в журнал кожного візиту з вибраним способом. Ці дані можна буде використовувати в аналітиці готівки, картки та інших оплат.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button type="button" disabled={busy} onClick={onClose} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase text-slate-600 disabled:opacity-50">Скасувати</button>
+            <button type="submit" disabled={busy || !form.payment_type} className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-5 py-3 text-xs font-black uppercase text-white shadow-lg shadow-emerald-100 disabled:bg-slate-300 disabled:shadow-none inline-flex items-center justify-center gap-2"><CheckCircle2 size={16}/> {busy ? 'Закриваємо...' : 'Підтвердити оплату'}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function ClientProfile({ client, tab, setTab, busy, onClose, onCloseDebt, onQuickAction, onSetStatus, onRepeatPart, onCopy, cfg }) {

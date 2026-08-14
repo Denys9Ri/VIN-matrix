@@ -1,3 +1,4 @@
+import json
 from collections import Counter, defaultdict
 from decimal import Decimal
 
@@ -42,6 +43,32 @@ def money(value):
 def normalize_phone(value):
     digits = ''.join(ch for ch in str(value or '') if ch.isdigit())
     return digits or 'no-phone'
+
+
+def vehicle_data(visit):
+    raw = getattr(visit, 'delivery_data', None)
+    try:
+        data = raw if isinstance(raw, dict) else json.loads(raw or '{}')
+    except (TypeError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    def clean(key, *fallbacks):
+        value = data.get(key)
+        if value in (None, ''):
+            for fallback in fallbacks:
+                value = data.get(fallback)
+                if value not in (None, ''):
+                    break
+        return str(value).strip() if value not in (None, '') else ''
+
+    return {
+        'brand': clean('brand', 'make'),
+        'model': clean('model'),
+        'year': clean('year'),
+        'mileage': clean('mileage', 'odometer', 'probig'),
+    }
 
 
 def client_record_key(client='', phone='', plate=''):
@@ -276,7 +303,8 @@ def serialize_order(visit, stock_statuses=None, payments=None, paid_total=None):
     if paid <= 0:
         paid = money(visit.prepayment_amount)
     debt = max(totals['revenue'] - paid, 0)
-    return {'id': visit.id, 'client': visit.client, 'phone': visit.phone, 'plate': visit.plate, 'vin_code': visit.vin_code, 'status': visit.status, 'payment_status': visit.payment_status, 'delivery_type': visit.delivery_type, 'created_at': visit.created_at, 'scheduled_datetime': visit.scheduled_datetime, 'revenue': totals['revenue'], 'cost': totals['cost'], 'profit': totals['profit'], 'margin': totals['margin'], 'paid_amount': round(paid, 2), 'debt_amount': round(debt, 2), 'payments': payments, 'parts_count': len(parts), 'services_count': len(services), 'services': [serialize_service(s) for s in services], 'parts': [{'id': p.id, 'brand': p.brand, 'article': p.article, 'name': p.name, 'quantity': float(p.quantity or 1), 'buy_price': money(p.buy_price), 'sell_price': money(p.sell_price), 'revenue': round(money(p.sell_price) * (money(p.quantity or 1) or 1), 2), 'profit': round((money(p.sell_price) - money(p.buy_price)) * (money(p.quantity or 1) or 1), 2), 'status': p.status, 'supplier': p.supplier, 'stock_status': stock_statuses.get(p.id, 'none')} for p in parts]}
+    car = vehicle_data(visit)
+    return {'id': visit.id, 'client': visit.client, 'phone': visit.phone, 'plate': visit.plate, 'vin_code': visit.vin_code, **car, 'status': visit.status, 'payment_status': visit.payment_status, 'delivery_type': visit.delivery_type, 'created_at': visit.created_at, 'scheduled_datetime': visit.scheduled_datetime, 'revenue': totals['revenue'], 'cost': totals['cost'], 'profit': totals['profit'], 'margin': totals['margin'], 'paid_amount': round(paid, 2), 'debt_amount': round(debt, 2), 'payments': payments, 'parts_count': len(parts), 'services_count': len(services), 'services': [serialize_service(s) for s in services], 'parts': [{'id': p.id, 'brand': p.brand, 'article': p.article, 'name': p.name, 'quantity': float(p.quantity or 1), 'buy_price': money(p.buy_price), 'sell_price': money(p.sell_price), 'revenue': round(money(p.sell_price) * (money(p.quantity or 1) or 1), 2), 'profit': round((money(p.sell_price) - money(p.buy_price)) * (money(p.quantity or 1) or 1), 2), 'status': p.status, 'supplier': p.supplier, 'stock_status': stock_statuses.get(p.id, 'none')} for p in parts]}
 
 
 def build_clients(company, search=''):
@@ -288,9 +316,9 @@ def build_clients(company, search=''):
             if exact_order_qs.exists():
                 qs = exact_order_qs
             else:
-                qs = qs.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(parts__brand__icontains=search) | Q(parts__article__icontains=search) | Q(parts__name__icontains=search) | Q(services__name__icontains=search)).distinct()
+                qs = qs.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(delivery_data__icontains=search) | Q(parts__brand__icontains=search) | Q(parts__article__icontains=search) | Q(parts__name__icontains=search) | Q(services__name__icontains=search)).distinct()
         else:
-            qs = qs.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(parts__brand__icontains=search) | Q(parts__article__icontains=search) | Q(parts__name__icontains=search) | Q(services__name__icontains=search)).distinct()
+            qs = qs.filter(Q(client__icontains=search) | Q(phone__icontains=search) | Q(plate__icontains=search) | Q(vin_code__icontains=search) | Q(delivery_data__icontains=search) | Q(parts__brand__icontains=search) | Q(parts__article__icontains=search) | Q(parts__name__icontains=search) | Q(services__name__icontains=search)).distinct()
     visits = list(qs)
     all_part_ids = [p.id for v in visits for p in v.parts.all()]
     stock_statuses = parse_stock_statuses(all_part_ids)
@@ -318,9 +346,24 @@ def build_clients(company, search=''):
         order_date = visit.scheduled_datetime or visit.created_at
         if order_date and (not g['last_order_date'] or order_date > g['last_order_date']):
             g['last_order_date'] = order_date
-        car_key = f'{visit.plate or ""} {visit.vin_code or ""}'.strip()
+        car = {
+            'plate': visit.plate or '',
+            'vin_code': visit.vin_code or '',
+            'brand': order.get('brand') or '',
+            'model': order.get('model') or '',
+            'year': order.get('year') or '',
+            'mileage': order.get('mileage') or '',
+        }
+        car_name = f'{car["brand"]} {car["model"]}'.strip()
+        car_key = (
+            f'plate:{car["plate"].strip().upper()}' if car['plate']
+            else f'vin:{car["vin_code"].strip().upper()}' if car['vin_code']
+            else f'car:{car_name.lower()}' if car_name
+            else ''
+        )
         if car_key:
-            g['cars'][car_key] = {'plate': visit.plate, 'vin_code': visit.vin_code}
+            current = g['cars'].get(car_key, {})
+            g['cars'][car_key] = {key: current.get(key) or value for key, value in car.items()}
         for p in order['parts']:
             g['parts'].append({**p, 'order_id': visit.id, 'date': order_date})
             if p['stock_status'] in ['returned', 'defective']:

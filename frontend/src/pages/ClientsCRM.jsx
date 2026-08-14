@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { closeClientDebt, debtOrdersOf, orderDebtAmount } from '../utils/clientDebtPayments';
 
 const money = (v) => `${Number(v || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
 const arr = (v) => Array.isArray(v) ? v : [];
@@ -116,10 +117,6 @@ const normalizePaymentLink = (value) => {
   if (/^https?:\/\//i.test(link)) return link;
   return `https://${link}`;
 };
-
-const orderDebtAmount = (order) => Number(order?.debt_amount ?? order?.revenue ?? order?.total_revenue ?? order?.total ?? 0) || 0;
-const orderPaidAmount = (order) => Number(order?.revenue ?? order?.total_revenue ?? order?.total ?? order?.debt_amount ?? 0) || 0;
-const isDebtOrder = (order) => orderDebtAmount(order) > 0 || ['unpaid', 'debt', 'cod', 'prepaid'].includes(String(order?.payment_status || '').toLowerCase());
 
 export default function ClientsCRM() {
   const navigate = useNavigate();
@@ -283,29 +280,27 @@ export default function ClientsCRM() {
 
   const handleCloseDebt = async (clientOverride = selected) => {
     const target = clientOverride || selected;
-    if (!target) return;
+    if (!target || debtBusy) return;
 
-    const targetOrders = arr(target.orders).filter(isDebtOrder);
-    if (!targetOrders.length && Number(target.debt_amount || 0) <= 0) {
+    const targetOrders = debtOrdersOf(target);
+    if (Array.isArray(target.orders) && !targetOrders.length && Number(target.debt_amount || 0) <= 0) {
       showActionNotice('Боргів по цьому клієнту немає.');
-      return;
-    }
-
-    if (!targetOrders.length) {
-      showActionNotice('Не бачу замовлень для закриття боргу. Відкрийте повну картку клієнта і спробуйте ще раз.');
       return;
     }
 
     setDebtBusy(true);
     try {
-      await Promise.all(targetOrders.map((order) => api.patch(`/api/visits/${order.id}/`, {
-        payment_status: 'paid',
-        prepayment_amount: orderPaidAmount(order),
-      })));
+      const result = await closeClientDebt(api, target, { fallbackClientKey: selected?.key });
+      if (!result.closed) {
+        showActionNotice('Не бачу візитів із боргом для закриття. Оновіть картку клієнта і спробуйте ще раз.');
+        return;
+      }
 
-      showActionNotice(`Борг закрито. Оновлено замовлень: ${targetOrders.length}.`);
+      showActionNotice(`Борг закрито. Оновлено візитів: ${result.closed}.`);
       await load(search);
-      await refreshSelectedClient(target);
+      if (selected?.key && selected.key === result.clientKey) {
+        await refreshSelectedClient({ key: result.clientKey });
+      }
     } catch (error) {
       setMessage(error.response?.data?.error || 'Не вдалося закрити борг. Перевірте права доступу або спробуйте ще раз.');
     } finally {

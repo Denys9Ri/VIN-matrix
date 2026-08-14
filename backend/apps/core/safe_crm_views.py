@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from .activity import log_activity
 from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation, CRMTask, WorkPost
 from .serializers import CategorySerializer, InventoryItemSerializer, OrderPartSerializer, OrderServiceSerializer, ServiceCatalogSerializer, SupplierSerializer, VisitSerializer, VehicleRecommendationSerializer, WorkPostSerializer
+from .visit_rollover import rollover_in_progress_visits
 from .views import VisitViewSet as BaseVisitViewSet
 
 SUPPLIER_BADGE_KEYS = {'supplier-local','supplier-vesna','supplier-omega','supplier-tehnomir','supplier-bm','supplier-default'}
@@ -131,6 +132,8 @@ class VisitViewSet(BaseVisitViewSet):
             try: target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             except Exception: target_date = timezone.localdate()
         else: target_date = timezone.localdate()
+        if target_date == timezone.localdate():
+            rollover_in_progress_visits(company, target_date)
         start_of_day = timezone.make_aware(datetime.combine(target_date, dt_time.min))
         end_of_day = start_of_day + timedelta(days=1)
         queryset = queryset.filter(Q(scheduled_datetime__gte=start_of_day, scheduled_datetime__lt=end_of_day)|Q(scheduled_datetime__isnull=True, created_at__gte=start_of_day, created_at__lt=end_of_day)).distinct()

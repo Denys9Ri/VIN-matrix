@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard';
+import VehicleFuelCombobox from '../components/visits/VehicleFuelCombobox';
 import VehicleMakeCombobox from '../components/visits/VehicleMakeCombobox';
 import VehicleModelCombobox from '../components/visits/VehicleModelCombobox';
 import { vehicleModelAfterMakeChange } from '../utils/vehicleModelCatalog';
@@ -1585,7 +1586,7 @@ function CarFields({ data, setData }) {
         <LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume || data.engine} onChange={(v) => setData({ ...data, engine: v, engine_volume: v, engine_review_status: 'manual' })} />
         <LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v) => setData({ ...data, engine_power: v, engine_review_status: 'manual' })} />
         <LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v) => setData({ ...data, engine_code: v, engine_review_status: 'manual' })} />
-        <div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v) => setData({ ...data, fuel: v, engine_review_status: 'manual' })} /></div>
+        <div className="col-span-2"><VehicleFuelCombobox value={data.fuel} onChange={(fuel) => setData({ ...data, fuel, engine_review_status: 'manual' })} /></div>
       </div>
     </div>
   );
@@ -1610,7 +1611,7 @@ function ScanReviewCard({ data, setData, onApply, onCancel }) {
         <LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume || data.engine} onChange={(v) => setData({ ...data, engine: v, engine_volume: v })} />
         <LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v) => setData({ ...data, engine_power: v })} />
         <LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v) => setData({ ...data, engine_code: v })} />
-        <div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v) => setData({ ...data, fuel: v })} /></div>
+        <div className="col-span-2"><VehicleFuelCombobox value={data.fuel} onChange={(fuel) => setData({ ...data, fuel })} /></div>
       </div>
       {data.warnings?.length > 0 && <div className="text-xs font-bold text-amber-700 space-y-1">{data.warnings.map((warning, index) => <p key={index}>• {warning}</p>)}</div>}
       <div className="flex flex-col sm:flex-row gap-2">

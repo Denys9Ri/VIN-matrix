@@ -74,6 +74,7 @@ const MainLayout = () => {
         isOpen={isMobileMenuOpen}
         closeMenu={() => setIsMobileMenuOpen(false)}
         desktopCollapsed={isSidebarCollapsed}
+        onDesktopCollapse={toggleSidebar}
       />
       <div className={`min-h-screen w-full flex flex-col transition-[padding] duration-300 ${isSidebarCollapsed ? 'md:pl-0' : 'md:pl-64'}`}>
         <Header sidebarCollapsed={isSidebarCollapsed} onToggleSidebar={toggleSidebar} />

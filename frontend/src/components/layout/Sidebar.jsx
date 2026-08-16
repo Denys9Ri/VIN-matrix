@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LineChart,
   Package,
+  PanelLeftClose,
   Search,
   Settings,
   ShieldCheck,
@@ -18,7 +19,7 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 
-const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false }) => {
+const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollapse }) => {
   const [role, setRole] = useState('client');
   const [businessType, setBusinessType] = useState('sto');
   const [canManagePartners, setCanManagePartners] = useState(false);
@@ -145,13 +146,23 @@ const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false }) => {
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } ${desktopCollapsed ? 'md:-translate-x-full' : 'md:translate-x-0'}`}
       >
-        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-6 text-white">
-          <div className="text-xl font-bold">
+        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4 text-white">
+          <div className="pl-2 text-xl font-bold">
             <span className="font-black tracking-tighter text-blue-500">
               VIN
             </span>
             <span className="italic text-white">-matrix</span>
           </div>
+
+          <button
+            type="button"
+            onClick={onDesktopCollapse}
+            className="hidden h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-white md:flex"
+            aria-label="Закрити бокову панель"
+            title="Закрити бокову панель"
+          >
+            <PanelLeftClose size={19} />
+          </button>
 
           <button
             onClick={closeMenu}

@@ -5,7 +5,10 @@ import Header from './Header';
 import MobileActionDock from './MobileActionDock';
 import MobileTablePolish from './MobileTablePolish';
 import SettingsProfileModalPolish from './SettingsProfileModalPolish';
+import SettingsSectionNav from './SettingsSectionNav';
 import '../../styles/settings-profile-modal.css';
+
+const SIDEBAR_STORAGE_KEY = 'vin-matrix:sidebar-collapsed';
 
 const DesktopLayoutCompatibility = () => (
   <style>{`
@@ -45,15 +48,38 @@ const DesktopLayoutCompatibility = () => (
 
 const MainLayout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   return (
     <div className="vm-main-layout min-h-screen bg-slate-50 overflow-x-hidden">
       <DesktopLayoutCompatibility />
       <SettingsProfileModalPolish />
-      <Sidebar isOpen={isMobileMenuOpen} closeMenu={() => setIsMobileMenuOpen(false)} />
-      <div className="min-h-screen w-full md:pl-64 flex flex-col transition-all duration-300">
-        <Header />
+      <Sidebar
+        isOpen={isMobileMenuOpen}
+        closeMenu={() => setIsMobileMenuOpen(false)}
+        desktopCollapsed={isSidebarCollapsed}
+        onDesktopCollapse={toggleSidebar}
+      />
+      <div className={`min-h-screen w-full flex flex-col transition-[padding] duration-300 ${isSidebarCollapsed ? 'md:pl-0' : 'md:pl-64'}`}>
+        <Header sidebarCollapsed={isSidebarCollapsed} onToggleSidebar={toggleSidebar} />
         <main className="flex-1 w-full min-w-0 relative pb-[76px] md:pb-0">
+          <SettingsSectionNav />
           <Outlet />
         </main>
       </div>

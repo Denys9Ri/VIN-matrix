@@ -164,6 +164,7 @@ function App() {
             <Route path="inventory" element={<Inventory />} />
             <Route path="billing" element={<Billing />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="settings/ai-agent" element={<Agent />} />
             <Route path="settings/services" element={<ServicesSettings />} />
             <Route path="settings/documents" element={<DocumentSettings />} />
             <Route path="settings/dictionaries" element={<DictionarySettings />} />
@@ -174,7 +175,7 @@ function App() {
             <Route path="analytics" element={<AnalyticsWorkspace />} />
             <Route path="finance" element={<Finance />} />
             <Route path="activity" element={<ActivityJournal />} />
-            <Route path="agent" element={<Agent />} />
+            <Route path="agent" element={<Navigate to="/settings/ai-agent" replace />} />
             <Route path="journal" element={<ActivityJournal />} />
             <Route path="data" element={<DataExchange />} />
             <Route path="partner-clients" element={<PartnerClients />} />

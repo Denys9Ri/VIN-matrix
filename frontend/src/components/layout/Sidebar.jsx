@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  Bot,
   Boxes,
   CreditCard,
-  History,
   LayoutDashboard,
   LineChart,
   Package,
+  PanelLeftClose,
   Search,
   Settings,
   ShieldCheck,
@@ -20,7 +19,7 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 
-const Sidebar = ({ isOpen, closeMenu }) => {
+const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollapse }) => {
   const [role, setRole] = useState('client');
   const [businessType, setBusinessType] = useState('sto');
   const [canManagePartners, setCanManagePartners] = useState(false);
@@ -91,8 +90,6 @@ const Sidebar = ({ isOpen, closeMenu }) => {
     { name: 'Панель', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
     { name: 'Фінанси', icon: <WalletCards size={20} />, path: '/finance' },
-    { name: 'Журнал дій', icon: <History size={20} />, path: '/activity' },
-    { name: 'AI Agent', icon: <Bot size={20} />, path: '/agent' },
   ];
 
   const accessItems = [
@@ -145,17 +142,27 @@ const Sidebar = ({ isOpen, closeMenu }) => {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-900 text-slate-300 shadow-2xl transition-transform duration-300 ease-in-out md:translate-x-0 md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-900 text-slate-300 shadow-2xl transition-transform duration-300 ease-in-out md:shadow-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        } ${desktopCollapsed ? 'md:-translate-x-full' : 'md:translate-x-0'}`}
       >
-        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-6 text-white">
-          <div className="text-xl font-bold">
+        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4 text-white">
+          <div className="pl-2 text-xl font-bold">
             <span className="font-black tracking-tighter text-blue-500">
               VIN
             </span>
             <span className="italic text-white">-matrix</span>
           </div>
+
+          <button
+            type="button"
+            onClick={onDesktopCollapse}
+            className="hidden h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-white md:flex"
+            aria-label="Закрити бокову панель"
+            title="Закрити бокову панель"
+          >
+            <PanelLeftClose size={19} />
+          </button>
 
           <button
             onClick={closeMenu}

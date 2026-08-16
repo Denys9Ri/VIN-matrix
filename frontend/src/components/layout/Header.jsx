@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, LogOut, Settings, UserRound } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  History,
+  LogOut,
+  PanelLeftOpen,
+  Settings,
+  UserRound,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import CopyButton from '../common/CopyButton';
@@ -62,7 +72,7 @@ const badgeClass = {
   danger: 'bg-rose-50 text-rose-700 border-rose-100 shadow-rose-100/60',
 };
 
-const Header = () => {
+const Header = ({ sidebarCollapsed = false, onToggleSidebar }) => {
   const [profile, setProfile] = useState(null);
   const [partnerStats, setPartnerStats] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -117,6 +127,17 @@ const Header = () => {
     <>
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 sticky top-0 z-30 shadow-sm w-full">
         <div className="flex items-center min-w-0 flex-1">
+          {sidebarCollapsed && onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="mr-2 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:flex"
+              aria-label="Відкрити бокову панель"
+              title="Відкрити бокову панель"
+            >
+              <PanelLeftOpen size={18} />
+            </button>
+          )}
           <GlobalSearchBox compact />
         </div>
 
@@ -189,6 +210,9 @@ const Header = () => {
               </div>
 
               <div className="p-2 border-t border-slate-100">
+                <button onClick={() => { setMenuOpen(false); navigate('/activity'); }} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 font-bold text-slate-700">
+                  <History size={16} /> Журнал дій
+                </button>
                 <button onClick={() => { setMenuOpen(false); navigate('/settings'); }} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 font-bold text-slate-700">
                   <Settings size={16} /> Налаштування
                 </button>

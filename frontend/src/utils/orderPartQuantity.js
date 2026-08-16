@@ -4,6 +4,12 @@ export function normalizeOrderPartQuantity(value, fallback = 1) {
   return Math.max(1, Math.trunc(parsed));
 }
 
+export function adjustOrderPartQuantity(value, delta) {
+  const parsedDelta = Number(delta);
+  if (!Number.isFinite(parsedDelta)) return normalizeOrderPartQuantity(value);
+  return Math.max(1, normalizeOrderPartQuantity(value) + Math.trunc(parsedDelta));
+}
+
 export function supplierPartDefaultQuantity(part) {
   return normalizeOrderPartQuantity(part?.min_qty, 1);
 }

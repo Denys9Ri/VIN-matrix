@@ -45,10 +45,6 @@ def migrate_finance_schema_after_legacy_repair():
     present_before = REQUIRED_FINANCE_TABLES & existing_before
     missing_before = REQUIRED_FINANCE_TABLES - existing_before
 
-    recorder = MigrationRecorder(connection)
-    applied = recorder.applied_migrations()
-    initial_is_recorded = ('finance', FINANCE_INITIAL_MIGRATION) in applied
-
     if missing_before and present_before:
         raise RuntimeError(
             'Виявлено частково створену схему Finance. Автоматичний запуск '
@@ -57,6 +53,10 @@ def migrate_finance_schema_after_legacy_repair():
             + '; відсутні: '
             + ', '.join(sorted(missing_before))
         )
+
+    recorder = MigrationRecorder(connection)
+    applied = recorder.applied_migrations()
+    initial_is_recorded = ('finance', FINANCE_INITIAL_MIGRATION) in applied
 
     if initial_is_recorded and not present_before:
         # A previous/manual deploy may have left django_migrations saying that

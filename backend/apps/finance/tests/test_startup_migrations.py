@@ -4,8 +4,12 @@ from unittest.mock import MagicMock, patch
 from django.test import SimpleTestCase
 
 from apps.finance.startup_migrations import (
+    CORE_COMPANY_PHONES_MIGRATION,
+    CORE_SUPPORT_ACCESS_MIGRATION,
+    CORE_SUPPLIER_ACCOUNTS_MIGRATION,
     FINANCE_INITIAL_MIGRATION,
     REQUIRED_FINANCE_TABLES,
+    _repair_legacy_core_migration_history,
     is_legacy_fix_db_process,
     migrate_finance_schema_after_legacy_repair,
 )
@@ -98,6 +102,58 @@ class FinanceStartupMigrationTests(SimpleTestCase):
             migrate_finance_schema_after_legacy_repair()
 
         call_command.assert_called_once()
+
+    @patch('apps.finance.startup_migrations._table_columns')
+    def test_repairs_missing_core_0008_marker_only_when_schema_exists(self, table_columns):
+        table_columns.return_value = {'id', 'name', 'phone', 'phones'}
+        recorder = MagicMock()
+        applied = {
+            ('core', CORE_SUPPORT_ACCESS_MIGRATION),
+            ('core', CORE_SUPPLIER_ACCOUNTS_MIGRATION),
+        }
+
+        repaired = _repair_legacy_core_migration_history(
+            recorder,
+            applied,
+            {'core_company', 'core_supplieraccount'},
+        )
+
+        recorder.record_applied.assert_called_once_with(
+            'core',
+            CORE_COMPANY_PHONES_MIGRATION,
+        )
+        self.assertIn(('core', CORE_COMPANY_PHONES_MIGRATION), repaired)
+
+    @patch('apps.finance.startup_migrations._table_columns')
+    def test_refuses_to_fake_core_0008_when_phones_column_is_missing(self, table_columns):
+        table_columns.return_value = {'id', 'name', 'phone'}
+        recorder = MagicMock()
+        applied = {
+            ('core', CORE_SUPPORT_ACCESS_MIGRATION),
+            ('core', CORE_SUPPLIER_ACCOUNTS_MIGRATION),
+        }
+
+        with self.assertRaisesRegex(RuntimeError, 'немає колонки phones'):
+            _repair_legacy_core_migration_history(
+                recorder,
+                applied,
+                {'core_company', 'core_supplieraccount'},
+            )
+
+        recorder.record_applied.assert_not_called()
+
+    def test_refuses_to_repair_core_0008_when_dependency_0007_is_missing(self):
+        recorder = MagicMock()
+        applied = {('core', CORE_SUPPLIER_ACCOUNTS_MIGRATION)}
+
+        with self.assertRaisesRegex(RuntimeError, 'відсутні core.0008 та її залежність core.0007'):
+            _repair_legacy_core_migration_history(
+                recorder,
+                applied,
+                {'core_company', 'core_supplieraccount'},
+            )
+
+        recorder.record_applied.assert_not_called()
 
     def test_manage_collectstatic_runs_finance_preflight_before_django_command(self):
         backend_root = Path(__file__).resolve().parents[3]

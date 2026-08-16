@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api/axios';
 import { AppPage, Badge, PageHeader, useToast } from '../components/ui';
-import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History } from 'lucide-react';
+import { Search, Plus, Minus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { normalizeOrderPartQuantity, orderPartLineTotal, supplierPartDefaultQuantity } from '../utils/orderPartQuantity';
+import { adjustOrderPartQuantity, normalizeOrderPartQuantity, orderPartLineTotal, supplierPartDefaultQuantity } from '../utils/orderPartQuantity';
 
 const UniversalSearch = () => {
   const navigate = useNavigate();
@@ -919,16 +919,37 @@ const UniversalSearch = () => {
 
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Кількість</label>
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  step="1"
-                  inputMode="numeric"
-                  className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-black text-xl text-blue-600"
-                  value={addToVisitData.quantity}
-                  onChange={e => setAddToVisitData({ ...addToVisitData, quantity: e.target.value })}
-                />
+                <div className="flex h-14 overflow-hidden rounded-xl border-2 border-slate-200 bg-white shadow-sm transition-all focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
+                  <button
+                    type="button"
+                    aria-label="Зменшити кількість"
+                    disabled={normalizeOrderPartQuantity(addToVisitData.quantity) <= 1}
+                    onClick={() => setAddToVisitData(current => ({ ...current, quantity: adjustOrderPartQuantity(current.quantity, -1) }))}
+                    className="flex w-16 shrink-0 items-center justify-center border-r border-slate-200 bg-slate-100 text-slate-700 transition-all hover:bg-slate-200 active:scale-95 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-slate-100"
+                  >
+                    <Minus size={24} strokeWidth={3} />
+                  </button>
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputMode="numeric"
+                    aria-label="Кількість запчастин"
+                    className="min-w-0 flex-1 appearance-none bg-white px-3 text-center text-2xl font-black text-blue-600 outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    value={addToVisitData.quantity}
+                    onChange={e => setAddToVisitData({ ...addToVisitData, quantity: e.target.value })}
+                    onBlur={() => setAddToVisitData(current => ({ ...current, quantity: normalizeOrderPartQuantity(current.quantity) }))}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Збільшити кількість"
+                    onClick={() => setAddToVisitData(current => ({ ...current, quantity: adjustOrderPartQuantity(current.quantity, 1) }))}
+                    className="flex w-16 shrink-0 items-center justify-center border-l border-blue-700 bg-blue-600 text-white transition-all hover:bg-blue-700 active:scale-95"
+                  >
+                    <Plus size={24} strokeWidth={3} />
+                  </button>
+                </div>
                 {Number(selectedPart.min_qty || 1) > 1 && (
                   <p className="mt-2 text-[10px] font-bold uppercase text-amber-600">Мінімальна партія постачальника: {selectedPart.min_qty} шт.</p>
                 )}

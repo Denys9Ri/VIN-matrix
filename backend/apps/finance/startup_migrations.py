@@ -15,13 +15,8 @@ REQUIRED_FINANCE_TABLES = {
     'finance_visitfinanceassignment',
     'finance_financetransaction',
     'finance_financesourceallocation',
-    'finance_changelog',
+    'finance_financechangelog',
 }
-
-# Keep compatibility with the real migration table name. The model is
-# FinanceChangeLog, therefore Django creates finance_financechangelog.
-REQUIRED_FINANCE_TABLES.remove('finance_changelog')
-REQUIRED_FINANCE_TABLES.add('finance_financechangelog')
 
 
 def is_legacy_fix_db_process(argv0):
@@ -49,10 +44,10 @@ def _repair_legacy_core_migration_history(recorder, applied, existing_tables):
     dependency 0008 is missing from django_migrations. Django correctly
     refuses to run any later migration in that state.
 
-    We only restore the missing 0008 marker when all safety conditions prove
-    that 0008 is physically present: its dependency 0007 is already recorded,
+    Restore the missing 0008 marker only when all safety conditions prove that
+    0008 is physically present: its dependency 0007 is already recorded,
     core_company exists, and the ``phones`` column created by 0008 exists.
-    No table/column/data is modified here.
+    No table, column, or business data is modified here.
     """
 
     migration_0007 = ('core', CORE_SUPPORT_ACCESS_MIGRATION)
@@ -92,19 +87,7 @@ def _repair_legacy_core_migration_history(recorder, applied, existing_tables):
 
 
 def migrate_finance_schema_after_legacy_repair():
-    """Ensure the Finance schema exists before the application starts.
-
-    The production service still repairs the historical core schema with
-    ``fix_db.py`` before running ``manage.py collectstatic`` and Gunicorn.
-    Finance is a normal Django app, so its schema must be created by its Django
-    migration after that legacy repair has completed.
-
-    ``fake_initial=True`` also makes this safe for an installation where all
-    Finance tables already exist but the initial migration marker is missing.
-    A stale marker with *no* Finance tables is repaired automatically. A
-    partially existing Finance schema is deliberately rejected instead of
-    dropping or overwriting potentially real financial data.
-    """
+    """Ensure the Finance schema exists before the application starts."""
 
     print('🔧 Перевіряємо міграції модуля Фінанси...', flush=True)
 
@@ -131,10 +114,6 @@ def migrate_finance_schema_after_legacy_repair():
     initial_is_recorded = ('finance', FINANCE_INITIAL_MIGRATION) in applied
 
     if initial_is_recorded and not present_before:
-        # A previous/manual deploy may have left django_migrations saying that
-        # Finance was applied even though none of its tables exist. Removing
-        # only this stale marker is safe here because there is no Finance data
-        # to preserve, and lets Django create the schema normally below.
         print(
             '⚠️ Знайдено запис finance.0001_initial без таблиць. '
             'Відновлюємо стан міграцій...',

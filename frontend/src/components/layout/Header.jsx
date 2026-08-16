@@ -6,7 +6,6 @@ import {
   Clock3,
   History,
   LogOut,
-  PanelLeftClose,
   PanelLeftOpen,
   Settings,
   UserRound,
@@ -128,15 +127,15 @@ const Header = ({ sidebarCollapsed = false, onToggleSidebar }) => {
     <>
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 sticky top-0 z-30 shadow-sm w-full">
         <div className="flex items-center min-w-0 flex-1">
-          {onToggleSidebar && (
+          {sidebarCollapsed && onToggleSidebar && (
             <button
               type="button"
               onClick={onToggleSidebar}
               className="mr-2 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:flex"
-              aria-label={sidebarCollapsed ? 'Відкрити бокову панель' : 'Закрити бокову панель'}
-              title={sidebarCollapsed ? 'Відкрити бокову панель' : 'Закрити бокову панель'}
+              aria-label="Відкрити бокову панель"
+              title="Відкрити бокову панель"
             >
-              {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+              <PanelLeftOpen size={18} />
             </button>
           )}
           <GlobalSearchBox compact />

@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'apps.integrations.apps.IntegrationsConfig',
     'apps.crm.apps.CrmConfig',
     'apps.agent.apps.AgentConfig',
+    'apps.finance.apps.FinanceConfig',
 ]
 
 TEMPLATES = [

@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from django.contrib.auth.models import User
+from django.conf import settings
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
@@ -69,3 +72,12 @@ class CompanyDocumentPhoneTests(TestCase):
         self.assertEqual(document.status_code, 200)
         self.assertNotIn('+380501111111', html)
         self.assertNotIn('+380672222222', html)
+
+    def test_production_repair_script_adds_and_backfills_company_phones(self):
+        repair_script = (Path(settings.BASE_DIR) / 'fix_db.py').read_text(encoding='utf-8')
+
+        self.assertIn(
+            "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS phones jsonb NOT NULL DEFAULT '[]'::jsonb;",
+            repair_script,
+        )
+        self.assertIn("jsonb_build_object('number', BTRIM(phone), 'show_in_documents', true)", repair_script)

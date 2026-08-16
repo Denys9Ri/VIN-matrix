@@ -2,6 +2,7 @@ from datetime import timedelta
 import re
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework import status, viewsets
@@ -32,21 +33,21 @@ def is_main_admin(user):
 def get_employee(user):
     try:
         return user.employee_profile
-    except Exception:
+    except ObjectDoesNotExist:
         return None
 
 
 def get_company(user):
     try:
         return user.company
-    except Exception:
+    except ObjectDoesNotExist:
         return None
 
 
 def get_platform_client(user):
     try:
         return user.platform_client_profile
-    except Exception:
+    except ObjectDoesNotExist:
         return None
 
 

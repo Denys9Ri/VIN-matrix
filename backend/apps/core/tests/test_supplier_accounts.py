@@ -122,6 +122,31 @@ class SupplierAccountTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(OrderPart.objects.filter(visit=self.visit).exists())
 
+    def test_client_service_and_visit_history_include_supplier_account_name(self):
+        account = self.create_account('ФОП Драгун Валентин Вікторович', '111:first-token')
+        OrderPart.objects.create(
+            visit=self.visit,
+            brand='FEBI',
+            article='01505',
+            name='Сайлентблок ресори, DB410',
+            buy_price='648.40',
+            sell_price='778.08',
+            quantity=1,
+            supplier='Vesna-auto (Київ)',
+            supplier_ref=self.supplier,
+            supplier_account=account,
+            supplier_account_name=account.name,
+        )
+
+        response = self.client.get(f'/api/store-clients/detail/?key={self.visit.phone}')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        order_part = response.data['orders'][0]['parts'][0]
+        history_part = response.data['parts'][0]
+        self.assertEqual(order_part['supplier'], 'Vesna-auto (Київ)')
+        self.assertEqual(order_part['supplier_account_name'], account.name)
+        self.assertEqual(history_part['supplier_account_name'], account.name)
+
     def test_production_repair_script_creates_supplier_account_schema(self):
         repair_script = (Path(settings.BASE_DIR) / 'fix_db.py').read_text(encoding='utf-8')
 

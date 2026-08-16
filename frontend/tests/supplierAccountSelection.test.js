@@ -17,3 +17,13 @@ test('visit parts keep the account selector for later corrections', () => {
   assert.match(visitsSource, /onUpdatePartAccount/);
   assert.match(visitsSource, /Акаунт не вказано/);
 });
+
+test('client service and visit history show supplier and full account name', async () => {
+  const clientsSource = await readFile(new URL('../src/pages/ClientsCRMStage5.jsx', import.meta.url), 'utf8');
+
+  assert.match(clientsSource, /function PartSourceBadges/);
+  assert.match(clientsSource, /part\.supplier_account_name/);
+  assert.match(clientsSource, /Акаунт: \{part\.supplier_account_name\}/);
+  assert.match(clientsSource, /<PartSourceBadges part=\{item\.part\}/);
+  assert.match(clientsSource, /<PartSourceBadges part=\{part\}/);
+});

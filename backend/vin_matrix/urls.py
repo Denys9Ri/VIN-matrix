@@ -43,10 +43,14 @@ from apps.core.safe_crm_views import (
     VisitViewSet,
     WorkPostViewSet,
     ServiceCatalogViewSet,
-    OrderPartViewSet,
     OrderServiceViewSet,
     VehicleRecommendationViewSet,
     CRMTaskViewSet,
+)
+from apps.core.finance_supplier_views import (
+    OrderPartViewSet,
+    SupplierViewSet,
+    SupplierAccountViewSet,
 )
 from apps.core.communication_views import (
     CRMCommunicationViewSet,
@@ -86,8 +90,6 @@ from apps.core.paid_views import (
     MechanicViewSet,
     CategoryViewSet,
     InventoryItemViewSet,
-    SupplierViewSet,
-    SupplierAccountViewSet,
 )
 from apps.core.partner_views import PartnerManagementViewSet
 from apps.core.platform_auth_views import RegisterView
@@ -137,7 +139,7 @@ def openapi_schema(request):
         'info': {'title': 'VIN-matrix API', 'version': '1.0.0'},
         'paths': {
             '/token/': {'post': {'summary': 'Obtain JWT token pair'}},
-            '/token/refresh/': {'post': {'summary': 'Refresh JWT access token'}},
+            '/token/refresh/': {'post': {'summary': 'Refresh JWT access token pair'}},
             '/api/visits/': {'get': {'summary': 'List visits'}, 'post': {'summary': 'Create visit'}},
             '/api/payments/': {'get': {'summary': 'List visit payments'}},
             '/api/inventory/': {'get': {'summary': 'List inventory'}, 'post': {'summary': 'Create inventory item'}},

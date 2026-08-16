@@ -6,16 +6,21 @@ from django.db.migrations.recorder import MigrationRecorder
 
 
 FINANCE_INITIAL_MIGRATION = '0001_initial'
+FINANCE_LATEST_MIGRATION = '0002_supplier_account_binding'
 CORE_SUPPORT_ACCESS_MIGRATION = '0007_supportaccesssession'
 CORE_COMPANY_PHONES_MIGRATION = '0008_company_phones'
 CORE_SUPPLIER_ACCOUNTS_MIGRATION = '0009_supplier_accounts'
-REQUIRED_FINANCE_TABLES = {
+INITIAL_FINANCE_TABLES = {
     'finance_legalentity',
     'finance_financeaccount',
     'finance_visitfinanceassignment',
     'finance_financetransaction',
     'finance_financesourceallocation',
     'finance_financechangelog',
+}
+REQUIRED_FINANCE_TABLES = {
+    *INITIAL_FINANCE_TABLES,
+    'finance_supplieraccountbinding',
 }
 
 
@@ -87,21 +92,30 @@ def _repair_legacy_core_migration_history(recorder, applied, existing_tables):
 
 
 def migrate_finance_schema_after_legacy_repair():
-    """Ensure the Finance schema exists before the application starts."""
+    """Ensure every Finance migration exists before the application starts."""
 
     print('🔧 Перевіряємо міграції модуля Фінанси...', flush=True)
 
     existing_before = _existing_tables()
-    present_before = REQUIRED_FINANCE_TABLES & existing_before
-    missing_before = REQUIRED_FINANCE_TABLES - existing_before
+    initial_present = INITIAL_FINANCE_TABLES & existing_before
+    initial_missing = INITIAL_FINANCE_TABLES - existing_before
 
-    if missing_before and present_before:
+    # A normal upgrade from 0001 to 0002 has all initial tables and only the
+    # new binding table missing.  Reject only a genuinely partial 0001 schema.
+    if initial_missing and initial_present:
         raise RuntimeError(
-            'Виявлено частково створену схему Finance. Автоматичний запуск '
-            'зупинено, щоб не пошкодити фінансові дані. Є таблиці: '
-            + ', '.join(sorted(present_before))
+            'Виявлено частково створену початкову схему Finance. '
+            'Автоматичний запуск зупинено, щоб не пошкодити фінансові дані. '
+            'Є таблиці: '
+            + ', '.join(sorted(initial_present))
             + '; відсутні: '
-            + ', '.join(sorted(missing_before))
+            + ', '.join(sorted(initial_missing))
+        )
+
+    if 'finance_supplieraccountbinding' in existing_before and not initial_present:
+        raise RuntimeError(
+            'Виявлено таблицю привʼязок постачальників без початкової схеми '
+            'Finance. Автоматичне виправлення зупинено.'
         )
 
     recorder = MigrationRecorder(connection)
@@ -113,7 +127,7 @@ def migrate_finance_schema_after_legacy_repair():
     )
     initial_is_recorded = ('finance', FINANCE_INITIAL_MIGRATION) in applied
 
-    if initial_is_recorded and not present_before:
+    if initial_is_recorded and not initial_present:
         print(
             '⚠️ Знайдено запис finance.0001_initial без таблиць. '
             'Відновлюємо стан міграцій...',
@@ -127,7 +141,7 @@ def migrate_finance_schema_after_legacy_repair():
     call_command(
         'migrate',
         'finance',
-        FINANCE_INITIAL_MIGRATION,
+        FINANCE_LATEST_MIGRATION,
         interactive=False,
         verbosity=1,
         fake_initial=True,
@@ -140,5 +154,10 @@ def migrate_finance_schema_after_legacy_repair():
             'Finance migration завершилась, але відсутні таблиці: '
             + ', '.join(missing_after)
         )
+
+    # The old runtime repair can recreate a renamed/deleted «Основний акаунт».
+    # Remove only exact credential duplicates; a sole legacy account is kept.
+    from .supplier_bindings import cleanup_runtime_legacy_supplier_account_duplicates
+    cleanup_runtime_legacy_supplier_account_duplicates()
 
     print('✅ Таблиці модуля Фінанси PostgreSQL ОК', flush=True)

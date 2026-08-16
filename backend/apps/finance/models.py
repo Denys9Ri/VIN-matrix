@@ -42,6 +42,56 @@ class LegalEntity(models.Model):
         return f'{self.get_entity_type_display()} {self.name}'
 
 
+class SupplierAccountBinding(models.Model):
+    """Maps a supplier API/login account to the legal entity that owns it.
+
+    SupplierAccount remains a technical connection in the core app. The FOP/TOV
+    ownership is finance data and therefore lives here instead of duplicating
+    legal entities in supplier settings.
+    """
+
+    company = models.ForeignKey(
+        'core.Company',
+        on_delete=models.CASCADE,
+        related_name='finance_supplier_account_bindings',
+    )
+    supplier = models.ForeignKey(
+        'core.Supplier',
+        on_delete=models.CASCADE,
+        related_name='finance_account_bindings',
+    )
+    supplier_account = models.OneToOneField(
+        'core.SupplierAccount',
+        on_delete=models.CASCADE,
+        related_name='finance_binding',
+    )
+    legal_entity = models.ForeignKey(
+        LegalEntity,
+        on_delete=models.CASCADE,
+        related_name='supplier_account_bindings',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['supplier_id', 'legal_entity_id', 'supplier_account_id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'supplier', 'legal_entity'],
+                name='finance_sup_ent_acc_uniq',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['company', 'supplier', 'legal_entity'],
+                name='finance_supacc_bind_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.supplier} · {self.legal_entity} → {self.supplier_account}'
+
+
 class FinanceAccount(models.Model):
     TYPE_CASH = 'cash'
     TYPE_BANK = 'bank'

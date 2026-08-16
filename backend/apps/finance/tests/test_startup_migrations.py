@@ -8,6 +8,8 @@ from apps.finance.startup_migrations import (
     CORE_SUPPORT_ACCESS_MIGRATION,
     CORE_SUPPLIER_ACCOUNTS_MIGRATION,
     FINANCE_INITIAL_MIGRATION,
+    FINANCE_LATEST_MIGRATION,
+    INITIAL_FINANCE_TABLES,
     REQUIRED_FINANCE_TABLES,
     _repair_legacy_core_migration_history,
     is_legacy_fix_db_process,
@@ -22,14 +24,16 @@ class FinanceStartupMigrationTests(SimpleTestCase):
         self.assertFalse(is_legacy_fix_db_process('/app/manage.py'))
         self.assertFalse(is_legacy_fix_db_process('gunicorn'))
 
+    @patch('apps.finance.supplier_bindings.cleanup_runtime_legacy_supplier_account_duplicates')
     @patch('apps.finance.startup_migrations.MigrationRecorder')
     @patch('apps.finance.startup_migrations._existing_tables')
     @patch('apps.finance.startup_migrations.call_command')
-    def test_runs_finance_migration_and_verifies_required_tables(
+    def test_runs_latest_finance_migration_and_verifies_required_tables(
         self,
         call_command,
         existing_tables,
         recorder_cls,
+        cleanup_duplicates,
     ):
         existing_tables.side_effect = [set(), set(REQUIRED_FINANCE_TABLES)]
         recorder_cls.return_value.applied_migrations.return_value = set()
@@ -39,20 +43,47 @@ class FinanceStartupMigrationTests(SimpleTestCase):
         call_command.assert_called_once_with(
             'migrate',
             'finance',
-            FINANCE_INITIAL_MIGRATION,
+            FINANCE_LATEST_MIGRATION,
             interactive=False,
             verbosity=1,
             fake_initial=True,
         )
+        cleanup_duplicates.assert_called_once_with()
 
+    @patch('apps.finance.supplier_bindings.cleanup_runtime_legacy_supplier_account_duplicates')
     @patch('apps.finance.startup_migrations.MigrationRecorder')
     @patch('apps.finance.startup_migrations._existing_tables')
     @patch('apps.finance.startup_migrations.call_command')
-    def test_repairs_stale_migration_marker_when_no_finance_tables_exist(
+    def test_normal_upgrade_allows_initial_schema_with_only_0002_table_missing(
         self,
         call_command,
         existing_tables,
         recorder_cls,
+        cleanup_duplicates,
+    ):
+        existing_tables.side_effect = [
+            set(INITIAL_FINANCE_TABLES),
+            set(REQUIRED_FINANCE_TABLES),
+        ]
+        recorder_cls.return_value.applied_migrations.return_value = {
+            ('finance', FINANCE_INITIAL_MIGRATION),
+        }
+
+        migrate_finance_schema_after_legacy_repair()
+
+        call_command.assert_called_once()
+        cleanup_duplicates.assert_called_once_with()
+
+    @patch('apps.finance.supplier_bindings.cleanup_runtime_legacy_supplier_account_duplicates')
+    @patch('apps.finance.startup_migrations.MigrationRecorder')
+    @patch('apps.finance.startup_migrations._existing_tables')
+    @patch('apps.finance.startup_migrations.call_command')
+    def test_repairs_stale_initial_marker_when_no_finance_tables_exist(
+        self,
+        call_command,
+        existing_tables,
+        recorder_cls,
+        cleanup_duplicates,
     ):
         existing_tables.side_effect = [set(), set(REQUIRED_FINANCE_TABLES)]
         recorder = recorder_cls.return_value
@@ -68,11 +99,12 @@ class FinanceStartupMigrationTests(SimpleTestCase):
         )
         filtered.delete.assert_called_once_with()
         call_command.assert_called_once()
+        cleanup_duplicates.assert_called_once_with()
 
     @patch('apps.finance.startup_migrations.MigrationRecorder')
     @patch('apps.finance.startup_migrations._existing_tables')
     @patch('apps.finance.startup_migrations.call_command')
-    def test_rejects_partial_finance_schema_instead_of_overwriting_data(
+    def test_rejects_partial_initial_finance_schema_instead_of_overwriting_data(
         self,
         call_command,
         existing_tables,
@@ -80,12 +112,13 @@ class FinanceStartupMigrationTests(SimpleTestCase):
     ):
         existing_tables.return_value = {'finance_legalentity'}
 
-        with self.assertRaisesRegex(RuntimeError, 'частково створену схему'):
+        with self.assertRaisesRegex(RuntimeError, 'частково створену початкову схему'):
             migrate_finance_schema_after_legacy_repair()
 
         recorder_cls.assert_not_called()
         call_command.assert_not_called()
 
+    @patch('apps.finance.supplier_bindings.cleanup_runtime_legacy_supplier_account_duplicates')
     @patch('apps.finance.startup_migrations.MigrationRecorder')
     @patch('apps.finance.startup_migrations._existing_tables')
     @patch('apps.finance.startup_migrations.call_command')
@@ -94,6 +127,7 @@ class FinanceStartupMigrationTests(SimpleTestCase):
         call_command,
         existing_tables,
         recorder_cls,
+        cleanup_duplicates,
     ):
         existing_tables.side_effect = [set(), set()]
         recorder_cls.return_value.applied_migrations.return_value = set()
@@ -102,6 +136,7 @@ class FinanceStartupMigrationTests(SimpleTestCase):
             migrate_finance_schema_after_legacy_repair()
 
         call_command.assert_called_once()
+        cleanup_duplicates.assert_not_called()
 
     @patch('apps.finance.startup_migrations._table_columns')
     def test_repairs_missing_core_0008_marker_only_when_schema_exists(self, table_columns):

@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   UserCheck,
   Users,
+  WalletCards,
   Wrench,
   X,
 } from 'lucide-react';
@@ -89,6 +90,7 @@ const Sidebar = ({ isOpen, closeMenu }) => {
   const controlItems = [
     { name: 'Панель', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
+    { name: 'Фінанси', icon: <WalletCards size={20} />, path: '/finance' },
     { name: 'Журнал дій', icon: <History size={20} />, path: '/activity' },
     { name: 'AI Agent', icon: <Bot size={20} />, path: '/agent' },
   ];

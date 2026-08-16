@@ -144,7 +144,6 @@ const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false }) => {
         className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-900 text-slate-300 shadow-2xl transition-transform duration-300 ease-in-out md:shadow-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } ${desktopCollapsed ? 'md:-translate-x-full' : 'md:translate-x-0'}`}
-        aria-hidden={desktopCollapsed ? 'true' : undefined}
       >
         <div className="flex h-16 items-center justify-between border-b border-slate-800 px-6 text-white">
           <div className="text-xl font-bold">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../api/axios';
 import { AppPage, Badge, PageHeader, useToast } from '../components/ui';
 import { Search, Plus, Minus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History, KeyRound } from 'lucide-react';
@@ -37,6 +37,9 @@ const UniversalSearch = () => {
   const [visitSearchResults, setVisitSearchResults] = useState([]);
   const [isSearchingVisits, setIsSearchingVisits] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
+  const [supplierAccountsLoading, setSupplierAccountsLoading] = useState(false);
+  const [supplierAccountsError, setSupplierAccountsError] = useState('');
+  const supplierAccountRequestId = useRef(0);
 
   const [locationFilter, setLocationFilter] = useState('');
 
@@ -272,6 +275,7 @@ const UniversalSearch = () => {
   }, [visitSearchQuery, token]);
 
   const openAddModal = (part, whIdx) => {
+    const accountRequestId = ++supplierAccountRequestId.current;
     const safeIdx = whIdx || 0;
     const selectedWh = (part.warehouses && part.warehouses.length > 0) ? (part.warehouses[safeIdx] || part.warehouses[0]) : null;
     
@@ -279,19 +283,59 @@ const UniversalSearch = () => {
       ...part,
       source: selectedWh ? `${part.source} (${selectedWh.name})` : part.source,
       buy_price: selectedWh ? (selectedWh.buy_price || part.buy_price) : part.buy_price,
-      quantity: selectedWh ? `${selectedWh.quantity} шт` : part.quantity
+      quantity: selectedWh ? `${selectedWh.quantity} шт` : part.quantity,
+      supplier_accounts: Array.isArray(part.supplier_accounts) ? part.supplier_accounts : [],
     };
     
     setSelectedPart(finalPart);
     setSelectedVisit(null);
     setVisitSearchQuery('');
+    setSupplierAccountsError('');
     const margin = companyInfo?.global_margin_percent ? parseFloat(companyInfo.global_margin_percent) : 0;
     const sellPrice = (finalPart.buy_price * (1 + margin / 100)).toFixed(2);
+    const currentAccounts = finalPart.supplier_accounts;
+    const currentDefaultAccount = currentAccounts.find(account => account.is_default) || currentAccounts[0];
     setAddToVisitData({
       sell_price: sellPrice,
       quantity: supplierPartDefaultQuantity(part),
-      supplier_account: part.supplier_account_id || part.supplier_accounts?.[0]?.id || '',
+      supplier_account: part.supplier_account_id || currentDefaultAccount?.id || '',
     });
+
+    if (part.is_local || !part.supplier_id) {
+      setSupplierAccountsLoading(false);
+      return;
+    }
+
+    const supplierId = String(part.supplier_id);
+    setSupplierAccountsLoading(true);
+    api.get(`/api/supplier-accounts/?supplier=${encodeURIComponent(supplierId)}`)
+      .then((response) => {
+        if (supplierAccountRequestId.current !== accountRequestId) return;
+        const payload = Array.isArray(response.data) ? response.data : response.data?.results;
+        const accounts = (Array.isArray(payload) ? payload : [])
+          .filter(account => account?.is_active !== false)
+          .sort((first, second) => Number(Boolean(second.is_default)) - Number(Boolean(first.is_default)) || String(first.name || '').localeCompare(String(second.name || ''), 'uk'));
+        const defaultAccount = accounts.find(account => account.is_default) || accounts[0];
+
+        setSelectedPart(current => (
+          current && String(current.supplier_id) === supplierId
+            ? { ...current, supplier_accounts: accounts, supplier_account_id: defaultAccount?.id || null }
+            : current
+        ));
+        setAddToVisitData(current => ({
+          ...current,
+          supplier_account: accounts.some(account => String(account.id) === String(current.supplier_account))
+            ? current.supplier_account
+            : (defaultAccount?.id || ''),
+        }));
+      })
+      .catch(() => {
+        if (supplierAccountRequestId.current !== accountRequestId) return;
+        setSupplierAccountsError('Не вдалося завантажити акаунти постачальника. Спробуйте відкрити товар ще раз.');
+      })
+      .finally(() => {
+        if (supplierAccountRequestId.current === accountRequestId) setSupplierAccountsLoading(false);
+      });
   };
 
   const handleAddToVisit = async (e) => {
@@ -915,6 +959,19 @@ const UniversalSearch = () => {
                 )}
               </div>
 
+              {!selectedPart.is_local && supplierAccountsLoading && selectedPart.supplier_accounts?.length === 0 && (
+                <div className="flex items-center gap-3 rounded-xl border-2 border-blue-100 bg-blue-50 px-4 py-3 text-blue-700">
+                  <Loader2 size={17} className="shrink-0 animate-spin" />
+                  <p className="text-xs font-black uppercase">Завантажуємо акаунти постачальника…</p>
+                </div>
+              )}
+
+              {!selectedPart.is_local && supplierAccountsError && selectedPart.supplier_accounts?.length === 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
+                  {supplierAccountsError}
+                </div>
+              )}
+
               {!selectedPart.is_local && selectedPart.supplier_accounts?.length > 0 && (
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Акаунт постачальника</label>
@@ -999,7 +1056,7 @@ const UniversalSearch = () => {
                 </div>
               </div>
 
-              <button onClick={handleAddToVisit} disabled={!selectedVisit} className="w-full bg-emerald-500 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-4 shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all disabled:opacity-30 disabled:grayscale">
+              <button onClick={handleAddToVisit} disabled={!selectedVisit || ((supplierAccountsLoading || supplierAccountsError) && selectedPart.supplier_accounts?.length === 0)} className="w-full bg-emerald-500 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-4 shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all disabled:opacity-30 disabled:grayscale">
                 Додати {normalizeOrderPartQuantity(addToVisitData.quantity)} шт. у візит
               </button>
             </div>

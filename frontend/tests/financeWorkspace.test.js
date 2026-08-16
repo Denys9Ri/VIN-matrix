@@ -11,7 +11,8 @@ test('finance is a separate protected workspace next to analytics', () => {
   assert.match(appSource, /import\('\.\/pages\/Finance'\)/);
   assert.match(appSource, /path="finance" element={<Finance \/>}/);
   assert.match(sidebarSource, /name: 'Фінанси'.*path: '\/finance'/s);
-  assert.match(analyticsWorkspaceSource, /<FinanceWorkspaceNav showExpenses \/>/);
+  assert.match(analyticsWorkspaceSource, /<FinanceWorkspaceNav \/>/);
+  assert.doesNotMatch(analyticsWorkspaceSource, /showExpenses/);
 });
 
 test('analytics keeps its page while expenses are promoted to the second quick section', () => {

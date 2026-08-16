@@ -193,6 +193,7 @@ _ALTER_TABLES = [
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS euro_rate numeric(6, 2) NOT NULL DEFAULT 42.00;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS business_type varchar(20) NOT NULL DEFAULT 'sto';",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS phone varchar(50) NULL;",
+    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS phones jsonb NOT NULL DEFAULT '[]'::jsonb;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS address varchar(255) NULL;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS document_footer text NULL;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS global_margin_percent numeric(5, 2) NOT NULL DEFAULT 20.00;",

@@ -18,6 +18,7 @@ from django.http import HttpResponse
 from decimal import Decimal
 
 from .models import Company, Visit, ServiceCatalog, Employee, OrderPart, OrderService, Category, InventoryItem, Supplier, PlatformClient
+from .company_phones import document_phone_text
 from .serializers import (
     VisitSerializer, UserSerializer, 
     CompanySerializer, ServiceCatalogSerializer,
@@ -194,7 +195,7 @@ class VisitViewSet(viewsets.ModelViewSet):
 
         # Дані компанії
         comp_name = company.name if company and company.name else "АВТОСЕРВІС"
-        comp_phone = company.phone if company and company.phone else ""
+        comp_phone = document_phone_text(company) if company else ""
         comp_addr = company.address if company and company.address else ""
         footer_text = company.document_footer if company and company.document_footer else "Дякуємо, що обрали нас!"
 

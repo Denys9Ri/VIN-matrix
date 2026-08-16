@@ -7,6 +7,7 @@ class Company(models.Model):
     owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company')
     logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Logo")
     phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="Phone")
+    phones = models.JSONField(default=list, blank=True, verbose_name="Company phones")
     address = models.CharField(max_length=255, blank=True, null=True, verbose_name="Address")
     document_footer = models.TextField(blank=True, null=True, verbose_name="Document footer")
     document_requisites = models.TextField(blank=True, null=True, verbose_name="Document requisites")

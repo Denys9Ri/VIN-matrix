@@ -30,6 +30,8 @@ import {
 } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard';
 import VehicleMakeCombobox from '../components/visits/VehicleMakeCombobox';
+import VehicleModelCombobox from '../components/visits/VehicleModelCombobox';
+import { vehicleModelAfterMakeChange } from '../utils/vehicleModelCatalog';
 import VisitWorkflowPanel from '../components/crm/VisitWorkflowPanel';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppPage, PageHeader, Tabs, useToast } from '../components/ui';
@@ -1577,8 +1579,8 @@ function CarFields({ data, setData }) {
         <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border ${data.engine_review_status === 'needs_review' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>{data.engine_review_status === 'needs_review' ? 'Двигун перевірити' : 'Перевірено вручну'}</span>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <VehicleMakeCombobox value={data.brand} onChange={(brand) => setData({ ...data, brand })} />
-        <LabeledInput label="Модель" value={data.model} onChange={(v) => setData({ ...data, model: v })} />
+        <VehicleMakeCombobox value={data.brand} onChange={(brand) => setData({ ...data, brand, model: vehicleModelAfterMakeChange(data.brand, brand, data.model) })} />
+        <VehicleModelCombobox make={data.brand} value={data.model} onChange={(model) => setData({ ...data, model })} />
         <LabeledInput label="Рік" type="number" value={data.year} onChange={(v) => setData({ ...data, year: v })} />
         <LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume || data.engine} onChange={(v) => setData({ ...data, engine: v, engine_volume: v, engine_review_status: 'manual' })} />
         <LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v) => setData({ ...data, engine_power: v, engine_review_status: 'manual' })} />
@@ -1602,8 +1604,8 @@ function ScanReviewCard({ data, setData, onApply, onCancel }) {
       <div className="grid grid-cols-2 gap-2">
         <LabeledInput label="Держ. номер" value={data.plate} onChange={(v) => setData({ ...data, plate: v.toUpperCase() })} />
         <LabeledInput label="VIN" value={data.vin_code || data.vin_candidate} onChange={(v) => setData({ ...data, vin_code: v.toUpperCase() })} />
-        <VehicleMakeCombobox value={data.brand} onChange={(brand) => setData({ ...data, brand })} />
-        <LabeledInput label="Модель" value={data.model} onChange={(v) => setData({ ...data, model: v })} />
+        <VehicleMakeCombobox value={data.brand} onChange={(brand) => setData({ ...data, brand, model: vehicleModelAfterMakeChange(data.brand, brand, data.model) })} />
+        <VehicleModelCombobox make={data.brand} value={data.model} onChange={(model) => setData({ ...data, model })} />
         <LabeledInput label="Рік" type="number" value={data.year} onChange={(v) => setData({ ...data, year: v })} />
         <LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume || data.engine} onChange={(v) => setData({ ...data, engine: v, engine_volume: v })} />
         <LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v) => setData({ ...data, engine_power: v })} />

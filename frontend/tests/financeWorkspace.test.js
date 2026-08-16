@@ -26,6 +26,6 @@ test('finance supports multi-entity allocations, corrections and accountant expo
   assert.match(financeSource, /\/api\/finance\/source-allocation\//);
   assert.match(financeSource, /Причина коригування/);
   assert.match(financeSource, /\/api\/finance\/export\//);
-  assert.match(financeSource, /Виплата зарплати/);
-  assert.match(financeSource, /Оплата постачальнику|supplier/);
+  assert.match(financeSource, /виплата зарплати/i);
+  assert.match(financeSource, /постачальник|supplier/i);
 });

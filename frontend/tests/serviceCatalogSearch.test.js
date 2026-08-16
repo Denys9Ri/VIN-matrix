@@ -27,11 +27,15 @@ test('empty service search keeps the complete catalog', () => {
   assert.deepEqual(searchServiceCatalog(services, ''), services);
 });
 
-test('visits service form renders live search and keeps the full list', async () => {
+test('visits service form renders one searchable catalog combobox', async () => {
   const source = await readFile(new URL('../src/pages/Visits.jsx', import.meta.url), 'utf8');
 
-  assert.match(source, /Швидкий пошук: ТО, мастило, колодки/);
+  assert.match(source, /Знайти або вибрати роботу/);
   assert.match(source, /searchServiceCatalog\(catalogServices, serviceSearch\)/);
-  assert.match(source, /Усі роботи з довідника/);
-  assert.match(source, /Шукати роботу/);
+  assert.match(source, /role="combobox"/);
+  assert.match(source, /aria-expanded=\{isServiceCatalogOpen\}/);
+  assert.match(source, /aria-label="Відкрити список робіт"/);
+  assert.match(source, /Ввести вручну/);
+  assert.doesNotMatch(source, /id="service-catalog-select"/);
+  assert.doesNotMatch(source, /Усі роботи з довідника/);
 });

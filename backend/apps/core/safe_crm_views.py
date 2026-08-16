@@ -4,6 +4,7 @@ from decimal import Decimal
 from html import escape
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import connection
 from django.db.models import Q
 from django.http import HttpResponse
@@ -42,9 +43,9 @@ def part_label(part): return f"{safe_text(getattr(part, 'brand', ''), 80)} {safe
 
 def safe_get_company(user):
     try: return user.company
-    except Exception: pass
+    except ObjectDoesNotExist: pass
     try: return user.employee_profile.company
-    except Exception: pass
+    except ObjectDoesNotExist: pass
     return None
 
 def safe_ensure_company(user):

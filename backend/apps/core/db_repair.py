@@ -268,6 +268,15 @@ _CLEANUP = [
     "UPDATE core_company SET euro_rate = 42.00 WHERE euro_rate IS NULL;",
     "UPDATE core_company SET business_type = 'sto' WHERE business_type IS NULL;",
     "UPDATE core_company SET global_margin_percent = 20.00 WHERE global_margin_percent IS NULL;",
+    """
+    UPDATE core_company
+    SET phones = jsonb_build_array(
+        jsonb_build_object('number', BTRIM(phone), 'show_in_documents', true)
+    )
+    WHERE phone IS NOT NULL
+      AND BTRIM(phone) <> ''
+      AND (phones IS NULL OR phones = '[]'::jsonb);
+    """,
     "UPDATE core_inventoryitem SET sell_price = 0 WHERE sell_price IS NULL;",
     "UPDATE core_inventoryitem SET updated_at = NOW() WHERE updated_at IS NULL;",
     "UPDATE core_stockmovement SET movement_type = 'receipt' WHERE movement_type IS NULL;",

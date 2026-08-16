@@ -286,6 +286,7 @@ queries_alter = [
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS euro_rate numeric(6, 2) NOT NULL DEFAULT 42.00;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS business_type varchar(20) NOT NULL DEFAULT 'sto';",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS phone varchar(50) NULL;",
+    "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS phones jsonb NOT NULL DEFAULT '[]'::jsonb;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS address varchar(255) NULL;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS document_footer text NULL;",
     "ALTER TABLE core_company ADD COLUMN IF NOT EXISTS document_requisites text NULL;",
@@ -392,6 +393,15 @@ with connection.cursor() as cursor:
         "UPDATE core_company SET euro_rate = 42.00 WHERE euro_rate IS NULL;",
         "UPDATE core_company SET business_type = 'sto' WHERE business_type IS NULL;",
         "UPDATE core_company SET global_margin_percent = 20.00 WHERE global_margin_percent IS NULL;",
+        """
+        UPDATE core_company
+        SET phones = jsonb_build_array(
+            jsonb_build_object('number', BTRIM(phone), 'show_in_documents', true)
+        )
+        WHERE phone IS NOT NULL
+          AND BTRIM(phone) <> ''
+          AND (phones IS NULL OR phones = '[]'::jsonb);
+        """,
         "UPDATE core_servicecomplex SET is_active = true WHERE is_active IS NULL;",
         "UPDATE core_servicecomplex SET created_at = NOW() WHERE created_at IS NULL;",
         "UPDATE core_servicecomplex SET updated_at = NOW() WHERE updated_at IS NULL;",

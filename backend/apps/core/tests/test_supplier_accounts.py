@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -118,3 +121,13 @@ class SupplierAccountTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(OrderPart.objects.filter(visit=self.visit).exists())
+
+    def test_production_repair_script_creates_supplier_account_schema(self):
+        repair_script = (Path(settings.BASE_DIR) / 'fix_db.py').read_text(encoding='utf-8')
+
+        self.assertIn('CREATE TABLE IF NOT EXISTS core_supplieraccount', repair_script)
+        self.assertIn('ADD COLUMN IF NOT EXISTS supplier_ref_id', repair_script)
+        self.assertIn('ADD COLUMN IF NOT EXISTS supplier_account_id', repair_script)
+        self.assertIn('ADD COLUMN IF NOT EXISTS supplier_account_name', repair_script)
+        self.assertIn('ON CONFLICT (supplier_id, name) DO NOTHING', repair_script)
+        self.assertIn("'core', '0009_supplier_accounts', NOW()", repair_script)

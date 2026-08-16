@@ -40,6 +40,8 @@ import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Alert from '../components/ui/Alert';
+import CompanyPhoneFields from '../components/settings/CompanyPhoneFields';
+import { normalizeCompanyPhones, primaryCompanyPhone } from '../utils/companyPhones';
 
 const getMechanicUser = (mech = {}) => mech.user || mech.employee_user || mech.profile || {};
 const getMechanicName = (mech = {}) => {
@@ -129,6 +131,7 @@ const initialProfile = {
     name: '',
     logo: null,
     phone: '',
+    phones: [],
     address: '',
     document_footer: '',
     document_requisites: '',
@@ -148,7 +151,7 @@ const initialFormData = {
   first_name: '',
   email: '',
   company_name: '',
-  phone: '',
+  phones: [],
   address: '',
   document_footer: '',
   document_requisites: '',
@@ -221,7 +224,7 @@ export default function Settings() {
           first_name: nextProfile.user?.first_name || '',
           email: nextProfile.user?.email || '',
           company_name: nextCompany.name || '',
-          phone: nextCompany.phone || '',
+          phones: normalizeCompanyPhones(nextCompany),
           address: nextCompany.address || '',
           document_footer: nextCompany.document_footer || '',
           document_requisites: nextCompany.document_requisites || '',
@@ -272,7 +275,7 @@ export default function Settings() {
     const data = new FormData();
     data.append('user[first_name]', formData.first_name);
     data.append('company[name]', formData.company_name);
-    data.append('company[phone]', formData.phone);
+    data.append('company[phones]', JSON.stringify(formData.phones || []));
     data.append('company[address]', formData.address);
     data.append('company[document_footer]', formData.document_footer);
     data.append('company[document_requisites]', formData.document_requisites);
@@ -668,7 +671,7 @@ function CompanyProfileCard({ company, user, isSto, activePosts, mechanicsCount,
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4 text-sm font-bold text-blue-50">
               <p className="flex items-center gap-2 min-w-0"><MapPin size={15} className="shrink-0"/><span className="truncate">{company.address || 'Адреса не вказана'}</span></p>
-              <p className="flex items-center gap-2 min-w-0"><Phone size={15} className="shrink-0"/><span className="truncate">{company.phone || 'Телефон не вказаний'}</span></p>
+              <p className="flex items-center gap-2 min-w-0"><Phone size={15} className="shrink-0"/><span className="truncate">{primaryCompanyPhone(company) || 'Телефон не вказаний'}</span></p>
               <p className="flex items-center gap-2"><DollarSign size={15} className="shrink-0"/> Націнка: {company.global_margin_percent || 20}%</p>
               <p className="flex items-center gap-2 min-w-0"><User size={15} className="shrink-0"/><span className="truncate">{user.first_name || user.username || 'Власник'}</span></p>
             </div>
@@ -969,9 +972,9 @@ function ProfileForm({ formData, setFormData, profile, saveLoading, billingNotic
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input label="Ваше ім'я" value={formData.first_name} onChange={e => setFormData({ ...formData, first_name: e.target.value })} />
           <Input label="Назва компанії" value={formData.company_name} onChange={e => setFormData({ ...formData, company_name: e.target.value })} />
-          <Input label="Телефон" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
           <Input label="Адреса" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
         </div>
+        <CompanyPhoneFields phones={formData.phones} onChange={(phones) => setFormData({ ...formData, phones })} />
       </Card>
 
       <Card className="space-y-4">

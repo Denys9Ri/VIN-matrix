@@ -7,6 +7,7 @@ from .models import (
     Category, InventoryItem, Supplier, PlatformClient,
     ServiceComplex, ComplexServiceItem, ComplexPartItem, VehicleRecommendation, StockMovement
 )
+from .company_phones import normalize_company_phones
 from .subscriptions import subscription_payload
 
 class UserSerializer(serializers.ModelSerializer):
@@ -15,9 +16,14 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'first_name', 'email']
 
 class CompanySerializer(serializers.ModelSerializer):
+    phones = serializers.SerializerMethodField()
+
     class Meta:
         model = Company
         fields = '__all__'
+
+    def get_phones(self, obj):
+        return normalize_company_phones(obj.phones, obj.phone)
 
 class WorkPostSerializer(serializers.ModelSerializer):
     class Meta:

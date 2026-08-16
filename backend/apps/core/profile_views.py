@@ -10,6 +10,7 @@ from .partner_views import (
     get_user_company,
     repair_legacy_account,
 )
+from .company_phones import normalize_company_phones
 from .serializers import CompanySerializer, UserSerializer
 from .subscriptions import get_billing_status, subscription_payload
 
@@ -56,6 +57,7 @@ class ProfileSettingsView(BaseProfileSettingsView):
             'name': '',
             'logo': None,
             'phone': '',
+            'phones': [],
             'address': '',
             'document_footer': '',
             'document_requisites': '',
@@ -116,7 +118,6 @@ class ProfileSettingsView(BaseProfileSettingsView):
 
         mapping = {
             'company[name]': 'name', 'name': 'name',
-            'company[phone]': 'phone', 'phone': 'phone',
             'company[address]': 'address', 'address': 'address',
             'company[document_footer]': 'document_footer', 'document_footer': 'document_footer',
             'company[document_requisites]': 'document_requisites', 'document_requisites': 'document_requisites',
@@ -132,6 +133,25 @@ class ProfileSettingsView(BaseProfileSettingsView):
         for key, field in mapping.items():
             if key in request.data:
                 setattr(company, field, request.data.get(key))
+
+        phones_key = next((key for key in ['company[phones]', 'phones'] if key in request.data), None)
+        phone_key = next((key for key in ['company[phone]', 'phone'] if key in request.data), None)
+        if phones_key:
+            phones = normalize_company_phones(request.data.get(phones_key))
+            company.phones = phones
+            company.phone = phones[0]['number'] if phones else ''
+        elif phone_key:
+            primary_phone = str(request.data.get(phone_key) or '').strip()[:50]
+            phones = normalize_company_phones(company.phones, company.phone)
+            if primary_phone:
+                if phones:
+                    phones[0]['number'] = primary_phone
+                else:
+                    phones = [{'number': primary_phone, 'show_in_documents': True}]
+            elif phones:
+                phones = phones[1:]
+            company.phones = normalize_company_phones(phones)
+            company.phone = company.phones[0]['number'] if company.phones else ''
 
         logo = request.data.get('company[logo]') or request.data.get('logo')
         if logo:

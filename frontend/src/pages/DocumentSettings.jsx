@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Building2, FileSignature, Image, Loader2, MapPin, Phone, Save, ShieldCheck, Upload } from 'lucide-react';
+import { ArrowLeft, Building2, FileSignature, Image, Loader2, MapPin, Save, ShieldCheck, Upload } from 'lucide-react';
 import api from '../api/axios';
 import { Alert, AppPage, Button, Card, PageHeader, useToast } from '../components/ui';
+import CompanyPhoneFields from '../components/settings/CompanyPhoneFields';
+import { normalizeCompanyPhones } from '../utils/companyPhones';
 
 const emptyForm = {
   name: '',
-  phone: '',
+  phones: [],
   address: '',
   logo: null,
   logo_url: '',
@@ -36,7 +38,7 @@ export default function DocumentSettings() {
         setCompanyName(company.name || 'Компанія');
         setForm({
           name: company.name || '',
-          phone: company.phone || '',
+          phones: normalizeCompanyPhones(company),
           address: company.address || '',
           logo: null,
           logo_url: company.logo || '',
@@ -58,9 +60,10 @@ export default function DocumentSettings() {
     setSaving(true);
     setError('');
     const data = new FormData();
-    ['name', 'phone', 'address', 'document_requisites', 'document_signature', 'document_warranty_text', 'document_footer'].forEach((key) => {
+    ['name', 'address', 'document_requisites', 'document_signature', 'document_warranty_text', 'document_footer'].forEach((key) => {
       data.append(`company[${key}]`, form[key] || '');
     });
+    data.append('company[phones]', JSON.stringify(form.phones || []));
     if (form.logo instanceof File) data.append('company[logo]', form.logo);
     try {
       await api.patch('/api/settings/', data, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -118,10 +121,10 @@ export default function DocumentSettings() {
               </div>
               <div className="space-y-3">
                 <Input icon={<Building2 size={15}/>} label="Назва компанії" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="VIN-matrix / Назва СТО / Назва магазину" />
-                <Input icon={<Phone size={15}/>} label="Телефон" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+380..." />
                 <Input icon={<MapPin size={15}/>} label="Адреса" value={form.address} onChange={(v) => setForm({ ...form, address: v })} placeholder="Місто, вулиця, номер" />
               </div>
             </div>
+            <CompanyPhoneFields phones={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
           </Card>
 
           <Card className="space-y-5" padding="lg">

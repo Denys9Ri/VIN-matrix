@@ -6,6 +6,7 @@ import {
   Camera,
   CarFront,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -1249,15 +1250,33 @@ function Works({
   const payrollTotal = servicesPayrollTotal(visit);
   const selectedMechanic = findById(mechanics, newService.mechanic);
   const [serviceSearch, setServiceSearch] = useState('');
+  const [isServiceCatalogOpen, setIsServiceCatalogOpen] = useState(false);
+  const serviceComboboxRef = useRef(null);
   const matchingCatalogServices = useMemo(
     () => searchServiceCatalog(catalogServices, serviceSearch),
     [catalogServices, serviceSearch],
   );
   const hasServiceSearch = serviceSearch.trim().length > 0;
-  const quickServiceResults = hasServiceSearch ? matchingCatalogServices.slice(0, 8) : [];
+  const visibleCatalogServices = hasServiceSearch ? matchingCatalogServices : catalogServices;
+  const selectedCatalogService = findById(catalogServices, selectedCatalogId);
+  const serviceComboboxValue = serviceSearch || selectedCatalogService?.name || '';
 
   useEffect(() => {
-    if (!showServiceForm) setServiceSearch('');
+    if (!showServiceForm) {
+      setServiceSearch('');
+      setIsServiceCatalogOpen(false);
+    }
+  }, [showServiceForm]);
+
+  useEffect(() => {
+    if (!showServiceForm) return undefined;
+
+    const closeServiceCatalog = (event) => {
+      if (!serviceComboboxRef.current?.contains(event.target)) setIsServiceCatalogOpen(false);
+    };
+
+    document.addEventListener('mousedown', closeServiceCatalog);
+    return () => document.removeEventListener('mousedown', closeServiceCatalog);
   }, [showServiceForm]);
 
   const chooseCatalogService = (service) => {
@@ -1270,6 +1289,13 @@ function Works({
       quantity: 1,
     }));
     setServiceSearch('');
+    setIsServiceCatalogOpen(false);
+  };
+
+  const chooseManualService = () => {
+    setSelectedCatalogId('');
+    setServiceSearch('');
+    setIsServiceCatalogOpen(false);
   };
 
   const pickMechanic = (mechanicId) => {
@@ -1296,36 +1322,67 @@ function Works({
 
       {showServiceForm && (
         <form onSubmit={onAddService} className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
-          <div className="space-y-2">
-            <label htmlFor="service-catalog-search" className="block text-[10px] font-black uppercase tracking-wide text-slate-500">Швидкий пошук роботи</label>
+          <div ref={serviceComboboxRef} className="relative">
+            <label htmlFor="service-catalog-combobox" className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500">Робота з довідника</label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" size={17} />
               <input
-                id="service-catalog-search"
-                type="search"
-                value={serviceSearch}
+                id="service-catalog-combobox"
+                type="text"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="service-catalog-options"
+                aria-expanded={isServiceCatalogOpen}
+                value={serviceComboboxValue}
                 onChange={(event) => {
                   setServiceSearch(event.target.value);
                   if (selectedCatalogId) setSelectedCatalogId('');
+                  setIsServiceCatalogOpen(true);
                 }}
-                placeholder="Швидкий пошук: ТО, мастило, колодки..."
-                aria-label="Шукати роботу"
+                onFocus={(event) => {
+                  setIsServiceCatalogOpen(true);
+                  if (selectedCatalogId) event.currentTarget.select();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setIsServiceCatalogOpen(false);
+                  if (event.key === 'ArrowDown') setIsServiceCatalogOpen(true);
+                  if (event.key === 'Enter' && isServiceCatalogOpen && hasServiceSearch && visibleCatalogServices.length) {
+                    event.preventDefault();
+                    chooseCatalogService(visibleCatalogServices[0]);
+                  }
+                }}
+                placeholder="Знайти або вибрати роботу..."
+                aria-label="Знайти або вибрати роботу"
                 autoComplete="off"
                 className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-10 pr-10 text-sm font-black text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
-              {serviceSearch && (
-                <button type="button" onClick={() => setServiceSearch('')} aria-label="Очистити пошук робіт" className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
-                  <X size={16} />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsServiceCatalogOpen((current) => !current)}
+                aria-label="Відкрити список робіт"
+                className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-blue-600"
+              >
+                <ChevronDown size={18} className={`transition-transform ${isServiceCatalogOpen ? 'rotate-180' : ''}`} />
+              </button>
             </div>
 
-            {hasServiceSearch && (
-              <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg" aria-live="polite">
-                {quickServiceResults.length ? quickServiceResults.map((service) => (
+            {isServiceCatalogOpen && (
+              <div id="service-catalog-options" role="listbox" className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl" aria-live="polite">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={!selectedCatalogId}
+                  onClick={chooseManualService}
+                  className="flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm font-black text-slate-500 transition hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                >
+                  Ввести вручну
+                </button>
+                {visibleCatalogServices.length ? visibleCatalogServices.map((service) => (
                   <button
                     key={service.id}
                     type="button"
+                    role="option"
+                    aria-selected={String(service.id) === String(selectedCatalogId)}
                     onClick={() => chooseCatalogService(service)}
                     className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
                   >
@@ -1335,30 +1392,12 @@ function Works({
                 )) : (
                   <div className="px-3 py-4 text-center">
                     <p className="text-sm font-black text-slate-600">Нічого не знайдено</p>
-                    <p className="mt-1 text-xs font-bold text-slate-400">Можна ввести назву роботи вручну нижче.</p>
+                    <p className="mt-1 text-xs font-bold text-slate-400">Оберіть «Ввести вручну» та вкажіть назву нижче.</p>
                   </div>
-                )}
-                {matchingCatalogServices.length > quickServiceResults.length && (
-                  <p className="px-3 py-2 text-[10px] font-black uppercase text-slate-400">Ще збігів: {matchingCatalogServices.length - quickServiceResults.length}. Уточніть пошук.</p>
                 )}
               </div>
             )}
           </div>
-
-          <label htmlFor="service-catalog-select" className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Усі роботи з довідника</label>
-          <select
-            id="service-catalog-select"
-            value={selectedCatalogId}
-            onChange={(e) => {
-              setSelectedCatalogId(e.target.value);
-              const s = catalogServices.find((x) => x.id === Number(e.target.value));
-              if (s) chooseCatalogService(s);
-            }}
-            className="w-full bg-white border rounded-lg p-2 text-xs font-bold"
-          >
-            <option value="">Ввести вручну</option>
-            {(hasServiceSearch ? matchingCatalogServices : catalogServices).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
 
           <input required placeholder="Назва роботи" value={newService.name} onChange={(e) => setNewService({ ...newService, name: e.target.value })} className="w-full bg-white border rounded-lg p-2 text-xs font-bold" />
 

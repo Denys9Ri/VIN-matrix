@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .activity import log_activity
-from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, Visit, VehicleRecommendation, CRMTask, WorkPost
+from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, SupplierAccount, Visit, VehicleRecommendation, CRMTask, WorkPost
 from .serializers import CategorySerializer, InventoryItemSerializer, OrderPartSerializer, OrderServiceSerializer, ServiceCatalogSerializer, SupplierSerializer, VisitSerializer, VehicleRecommendationSerializer, WorkPostSerializer
 from .visit_rollover import rollover_in_progress_visits
 from .views import VisitViewSet as BaseVisitViewSet
@@ -257,20 +257,61 @@ class OrderPartViewSet(viewsets.ModelViewSet):
         company = safe_ensure_company(self.request.user); visit = Visit.objects.get(id=self.request.data.get('visit'), company=company)
         supplier = self.request.data.get('supplier') or ''; is_local = self.request.data.get('is_local') is True or str(self.request.data.get('is_local')).lower() == 'true'
         supplier_color = normalize_supplier_badge_key(self.request.data.get('supplier_color'), supplier_name=supplier, is_local=is_local)
-        part = serializer.save(visit=visit, supplier_color=supplier_color)
+        supplier_ref = None
+        supplier_account = None
+        supplier_ref_id = self.request.data.get('supplier_ref')
+        supplier_account_id = self.request.data.get('supplier_account')
+        if supplier_ref_id:
+            supplier_ref = Supplier.objects.filter(id=supplier_ref_id, company=company).first()
+            if not supplier_ref:
+                raise serializers.ValidationError({'supplier_ref': 'Постачальника не знайдено.'})
+        if supplier_account_id:
+            supplier_account = SupplierAccount.objects.select_related('supplier').filter(id=supplier_account_id, supplier__company=company, is_active=True).first()
+            if not supplier_account:
+                raise serializers.ValidationError({'supplier_account': 'Акаунт постачальника не знайдено.'})
+            if supplier_ref and supplier_account.supplier_id != supplier_ref.id:
+                raise serializers.ValidationError({'supplier_account': 'Акаунт не належить вибраному постачальнику.'})
+            supplier_ref = supplier_account.supplier
+        part = serializer.save(
+            visit=visit,
+            supplier_color=supplier_color,
+            supplier_ref=supplier_ref,
+            supplier_account=supplier_account,
+            supplier_account_name=supplier_account.name if supplier_account else '',
+        )
         log_activity(company=company, user=self.request.user, visit=visit, order_part=part, action_type='part_added', title='Додано товар' if is_store(company) else 'Додано запчастину', description=f"{part_label(part)} · {qty_display(part.quantity)} шт · продаж {money_display(part.sell_price)}", metadata={'supplier': part.supplier, 'buy_price': float(money_value(part.buy_price)), 'sell_price': float(money_value(part.sell_price))})
     def update(self, request, *args, **kwargs):
-        instance = self.get_object(); old = {'quantity': instance.quantity, 'buy_price': instance.buy_price, 'sell_price': instance.sell_price, 'status': instance.status}
+        instance = self.get_object(); old = {'quantity': instance.quantity, 'buy_price': instance.buy_price, 'sell_price': instance.sell_price, 'status': instance.status, 'supplier_account_name': instance.supplier_account_name}
+        target_account = None
+        account_was_sent = 'supplier_account' in request.data
+        if account_was_sent and request.data.get('supplier_account') not in [None, '']:
+            target_account = SupplierAccount.objects.select_related('supplier').filter(
+                id=request.data.get('supplier_account'), supplier__company=instance.visit.company, is_active=True,
+            ).first()
+            if not target_account:
+                raise serializers.ValidationError({'supplier_account': 'Акаунт постачальника не знайдено.'})
+            if instance.supplier_ref_id and target_account.supplier_id != instance.supplier_ref_id:
+                raise serializers.ValidationError({'supplier_account': 'Акаунт не належить постачальнику цієї запчастини.'})
         response = super().update(request, *args, **kwargs)
         try:
             from .stock_reservations import sync_order_part_after_update
-            instance.refresh_from_db(); sync_order_part_after_update(instance, old_quantity=old['quantity'])
+            instance.refresh_from_db()
+            if account_was_sent:
+                instance.supplier_account = target_account
+                instance.supplier_account_name = target_account.name if target_account else ''
+                if target_account and not instance.supplier_ref_id:
+                    instance.supplier_ref = target_account.supplier
+                instance.save(update_fields=['supplier_account', 'supplier_account_name', 'supplier_ref'])
+            sync_order_part_after_update(instance, old_quantity=old['quantity'])
             changes = []
             for field, label in [('quantity','кількість'),('buy_price','закупка'),('sell_price','продаж'),('status','статус')]:
                 if str(old[field]) != str(getattr(instance, field)):
                     changes.append(f"{label}: {old[field]} → {getattr(instance, field)}")
+            if old['supplier_account_name'] != instance.supplier_account_name:
+                changes.append(f"акаунт: {old['supplier_account_name'] or 'не вказано'} → {instance.supplier_account_name or 'не вказано'}")
             if changes:
                 log_activity(company=instance.visit.company, user=request.user, visit=instance.visit, order_part=instance, action_type='part_status_changed' if str(old['status']) != str(instance.status) else 'part_updated', title='Оновлено товар' if is_store(instance.visit.company) else 'Оновлено запчастину', description=f"{part_label(instance)} · {'; '.join(changes)}", old_value=json.dumps(old, default=str, ensure_ascii=False), new_value=json.dumps({'quantity': instance.quantity, 'buy_price': instance.buy_price, 'sell_price': instance.sell_price, 'status': instance.status}, default=str, ensure_ascii=False))
+            response.data = self.get_serializer(instance).data
         except Exception as exc: print(f'STOCK/ACTIVITY: order part update failed: {exc}')
         return response
     def partial_update(self, request, *args, **kwargs): kwargs['partial'] = True; return self.update(request, *args, **kwargs)
@@ -428,7 +469,7 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer): company = safe_ensure_company(self.request.user); item = serializer.save(company=company); log_activity(company=company, user=self.request.user, inventory_item=item, action_type='stock_adjusted', title='Створено товар на складі', description=f"{item.brand} {item.article} · {item.quantity} шт")
 class SupplierViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierSerializer; permission_classes = [IsAuthenticated]
-    def get_queryset(self): company = safe_ensure_company(self.request.user); return Supplier.objects.filter(company=company) if company else Supplier.objects.none()
+    def get_queryset(self): company = safe_ensure_company(self.request.user); return Supplier.objects.filter(company=company).prefetch_related('accounts') if company else Supplier.objects.none()
     def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class MechanicViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]

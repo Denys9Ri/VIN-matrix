@@ -1,10 +1,11 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.utils import timezone
-from django.db import connection
+from django.db import connection, transaction
+from django.db.models import Q
 from .models import (
     Company, Employee, WorkPost, Visit, ServiceCatalog, OrderPart, OrderService,
-    Category, InventoryItem, Supplier, PlatformClient,
+    Category, InventoryItem, Supplier, SupplierAccount, PlatformClient,
     ServiceComplex, ComplexServiceItem, ComplexPartItem, VehicleRecommendation, StockMovement
 )
 from .company_phones import normalize_company_phones
@@ -42,10 +43,11 @@ class OrderPartSerializer(serializers.ModelSerializer):
     inventory_item = serializers.SerializerMethodField()
     inventory_item_label = serializers.SerializerMethodField()
     source_label = serializers.SerializerMethodField()
+    supplier_account_options = serializers.SerializerMethodField()
     class Meta:
         model = OrderPart
         fields = '__all__'
-        read_only_fields = ['visit', 'stock_status', 'inventory_item', 'inventory_item_label', 'source_label']
+        read_only_fields = ['visit', 'stock_status', 'inventory_item', 'inventory_item_label', 'source_label', 'supplier_account_name', 'supplier_account_options']
     def _extra(self, obj):
         try:
             with connection.cursor() as cursor:
@@ -72,6 +74,17 @@ class OrderPartSerializer(serializers.ModelSerializer):
             if status == 'released': return 'Мій склад — резерв знято'
             return 'Мій склад'
         return obj.supplier or 'Постачальник не вказаний'
+    def get_supplier_account_options(self, obj):
+        supplier = getattr(obj, 'supplier_ref', None)
+        if not supplier:
+            return []
+        accounts = supplier.accounts.filter(is_active=True)
+        if getattr(obj, 'supplier_account_id', None):
+            accounts = supplier.accounts.filter(Q(is_active=True) | Q(id=obj.supplier_account_id))
+        return [
+            {'id': account.id, 'name': account.name, 'is_default': account.is_default, 'is_active': account.is_active}
+            for account in accounts.order_by('-is_default', 'name', 'id')
+        ]
     def create(self, validated_data):
         instance = super().create(validated_data)
         try:
@@ -263,6 +276,9 @@ class SupplierSerializer(serializers.ModelSerializer):
     api_password_set = serializers.SerializerMethodField()
     api_token_set = serializers.SerializerMethodField()
     connection_label = serializers.SerializerMethodField()
+    accounts = serializers.SerializerMethodField()
+    accounts_count = serializers.SerializerMethodField()
+    default_account_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Supplier
@@ -282,6 +298,9 @@ class SupplierSerializer(serializers.ModelSerializer):
             'warehouse_prefs',
             'is_active',
             'connection_label',
+            'accounts',
+            'accounts_count',
+            'default_account_name',
         ]
         read_only_fields = [
             'id',
@@ -290,6 +309,9 @@ class SupplierSerializer(serializers.ModelSerializer):
             'api_password_set',
             'api_token_set',
             'connection_label',
+            'accounts',
+            'accounts_count',
+            'default_account_name',
         ]
         extra_kwargs = {
             'api_key': {'write_only': True, 'required': False, 'allow_blank': True, 'allow_null': True},
@@ -322,6 +344,16 @@ class SupplierSerializer(serializers.ModelSerializer):
             return 'Файл прайсу / ручний'
         return 'API ключ' if getattr(obj, 'api_key', '') else 'Потрібен API ключ'
 
+    def get_accounts(self, obj):
+        return SupplierAccountSerializer(obj.accounts.all(), many=True).data
+
+    def get_accounts_count(self, obj):
+        return obj.accounts.count()
+
+    def get_default_account_name(self, obj):
+        account = obj.accounts.filter(is_active=True, is_default=True).first()
+        return account.name if account else ''
+
     def _clean_empty_secrets(self, validated_data):
         # Не стираємо існуючий ключ або пароль, якщо користувач залишив поле пустим.
         for field in ['api_key', 'api_password', 'api_token', 'api_refresh_token']:
@@ -334,6 +366,107 @@ class SupplierSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         return super().update(instance, self._clean_empty_secrets(validated_data))
+
+
+SUPPLIER_ACCOUNT_SECRET_FIELDS = [
+    'api_key', 'api_password', 'api_token', 'api_refresh_token',
+]
+SUPPLIER_ACCOUNT_CONNECTION_FIELDS = [
+    'api_key', 'api_login', 'api_password', 'api_token', 'api_refresh_token',
+    'api_token_expires_at', 'browser_fingerprint',
+]
+
+
+def sync_supplier_default_account(supplier, preferred=None):
+    active = supplier.accounts.filter(is_active=True).order_by('-is_default', 'id')
+    chosen = preferred if preferred and preferred.is_active else active.filter(is_default=True).first()
+    if chosen is None:
+        chosen = active.first()
+    if chosen is None:
+        for field in SUPPLIER_ACCOUNT_CONNECTION_FIELDS:
+            setattr(supplier, field, None)
+        supplier.save(update_fields=SUPPLIER_ACCOUNT_CONNECTION_FIELDS)
+        return None
+
+    supplier.accounts.exclude(id=chosen.id).filter(is_default=True).update(is_default=False)
+    if not chosen.is_default:
+        chosen.is_default = True
+        chosen.save(update_fields=['is_default', 'updated_at'])
+
+    for field in SUPPLIER_ACCOUNT_CONNECTION_FIELDS:
+        setattr(supplier, field, getattr(chosen, field, None))
+    supplier.save(update_fields=SUPPLIER_ACCOUNT_CONNECTION_FIELDS)
+    return chosen
+
+
+class SupplierAccountSerializer(serializers.ModelSerializer):
+    api_key_masked = serializers.SerializerMethodField()
+    api_key_set = serializers.SerializerMethodField()
+    api_password_set = serializers.SerializerMethodField()
+    connection_label = serializers.SerializerMethodField()
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+
+    class Meta:
+        model = SupplierAccount
+        fields = [
+            'id', 'supplier', 'supplier_name', 'name', 'api_key', 'api_key_masked',
+            'api_key_set', 'api_login', 'api_password', 'api_password_set',
+            'browser_fingerprint', 'is_active', 'is_default', 'connection_label',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'supplier_name', 'api_key_masked', 'api_key_set',
+            'api_password_set', 'connection_label', 'created_at', 'updated_at',
+        ]
+        extra_kwargs = {
+            'api_key': {'write_only': True, 'required': False, 'allow_blank': True, 'allow_null': True},
+            'api_password': {'write_only': True, 'required': False, 'allow_blank': True, 'allow_null': True},
+            'api_login': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'browser_fingerprint': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'is_active': {'required': False},
+            'is_default': {'required': False},
+        }
+
+    def get_api_key_masked(self, obj):
+        return _mask_secret(obj.api_key)
+
+    def get_api_key_set(self, obj):
+        return bool(obj.api_key)
+
+    def get_api_password_set(self, obj):
+        return bool(obj.api_password)
+
+    def get_connection_label(self, obj):
+        api_type = getattr(obj.supplier, 'api_type', 'custom') or 'custom'
+        if api_type == 'utr':
+            return 'Підключено' if obj.api_login and obj.api_password else 'Потрібен логін/пароль'
+        if api_type == 'custom':
+            return 'Ручний акаунт'
+        return 'Підключено' if obj.api_key else 'Потрібен API ключ'
+
+    def validate_name(self, value):
+        value = str(value or '').strip()
+        if not value:
+            raise serializers.ValidationError('Вкажіть повну назву акаунта.')
+        return value
+
+    def _clean_empty_secrets(self, validated_data):
+        for field in SUPPLIER_ACCOUNT_SECRET_FIELDS:
+            if field in validated_data and validated_data.get(field) in [None, '']:
+                validated_data.pop(field)
+        return validated_data
+
+    @transaction.atomic
+    def create(self, validated_data):
+        instance = super().create(self._clean_empty_secrets(validated_data))
+        sync_supplier_default_account(instance.supplier, instance if instance.is_default else None)
+        return instance
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        instance = super().update(instance, self._clean_empty_secrets(validated_data))
+        sync_supplier_default_account(instance.supplier, instance if instance.is_default else None)
+        return instance
 
 class InventoryItemSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)

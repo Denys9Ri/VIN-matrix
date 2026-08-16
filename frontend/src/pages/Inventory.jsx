@@ -9,7 +9,6 @@ import {
   Package,
   PackageOpen,
   Plus,
-  RefreshCcw,
   Search,
   ShieldCheck,
   Tag,
@@ -85,6 +84,22 @@ const newSupplierForm = () => ({
   current_login: '',
   current_password_set: false,
   current_key_set: false,
+  accounts: [],
+});
+
+const newSupplierAccountForm = (supplierId = '', makeDefault = false) => ({
+  id: '',
+  supplier: supplierId,
+  name: '',
+  api_key: '',
+  api_login: '',
+  api_password: '',
+  browser_fingerprint: '',
+  current_key: '',
+  current_key_set: false,
+  current_password_set: false,
+  is_active: true,
+  is_default: makeDefault,
 });
 
 const inferSupplierType = (supplier = {}) => {
@@ -138,6 +153,7 @@ export default function Inventory() {
   const [confirmState, setConfirmState] = useState(null);
   const [newCat, setNewCat] = useState('');
   const [supplierForm, setSupplierForm] = useState(newSupplierForm());
+  const [supplierAccountForm, setSupplierAccountForm] = useState(null);
   const [receipt, setReceipt] = useState({ ...emptyReceipt });
   const [priceRows, setPriceRows] = useState([]);
   const [priceSearch, setPriceSearch] = useState('');
@@ -284,8 +300,32 @@ export default function Inventory() {
       current_login: supplier?.api_login || '',
       current_password_set: Boolean(supplier?.api_password_set),
       current_key_set: Boolean(supplier?.api_key_set),
+      accounts: list(supplier?.accounts),
     });
+    setSupplierAccountForm(null);
     setModal('supplier');
+  };
+
+  const refreshSupplier = async (supplierId) => {
+    const response = await api.get(`/api/suppliers/${supplierId}/`);
+    const supplier = response.data;
+    const apiType = inferSupplierType(supplier);
+    setSuppliers((current) => current.some((item) => String(item.id) === String(supplier.id))
+      ? current.map((item) => (String(item.id) === String(supplier.id) ? supplier : item))
+      : [...current, supplier]);
+    setSupplierForm((current) => ({
+      ...current,
+      id: supplier.id,
+      name: supplier.name,
+      api_type: apiType,
+      is_active: supplier.is_active !== false,
+      accounts: list(supplier.accounts),
+      current: supplier.api_key_masked || '',
+      current_login: supplier.api_login || '',
+      current_password_set: Boolean(supplier.api_password_set),
+      current_key_set: Boolean(supplier.api_key_set),
+    }));
+    return supplier;
   };
 
   const saveSupplier = async (event) => {
@@ -310,17 +350,94 @@ export default function Inventory() {
 
     setBusy(true);
     try {
-      if (supplierForm.id) await api.patch(`/api/suppliers/${supplierForm.id}/`, formData);
-      else await api.post('/api/suppliers/', formData);
-      setModal(null);
-      setSupplierForm(newSupplierForm());
-      toast.success('Постачальника збережено.');
-      await load();
+      if (supplierForm.id) {
+        await api.patch(`/api/suppliers/${supplierForm.id}/`, formData);
+        await refreshSupplier(supplierForm.id);
+        toast.success('Постачальника збережено.');
+      } else {
+        const response = await api.post('/api/suppliers/', formData);
+        await load();
+        await refreshSupplier(response.data.id);
+        setSupplierAccountForm(newSupplierAccountForm(response.data.id, true));
+        toast.success('Постачальника створено. Додайте його перший акаунт.');
+      }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Не вдалося зберегти постачальника.');
     } finally {
       setBusy(false);
     }
+  };
+
+  const editSupplierAccount = (account = null) => {
+    if (!supplierForm.id) return;
+    setSupplierAccountForm(account ? {
+      ...newSupplierAccountForm(supplierForm.id),
+      id: account.id,
+      name: account.name || '',
+      api_login: account.api_login || '',
+      browser_fingerprint: account.browser_fingerprint || '',
+      current_key: account.api_key_masked || '',
+      current_key_set: Boolean(account.api_key_set),
+      current_password_set: Boolean(account.api_password_set),
+      is_active: account.is_active !== false,
+      is_default: Boolean(account.is_default),
+    } : newSupplierAccountForm(supplierForm.id, !supplierForm.accounts.length));
+  };
+
+  const saveSupplierAccount = async () => {
+    const account = supplierAccountForm;
+    if (!account?.name?.trim()) return toast.warning('Вкажіть повну назву акаунта, наприклад «ФОП Іваненко Денис».');
+    const payload = {
+      supplier: supplierForm.id,
+      name: account.name.trim(),
+      api_login: account.api_login || '',
+      browser_fingerprint: account.browser_fingerprint || '',
+      is_active: account.is_active,
+      is_default: account.is_default,
+    };
+    if (account.api_key) payload.api_key = account.api_key;
+    if (account.api_password) payload.api_password = account.api_password;
+
+    setBusy(true);
+    try {
+      if (account.id) await api.patch(`/api/supplier-accounts/${account.id}/`, payload);
+      else await api.post('/api/supplier-accounts/', payload);
+      await refreshSupplier(supplierForm.id);
+      setSupplierAccountForm(null);
+      toast.success('Акаунт постачальника збережено.');
+    } catch (error) {
+      const details = error.response?.data;
+      toast.error(details?.name?.[0] || details?.detail || 'Не вдалося зберегти акаунт. Перевірте назву та дані доступу.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const makeDefaultSupplierAccount = async (account) => {
+    setBusy(true);
+    try {
+      await api.patch(`/api/supplier-accounts/${account.id}/`, { is_default: true });
+      await refreshSupplier(supplierForm.id);
+      toast.success(`Для пошуку вибрано «${account.name}».`);
+    } catch {
+      toast.error('Не вдалося змінити акаунт для пошуку.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteSupplierAccount = (account) => {
+    setConfirmState({
+      title: 'Видалити акаунт постачальника?',
+      text: `Акаунт «${account.name}» буде видалено. У старих візитах його назва залишиться збереженою.`,
+      actionLabel: 'Видалити акаунт',
+      onConfirm: async () => {
+        await api.delete(`/api/supplier-accounts/${account.id}/`);
+        await refreshSupplier(supplierForm.id);
+        setSupplierAccountForm(null);
+        toast.success('Акаунт видалено.');
+      },
+    });
   };
 
   const checkSupplier = () => {
@@ -585,6 +702,12 @@ export default function Inventory() {
             setForm={setSupplierForm}
             onSubmit={saveSupplier}
             onCheck={checkSupplier}
+            accountForm={supplierAccountForm}
+            setAccountForm={setSupplierAccountForm}
+            onEditAccount={editSupplierAccount}
+            onSaveAccount={saveSupplierAccount}
+            onDeleteAccount={deleteSupplierAccount}
+            onMakeDefault={makeDefaultSupplierAccount}
             busy={busy}
           />
         </Modal>
@@ -894,7 +1017,16 @@ function Supplier({ supplier, onOpen, onDelete }) {
   const type = inferSupplierType(supplier);
   const loginBased = supplierNeedsLogin(type);
   const keyBased = supplierNeedsApiKey(type);
-  const connected = loginBased ? (supplier.api_login && supplier.api_password_set) : (keyBased ? supplier.api_key_set : true);
+  const accounts = list(supplier.accounts);
+  const connectedAccounts = accounts.filter((account) => account.is_active && (
+    !loginBased && !keyBased
+      ? true
+      : loginBased
+        ? account.api_login && account.api_password_set
+        : account.api_key_set
+  ));
+  const connected = !loginBased && !keyBased ? true : connectedAccounts.length > 0;
+  const defaultAccount = accounts.find((account) => account.is_default && account.is_active);
 
   return (
     <button
@@ -905,7 +1037,7 @@ function Supplier({ supplier, onOpen, onDelete }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="break-words text-base font-black text-slate-900">{supplier.name}</h3>
-          <p className="mt-2 text-xs font-bold text-slate-400">{supplierTypeLabel(type)} · {connected ? 'підключено' : 'потрібні дані доступу'}</p>
+          <p className="mt-2 text-xs font-bold text-slate-400">{supplierTypeLabel(type)} · акаунтів {accounts.length}</p>
         </div>
         <span className={`rounded-2xl border px-3 py-1 text-[10px] font-black uppercase ${connected ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
           {connected ? 'OK' : 'Налаштувати'}
@@ -915,9 +1047,7 @@ function Supplier({ supplier, onOpen, onDelete }) {
       <div className="mt-4 flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
         <KeyRound size={15} className={type === 'utr' ? 'text-orange-500' : 'text-blue-600'} />
         <span className="min-w-0 truncate text-xs font-black text-slate-700">
-          {loginBased
-            ? `${supplier.api_login || 'логін не додано'} · ${supplier.api_password_set ? 'пароль додано' : 'пароль не додано'}`
-            : (keyBased ? (supplier.api_key_masked || 'ключ не додано') : 'ручний постачальник')}
+          {defaultAccount ? `${defaultAccount.name} · для пошуку` : (accounts.length ? accounts[0].name : 'акаунти ще не додані')}
         </span>
       </div>
 
@@ -937,7 +1067,7 @@ function Supplier({ supplier, onOpen, onDelete }) {
   );
 }
 
-function SupplierForm({ form, setForm, onSubmit, onCheck, busy }) {
+function SupplierForm({ form, setForm, onSubmit, accountForm, setAccountForm, onEditAccount, onSaveAccount, onDeleteAccount, onMakeDefault, busy }) {
   const type = supplierType(form.api_type);
   const needsKey = supplierNeedsApiKey(form.api_type);
   const needsLogin = supplierNeedsLogin(form.api_type);
@@ -947,10 +1077,6 @@ function SupplierForm({ form, setForm, onSubmit, onCheck, busy }) {
       ...prev,
       api_type: apiType,
       name: prev.name || supplierType(apiType).defaultName || '',
-      api_key: '',
-      api_login: apiType === 'utr' ? (prev.api_login || prev.current_login || '') : prev.api_login,
-      api_password: '',
-      browser_fingerprint: apiType === 'utr' ? prev.browser_fingerprint : '',
     }));
   };
 
@@ -966,47 +1092,69 @@ function SupplierForm({ form, setForm, onSubmit, onCheck, busy }) {
       <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-4">
         <p className="text-xs font-black uppercase tracking-wide text-blue-700">{type.label}</p>
         <p className="mt-1 text-sm font-semibold text-blue-700">
-          {needsLogin ? 'Для Юнік Трейд зберігаємо login/password. Token отримує backend під час пошуку.' : needsKey ? 'Для цього постачальника потрібен API ключ або token.' : 'Ручний постачальник: працює через прихід товару і прайс-експорт.'}
+          {needsLogin ? 'Додайте окремий акаунт для кожного ФОП або ТОВ. У кожного акаунта буде власний login/password.' : needsKey ? 'Додайте окремий іменований акаунт для кожного ФОП або ТОВ та його API key / token.' : 'Для ручного постачальника акаунти можна використовувати як позначки ФОП або ТОВ без API-ключів.'}
         </p>
       </div>
 
-      {needsKey && (
-        <div className="space-y-3">
-          <StatusPill icon={<KeyRound size={15} />} label="Поточний ключ" value={form.current_key_set || form.current ? (form.current || 'ключ збережено') : 'ключ не додано'} ok={form.current_key_set || form.current} />
-          <Input
-            label="Новий API key / token"
-            placeholder="Вставте тільки якщо потрібно замінити ключ"
-            value={form.api_key}
-            onChange={(value) => setForm((prev) => ({ ...prev, api_key: value }))}
-          />
-        </div>
-      )}
-
-      {needsLogin && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input
-              label="Логін Юнік Трейд"
-              value={form.api_login}
-              onChange={(value) => setForm((prev) => ({ ...prev, api_login: value }))}
-              placeholder="login / email"
-            />
-            <Input
-              type="password"
-              label={form.current_password_set ? 'Новий пароль Юнік Трейд' : 'Пароль Юнік Трейд'}
-              value={form.api_password}
-              onChange={(value) => setForm((prev) => ({ ...prev, api_password: value }))}
-              placeholder={form.current_password_set ? 'Заповніть тільки для заміни' : 'Пароль'}
-            />
+      {form.id ? (
+        <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-slate-700">Акаунти постачальника</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">Назва відображається у візиті повністю: наприклад «ФОП Іваненко Денис».</p>
+            </div>
+            <button type="button" onClick={() => onEditAccount()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-sm hover:bg-blue-700"><Plus size={15} /> Додати акаунт</button>
           </div>
-          <StatusPill icon={<ShieldCheck size={15} />} label="Поточні дані" value={`${form.api_login || form.current_login || 'логін не додано'} · ${form.current_password_set ? 'пароль збережено' : 'пароль не додано'}`} ok={(form.api_login || form.current_login) && (form.current_password_set || form.api_password)} />
-          <Input
-            label="Browser fingerprint"
-            value={form.browser_fingerprint}
-            onChange={(value) => setForm((prev) => ({ ...prev, browser_fingerprint: value }))}
-            placeholder="Необовʼязково, якщо backend не вимагає"
-          />
+
+          <div className="mt-4 space-y-2">
+            {list(form.accounts).map((account) => (
+              <div key={account.id} className={`rounded-2xl border bg-white p-3 ${account.is_default ? 'border-blue-200 ring-2 ring-blue-50' : 'border-slate-200'}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button type="button" onClick={() => onEditAccount(account)} className="min-w-0 text-left">
+                    <p className="break-words text-sm font-black text-slate-900">{account.name}</p>
+                    <p className="mt-1 text-[10px] font-bold uppercase text-slate-400">{account.connection_label}{account.is_default ? ' · для пошуку' : ''}{account.is_active ? '' : ' · вимкнено'}</p>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {!account.is_default && account.is_active && <button type="button" disabled={busy} onClick={() => onMakeDefault(account)} className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[10px] font-black uppercase text-blue-700 hover:bg-blue-100">Для пошуку</button>}
+                    <button type="button" onClick={() => onEditAccount(account)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-slate-600 hover:bg-slate-50">Змінити</button>
+                    <button type="button" onClick={() => onDeleteAccount(account)} className="rounded-xl p-2 text-red-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={15} /></button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {!list(form.accounts).length && <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-center text-xs font-bold text-slate-400">Акаунтів ще немає</p>}
+          </div>
+
+          {accountForm && (
+            <div className="mt-4 space-y-4 rounded-3xl border-2 border-blue-100 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-black uppercase text-slate-900">{accountForm.id ? 'Редагувати акаунт' : 'Новий акаунт'}</p>
+                <button type="button" onClick={() => setAccountForm(null)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X size={17} /></button>
+              </div>
+              <Input required label="Повна назва акаунта" placeholder="Напр. ФОП Іваненко Денис" value={accountForm.name} onChange={(value) => setAccountForm((prev) => ({ ...prev, name: value }))} />
+              {needsKey && (
+                <div className="space-y-2">
+                  {accountForm.current_key_set && <StatusPill icon={<KeyRound size={15} />} label="Поточний ключ" value={accountForm.current_key || 'ключ збережено'} ok />}
+                  <Input label={accountForm.current_key_set ? 'Новий API key / token' : 'API key / token'} placeholder={accountForm.current_key_set ? 'Заповніть тільки для заміни' : 'Вставте ключ цього акаунта'} value={accountForm.api_key} onChange={(value) => setAccountForm((prev) => ({ ...prev, api_key: value }))} />
+                </div>
+              )}
+              {needsLogin && (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Input label="Логін" value={accountForm.api_login} onChange={(value) => setAccountForm((prev) => ({ ...prev, api_login: value }))} placeholder="login / email" />
+                  <Input type="password" label={accountForm.current_password_set ? 'Новий пароль' : 'Пароль'} value={accountForm.api_password} onChange={(value) => setAccountForm((prev) => ({ ...prev, api_password: value }))} placeholder={accountForm.current_password_set ? 'Тільки для заміни' : 'Пароль'} />
+                  <div className="md:col-span-2"><Input label="Browser fingerprint" value={accountForm.browser_fingerprint} onChange={(value) => setAccountForm((prev) => ({ ...prev, browser_fingerprint: value }))} placeholder="Необовʼязково" /></div>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs font-black text-slate-700"><input type="checkbox" checked={accountForm.is_active} onChange={(event) => setAccountForm((prev) => ({ ...prev, is_active: event.target.checked }))} /> Акаунт активний</label>
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs font-black text-blue-700"><input type="checkbox" checked={accountForm.is_default} onChange={(event) => setAccountForm((prev) => ({ ...prev, is_default: event.target.checked }))} /> Використовувати для пошуку</label>
+              </div>
+              <button type="button" disabled={busy} onClick={onSaveAccount} className="w-full rounded-2xl bg-emerald-600 px-5 py-3 text-xs font-black uppercase text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50">Зберегти акаунт</button>
+            </div>
+          )}
         </div>
+      ) : (
+        <p className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs font-bold text-slate-500">Спочатку збережіть постачальника — після цього одразу відкриється додавання першого акаунта.</p>
       )}
 
 
@@ -1023,10 +1171,7 @@ function SupplierForm({ form, setForm, onSubmit, onCheck, busy }) {
         </span>
       </label>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <button type="button" onClick={onCheck} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-blue-100 bg-white px-5 py-3 text-xs font-black uppercase text-blue-700 shadow-sm transition hover:bg-blue-50"><RefreshCcw size={15} /> Перевірити дані</button>
-        <Button type="submit" loading={busy} className="w-full">Зберегти постачальника</Button>
-      </div>
+      <Button type="submit" loading={busy} className="w-full">Зберегти постачальника</Button>
     </form>
   );
 }

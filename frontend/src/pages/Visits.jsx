@@ -636,6 +636,15 @@ export default function Visits() {
   };
 
   const updatePartStatus = async (id, status) => { await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { status }, { headers }); refreshSelected(); };
+  const updatePartAccount = async (id, supplierAccount) => {
+    try {
+      await axios.patch(`${API_BASE}/api/order-parts/${id}/`, { supplier_account: supplierAccount || null }, { headers });
+      uiToast.success('Акаунт постачальника оновлено.');
+      refreshSelected();
+    } catch {
+      uiToast.error('Не вдалося змінити акаунт постачальника.');
+    }
+  };
   const printPdf = async () => { const w = window.open('', '_blank'); if (!w) return; try { const r = await axios.get(`${API_BASE}/api/visits/${selectedVisit.id}/pdf/`, { headers, responseType: 'text' }); w.document.write(r.data); w.document.close(); } catch { w.close(); uiToast.error('Не вдалося згенерувати документ'); } };
   const cancelVisit = () => {
     askConfirm({
@@ -717,7 +726,7 @@ export default function Visits() {
 
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] bg-slate-900 text-white px-5 py-3 rounded-2xl text-sm font-black shadow-xl">{toast}</div>}
       {isCreatingVisit && <CreateVisitModal data={newVisitData} setData={setNewVisitData} onClose={() => { setIsCreatingVisit(false); setScanDraft(null); }} onSubmit={createVisit} onPlateBlur={handlePlateBlur} foundExisting={foundExisting} isScanning={isScanning} cameraRef={cameraInputRef} galleryRef={galleryInputRef} onScan={scanNewVisit} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={acceptNewScan} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
-      {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
+      {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} onUpdatePartAccount={updatePartAccount} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
       {confirmDialog && <ConfirmActionModal dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />}
     </AppPage>
   );
@@ -881,7 +890,7 @@ const openDocumentPackage = (visit, isStore) => {
   }));
 };
 
-function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
+function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, onUpdatePartAccount, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
   const tabs = [
     ['overview','Огляд',Info,'Головна інформація'],
     ['passport','Техпаспорт',CarFront,'Авто, VIN, двигун'],
@@ -913,7 +922,7 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
     if (tab === 'acceptance') return <VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>;
     if (tab === 'diagnostic') return <VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>;
     if (tab === 'works') return <Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService} mechanics={mechanics} isStore={isStore}/>;
-    if (tab === 'parts') return <Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus}/>;
+    if (tab === 'parts') return <Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus} onAccount={onUpdatePartAccount}/>;
     if (tab === 'recommendations') return <Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>;
     return <Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />;
   };
@@ -1469,7 +1478,59 @@ function Works({
     </div>
   );
 }
-function Parts({visit,showForm,setShowForm,form,setForm,onSubmit,onDelete,onStatus}){const ps=partsOf(visit);const c=partCounts(visit);return <div className="space-y-3"><div className="grid grid-cols-2 md:grid-cols-4 gap-2"><MiniStatus label="Очікується" value={c.WAITING} cls="text-amber-600 bg-amber-50 border-amber-100"/><MiniStatus label="В дорозі" value={c.IN_TRANSIT} cls="text-blue-600 bg-blue-50 border-blue-100"/><MiniStatus label="Отримано" value={c.ARRIVED} cls="text-emerald-600 bg-emerald-50 border-emerald-100"/><MiniStatus label="Відмова" value={c.UNAVAILABLE} cls="text-rose-600 bg-rose-50 border-rose-100"/></div><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><InfoCard label="Позицій" value={ps.length}/><InfoCard label="Сума" value={money(partsTotal(visit))}/><button type="button" onClick={()=>setShowForm(!showForm)} className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15}/> Додати вручну</button></div>{showForm&&<ManualPartForm form={form} setForm={setForm} onSubmit={onSubmit} onCancel={()=>setShowForm(false)}/>} {ps.map(p=><div key={p.id} className="p-3 bg-slate-50 rounded-xl border flex flex-col lg:flex-row lg:items-center gap-3"><div className="flex-1 min-w-0"><div className="flex flex-wrap items-center gap-2 mb-1"><span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-widest ${supplierBadge(p)}`}>{p.supplier || 'Постачальник'}</span><span className="text-[11px] font-black uppercase text-slate-400">к-сть {p.quantity||1}</span></div><p className="font-black text-slate-800 text-sm break-words">{p.name}</p><p className="text-xs uppercase font-bold text-slate-500 break-words">{p.brand} | {p.part_number||p.article}</p><p className="text-xs font-bold text-blue-600 mt-1">{money(p.sell_price||p.price)} · закупка {money(p.buy_price)}</p></div><select value={p.status||p.logistics_status||'WAITING'} onChange={(e)=>onStatus(p.id,e.target.value)} className="border rounded-xl px-3 py-2 text-xs font-black bg-white"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select><button onClick={()=>onDelete(p.id)} className="text-red-500 p-2 self-start lg:self-center"><Trash2 size={16}/></button></div>)}{!ps.length&&<EmptyPanel text="Запчастини ще не додані"/>}</div>}
+function Parts({ visit, showForm, setShowForm, form, setForm, onSubmit, onDelete, onStatus, onAccount }) {
+  const ps = partsOf(visit);
+  const c = partCounts(visit);
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <MiniStatus label="Очікується" value={c.WAITING} cls="text-amber-600 bg-amber-50 border-amber-100" />
+        <MiniStatus label="В дорозі" value={c.IN_TRANSIT} cls="text-blue-600 bg-blue-50 border-blue-100" />
+        <MiniStatus label="Отримано" value={c.ARRIVED} cls="text-emerald-600 bg-emerald-50 border-emerald-100" />
+        <MiniStatus label="Відмова" value={c.UNAVAILABLE} cls="text-rose-600 bg-rose-50 border-rose-100" />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <InfoCard label="Позицій" value={ps.length} />
+        <InfoCard label="Сума" value={money(partsTotal(visit))} />
+        <button type="button" onClick={() => setShowForm(!showForm)} className="bg-blue-600 text-white rounded-2xl px-4 py-3 text-xs font-black uppercase flex items-center justify-center gap-2"><Plus size={15} /> Додати вручну</button>
+      </div>
+      {showForm && <ManualPartForm form={form} setForm={setForm} onSubmit={onSubmit} onCancel={() => setShowForm(false)} />}
+      {ps.map((part) => {
+        const accountOptions = Array.isArray(part.supplier_account_options) ? part.supplier_account_options : [];
+        return (
+          <div key={part.id} className="p-3 bg-slate-50 rounded-xl border flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-widest ${supplierBadge(part)}`}>{part.supplier || 'Постачальник'}</span>
+                {part.supplier_account_name && <span className="inline-flex max-w-full items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-black text-blue-700 break-words">{part.supplier_account_name}</span>}
+                <span className="text-[11px] font-black uppercase text-slate-400">к-сть {part.quantity || 1}</span>
+              </div>
+              <p className="font-black text-slate-800 text-sm break-words">{part.name}</p>
+              <p className="text-xs uppercase font-bold text-slate-500 break-words">{part.brand} | {part.part_number || part.article}</p>
+              <p className="text-xs font-bold text-blue-600 mt-1">{money(part.sell_price || part.price)} · закупка {money(part.buy_price)}</p>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+              {accountOptions.length > 1 && (
+                <select value={part.supplier_account || ''} onChange={(event) => onAccount(part.id, event.target.value)} className="min-w-[210px] flex-1 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-800 outline-none focus:border-blue-400" title="Акаунт постачальника">
+                  <option value="">Акаунт не вказано</option>
+                  {accountOptions.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                </select>
+              )}
+              <select value={part.status || part.logistics_status || 'WAITING'} onChange={(event) => onStatus(part.id, event.target.value)} className="border rounded-xl px-3 py-2 text-xs font-black bg-white">
+                <option value="WAITING">Очікується</option>
+                <option value="IN_TRANSIT">В дорозі</option>
+                <option value="ARRIVED">Доставлено</option>
+                <option value="UNAVAILABLE">Відмова</option>
+              </select>
+            </div>
+            <button onClick={() => onDelete(part.id)} className="text-red-500 p-2 self-start lg:self-center"><Trash2 size={16} /></button>
+          </div>
+        );
+      })}
+      {!ps.length && <EmptyPanel text="Запчастини ще не додані" />}
+    </div>
+  );
+}
 function MiniStatus({label,value,cls}){return <div className={`rounded-2xl border p-3 ${cls}`}><p className="text-[10px] font-black uppercase opacity-80">{label}</p><p className="text-2xl font-black leading-none mt-1">{value}</p></div>}
 function ManualPartForm({ form, setForm, onSubmit, onCancel }) { return <form onSubmit={onSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"><div className="flex items-center justify-between gap-3"><h3 className="font-black text-slate-800 uppercase text-sm">Ручне додавання</h3><button type="button" onClick={onCancel} className="text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><LabeledInput label="Назва" required value={form.name} onChange={(v)=>setForm({...form,name:v})}/><LabeledInput label="Бренд" value={form.brand} onChange={(v)=>setForm({...form,brand:v})}/><LabeledInput label="Артикул" value={form.article} onChange={(v)=>setForm({...form,article:v})}/><LabeledInput label="Постачальник" value={form.supplier} onChange={(v)=>setForm({...form,supplier:v})}/><LabeledInput label="Закупка" type="number" required value={form.buy_price} onChange={(v)=>setForm({...form,buy_price:v})}/><LabeledInput label="Продаж" type="number" required value={form.sell_price} onChange={(v)=>setForm({...form,sell_price:v})}/><LabeledInput label="Кількість" type="number" required value={form.quantity} onChange={(v)=>setForm({...form,quantity:v})}/><label className="block md:col-span-2"><span className="text-[11px] font-black uppercase text-slate-400 ml-1 block mb-1">Статус</span><select value={form.status} onChange={(e)=>setForm({...form,status:e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm font-black text-slate-700 outline-none"><option value="WAITING">Очікується</option><option value="IN_TRANSIT">В дорозі</option><option value="ARRIVED">Доставлено</option><option value="UNAVAILABLE">Відмова</option></select></label></div><button className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Зберегти запчастину</button></form>}
 function Recommendations({ recommendations = [], showForm, setShowForm, form, setForm, onSubmit, onDone, onPostpone }) {

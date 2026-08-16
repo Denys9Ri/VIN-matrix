@@ -225,6 +225,9 @@ class OrderPart(models.Model):
     sell_price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.DecimalField(max_digits=8, decimal_places=2, default=1)
     supplier = models.CharField(max_length=100)
+    supplier_ref = models.ForeignKey('Supplier', on_delete=models.SET_NULL, null=True, blank=True, related_name='order_parts')
+    supplier_account = models.ForeignKey('SupplierAccount', on_delete=models.SET_NULL, null=True, blank=True, related_name='order_parts')
+    supplier_account_name = models.CharField(max_length=255, blank=True, default='')
     supplier_color = models.CharField(max_length=80, blank=True, null=True)
     status = models.CharField(max_length=20, default='WAITING')
 
@@ -450,6 +453,34 @@ class Supplier(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class SupplierAccount(models.Model):
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='accounts')
+    name = models.CharField(max_length=255)
+    api_key = models.CharField(max_length=255, blank=True, null=True)
+    api_login = models.CharField(max_length=255, blank=True, null=True)
+    api_password = models.CharField(max_length=255, blank=True, null=True)
+    api_token = models.TextField(blank=True, null=True)
+    api_refresh_token = models.TextField(blank=True, null=True)
+    api_token_expires_at = models.DateTimeField(null=True, blank=True)
+    browser_fingerprint = models.CharField(max_length=128, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-is_default', 'name', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['supplier', 'name'], name='core_supacc_name_unique'),
+        ]
+        indexes = [
+            models.Index(fields=['supplier', 'is_active', 'is_default'], name='core_supacc_active_default_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.supplier.name} — {self.name}'
 
 class InventoryItem(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)

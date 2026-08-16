@@ -87,6 +87,7 @@ from apps.core.paid_views import (
     CategoryViewSet,
     InventoryItemViewSet,
     SupplierViewSet,
+    SupplierAccountViewSet,
 )
 from apps.core.partner_views import PartnerManagementViewSet
 from apps.core.platform_auth_views import RegisterView
@@ -123,6 +124,7 @@ router.register(r'order-services', OrderServiceViewSet, basename='order-service'
 router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'inventory', InventoryItemViewSet, basename='inventory')
 router.register(r'suppliers', SupplierViewSet, basename='supplier')
+router.register(r'supplier-accounts', SupplierAccountViewSet, basename='supplier-account')
 router.register(r'stock-movements', StockMovementViewSet, basename='stock-movement')
 router.register(r'expenses', StoExpenseViewSet, basename='expense')
 router.register(r'platform-clients', SecurePlatformClientViewSet, basename='platform-client')

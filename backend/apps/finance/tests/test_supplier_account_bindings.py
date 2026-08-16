@@ -127,7 +127,7 @@ class SupplierAccountBindingTests(TestCase):
         second = self.create_account('Vesna 2', '222:key', self.parts_fop.id)
 
         self.assertEqual(second.status_code, 400, second.data)
-        self.assertIn('legal_entity_id', second.data)
+        self.assertIn('legal_entity_id', second.data.get('details', {}))
         self.assertEqual(SupplierAccount.objects.filter(supplier=self.supplier).count(), before_count)
 
     def test_runtime_legacy_duplicate_is_removed_but_single_account_is_kept(self):

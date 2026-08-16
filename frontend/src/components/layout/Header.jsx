@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
@@ -77,6 +77,7 @@ const Header = ({ sidebarCollapsed = false, onToggleSidebar }) => {
   const [partnerStats, setPartnerStats] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
+  const profileMenuRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -114,6 +115,28 @@ const Header = ({ sidebarCollapsed = false, onToggleSidebar }) => {
   useEffect(() => {
     loadProfile();
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen]);
 
   const logout = () => {
     localStorage.removeItem('access_token');
@@ -170,58 +193,66 @@ const Header = ({ sidebarCollapsed = false, onToggleSidebar }) => {
 
           {role !== 'partner' && <NotificationBell />}
 
-          <button onClick={() => setMenuOpen(!menuOpen)} className="w-11 h-11 md:w-9 md:h-9 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shrink-0 shadow-md shadow-blue-200" aria-label="Профіль">
-            {initials}
-          </button>
+          <div ref={profileMenuRef} className="relative shrink-0">
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="w-11 h-11 md:w-9 md:h-9 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shrink-0 shadow-md shadow-blue-200"
+              aria-label="Профіль"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+            >
+              {initials}
+            </button>
 
-          {menuOpen && (
-            <div className="absolute right-0 top-12 w-72 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden">
-              <div className="p-4 border-b border-slate-100">
-                <p className="font-black text-slate-900 break-words">{fullName}</p>
-                <p className="text-sm text-slate-500 font-bold">{roleLabel[role] || role}</p>
-                {userCode && (
-                  <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Ваш код</p>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-base font-black text-blue-800">{userCode}</span>
-                      <CopyButton value={userCode} label="Копіювати" copiedLabel="Готово" title="Скопіювати код клієнта" compact tone="blue" className="min-h-[36px] shrink-0 px-3" />
+            {menuOpen && (
+              <div className="absolute right-0 top-12 w-72 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden" role="menu">
+                <div className="p-4 border-b border-slate-100">
+                  <p className="font-black text-slate-900 break-words">{fullName}</p>
+                  <p className="text-sm text-slate-500 font-bold">{roleLabel[role] || role}</p>
+                  {userCode && (
+                    <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Ваш код</p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-base font-black text-blue-800">{userCode}</span>
+                        <CopyButton value={userCode} label="Копіювати" copiedLabel="Готово" title="Скопіювати код клієнта" compact tone="blue" className="min-h-[36px] shrink-0 px-3" />
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              <div className="p-4 space-y-2 text-sm">
-                {role === 'partner' && (
-                  <>
-                    <p className="font-bold text-slate-700">Мої клієнти: {partnerStats?.my_clients ?? 0}</p>
-                    <p className="font-bold text-emerald-700">Активних: {partnerStats?.active_clients ?? 0}</p>
-                  </>
-                )}
-                {role === 'client' && (
-                  <>
-                    <div className={`flex items-center gap-2 rounded-2xl border px-3 py-2 font-black text-xs ${badgeClass[billingBadge.tone] || badgeClass.success}`}>
-                      {billingBadge.icon}
-                      <span className="break-words">{billingBadge.text}</span>
-                    </div>
-                    <p className="font-bold text-slate-700">Доступ: {profile?.access_allowed === false ? 'немає доступу' : 'активний'}</p>
-                    <p className={`font-bold ${statusDanger ? 'text-rose-700' : 'text-slate-700'}`}>До: {profile?.billing?.subscription_end_display || profile?.billing?.trial_until_display || profile?.subscription_end_display || '—'}</p>
-                  </>
-                )}
-              </div>
+                <div className="p-4 space-y-2 text-sm">
+                  {role === 'partner' && (
+                    <>
+                      <p className="font-bold text-slate-700">Мої клієнти: {partnerStats?.my_clients ?? 0}</p>
+                      <p className="font-bold text-emerald-700">Активних: {partnerStats?.active_clients ?? 0}</p>
+                    </>
+                  )}
+                  {role === 'client' && (
+                    <>
+                      <div className={`flex items-center gap-2 rounded-2xl border px-3 py-2 font-black text-xs ${badgeClass[billingBadge.tone] || badgeClass.success}`}>
+                        {billingBadge.icon}
+                        <span className="break-words">{billingBadge.text}</span>
+                      </div>
+                      <p className="font-bold text-slate-700">Доступ: {profile?.access_allowed === false ? 'немає доступу' : 'активний'}</p>
+                      <p className={`font-bold ${statusDanger ? 'text-rose-700' : 'text-slate-700'}`}>До: {profile?.billing?.subscription_end_display || profile?.billing?.trial_until_display || profile?.subscription_end_display || '—'}</p>
+                    </>
+                  )}
+                </div>
 
-              <div className="p-2 border-t border-slate-100">
-                <button onClick={() => { setMenuOpen(false); navigate('/activity'); }} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 font-bold text-slate-700">
-                  <History size={16} /> Журнал дій
-                </button>
-                <button onClick={() => { setMenuOpen(false); navigate('/settings'); }} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 font-bold text-slate-700">
-                  <Settings size={16} /> Налаштування
-                </button>
-                <button onClick={logout} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-rose-50 font-bold text-rose-700">
-                  <LogOut size={16} /> Вийти
-                </button>
+                <div className="p-2 border-t border-slate-100">
+                  <button onClick={() => { setMenuOpen(false); navigate('/activity'); }} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 font-bold text-slate-700" role="menuitem">
+                    <History size={16} /> Журнал дій
+                  </button>
+                  <button onClick={() => { setMenuOpen(false); navigate('/settings'); }} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 font-bold text-slate-700" role="menuitem">
+                    <Settings size={16} /> Налаштування
+                  </button>
+                  <button onClick={logout} className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-rose-50 font-bold text-rose-700" role="menuitem">
+                    <LogOut size={16} /> Вийти
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
 

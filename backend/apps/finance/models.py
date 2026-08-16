@@ -45,7 +45,7 @@ class LegalEntity(models.Model):
 class SupplierAccountBinding(models.Model):
     """Maps a supplier API/login account to the legal entity that owns it.
 
-    SupplierAccount remains a technical connection in the core app.  The FOP/TOV
+    SupplierAccount remains a technical connection in the core app. The FOP/TOV
     ownership is finance data and therefore lives here instead of duplicating
     legal entities in supplier settings.
     """
@@ -78,13 +78,13 @@ class SupplierAccountBinding(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['company', 'supplier', 'legal_entity'],
-                name='finance_supplier_entity_account_uniq',
+                name='finance_sup_ent_acc_uniq',
             ),
         ]
         indexes = [
             models.Index(
                 fields=['company', 'supplier', 'legal_entity'],
-                name='finance_supacc_binding_lookup_idx',
+                name='finance_supacc_bind_idx',
             ),
         ]
 

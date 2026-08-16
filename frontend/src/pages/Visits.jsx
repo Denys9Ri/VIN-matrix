@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import VisitCard from '../components/visits/VisitCard';
+import VehicleMakeCombobox from '../components/visits/VehicleMakeCombobox';
 import VisitWorkflowPanel from '../components/crm/VisitWorkflowPanel';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppPage, PageHeader, Tabs, useToast } from '../components/ui';
@@ -1568,8 +1569,55 @@ function Summary({ visit, recommendations, workflowInfo, editComment, setEditCom
     </div>
   );
 }
-function CarFields({data,setData}){return <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4"><div className="flex justify-between items-center border-b pb-2 mb-3"><p className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Дані автомобіля</p><span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border ${data.engine_review_status==='needs_review'?'bg-amber-50 text-amber-700 border-amber-100':'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>{data.engine_review_status==='needs_review'?'Двигун перевірити':'Перевірено вручну'}</span></div><div className="grid grid-cols-2 gap-3"><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v,engine_review_status:'manual'})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v,engine_review_status:'manual'})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v,engine_review_status:'manual'})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v,engine_review_status:'manual'})}/></div></div></div>}
-function ScanReviewCard({data,setData,onApply,onCancel}){return <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 space-y-3"><div className="flex gap-2"><AlertTriangle size={18} className="text-amber-600 shrink-0"/><div><p className="font-black text-amber-800 text-sm">Результат скану потребує перевірки</p><p className="text-xs font-semibold text-amber-700">Це обʼєднаний результат: нове фото доповнює вже знайдені дані.</p></div></div><div className="grid grid-cols-2 gap-2"><LabeledInput label="Держ. номер" value={data.plate} onChange={(v)=>setData({...data,plate:v.toUpperCase()})}/><LabeledInput label="VIN" value={data.vin_code||data.vin_candidate} onChange={(v)=>setData({...data,vin_code:v.toUpperCase()})}/><LabeledInput label="Марка" value={data.brand} onChange={(v)=>setData({...data,brand:v})}/><LabeledInput label="Модель" value={data.model} onChange={(v)=>setData({...data,model:v})}/><LabeledInput label="Рік" type="number" value={data.year} onChange={(v)=>setData({...data,year:v})}/><LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume||data.engine} onChange={(v)=>setData({...data,engine:v,engine_volume:v})}/><LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v)=>setData({...data,engine_power:v})}/><LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v)=>setData({...data,engine_code:v})}/><div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v)=>setData({...data,fuel:v})}/></div></div>{data.warnings?.length>0&&<div className="text-xs font-bold text-amber-700 space-y-1">{data.warnings.map((w,i)=><p key={i}>• {w}</p>)}</div>}<div className="flex flex-col sm:flex-row gap-2"><button type="button" onClick={onApply} className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Прийняти дані</button><button type="button" onClick={onCancel} className="flex-1 bg-white border border-amber-200 text-amber-700 rounded-xl py-3 text-xs font-black uppercase">Не використовувати</button></div></div>}
+function CarFields({ data, setData }) {
+  return (
+    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+      <div className="flex justify-between items-center border-b pb-2 mb-3">
+        <p className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Дані автомобіля</p>
+        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border ${data.engine_review_status === 'needs_review' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>{data.engine_review_status === 'needs_review' ? 'Двигун перевірити' : 'Перевірено вручну'}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <VehicleMakeCombobox value={data.brand} onChange={(brand) => setData({ ...data, brand })} />
+        <LabeledInput label="Модель" value={data.model} onChange={(v) => setData({ ...data, model: v })} />
+        <LabeledInput label="Рік" type="number" value={data.year} onChange={(v) => setData({ ...data, year: v })} />
+        <LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume || data.engine} onChange={(v) => setData({ ...data, engine: v, engine_volume: v, engine_review_status: 'manual' })} />
+        <LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v) => setData({ ...data, engine_power: v, engine_review_status: 'manual' })} />
+        <LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v) => setData({ ...data, engine_code: v, engine_review_status: 'manual' })} />
+        <div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v) => setData({ ...data, fuel: v, engine_review_status: 'manual' })} /></div>
+      </div>
+    </div>
+  );
+}
+
+function ScanReviewCard({ data, setData, onApply, onCancel }) {
+  return (
+    <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 space-y-3">
+      <div className="flex gap-2">
+        <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+        <div>
+          <p className="font-black text-amber-800 text-sm">Результат скану потребує перевірки</p>
+          <p className="text-xs font-semibold text-amber-700">Це обʼєднаний результат: нове фото доповнює вже знайдені дані.</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <LabeledInput label="Держ. номер" value={data.plate} onChange={(v) => setData({ ...data, plate: v.toUpperCase() })} />
+        <LabeledInput label="VIN" value={data.vin_code || data.vin_candidate} onChange={(v) => setData({ ...data, vin_code: v.toUpperCase() })} />
+        <VehicleMakeCombobox value={data.brand} onChange={(brand) => setData({ ...data, brand })} />
+        <LabeledInput label="Модель" value={data.model} onChange={(v) => setData({ ...data, model: v })} />
+        <LabeledInput label="Рік" type="number" value={data.year} onChange={(v) => setData({ ...data, year: v })} />
+        <LabeledInput label="Обʼєм см³" type="number" value={data.engine_volume || data.engine} onChange={(v) => setData({ ...data, engine: v, engine_volume: v })} />
+        <LabeledInput label="Потужність кВт" type="number" value={data.engine_power} onChange={(v) => setData({ ...data, engine_power: v })} />
+        <LabeledInput label="Код двигуна" value={data.engine_code} onChange={(v) => setData({ ...data, engine_code: v })} />
+        <div className="col-span-2"><LabeledInput label="Паливо" value={data.fuel} onChange={(v) => setData({ ...data, fuel: v })} /></div>
+      </div>
+      {data.warnings?.length > 0 && <div className="text-xs font-bold text-amber-700 space-y-1">{data.warnings.map((warning, index) => <p key={index}>• {warning}</p>)}</div>}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <button type="button" onClick={onApply} className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase">Прийняти дані</button>
+        <button type="button" onClick={onCancel} className="flex-1 bg-white border border-amber-200 text-amber-700 rounded-xl py-3 text-xs font-black uppercase">Не використовувати</button>
+      </div>
+    </div>
+  );
+}
 
 function ConfirmActionModal({ dialog, onClose }) {
   const [saving, setSaving] = useState(false);

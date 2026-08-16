@@ -23,8 +23,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['supplier_id', 'legal_entity_id', 'supplier_account_id'],
-                'indexes': [models.Index(fields=['company', 'supplier', 'legal_entity'], name='finance_supacc_binding_lookup_idx')],
-                'constraints': [models.UniqueConstraint(fields=('company', 'supplier', 'legal_entity'), name='finance_supplier_entity_account_uniq')],
+                'indexes': [models.Index(fields=['company', 'supplier', 'legal_entity'], name='finance_supacc_bind_idx')],
+                'constraints': [models.UniqueConstraint(fields=('company', 'supplier', 'legal_entity'), name='finance_sup_ent_acc_uniq')],
             },
         ),
     ]

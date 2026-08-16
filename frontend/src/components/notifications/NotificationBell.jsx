@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bell, Clock3, CreditCard, ExternalLink, PackageMinus, RefreshCcw, RotateCcw, Truck, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
@@ -45,6 +45,8 @@ function actionUrl(section, item) {
 
 export default function NotificationBell() {
   const navigate = useNavigate();
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
   const [summary, setSummary] = useState(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -76,6 +78,28 @@ export default function NotificationBell() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleOutsidePointer = (event) => {
+      const target = event.target;
+      if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
   const goTo = (url) => {
     setOpen(false);
     if (url) navigate(url);
@@ -92,13 +116,21 @@ export default function NotificationBell() {
   };
 
   return <div className="relative">
-    <button onClick={() => setOpen(true)} className="relative w-11 h-11 md:w-10 md:h-10 rounded-full bg-slate-100 hover:bg-blue-50 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-all" title="Центр повідомлень" aria-label="Відкрити центр повідомлень">
+    <button
+      ref={triggerRef}
+      onClick={() => setOpen((current) => !current)}
+      className="relative w-11 h-11 md:w-10 md:h-10 rounded-full bg-slate-100 hover:bg-blue-50 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-all"
+      title="Центр повідомлень"
+      aria-label="Відкрити центр повідомлень"
+      aria-expanded={open}
+      aria-haspopup="dialog"
+    >
       <Bell size={18} />
       {total > 0 && <span className={`absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full text-[10px] font-black flex items-center justify-center shadow-sm ${hasCritical ? toneMap.critical.badge : toneMap.warning.badge}`}>{total > 99 ? '99+' : total}</span>}
     </button>
 
     {open && <div className="fixed inset-0 z-[90] md:absolute md:inset-auto md:right-0 md:top-12 md:w-[420px] bg-slate-950/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-0">
-      <div className="bg-white w-full h-full md:h-auto md:max-h-[80vh] md:rounded-3xl md:border md:border-slate-200 md:shadow-2xl overflow-hidden flex flex-col">
+      <div ref={panelRef} role="dialog" aria-label="Центр повідомлень" className="bg-white w-full h-full md:h-auto md:max-h-[80vh] md:rounded-3xl md:border md:border-slate-200 md:shadow-2xl overflow-hidden flex flex-col">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-gradient-to-r from-white to-blue-50">
           <div><p className="font-black text-slate-900 uppercase">Центр повідомлень</p><p className="text-xs font-bold text-slate-500">Що потребує уваги зараз</p></div>
           <div className="flex items-center gap-2"><button onClick={loadSummary} className="w-11 h-11 md:w-9 md:h-9 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-blue-700 flex items-center justify-center" title="Оновити" aria-label="Оновити повідомлення"><RefreshCcw size={16} className={loading ? 'animate-spin' : ''} /></button><button onClick={() => setOpen(false)} className="w-11 h-11 md:w-9 md:h-9 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center" aria-label="Закрити центр повідомлень"><X size={18} /></button></div>

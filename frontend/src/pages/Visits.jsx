@@ -31,6 +31,7 @@ import VisitCard from '../components/visits/VisitCard';
 import VisitWorkflowPanel from '../components/crm/VisitWorkflowPanel';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppPage, PageHeader, Tabs, useToast } from '../components/ui';
+import { searchServiceCatalog } from '../utils/serviceCatalogSearch';
 
 const API_BASE = 'http://c7flj95csavoasntnnxolemw.95.217.211.207.sslip.io';
 const emptyCarData = { brand: '', model: '', year: '', engine: '', fuel: '', mileage: '', engine_volume: '', engine_power: '', engine_code: '', engine_review_status: 'manual' };
@@ -1247,6 +1248,29 @@ function Works({
   const ss = servicesOf(visit);
   const payrollTotal = servicesPayrollTotal(visit);
   const selectedMechanic = findById(mechanics, newService.mechanic);
+  const [serviceSearch, setServiceSearch] = useState('');
+  const matchingCatalogServices = useMemo(
+    () => searchServiceCatalog(catalogServices, serviceSearch),
+    [catalogServices, serviceSearch],
+  );
+  const hasServiceSearch = serviceSearch.trim().length > 0;
+  const quickServiceResults = hasServiceSearch ? matchingCatalogServices.slice(0, 8) : [];
+
+  useEffect(() => {
+    if (!showServiceForm) setServiceSearch('');
+  }, [showServiceForm]);
+
+  const chooseCatalogService = (service) => {
+    if (!service) return;
+    setSelectedCatalogId(String(service.id));
+    setNewService((current) => ({
+      ...current,
+      name: service.name,
+      price: service.price || service.default_price || '',
+      quantity: 1,
+    }));
+    setServiceSearch('');
+  };
 
   const pickMechanic = (mechanicId) => {
     const mechanic = findById(mechanics, mechanicId);
@@ -1272,17 +1296,68 @@ function Works({
 
       {showServiceForm && (
         <form onSubmit={onAddService} className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
+          <div className="space-y-2">
+            <label htmlFor="service-catalog-search" className="block text-[10px] font-black uppercase tracking-wide text-slate-500">Швидкий пошук роботи</label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" size={17} />
+              <input
+                id="service-catalog-search"
+                type="search"
+                value={serviceSearch}
+                onChange={(event) => {
+                  setServiceSearch(event.target.value);
+                  if (selectedCatalogId) setSelectedCatalogId('');
+                }}
+                placeholder="Швидкий пошук: ТО, мастило, колодки..."
+                aria-label="Шукати роботу"
+                autoComplete="off"
+                className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-10 pr-10 text-sm font-black text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+              {serviceSearch && (
+                <button type="button" onClick={() => setServiceSearch('')} aria-label="Очистити пошук робіт" className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {hasServiceSearch && (
+              <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg" aria-live="polite">
+                {quickServiceResults.length ? quickServiceResults.map((service) => (
+                  <button
+                    key={service.id}
+                    type="button"
+                    onClick={() => chooseCatalogService(service)}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+                  >
+                    <span className="min-w-0 text-sm font-black text-slate-800">{service.name}</span>
+                    <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700">{money(service.price || service.default_price || 0)}</span>
+                  </button>
+                )) : (
+                  <div className="px-3 py-4 text-center">
+                    <p className="text-sm font-black text-slate-600">Нічого не знайдено</p>
+                    <p className="mt-1 text-xs font-bold text-slate-400">Можна ввести назву роботи вручну нижче.</p>
+                  </div>
+                )}
+                {matchingCatalogServices.length > quickServiceResults.length && (
+                  <p className="px-3 py-2 text-[10px] font-black uppercase text-slate-400">Ще збігів: {matchingCatalogServices.length - quickServiceResults.length}. Уточніть пошук.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <label htmlFor="service-catalog-select" className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Усі роботи з довідника</label>
           <select
+            id="service-catalog-select"
             value={selectedCatalogId}
             onChange={(e) => {
               setSelectedCatalogId(e.target.value);
               const s = catalogServices.find((x) => x.id === Number(e.target.value));
-              if (s) setNewService({ ...newService, name: s.name, price: s.price || s.default_price || '', quantity: 1 });
+              if (s) chooseCatalogService(s);
             }}
             className="w-full bg-white border rounded-lg p-2 text-xs font-bold"
           >
             <option value="">Ввести вручну</option>
-            {catalogServices.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {(hasServiceSearch ? matchingCatalogServices : catalogServices).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
 
           <input required placeholder="Назва роботи" value={newService.name} onChange={(e) => setNewService({ ...newService, name: e.target.value })} className="w-full bg-white border rounded-lg p-2 text-xs font-bold" />

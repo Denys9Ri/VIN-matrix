@@ -22,7 +22,8 @@ const RegisterOnboarding = lazy(() => import('./pages/RegisterOnboarding'));
 const Visits = lazy(() => import('./pages/Visits'));
 const StoreOrders = lazy(() => import('./pages/StoreOrders'));
 const ClientsCRM = lazy(() => import('./pages/ClientsCRMStage5'));
-const Analytics = lazy(() => import('./pages/Analytics'));
+const AnalyticsWorkspace = lazy(() => import('./pages/AnalyticsWorkspace'));
+const Finance = lazy(() => import('./pages/Finance'));
 const ActivityJournal = lazy(() => import('./pages/ActivityJournal'));
 const Agent = lazy(() => import('./pages/Agent'));
 const DataExchange = lazy(() => import('./pages/DataExchange'));
@@ -170,7 +171,8 @@ function App() {
             <Route path="visits" element={<VisitsWithCrm />} />
             <Route path="attention" element={<AttentionAction />} />
             <Route path="clients" element={<><ClientsCRM /><ActivityDock /></>} />
-            <Route path="analytics" element={<Analytics />} />
+            <Route path="analytics" element={<AnalyticsWorkspace />} />
+            <Route path="finance" element={<Finance />} />
             <Route path="activity" element={<ActivityJournal />} />
             <Route path="agent" element={<Agent />} />
             <Route path="journal" element={<ActivityJournal />} />

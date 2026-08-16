@@ -34,7 +34,7 @@ export default function AnalyticsWorkspace() {
   return (
     <>
       <AppPage className="max-w-[1680px] pb-0">
-        <FinanceWorkspaceNav showExpenses />
+        <FinanceWorkspaceNav />
       </AppPage>
       <Analytics />
     </>

@@ -3,6 +3,7 @@ import api from '../api/axios';
 import { AppPage, Badge, PageHeader, useToast } from '../components/ui';
 import { Search, Plus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { normalizeOrderPartQuantity, orderPartLineTotal, supplierPartDefaultQuantity } from '../utils/orderPartQuantity';
 
 const UniversalSearch = () => {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ const UniversalSearch = () => {
 
   const [locationFilter, setLocationFilter] = useState('');
 
-  const [addToVisitData, setAddToVisitData] = useState({ sell_price: '' });
+  const [addToVisitData, setAddToVisitData] = useState({ sell_price: '', quantity: 1 });
 
   const toast = useToast();
   const token = localStorage.getItem('access_token');
@@ -286,22 +287,26 @@ const UniversalSearch = () => {
     setVisitSearchQuery('');
     const margin = companyInfo?.global_margin_percent ? parseFloat(companyInfo.global_margin_percent) : 0;
     const sellPrice = (finalPart.buy_price * (1 + margin / 100)).toFixed(2);
-    setAddToVisitData({ sell_price: sellPrice });
+    setAddToVisitData({
+      sell_price: sellPrice,
+      quantity: supplierPartDefaultQuantity(part),
+    });
   };
 
   const handleAddToVisit = async (e) => {
     e.preventDefault();
     if (!selectedVisit) { toast.warning('Будь ласка, знайдіть та оберіть замовлення/авто!'); return; }
     
+    const orderQuantity = normalizeOrderPartQuantity(addToVisitData.quantity);
     const payload = {
       visit: selectedVisit.id, brand: selectedPart.brand, article: selectedPart.article,
       name: selectedPart.name, buy_price: selectedPart.buy_price, sell_price: addToVisitData.sell_price,
-      supplier: selectedPart.source, status: selectedPart.is_local ? 'ARRIVED' : 'WAITING'
+      quantity: orderQuantity, supplier: selectedPart.source, status: selectedPart.is_local ? 'ARRIVED' : 'WAITING'
     };
 
     try {
       await api.post('/api/order-parts/', payload);
-      toast.success(`Запчастину додано до ${selectedVisit.plate}!`);
+      toast.success(`${orderQuantity} шт. додано до ${selectedVisit.plate}!`);
       setSelectedPart(null);
     } catch (error) { toast.error('Помилка додавання.'); }
   };
@@ -912,8 +917,36 @@ const UniversalSearch = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Кількість</label>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 font-black text-xl text-blue-600"
+                  value={addToVisitData.quantity}
+                  onChange={e => setAddToVisitData({ ...addToVisitData, quantity: e.target.value })}
+                />
+                {Number(selectedPart.min_qty || 1) > 1 && (
+                  <p className="mt-2 text-[10px] font-bold uppercase text-amber-600">Мінімальна партія постачальника: {selectedPart.min_qty} шт.</p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-2">
+                <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-500">
+                  <span>Закупка за {normalizeOrderPartQuantity(addToVisitData.quantity)} шт.</span>
+                  <span>{orderPartLineTotal(selectedPart.buy_price, addToVisitData.quantity).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-emerald-100 pt-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Загальна сума продажу</span>
+                  <span className="text-xl font-black text-emerald-700">{orderPartLineTotal(addToVisitData.sell_price, addToVisitData.quantity).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴</span>
+                </div>
+              </div>
+
               <button onClick={handleAddToVisit} disabled={!selectedVisit} className="w-full bg-emerald-500 text-white p-4 rounded-xl font-black uppercase tracking-widest text-sm mt-4 shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all disabled:opacity-30 disabled:grayscale">
-                Зберегти в чек
+                Додати {normalizeOrderPartQuantity(addToVisitData.quantity)} шт. у візит
               </button>
             </div>
           </div>

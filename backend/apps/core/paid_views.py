@@ -6,12 +6,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from django.utils import timezone
+from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .access_control import HasPaidAccess
-from .models import Supplier
+from .models import Supplier, SupplierAccount
+from .serializers import SupplierAccountSerializer, sync_supplier_default_account
 from .safe_crm_views import (
     CategoryViewSet as SafeCategoryViewSet,
     InventoryItemViewSet as SafeInventoryItemViewSet,
@@ -1068,6 +1070,39 @@ class SupplierViewSet(SafeSupplierViewSet):
         return Response(info_data)
 
 
+class SupplierAccountViewSet(viewsets.ModelViewSet):
+    serializer_class = SupplierAccountSerializer
+    permission_classes = [IsAuthenticated, HasPaidAccess]
+
+    def get_queryset(self):
+        company = safe_ensure_company(self.request.user)
+        queryset = SupplierAccount.objects.select_related('supplier')
+        if not company:
+            return queryset.none()
+        queryset = queryset.filter(supplier__company=company)
+        supplier_id = self.request.query_params.get('supplier')
+        return queryset.filter(supplier_id=supplier_id) if supplier_id else queryset
+
+    def perform_create(self, serializer):
+        company = safe_ensure_company(self.request.user)
+        supplier = Supplier.objects.filter(id=self.request.data.get('supplier'), company=company).first()
+        if not supplier:
+            raise serializers.ValidationError({'supplier': 'Постачальника не знайдено.'})
+        serializer.save(supplier=supplier)
+
+    def perform_update(self, serializer):
+        company = safe_ensure_company(self.request.user)
+        supplier = Supplier.objects.filter(id=self.request.data.get('supplier', serializer.instance.supplier_id), company=company).first()
+        if not supplier:
+            raise serializers.ValidationError({'supplier': 'Постачальника не знайдено.'})
+        serializer.save(supplier=supplier)
+
+    def perform_destroy(self, instance):
+        supplier = instance.supplier
+        instance.delete()
+        sync_supplier_default_account(supplier)
+
+
 class MechanicViewSet(SafeMechanicViewSet):
     permission_classes = [IsAuthenticated, HasPaidAccess]
 
@@ -1079,6 +1114,7 @@ class PartSearchView(BasePartSearchView):
         """Use the old search for all suppliers, but replace strict API adapters with normalized results."""
         response = super().get(request)
 
+        company = None
         try:
             company = safe_ensure_company(request.user)
             query = request.query_params.get('q', '').strip()
@@ -1125,6 +1161,34 @@ class PartSearchView(BasePartSearchView):
                 float(item.get('buy_price') or 0),
             ))
             response.data = cleaned
+        except Exception:
+            pass
+
+        try:
+            if company and isinstance(response.data, list):
+                supplier_ids = {
+                    int(item.get('supplier_id')) for item in response.data
+                    if str(item.get('supplier_id') or '').isdigit()
+                }
+                account_map = {}
+                accounts = SupplierAccount.objects.filter(
+                    supplier__company=company,
+                    supplier_id__in=supplier_ids,
+                    is_active=True,
+                ).order_by('supplier_id', '-is_default', 'name', 'id')
+                for account in accounts:
+                    account_map.setdefault(account.supplier_id, []).append({
+                        'id': account.id,
+                        'name': account.name,
+                        'is_default': account.is_default,
+                    })
+                for item in response.data:
+                    supplier_id = item.get('supplier_id')
+                    if not str(supplier_id or '').isdigit():
+                        continue
+                    public_accounts = account_map.get(int(supplier_id), [])
+                    item['supplier_accounts'] = public_accounts
+                    item['supplier_account_id'] = public_accounts[0]['id'] if public_accounts else None
         except Exception:
             pass
 

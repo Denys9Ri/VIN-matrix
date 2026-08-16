@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api/axios';
 import { AppPage, Badge, PageHeader, useToast } from '../components/ui';
-import { Search, Plus, Minus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History } from 'lucide-react';
+import { Search, Plus, Minus, Box, Truck, X, Loader2, ChevronDown, ChevronUp, CornerDownRight, Info, Image as ImageIcon, Banknote, Edit3, Check, Filter, RefreshCcw, Activity, CarFront, History, KeyRound } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { adjustOrderPartQuantity, normalizeOrderPartQuantity, orderPartLineTotal, supplierPartDefaultQuantity } from '../utils/orderPartQuantity';
 
@@ -40,7 +40,7 @@ const UniversalSearch = () => {
 
   const [locationFilter, setLocationFilter] = useState('');
 
-  const [addToVisitData, setAddToVisitData] = useState({ sell_price: '', quantity: 1 });
+  const [addToVisitData, setAddToVisitData] = useState({ sell_price: '', quantity: 1, supplier_account: '' });
 
   const toast = useToast();
   const token = localStorage.getItem('access_token');
@@ -290,18 +290,26 @@ const UniversalSearch = () => {
     setAddToVisitData({
       sell_price: sellPrice,
       quantity: supplierPartDefaultQuantity(part),
+      supplier_account: part.supplier_account_id || part.supplier_accounts?.[0]?.id || '',
     });
   };
 
   const handleAddToVisit = async (e) => {
     e.preventDefault();
     if (!selectedVisit) { toast.warning('Будь ласка, знайдіть та оберіть замовлення/авто!'); return; }
+    if (!selectedPart.is_local && selectedPart.supplier_accounts?.length > 0 && !addToVisitData.supplier_account) {
+      toast.warning('Оберіть акаунт постачальника.');
+      return;
+    }
     
     const orderQuantity = normalizeOrderPartQuantity(addToVisitData.quantity);
     const payload = {
       visit: selectedVisit.id, brand: selectedPart.brand, article: selectedPart.article,
       name: selectedPart.name, buy_price: selectedPart.buy_price, sell_price: addToVisitData.sell_price,
-      quantity: orderQuantity, supplier: selectedPart.source, status: selectedPart.is_local ? 'ARRIVED' : 'WAITING'
+      quantity: orderQuantity, supplier: selectedPart.source, status: selectedPart.is_local ? 'ARRIVED' : 'WAITING',
+      is_local: Boolean(selectedPart.is_local),
+      supplier_ref: selectedPart.is_local ? null : selectedPart.supplier_id,
+      supplier_account: selectedPart.is_local ? null : (addToVisitData.supplier_account || null),
     };
 
     try {
@@ -906,6 +914,31 @@ const UniversalSearch = () => {
                   </div>
                 )}
               </div>
+
+              {!selectedPart.is_local && selectedPart.supplier_accounts?.length > 0 && (
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Акаунт постачальника</label>
+                  {selectedPart.supplier_accounts.length === 1 ? (
+                    <div className="flex items-center gap-3 rounded-xl border-2 border-blue-100 bg-blue-50 px-4 py-3">
+                      <KeyRound size={17} className="shrink-0 text-blue-600" />
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-black text-blue-900">{selectedPart.supplier_accounts[0].name}</p>
+                        <p className="mt-0.5 text-[10px] font-bold uppercase text-blue-500">Буде збережено у візиті</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      value={addToVisitData.supplier_account}
+                      onChange={(event) => setAddToVisitData({ ...addToVisitData, supplier_account: event.target.value })}
+                      className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-800 outline-none transition focus:border-blue-500"
+                    >
+                      <option value="">Оберіть ФОП / ТОВ</option>
+                      {selectedPart.supplier_accounts.map((account) => <option key={account.id} value={account.id}>{account.name}{account.is_default ? ' · для пошуку' : ''}</option>)}
+                    </select>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Ціна продажу клієнту (₴)</label>

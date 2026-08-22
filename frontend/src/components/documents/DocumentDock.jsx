@@ -110,6 +110,8 @@ export default function DocumentDock() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [shareAvailable, setShareAvailable] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const loadDocumentHistory = async (id = visit?.id) => {
     if (!id) return;
@@ -178,7 +180,34 @@ export default function DocumentDock() {
   }, [ctx]);
 
   const docs = useMemo(() => docOrder, []);
-  const previewHtml = useMemo(() => buildDocumentHtml(activeType, visit, settings), [activeType, visit, settings]);
+
+  useEffect(() => {
+    const fallback = buildDocumentHtml(activeType, visit, settings);
+    setPreviewHtml(fallback);
+
+    if (!open || !visit?.id) {
+      setPreviewLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setPreviewLoading(true);
+
+    api.get(`/api/documents/visits/${visit.id}/${activeType}/?preview=1`, { responseType: 'text' })
+      .then((response) => {
+        if (!cancelled && response.data) setPreviewHtml(response.data);
+      })
+      .catch(() => {
+        // Keep the local document only as an emergency fallback.
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeType, visit, settings, open]);
 
   if (!ctx) return null;
 
@@ -246,7 +275,12 @@ export default function DocumentDock() {
   const shareDocument = async (type) => {
     if (!visit?.id) return false;
     const meta = docTypes[type] || docTypes.receipt;
-    const html = buildDocumentHtml(type, visit, settings);
+    let html = buildDocumentHtml(type, visit, settings);
+    try {
+      html = await getBackendHtml(type);
+    } catch {
+      // Sharing keeps the local document only when the canonical backend document is unavailable.
+    }
     const file = new File([html], `${fileSlug(meta.title)}-${visit.id}.html`, { type: 'text/html' });
     const text = `Документ “${meta.title}” по замовленню №${visit.id}. Сума: ${money(documentTotals(type, visit).total)}.`;
 
@@ -364,7 +398,8 @@ export default function DocumentDock() {
               </div>
 
               <div className="min-h-0 flex-1 overflow-visible lg:overflow-auto p-3 md:p-6">
-                <div className="mx-auto w-full max-w-[860px] rounded-[20px] md:rounded-[24px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70 overflow-hidden">
+                <div className="relative mx-auto w-full max-w-[860px] rounded-[20px] md:rounded-[24px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70 overflow-hidden">
+                  {previewLoading && <div className="absolute right-3 top-3 z-10 rounded-xl border border-blue-100 bg-blue-50/95 px-3 py-2 text-[10px] font-black uppercase text-blue-700 shadow-sm">Оновлюємо превʼю...</div>}
                   <iframe title="document-preview" srcDoc={previewHtml} className="w-full h-[58dvh] sm:h-[66dvh] lg:h-[72vh] bg-white" />
                 </div>
               </div>

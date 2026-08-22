@@ -66,6 +66,7 @@ export default function VisitWorkflowPanel({
   lastVisit,
   initialActive = 'acceptance',
   standalone = false,
+  onDiagnosticSaved,
 }) {
   const visitId = getVisitId(lastVisit);
 
@@ -91,6 +92,7 @@ export default function VisitWorkflowPanel({
   const [loading, setLoading] = useState(false);
   const [savingAcceptance, setSavingAcceptance] = useState(false);
   const [savingDiagnostic, setSavingDiagnostic] = useState(false);
+  const [diagnosticSyncInfo, setDiagnosticSyncInfo] = useState(null);
 
   const tabs = useMemo(
     () => [
@@ -108,6 +110,7 @@ export default function VisitWorkflowPanel({
     if (!visitId) return;
 
     setLoading(true);
+    setDiagnosticSyncInfo(null);
 
     try {
       const [acceptanceResponse, diagnosticResponse] = await Promise.all([
@@ -199,6 +202,8 @@ export default function VisitWorkflowPanel({
         checklist: response.data?.checklist || prev.checklist,
         status: response.data?.status || finalStatus,
       }));
+      setDiagnosticSyncInfo(response.data?.recommendation_sync || {});
+      onDiagnosticSaved?.(response.data || {});
     } catch {
       alert('Не вдалося зберегти діагностику.');
     } finally {
@@ -470,9 +475,17 @@ export default function VisitWorkflowPanel({
             })}
           </div>
 
-          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 flex gap-2 text-sm font-semibold text-amber-700">
-            <AlertTriangle size={18} className="shrink-0" />
-            Якщо є критичні пункти, їх потім зручно перенести в рекомендації клієнту.
+          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 flex gap-2 text-sm text-blue-800">
+            <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+            <div>
+              <p className="font-black">«Увага» та «Критично» автоматично потрапляють у рекомендації після збереження.</p>
+              <p className="mt-1 text-xs font-semibold text-blue-700">Нічого переносити вручну не потрібно — далі можна відредагувати рекомендацію або одразу записати клієнта на наступний візит.</p>
+              {diagnosticSyncInfo && Number(diagnosticSyncInfo.created || 0) > 0 && (
+                <p className="mt-2 inline-flex rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">
+                  Створено рекомендацій: {diagnosticSyncInfo.created}
+                </p>
+              )}
+            </div>
           </div>
 
           <TextArea

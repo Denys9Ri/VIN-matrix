@@ -15,6 +15,7 @@ import api from '../../api/axios';
 import CopyButton from '../common/CopyButton';
 import NotificationBell from '../notifications/NotificationBell';
 import GlobalSearchBox from '../search/GlobalSearchBox';
+import ServiceQuickPrice from '../services/ServiceQuickPrice';
 
 const roleLabel = {
   admin: 'Адміністратор',
@@ -145,6 +146,7 @@ const Header = ({ sidebarCollapsed = false, onToggleSidebar }) => {
   };
 
   const statusDanger = billingBadge.tone === 'danger' || billingBadge.tone === 'warning';
+  const showQuickServicePrice = location.pathname.startsWith('/visits') && profile?.company?.business_type !== 'store';
 
   return (
     <>
@@ -191,6 +193,7 @@ const Header = ({ sidebarCollapsed = false, onToggleSidebar }) => {
             </button>
           )}
 
+          {showQuickServicePrice && <ServiceQuickPrice />}
           {role !== 'partner' && <NotificationBell />}
 
           <div ref={profileMenuRef} className="relative shrink-0">

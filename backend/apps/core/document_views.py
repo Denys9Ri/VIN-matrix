@@ -268,16 +268,24 @@ def recommendation_section_html(visit, doc_type):
         if recommendation.due_mileage:
             mileage = f"{int(recommendation.due_mileage):,}".replace(',', ' ')
             meta.append(f"На пробігу: {mileage} км")
+
         appointment = ''
         if followup and followup.scheduled_datetime:
             local_dt = timezone.localtime(followup.scheduled_datetime)
             appointment = f"<div class='rec-appointment'><b>Наступний запис на СТО:</b> {local_dt.strftime('%d.%m.%Y о %H:%M')}</div>"
 
+        description_html = ''
+        if recommendation.description:
+            description_html = f"<div class='rec-description'>{nl2br(recommendation.description)}</div>"
+        meta_html = ''
+        if meta:
+            meta_html = f"<div class='rec-meta'>{txt(' · '.join(meta))}</div>"
+
         cards.append(
             "<article class='rec-card'>"
             f"<div class='rec-head'><span class='{badge_class}'>{txt(badge_text)}</span><b>{txt(recommendation.title)}</b></div>"
-            f"{f'<div class=\"rec-description\">{nl2br(recommendation.description)}</div>' if recommendation.description else ''}"
-            f"{f'<div class=\"rec-meta\">{txt(' · '.join(meta))}</div>' if meta else ''}"
+            f"{description_html}"
+            f"{meta_html}"
             f"{appointment}"
             "</article>"
         )

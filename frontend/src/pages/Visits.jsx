@@ -34,6 +34,8 @@ import VehicleMakeCombobox from '../components/visits/VehicleMakeCombobox';
 import VehicleModelCombobox from '../components/visits/VehicleModelCombobox';
 import { vehicleModelAfterMakeChange } from '../utils/vehicleModelCatalog';
 import VisitWorkflowPanel from '../components/crm/VisitWorkflowPanel';
+import VisitRecommendationsPanel from '../components/crm/VisitRecommendationsPanel';
+import { buildRecommendationVisitPayload } from '../utils/recommendationVisit';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppPage, PageHeader, Tabs, useToast } from '../components/ui';
 import { searchServiceCatalog } from '../utils/serviceCatalogSearch';
@@ -586,6 +588,59 @@ export default function Visits() {
     }
   };
 
+  const updateRecommendation = async (rec, changes) => {
+    try {
+      await axios.patch(`${API_BASE}/api/recommendations/${rec.id}/`, changes, { headers });
+      uiToast.success('Рекомендацію оновлено.');
+      await fetchRecommendations(selectedVisit);
+      return true;
+    } catch {
+      uiToast.error('Не вдалося оновити рекомендацію.');
+      return false;
+    }
+  };
+
+  const scheduleRecommendationVisit = async (rec, schedule) => {
+    let payload;
+    try {
+      payload = buildRecommendationVisitPayload({
+        recommendation: rec,
+        sourceVisit: selectedVisit,
+        carData: editCarData,
+        schedule,
+      });
+    } catch {
+      uiToast.warning('Для запису потрібні дата, час, клієнт, телефон і номер авто.');
+      return false;
+    }
+
+    let createdVisit;
+    try {
+      const response = await axios.post(`${API_BASE}/api/visits/`, payload, { headers });
+      createdVisit = response.data;
+    } catch {
+      uiToast.error('Не вдалося створити наступний візит.');
+      return false;
+    }
+
+    try {
+      await axios.patch(`${API_BASE}/api/recommendations/${rec.id}/`, {
+        due_date: schedule.date || rec.due_date || null,
+        due_mileage: schedule.mileage ? Number(schedule.mileage) : (rec.due_mileage || null),
+        status: 'done',
+      }, { headers });
+      uiToast.success('Наступний візит створено. Клієнт уже є на дошці записів.');
+    } catch {
+      uiToast.warning('Візит створено, але рекомендацію не вдалося автоматично закрити. Сам запис не втрачено.');
+    }
+
+    await Promise.all([
+      fetchRecommendations(selectedVisit),
+      fetchData(),
+    ]);
+    return createdVisit || true;
+  };
+
   const copyText = async (value, label) => {
     if (!value) return;
     try {
@@ -726,7 +781,7 @@ export default function Visits() {
 
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] bg-slate-900 text-white px-5 py-3 rounded-2xl text-sm font-black shadow-xl">{toast}</div>}
       {isCreatingVisit && <CreateVisitModal data={newVisitData} setData={setNewVisitData} onClose={() => { setIsCreatingVisit(false); setScanDraft(null); }} onSubmit={createVisit} onPlateBlur={handlePlateBlur} foundExisting={foundExisting} isScanning={isScanning} cameraRef={cameraInputRef} galleryRef={galleryInputRef} onScan={scanNewVisit} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={acceptNewScan} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
-      {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} onUpdatePartAccount={updatePartAccount} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
+      {selectedVisit && <VisitModal visit={selectedVisit} setVisit={setSelectedVisit} tab={visitTab} setTab={setVisitTab} carData={editCarData} setCarData={setEditCarData} onSaveCar={saveCarData} scanRef={passportScanInputRef} onScan={scanExistingVisit} scanDraft={passportScanDraft} setScanDraft={setPassportScanDraft} onAcceptScan={acceptPassportScan} isScanning={isScanning} onPatch={patchVisit} onPrint={printPdf} onCancel={cancelVisit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={addService} onDeleteService={deleteService} onDeletePart={deletePart} onUpdatePartStatus={updatePartStatus} onUpdatePartAccount={updatePartAccount} editComment={editComment} setEditComment={setEditComment} showManualPartForm={showManualPartForm} setShowManualPartForm={setShowManualPartForm} manualPart={manualPart} setManualPart={setManualPart} onAddManualPart={addManualPart} recommendations={recommendations} showRecommendationForm={showRecommendationForm} setShowRecommendationForm={setShowRecommendationForm} newRecommendation={newRecommendation} setNewRecommendation={setNewRecommendation} onAddRecommendation={addRecommendation} onRecommendationDone={markRecommendationDone} onRecommendationPostpone={postponeRecommendation} onRecommendationUpdate={updateRecommendation} onRecommendationSchedule={scheduleRecommendationVisit} onRefreshRecommendations={fetchRecommendations} workflowInfo={workflowInfo} stoVisitStatuses={boardStatuses} stoStatusLabel={(key) => stoStatusLabel(boardStatuses, key)} onCopy={copyText} isStore={isStore} workPosts={workPosts} mechanics={mechanics} />}
       {confirmDialog && <ConfirmActionModal dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />}
     </AppPage>
   );
@@ -890,7 +945,7 @@ const openDocumentPackage = (visit, isStore) => {
   }));
 };
 
-function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, onUpdatePartAccount, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
+function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveCar, scanRef, onScan, scanDraft, setScanDraft, onAcceptScan, isScanning, onPatch, onPrint, onCancel, catalogServices, selectedCatalogId, setSelectedCatalogId, showServiceForm, setShowServiceForm, newService, setNewService, onAddService, onDeleteService, onDeletePart, onUpdatePartStatus, onUpdatePartAccount, editComment, setEditComment, showManualPartForm, setShowManualPartForm, manualPart, setManualPart, onAddManualPart, recommendations, showRecommendationForm, setShowRecommendationForm, newRecommendation, setNewRecommendation, onAddRecommendation, onRecommendationDone, onRecommendationPostpone, onRecommendationUpdate, onRecommendationSchedule, onRefreshRecommendations, workflowInfo, stoVisitStatuses = fallbackStoVisitStatuses, stoStatusLabel = (key) => key, onCopy, isStore, workPosts, mechanics }) {
   const tabs = [
     ['overview','Огляд',Info,'Головна інформація'],
     ['passport','Техпаспорт',CarFront,'Авто, VIN, двигун'],
@@ -905,6 +960,7 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
   const group = { client: visit.client, phone: visit.phone, plate: visit.plate, vin: visit.vin_code, car: `${carData.brand || ''} ${carData.model || ''}`.trim() || visit.plate };
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [reschedule, setReschedule] = useState(timeParts(visit.scheduled_datetime));
+  const activeRecommendationCount = listOf(recommendations).filter((item) => item.status !== 'done' && item.status !== 'cancelled').length;
 
   const revenue = totalOf(visit);
   const paid = Number(visit.paid_amount || visit.prepayment_amount || 0);
@@ -916,14 +972,19 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
     setRescheduleOpen(false);
   };
 
+  const changeTab = (key) => {
+    setTab(key);
+    if (key === 'recommendations') onRefreshRecommendations?.(visit);
+  };
+
   const renderContent = () => {
     if (tab === 'overview') return <Overview visit={visit} carData={carData} workPosts={workPosts} mechanics={mechanics} isStore={isStore}/>;
     if (tab === 'passport') return <Passport carData={carData} setCarData={setCarData} onSave={onSaveCar} scanRef={scanRef} onScan={onScan} scanDraft={scanDraft} setScanDraft={setScanDraft} onAcceptScan={onAcceptScan} visit={visit}/>;
     if (tab === 'acceptance') return <VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="acceptance" standalone/>;
-    if (tab === 'diagnostic') return <VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone/>;
+    if (tab === 'diagnostic') return <VisitWorkflowPanel selectedGroup={group} lastVisit={visit} initialActive="diagnostic" standalone onDiagnosticSaved={() => onRefreshRecommendations?.(visit)}/>;
     if (tab === 'works') return <Works visit={visit} catalogServices={catalogServices} selectedCatalogId={selectedCatalogId} setSelectedCatalogId={setSelectedCatalogId} showServiceForm={showServiceForm} setShowServiceForm={setShowServiceForm} newService={newService} setNewService={setNewService} onAddService={onAddService} onDeleteService={onDeleteService} mechanics={mechanics} isStore={isStore}/>;
     if (tab === 'parts') return <Parts visit={visit} showForm={showManualPartForm} setShowForm={setShowManualPartForm} form={manualPart} setForm={setManualPart} onSubmit={onAddManualPart} onDelete={onDeletePart} onStatus={onUpdatePartStatus} onAccount={onUpdatePartAccount}/>;
-    if (tab === 'recommendations') return <Recommendations recommendations={recommendations} showForm={showRecommendationForm} setShowForm={setShowRecommendationForm} form={newRecommendation} setForm={setNewRecommendation} onSubmit={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone}/>;
+    if (tab === 'recommendations') return <VisitRecommendationsPanel recommendations={recommendations} showCreateForm={showRecommendationForm} setShowCreateForm={setShowRecommendationForm} createForm={newRecommendation} setCreateForm={setNewRecommendation} onCreate={onAddRecommendation} onDone={onRecommendationDone} onPostpone={onRecommendationPostpone} onUpdate={onRecommendationUpdate} onSchedule={onRecommendationSchedule}/>;
     return <Summary visit={visit} recommendations={recommendations} workflowInfo={workflowInfo} editComment={editComment} setEditComment={setEditComment} onSave={() => onPatch('comment', editComment)} mechanics={mechanics} isStore={isStore} />;
   };
 
@@ -1044,10 +1105,13 @@ function VisitModal({ visit, setVisit, tab, setTab, carData, setCarData, onSaveC
               <button
                 key={key}
                 type="button"
-                onClick={()=>setTab(key)}
+                onClick={()=>changeTab(key)}
                 className={`min-h-[42px] inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-[11px] md:text-xs font-black uppercase leading-tight transition border whitespace-nowrap ${tab===key?'bg-blue-600 text-white border-blue-600 shadow-sm':'bg-slate-50 text-slate-700 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
               >
                 <Icon size={15}/>{label}
+                {key === 'recommendations' && activeRecommendationCount > 0 && (
+                  <span className={`min-w-5 h-5 px-1.5 rounded-full text-[10px] flex items-center justify-center ${tab === key ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'}`}>{activeRecommendationCount}</span>
+                )}
               </button>
             ))}
           </div>

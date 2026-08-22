@@ -1,10 +1,11 @@
 import json
-from django.db import connection
+from django.db import connection, transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .diagnostic_recommendations import sync_diagnostic_recommendations
 from .models import Visit
 from .safe_crm_views import safe_ensure_company
 
@@ -146,28 +147,45 @@ class VisitDiagnosticChecklistView(APIView):
         visit, company = get_visit_for_user(request.user, request.data.get('visit'))
         if not visit:
             return Response({'detail': 'Візит не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+
         payload = request.data
         checklist = payload.get('checklist') or {}
-        checklist_json = checklist if isinstance(checklist, str) else json.dumps(checklist, ensure_ascii=False)
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                INSERT INTO core_visitdiagnosticchecklist (
-                    company_id, visit_id, client, phone, plate, checklist, summary,
-                    status, created_by_id, created_at, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, NOW(), NOW())
-                ON CONFLICT (visit_id) DO UPDATE SET
-                    client = EXCLUDED.client,
-                    phone = EXCLUDED.phone,
-                    plate = EXCLUDED.plate,
-                    checklist = EXCLUDED.checklist,
-                    summary = EXCLUDED.summary,
-                    status = EXCLUDED.status,
-                    updated_at = NOW()
-                RETURNING *
-            """, [
-                company.id, visit.id, payload.get('client') or visit.client, payload.get('phone') or visit.phone,
-                payload.get('plate') or visit.plate, checklist_json,
-                payload.get('summary') or '', payload.get('status') or 'draft', request.user.id,
-            ])
-            data = row_to_dict(cursor, cursor.fetchone())
+        if isinstance(checklist, str):
+            try:
+                checklist = json.loads(checklist)
+            except Exception:
+                checklist = {}
+
+        with transaction.atomic():
+            synced_checklist, recommendation_sync = sync_diagnostic_recommendations(
+                company=company,
+                visit=visit,
+                checklist=checklist,
+                user=request.user,
+            )
+            checklist_json = json.dumps(synced_checklist, ensure_ascii=False)
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO core_visitdiagnosticchecklist (
+                        company_id, visit_id, client, phone, plate, checklist, summary,
+                        status, created_by_id, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, NOW(), NOW())
+                    ON CONFLICT (visit_id) DO UPDATE SET
+                        client = EXCLUDED.client,
+                        phone = EXCLUDED.phone,
+                        plate = EXCLUDED.plate,
+                        checklist = EXCLUDED.checklist,
+                        summary = EXCLUDED.summary,
+                        status = EXCLUDED.status,
+                        updated_at = NOW()
+                    RETURNING *
+                """, [
+                    company.id, visit.id, payload.get('client') or visit.client, payload.get('phone') or visit.phone,
+                    payload.get('plate') or visit.plate, checklist_json,
+                    payload.get('summary') or '', payload.get('status') or 'draft', request.user.id,
+                ])
+                data = row_to_dict(cursor, cursor.fetchone())
+
+        data['recommendation_sync'] = recommendation_sync
         return Response(data, status=status.HTTP_200_OK)

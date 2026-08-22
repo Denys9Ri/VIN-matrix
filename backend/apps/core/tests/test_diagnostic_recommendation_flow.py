@@ -97,8 +97,24 @@ class DiagnosticRecommendationFlowTests(TestCase):
         recommendation.refresh_from_db()
         self.assertEqual(recommendation.status, VehicleRecommendation.STATUS_CANCELLED)
 
+    def test_service_act_hides_diagnostic_boilerplate_but_keeps_manual_description(self):
+        self.client.post('/api/visit-diagnostic-checklist/', self.diagnostic_payload(), format='json')
+        recommendation = VehicleRecommendation.objects.get(visit=self.visit)
+
+        response = self.client.get(f'/api/documents/visits/{self.visit.id}/service_act/')
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertNotIn('Збережіть цей блок: тут вказано', html)
+        self.assertNotIn('Виявлено під час діагностики. Розділ:', html)
+
+        recommendation.description = 'Перевірити товщину колодок перед заміною.'
+        recommendation.save(update_fields=['description', 'updated_at'])
+        response = self.client.get(f'/api/documents/visits/{self.visit.id}/service_act/')
+        html = response.content.decode('utf-8')
+        self.assertIn('Перевірити товщину колодок перед заміною.', html)
+
     def test_service_act_shows_recommendation_and_scheduled_followup(self):
-        first = self.client.post('/api/visit-diagnostic-checklist/', self.diagnostic_payload(), format='json')
+        self.client.post('/api/visit-diagnostic-checklist/', self.diagnostic_payload(), format='json')
         recommendation = VehicleRecommendation.objects.get(visit=self.visit)
         followup_time = timezone.now() + timedelta(days=7)
         Visit.objects.create(

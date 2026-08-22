@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import PlatformClient
+from .models import PlatformClient, SupportAccessSession
 from .partner_views import (
     SecurePlatformClientViewSet as BaseSecurePlatformClientViewSet,
     get_default_assigned_owner,
@@ -119,6 +119,10 @@ class SecurePlatformClientViewSet(BaseSecurePlatformClientViewSet):
                 )
                 PlatformClient.objects.filter(referred_by=target_user).update(referred_by=admin_user)
 
+            # Support sessions are service/audit rows for an account that is being
+            # permanently removed. target_user uses PROTECT, so clean these rows
+            # first; otherwise Django correctly blocks User.delete().
+            SupportAccessSession.objects.filter(target_user=target_user).delete()
             target_user.delete()
         except Exception as exc:
             return Response({'error': 'Не вдалося видалити акаунт.', 'details': str(exc)}, status=status.HTTP_400_BAD_REQUEST)

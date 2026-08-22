@@ -78,3 +78,26 @@ class SupportAccessTests(TestCase):
         self.auth(self.client_user)
         response = self.api.get('/api/settings/')
         self.assertNotIn(response.status_code, [401, 403])
+
+    def test_admin_can_delete_client_with_support_session_history(self):
+        for index in range(3):
+            SupportAccessSession.objects.create(
+                admin_user=self.admin,
+                platform_client=self.platform_client,
+                target_user=self.client_user,
+                reason=f'test support {index + 1}',
+                expires_at=timezone.now() + timedelta(hours=1),
+                ended_at=timezone.now(),
+            )
+
+        target_user_id = self.client_user.id
+        platform_client_id = self.platform_client.id
+        self.assertEqual(SupportAccessSession.objects.filter(target_user_id=target_user_id).count(), 3)
+
+        self.auth(self.admin)
+        response = self.api.delete(f'/api/platform-clients/{platform_client_id}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(id=target_user_id).exists())
+        self.assertFalse(PlatformClient.objects.filter(id=platform_client_id).exists())
+        self.assertEqual(SupportAccessSession.objects.filter(target_user_id=target_user_id).count(), 0)

@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.core.models import Category, Company, InventoryItem, Supplier, Visit
+from apps.core.models import Category, Company, InventoryItem, ServiceCatalog, Supplier, Visit
 
 
 @override_settings(SECRET_KEY='test-secret-key', DEBUG=False, ALLOWED_HOSTS=['testserver'])
@@ -54,3 +54,45 @@ class ApiSmokeTests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertTrue(response.data['ok'])
+
+    def test_manual_visit_service_is_added_to_sto_price_list_once(self):
+        visit = Visit.objects.create(company=self.company, plate='AA1234BB', client='Client', phone='+380501112233')
+        self.authenticate()
+
+        first = self.client.post('/api/order-services/', {
+            'visit': visit.id,
+            'name': 'Заміна передніх колодок',
+            'price': '800.00',
+            'quantity': 1,
+        }, format='json')
+        self.assertEqual(first.status_code, 201, first.data)
+
+        catalog = ServiceCatalog.objects.get(company=self.company, name='Заміна передніх колодок')
+        self.assertEqual(str(catalog.price), '800.00')
+
+        second = self.client.post('/api/order-services/', {
+            'visit': visit.id,
+            'name': 'заміна передніх колодок',
+            'price': '650.00',
+            'quantity': 1,
+        }, format='json')
+        self.assertEqual(second.status_code, 201, second.data)
+        self.assertEqual(ServiceCatalog.objects.filter(company=self.company, name__iexact='Заміна передніх колодок').count(), 1)
+
+        catalog.refresh_from_db()
+        self.assertEqual(str(catalog.price), '800.00')
+
+    def test_store_order_service_does_not_pollute_sto_price_list(self):
+        self.company.business_type = 'store'
+        self.company.save(update_fields=['business_type'])
+        visit = Visit.objects.create(company=self.company, plate='STORE1', client='Buyer', phone='+380501112233')
+        self.authenticate()
+
+        response = self.client.post('/api/order-services/', {
+            'visit': visit.id,
+            'name': 'Доставка',
+            'price': '200.00',
+            'quantity': 1,
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertFalse(ServiceCatalog.objects.filter(company=self.company, name='Доставка').exists())

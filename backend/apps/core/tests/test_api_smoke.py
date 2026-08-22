@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.core.models import Category, Company, InventoryItem, ServiceCatalog, Supplier, Visit
+from apps.core.models import Category, Company, InventoryItem, ServiceCatalog, Supplier, VehicleRecommendation, Visit
 
 
 @override_settings(SECRET_KEY='test-secret-key', DEBUG=False, ALLOWED_HOSTS=['testserver'])
@@ -96,3 +96,31 @@ class ApiSmokeTests(TestCase):
         }, format='json')
         self.assertEqual(response.status_code, 201, response.data)
         self.assertFalse(ServiceCatalog.objects.filter(company=self.company, name='Доставка').exists())
+
+    def test_attention_diagnostic_item_creates_recommendation_without_duplicates(self):
+        visit = Visit.objects.create(
+            company=self.company,
+            plate='AA5678BB',
+            client='Diagnostic Client',
+            phone='+380501234567',
+            delivery_data='{"mileage":"100000"}',
+        )
+        self.authenticate()
+        payload = {
+            'visit': visit.id,
+            'status': 'completed',
+            'checklist': {
+                'brakes': {'status': 'attention', 'note': 'Заміна колодок через 2000 км'},
+            },
+            'summary': 'Гальмівна система потребує уваги.',
+        }
+        first = self.client.post('/api/visit-diagnostic-checklist/', payload, format='json')
+        self.assertEqual(first.status_code, 200, first.data)
+        self.assertEqual(first.data['recommendation_sync']['created'], 1)
+        recommendation = VehicleRecommendation.objects.get(visit=visit)
+        self.assertEqual(recommendation.due_mileage, 102000)
+
+        payload['checklist'] = first.data['checklist']
+        second = self.client.post('/api/visit-diagnostic-checklist/', payload, format='json')
+        self.assertEqual(second.status_code, 200, second.data)
+        self.assertEqual(VehicleRecommendation.objects.filter(visit=visit).count(), 1)

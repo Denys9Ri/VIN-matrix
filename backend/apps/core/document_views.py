@@ -1,7 +1,9 @@
+import json
 from decimal import Decimal
 from html import escape
 
 from django.db import connection
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
@@ -10,7 +12,7 @@ from rest_framework.views import APIView
 
 from .activity import log_activity
 from .company_phones import document_phone_text
-from .models import OrderPart, OrderService, Visit
+from .models import OrderPart, OrderService, VehicleRecommendation, Visit
 from .partner_views import repair_legacy_account
 
 
@@ -178,6 +180,125 @@ def log_document_event(company, user, visit, doc_type, action_key, channel='', s
     return None
 
 
+def diagnostic_recommendation_severity(visit):
+    result = {}
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT checklist FROM core_visitdiagnosticchecklist WHERE visit_id=%s LIMIT 1', [visit.id])
+            row = cursor.fetchone()
+        checklist = row[0] if row else {}
+        if isinstance(checklist, str):
+            checklist = json.loads(checklist)
+        for item in (checklist or {}).values():
+            if not isinstance(item, dict):
+                continue
+            recommendation_id = item.get('recommendation_id')
+            severity = item.get('status')
+            if recommendation_id and severity in ['attention', 'critical']:
+                result[int(recommendation_id)] = severity
+    except Exception:
+        pass
+    return result
+
+
+def recommendation_followup_visit(source_visit, recommendation):
+    base_datetime = source_visit.scheduled_datetime or source_visit.created_at
+    identity_filter = Q()
+    if recommendation.phone:
+        identity_filter |= Q(phone=recommendation.phone)
+    if recommendation.plate:
+        identity_filter |= Q(plate=recommendation.plate)
+    if not identity_filter:
+        return None
+
+    queryset = Visit.objects.filter(
+        company=source_visit.company,
+        scheduled_datetime__gt=base_datetime,
+    ).exclude(id=source_visit.id).filter(identity_filter)
+
+    tagged = queryset.filter(comment__icontains='[З рекомендації]')
+    if recommendation.title:
+        exact = tagged.filter(comment__icontains=recommendation.title).order_by('scheduled_datetime', 'id').first()
+        if exact:
+            return exact
+    return tagged.order_by('scheduled_datetime', 'id').first()
+
+
+def recommendation_document_items(visit):
+    severity_map = diagnostic_recommendation_severity(visit)
+    recommendations = VehicleRecommendation.objects.filter(visit=visit).exclude(status=VehicleRecommendation.STATUS_CANCELLED).order_by('due_date', 'due_mileage', 'id')
+    result = []
+    for recommendation in recommendations:
+        followup = recommendation_followup_visit(visit, recommendation)
+        if recommendation.status == VehicleRecommendation.STATUS_DONE and not followup:
+            continue
+        result.append({
+            'recommendation': recommendation,
+            'severity': severity_map.get(recommendation.id, ''),
+            'followup': followup,
+        })
+    return result
+
+
+def recommendation_section_html(visit, doc_type):
+    if doc_type != 'service_act':
+        return ''
+    items = recommendation_document_items(visit)
+    if not items:
+        return ''
+
+    cards = []
+    for item in items:
+        recommendation = item['recommendation']
+        severity = item['severity']
+        followup = item['followup']
+        if severity == 'critical':
+            badge_class = 'rec-badge critical'
+            badge_text = 'Критично'
+        elif severity == 'attention':
+            badge_class = 'rec-badge attention'
+            badge_text = 'Увага'
+        else:
+            badge_class = 'rec-badge regular'
+            badge_text = 'Рекомендація'
+
+        meta = []
+        if recommendation.due_date:
+            meta.append(f"Рекомендовано до: {recommendation.due_date.strftime('%d.%m.%Y')}")
+        if recommendation.due_mileage:
+            mileage = f"{int(recommendation.due_mileage):,}".replace(',', ' ')
+            meta.append(f"На пробігу: {mileage} км")
+
+        appointment = ''
+        if followup and followup.scheduled_datetime:
+            local_dt = timezone.localtime(followup.scheduled_datetime)
+            appointment = f"<div class='rec-appointment'><b>Наступний запис на СТО:</b> {local_dt.strftime('%d.%m.%Y о %H:%M')}</div>"
+
+        description_html = ''
+        if recommendation.description:
+            description_html = f"<div class='rec-description'>{nl2br(recommendation.description)}</div>"
+        meta_html = ''
+        if meta:
+            meta_html = f"<div class='rec-meta'>{txt(' · '.join(meta))}</div>"
+
+        cards.append(
+            "<article class='rec-card'>"
+            f"<div class='rec-head'><span class='{badge_class}'>{txt(badge_text)}</span><b>{txt(recommendation.title)}</b></div>"
+            f"{description_html}"
+            f"{meta_html}"
+            f"{appointment}"
+            "</article>"
+        )
+
+    return (
+        "<section class='recommendations'>"
+        "<div class='section-title'>Рекомендації та наступні роботи</div>"
+        "<p class='rec-intro'>Збережіть цей блок: тут вказано, що варто зробити після поточного ремонту та коли повернутися на СТО.</p>"
+        + ''.join(cards)
+        + "</section>"
+    )
+
+
 class VisitDocumentView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -231,6 +352,7 @@ def build_document_html(request, visit, company, doc_type, services, parts, auto
     is_invoice = doc_type == 'invoice'
     is_warranty = doc_type == 'warranty'
     is_return = doc_type == 'return_note'
+    recommendations_html = recommendation_section_html(visit, doc_type)
 
     row_html = ''.join(
         f"<tr><td><span class='kind'>{txt(row['kind'])}</span></td><td>{txt(row['article'])}</td><td>{txt(row['name'])}</td><td class='num'>{quantity(row['qty'])}</td><td class='num'>{money(row['price'])}</td><td class='num'>{money(row['sum'])}</td></tr>"
@@ -238,13 +360,14 @@ def build_document_html(request, visit, company, doc_type, services, parts, auto
     ) or "<tr><td colspan='6' class='empty'>Позицій немає</td></tr>"
 
     return f"""<!doctype html><html><head><meta charset='utf-8'><title>{txt(title)} №{visit.id}</title><style>
-@page{{size:A4;margin:12mm}}*{{box-sizing:border-box}}body{{margin:0;background:#e2e8f0;color:#0f172a;font-family:Arial,sans-serif}}.sheet{{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:15mm 16mm}}.toolbar{{position:sticky;top:0;z-index:10;background:#0f172a;color:#fff;padding:10px 14px;text-align:right}}.toolbar button{{border:0;border-radius:12px;background:#2563eb;color:#fff;padding:10px 14px;font-weight:900;text-transform:uppercase;font-size:11px}}.top{{display:flex;justify-content:space-between;gap:22px;border-bottom:3px solid #0f172a;padding-bottom:16px}}.brand{{display:flex;gap:14px;align-items:center;min-width:0}}.logo{{width:68px;height:68px;object-fit:contain;border:1px solid #e2e8f0;border-radius:18px;padding:6px}}.company h1{{margin:0;font-size:24px;line-height:1.05;font-weight:900;letter-spacing:-.03em}}.muted{{color:#64748b;font-size:12px;line-height:1.45}}.req{{text-align:right;max-width:82mm}}.doc-head{{margin:22px 0 18px;display:flex;justify-content:space-between;gap:18px;align-items:flex-end}}.doc-title{{font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:-.04em;margin:0}}.pill{{display:inline-flex;background:#eff6ff;color:#1d4ed8;padding:7px 11px;border-radius:999px;font-size:12px;font-weight:900;text-transform:uppercase}}.grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}}.box{{border:1px solid #e2e8f0;border-radius:18px;padding:13px;background:#f8fafc;min-height:72px}}.box b{{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:6px}}.box p{{margin:0;font-size:14px;font-weight:800;line-height:1.35}}.section-title{{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#334155;margin:20px 0 8px}}table{{width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden}}th{{background:#0f172a;color:#fff;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:10px}}td{{border-bottom:1px solid #e2e8f0;padding:10px;font-size:12px;vertical-align:top}}tr:last-child td{{border-bottom:0}}.num{{text-align:right;white-space:nowrap}}.empty{{text-align:center;color:#94a3b8;padding:18px}}.kind{{display:inline-flex;border-radius:999px;background:#f1f5f9;color:#475569;padding:4px 7px;font-size:10px;font-weight:900;text-transform:uppercase}}.summary{{margin-left:auto;margin-top:16px;width:300px;border:1px solid #e2e8f0;border-radius:18px;overflow:hidden}}.summary div{{display:flex;justify-content:space-between;gap:12px;padding:11px 13px;border-bottom:1px solid #e2e8f0;font-size:13px}}.summary div:last-child{{border-bottom:0}}.summary .pay{{background:#0f172a;color:#fff;font-weight:900}}.summary .debt{{color:#be123c;font-weight:900}}.note{{margin-top:18px;border:1px dashed #cbd5e1;border-radius:18px;padding:14px;color:#475569;font-size:12px;line-height:1.5;background:#f8fafc}}.note b{{display:block;color:#0f172a;text-transform:uppercase;font-size:11px;margin-bottom:6px}}.sign{{display:grid;grid-template-columns:1fr 1fr;gap:42px;margin-top:46px}}.line{{border-top:1px solid #0f172a;padding-top:8px;color:#475569;font-size:11px}}.footer{{margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;color:#64748b;font-size:11px;line-height:1.45}}@media print{{body{{background:#fff}}.sheet{{width:auto;min-height:auto;margin:0;padding:0}}.toolbar{{display:none}}.box,.note,tr{{break-inside:avoid;page-break-inside:avoid}}}}
+@page{{size:A4;margin:12mm}}*{{box-sizing:border-box}}body{{margin:0;background:#e2e8f0;color:#0f172a;font-family:Arial,sans-serif}}.sheet{{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:15mm 16mm}}.toolbar{{position:sticky;top:0;z-index:10;background:#0f172a;color:#fff;padding:10px 14px;text-align:right}}.toolbar button{{border:0;border-radius:12px;background:#2563eb;color:#fff;padding:10px 14px;font-weight:900;text-transform:uppercase;font-size:11px}}.top{{display:flex;justify-content:space-between;gap:22px;border-bottom:3px solid #0f172a;padding-bottom:16px}}.brand{{display:flex;gap:14px;align-items:center;min-width:0}}.logo{{width:68px;height:68px;object-fit:contain;border:1px solid #e2e8f0;border-radius:18px;padding:6px}}.company h1{{margin:0;font-size:24px;line-height:1.05;font-weight:900;letter-spacing:-.03em}}.muted{{color:#64748b;font-size:12px;line-height:1.45}}.req{{text-align:right;max-width:82mm}}.doc-head{{margin:22px 0 18px;display:flex;justify-content:space-between;gap:18px;align-items:flex-end}}.doc-title{{font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:-.04em;margin:0}}.pill{{display:inline-flex;background:#eff6ff;color:#1d4ed8;padding:7px 11px;border-radius:999px;font-size:12px;font-weight:900;text-transform:uppercase}}.grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}}.box{{border:1px solid #e2e8f0;border-radius:18px;padding:13px;background:#f8fafc;min-height:72px}}.box b{{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:6px}}.box p{{margin:0;font-size:14px;font-weight:800;line-height:1.35}}.section-title{{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#334155;margin:20px 0 8px}}table{{width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden}}th{{background:#0f172a;color:#fff;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:10px}}td{{border-bottom:1px solid #e2e8f0;padding:10px;font-size:12px;vertical-align:top}}tr:last-child td{{border-bottom:0}}.num{{text-align:right;white-space:nowrap}}.empty{{text-align:center;color:#94a3b8;padding:18px}}.kind{{display:inline-flex;border-radius:999px;background:#f1f5f9;color:#475569;padding:4px 7px;font-size:10px;font-weight:900;text-transform:uppercase}}.summary{{margin-left:auto;margin-top:16px;width:300px;border:1px solid #e2e8f0;border-radius:18px;overflow:hidden}}.summary div{{display:flex;justify-content:space-between;gap:12px;padding:11px 13px;border-bottom:1px solid #e2e8f0;font-size:13px}}.summary div:last-child{{border-bottom:0}}.summary .pay{{background:#0f172a;color:#fff;font-weight:900}}.summary .debt{{color:#be123c;font-weight:900}}.recommendations{{margin-top:22px}}.rec-intro{{margin:0 0 10px;color:#64748b;font-size:11px;line-height:1.45}}.rec-card{{border:1px solid #dbe4f0;border-radius:16px;padding:12px 13px;margin-top:8px;background:#f8fafc;break-inside:avoid;page-break-inside:avoid}}.rec-head{{display:flex;align-items:center;gap:9px;font-size:13px;line-height:1.35}}.rec-badge{{display:inline-flex;border-radius:999px;padding:4px 7px;font-size:9px;font-weight:900;text-transform:uppercase;white-space:nowrap}}.rec-badge.critical{{background:#ffe4e6;color:#be123c}}.rec-badge.attention{{background:#fef3c7;color:#b45309}}.rec-badge.regular{{background:#dbeafe;color:#1d4ed8}}.rec-description{{margin-top:7px;color:#475569;font-size:11px;line-height:1.45}}.rec-meta{{margin-top:8px;color:#334155;font-size:10px;font-weight:800}}.rec-appointment{{margin-top:9px;border-radius:11px;background:#eff6ff;color:#1d4ed8;padding:8px 10px;font-size:11px;line-height:1.4}}.note{{margin-top:18px;border:1px dashed #cbd5e1;border-radius:18px;padding:14px;color:#475569;font-size:12px;line-height:1.5;background:#f8fafc}}.note b{{display:block;color:#0f172a;text-transform:uppercase;font-size:11px;margin-bottom:6px}}.sign{{display:grid;grid-template-columns:1fr 1fr;gap:42px;margin-top:46px}}.line{{border-top:1px solid #0f172a;padding-top:8px;color:#475569;font-size:11px}}.footer{{margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;color:#64748b;font-size:11px;line-height:1.45}}@media print{{body{{background:#fff}}.sheet{{width:auto;min-height:auto;margin:0;padding:0}}.toolbar{{display:none}}.box,.note,.rec-card,tr{{break-inside:avoid;page-break-inside:avoid}}}}
 </style></head><body>{'' if auto_print else "<div class='toolbar'><button onclick='window.print()'>Друк / зберегти PDF</button></div>"}<main class='sheet'>
 <header class='top'><div class='brand'>{f"<img class='logo' src='{txt(logo)}' alt='logo'>" if logo else ''}<div class='company'><h1>{txt(getattr(company, 'name', '') or 'VIN-matrix')}</h1><div class='muted'>{txt(getattr(company, 'address', '') or '')}</div><div class='muted'>{txt(company_phones, '')}</div></div></div><div class='muted req'><b>{txt(date)}</b><br>{nl2br(requisites)}</div></header>
 <section class='doc-head'><div><h2 class='doc-title'>{txt(title)}</h2><span class='pill'>№{visit.id} · {txt(getattr(visit, 'status', '') or '')}</span></div><div class='muted' style='text-align:right'>{'Призначення платежу:<br>Оплата за замовлення №' + str(visit.id) if is_invoice else ''}</div></section>
 <section class='grid'><div class='box'><b>Клієнт</b><p>{txt(visit.client)}</p><div class='muted'>{txt(visit.phone, '')}</div></div><div class='box'><b>Авто / VIN</b><p>{txt(car_label(visit))}</p><div class='muted'>{txt(visit.plate, '')}{' · VIN: ' + txt(visit.vin_code) if getattr(visit, 'vin_code', None) else ''}</div></div></section>
 <div class='section-title'>Позиції документа</div><table><thead><tr><th>Тип</th><th>Артикул</th><th>Назва</th><th class='num'>К-сть</th><th class='num'>Ціна</th><th class='num'>Сума</th></tr></thead><tbody>{row_html}</tbody></table>
 <section class='summary'><div><span>Разом</span><b>{money(total)}</b></div><div><span>Оплачено</span><b>{money(paid)}</b></div><div><span>Борг</span><b class='debt'>{money(debt)}</b></div><div class='pay'><span>До сплати</span><b>{money(debt)}</b></div></section>
+{recommendations_html}
 {f"<section class='note'><b>Умови гарантії</b>{nl2br(warranty)}</section>" if is_warranty else ''}
 {"<section class='note'><b>Повернення товару</b>Товар прийнято до повернення після перевірки стану, комплектності та відповідності умовам повернення. Остаточне рішення приймається відповідальною особою компанії.</section>" if is_return else ''}
 {f"<section class='note'><b>Примітка</b>{nl2br(footer)}</section>" if not is_warranty and not is_return else ''}

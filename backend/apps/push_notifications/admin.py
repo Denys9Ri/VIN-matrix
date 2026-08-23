@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import WebPushSubscription, WebPushVapidKey
+from .models import WebPushSubscription
 
 
 @admin.register(WebPushSubscription)
@@ -9,12 +9,3 @@ class WebPushSubscriptionAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
     search_fields = ('user__username', 'user__email', 'endpoint')
     readonly_fields = ('created_at', 'updated_at', 'last_success_at', 'last_failure_at')
-
-
-@admin.register(WebPushVapidKey)
-class WebPushVapidKeyAdmin(admin.ModelAdmin):
-    list_display = ('id', 'created_at', 'updated_at')
-    readonly_fields = ('private_key', 'public_key', 'created_at', 'updated_at')
-
-    def has_add_permission(self, request):
-        return not WebPushVapidKey.objects.exists()

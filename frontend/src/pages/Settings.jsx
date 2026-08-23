@@ -49,16 +49,37 @@ const getMechanicName = (mech = {}) => {
   return user.first_name || user.username || mech.first_name || mech.username || mech.name || `Працівник #${mech.id || ''}`;
 };
 
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: 'Понеділок' },
+  { value: 1, label: 'Вівторок' },
+  { value: 2, label: 'Середа' },
+  { value: 3, label: 'Четвер' },
+  { value: 4, label: 'Пʼятниця' },
+  { value: 5, label: 'Субота' },
+  { value: 6, label: 'Неділя' },
+];
+const MONTH_DAY_OPTIONS = [
+  ...Array.from({ length: 28 }, (_, index) => ({ value: String(index + 1), label: `${index + 1} число` })),
+  { value: 'last', label: 'Останній день місяця' },
+];
+
 const emptyMechanicData = {
   username: '',
   password: '',
   first_name: '',
   can_create_visits: false,
+  can_view_clients: false,
+  can_manage_inventory: false,
+  can_take_payments: false,
+  can_view_analytics: false,
   can_view_finances: false,
   commission_percent: 40,
   parts_commission_percent: 0,
+  fixed_salary_amount: 0,
   salary_scheme: 'services_only',
   payout_period: 'monthly',
+  payout_weekday: 4,
+  payout_month_day: '5',
   is_salary_active: true,
 };
 
@@ -66,11 +87,18 @@ const emptyEditMechanicData = {
   first_name: '',
   new_password: '',
   can_create_visits: false,
+  can_view_clients: false,
+  can_manage_inventory: false,
+  can_take_payments: false,
+  can_view_analytics: false,
   can_view_finances: false,
   commission_percent: 40,
   parts_commission_percent: 0,
+  fixed_salary_amount: 0,
   salary_scheme: 'services_only',
   payout_period: 'monthly',
+  payout_weekday: 4,
+  payout_month_day: '5',
   is_salary_active: true,
 };
 
@@ -84,8 +112,17 @@ const payoutPeriodLabel = (period) => ({
   custom: 'довільний період',
 }[period] || 'щомісяця');
 
+const weekdayLabel = (value) => WEEKDAY_OPTIONS.find((item) => Number(item.value) === Number(value))?.label?.toLowerCase() || 'пʼятницю';
+const payoutScheduleLabel = (mech = {}) => {
+  const period = mech.payout_period || 'monthly';
+  if (period === 'weekly') return `виплата у ${weekdayLabel(mech.payout_weekday)}`;
+  if (period === 'monthly') return mech.payout_month_day === 'last' ? 'виплата в останній день місяця' : `виплата ${mech.payout_month_day || '5'} числа`;
+  return '';
+};
+
 const salarySchemeLabel = (scheme) => ({
   services_only: '% тільки від робіт',
+  parts_profit_only: '% тільки від маржі запчастин',
   services_and_parts_profit: '% від робіт + маржа запчастин',
   order_profit: '% від прибутку замовлення',
   fixed: 'Фіксована сума',
@@ -95,12 +132,16 @@ const mechanicPayrollSummary = (mech = {}) => {
   if (mech.is_salary_active === false) return 'Нарахування зарплати вимкнено';
   const workPercent = Number(mech.commission_percent ?? 40);
   const partsPercent = Number(mech.parts_commission_percent ?? 0);
+  const fixedAmount = Number(mech.fixed_salary_amount ?? 0);
   const scheme = mech.salary_scheme || 'services_only';
   const period = payoutPeriodLabel(mech.payout_period || 'monthly');
-  if (scheme === 'services_and_parts_profit') return `${workPercent}% роботи + ${partsPercent}% маржі запчастин · ${period}`;
-  if (scheme === 'order_profit') return `${workPercent}% від прибутку замовлення · ${period}`;
-  if (scheme === 'fixed') return `Фіксована схема · ${period}`;
-  return `${workPercent}% від робіт · ${period}`;
+  const schedule = payoutScheduleLabel(mech);
+  const suffix = schedule ? ` · ${period} · ${schedule}` : ` · ${period}`;
+  if (scheme === 'services_and_parts_profit') return `${workPercent}% від робіт + ${partsPercent}% від маржі запчастин${suffix}`;
+  if (scheme === 'parts_profit_only') return `${partsPercent}% від маржі запчастин${suffix}`;
+  if (scheme === 'order_profit') return `${workPercent}% від прибутку замовлення${suffix}`;
+  if (scheme === 'fixed') return `${fixedAmount.toLocaleString('uk-UA')} ₴${suffix}`;
+  return `${workPercent}% від робіт${suffix}`;
 };
 
 const mechanicPayload = (data = {}, isEdit = false) => ({
@@ -108,11 +149,18 @@ const mechanicPayload = (data = {}, isEdit = false) => ({
   first_name: data.first_name || '',
   ...(isEdit ? { new_password: data.new_password || '' } : {}),
   can_create_visits: Boolean(data.can_create_visits),
+  can_view_clients: Boolean(data.can_view_clients),
+  can_manage_inventory: Boolean(data.can_manage_inventory),
+  can_take_payments: Boolean(data.can_take_payments),
+  can_view_analytics: Boolean(data.can_view_analytics),
   can_view_finances: Boolean(data.can_view_finances),
   commission_percent: Number(data.commission_percent || 0),
   parts_commission_percent: Number(data.parts_commission_percent || 0),
+  fixed_salary_amount: Number(data.fixed_salary_amount || 0),
   salary_scheme: data.salary_scheme || 'services_only',
   payout_period: data.payout_period || 'monthly',
+  payout_weekday: Number(data.payout_weekday ?? 4),
+  payout_month_day: String(data.payout_month_day || '5'),
   is_salary_active: data.is_salary_active !== false,
 });
 
@@ -330,7 +378,8 @@ export default function Settings() {
       setMechanicData({ ...emptyMechanicData });
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Помилка. Логін може бути зайнятий.');
+      const details = error.response?.data;
+      toast.error(details?.error || Object.values(details || {})?.[0]?.[0] || 'Помилка. Перевірте зарплату, доступи та логін.');
     }
   };
 
@@ -359,8 +408,9 @@ export default function Settings() {
       toast.success('Дані працівника оновлено.');
       setIsEditingMechanic(null);
       fetchData();
-    } catch {
-      toast.error('Помилка оновлення працівника.');
+    } catch (error) {
+      const details = error.response?.data;
+      toast.error(details?.error || Object.values(details || {})?.[0]?.[0] || 'Помилка оновлення працівника.');
     }
   };
 
@@ -448,11 +498,18 @@ export default function Settings() {
       first_name: name,
       new_password: '',
       can_create_visits: Boolean(mech.can_create_visits),
+      can_view_clients: Boolean(mech.can_view_clients),
+      can_manage_inventory: Boolean(mech.can_manage_inventory),
+      can_take_payments: Boolean(mech.can_take_payments),
+      can_view_analytics: Boolean(mech.can_view_analytics),
       can_view_finances: Boolean(mech.can_view_finances),
       commission_percent: mech.commission_percent ?? 40,
       parts_commission_percent: mech.parts_commission_percent ?? 0,
+      fixed_salary_amount: mech.fixed_salary_amount ?? 0,
       salary_scheme: mech.salary_scheme || 'services_only',
       payout_period: mech.payout_period || 'monthly',
+      payout_weekday: mech.payout_weekday ?? 4,
+      payout_month_day: mech.payout_month_day || '5',
       is_salary_active: mech.is_salary_active !== false,
     });
   };
@@ -738,7 +795,6 @@ function SecurityCard({ onChangePassword }) {
   );
 }
 
-
 function SupportCard() {
   return (
     <section className="overflow-hidden rounded-[30px] border border-slate-100 bg-white shadow-sm">
@@ -749,64 +805,25 @@ function SupportCard() {
           </span>
 
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-200">
-              VIN-matrix
-            </p>
-            <h3 className="mt-1 text-base font-black uppercase">
-              Допомога та підтримка
-            </h3>
-            <p className="mt-2 text-xs font-semibold leading-relaxed text-blue-100">
-              Напишіть або зателефонуйте, якщо потрібна допомога з доступом,
-              налаштуванням або роботою в системі.
-            </p>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-200">VIN-matrix</p>
+            <h3 className="mt-1 text-base font-black uppercase">Допомога та підтримка</h3>
+            <p className="mt-2 text-xs font-semibold leading-relaxed text-blue-100">Напишіть або зателефонуйте, якщо потрібна допомога з доступом, налаштуванням або роботою в системі.</p>
           </div>
         </div>
       </div>
 
       <div className="grid gap-3 p-4">
-        <a
-          href="https://t.me/vin_matrix"
-          target="_blank"
-          rel="noreferrer"
-          className="group flex items-center gap-3 rounded-2xl border border-slate-200 p-3.5 transition hover:border-blue-300 hover:bg-blue-50"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 transition group-hover:bg-blue-600 group-hover:text-white">
-            <MessageCircle size={20} />
-          </span>
-
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
-              Telegram
-            </p>
-            <p className="mt-0.5 truncate text-sm font-black text-slate-900">
-              @vin_matrix
-            </p>
-          </div>
+        <a href="https://t.me/vin_matrix" target="_blank" rel="noreferrer" className="group flex items-center gap-3 rounded-2xl border border-slate-200 p-3.5 transition hover:border-blue-300 hover:bg-blue-50">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 transition group-hover:bg-blue-600 group-hover:text-white"><MessageCircle size={20} /></span>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Telegram</p><p className="mt-0.5 truncate text-sm font-black text-slate-900">@vin_matrix</p></div>
         </a>
-
-        <a
-          href="tel:+380636699617"
-          className="group flex items-center gap-3 rounded-2xl border border-slate-200 p-3.5 transition hover:border-blue-300 hover:bg-blue-50"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 transition group-hover:bg-blue-600 group-hover:text-white">
-            <Phone size={20} />
-          </span>
-
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
-              Телефон підтримки
-            </p>
-            <p className="mt-0.5 truncate text-sm font-black text-slate-900">
-              +380 63 669 96 17
-            </p>
-          </div>
+        <a href="tel:+380636699617" className="group flex items-center gap-3 rounded-2xl border border-slate-200 p-3.5 transition hover:border-blue-300 hover:bg-blue-50">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 transition group-hover:bg-blue-600 group-hover:text-white"><Phone size={20} /></span>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Телефон підтримки</p><p className="mt-0.5 truncate text-sm font-black text-slate-900">+380 63 669 96 17</p></div>
         </a>
       </div>
 
-      <div className="mx-4 mb-4 rounded-2xl bg-slate-50 p-3 text-xs font-semibold leading-relaxed text-slate-600">
-        Підтримка VIN-matrix не просить повідомляти пароль або коди доступу.
-        Для захисту облікового запису не передавайте ці дані третім особам.
-      </div>
+      <div className="mx-4 mb-4 rounded-2xl bg-slate-50 p-3 text-xs font-semibold leading-relaxed text-slate-600">Підтримка VIN-matrix не просить повідомляти пароль або коди доступу. Для захисту облікового запису не передавайте ці дані третім особам.</div>
     </section>
   );
 }
@@ -835,6 +852,7 @@ function TeamPanel({ mechanics = [], onAdd, onEdit, onDelete }) {
 function MechanicCard({ mech, onEdit, onDelete }) {
   const name = getMechanicName(mech);
   const isActive = mech.is_salary_active !== false;
+  const permissionsCount = ['can_create_visits', 'can_view_clients', 'can_manage_inventory', 'can_take_payments', 'can_view_analytics', 'can_view_finances'].filter((key) => mech[key]).length;
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -843,9 +861,9 @@ function MechanicCard({ mech, onEdit, onDelete }) {
             <p className="font-black text-slate-950 truncate">{name}</p>
             <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{isActive ? 'ЗП активна' : 'ЗП вимкнено'}</span>
           </div>
-          <p className="text-[11px] text-slate-400 font-black uppercase mt-1">{mech.can_view_finances ? 'Фінанси доступні' : 'Майстер'}</p>
+          <p className="text-[11px] text-slate-400 font-black uppercase mt-1">Майстер · {permissionsCount}/6 додаткових прав</p>
           <p className="text-xs font-black text-slate-700 mt-2">{mechanicPayrollSummary(mech)}</p>
-          <p className="text-[11px] font-semibold text-slate-400 mt-1">{salarySchemeLabel(mech.salary_scheme)} · {payoutPeriodLabel(mech.payout_period)}</p>
+          <p className="text-[11px] font-semibold text-slate-400 mt-1">{salarySchemeLabel(mech.salary_scheme)}</p>
         </div>
         <div className="flex gap-1 shrink-0">
           <IconButton label="Редагувати" onClick={onEdit} tone="blue"><Pencil size={15}/></IconButton>
@@ -858,74 +876,18 @@ function MechanicCard({ mech, onEdit, onDelete }) {
 
 function WorkPostsPanel({ posts = [], onAdd, onEdit, onDelete }) {
   const sortedPosts = [...posts].sort((a, b) => Number(a.number || 0) - Number(b.number || 0));
-
   return (
     <section className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
       <div className="p-5 md:p-6 bg-slate-50/80 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h3 className="font-black uppercase tracking-wider text-sm flex items-center gap-2 text-slate-900"><Building2 className="text-blue-600" size={18}/> Пости / підйомники</h3>
-          <p className="text-xs font-semibold text-slate-500 mt-1">Робочі місця СТО для планування завантаження, майстрів і аналітики.</p>
-        </div>
+        <div><h3 className="font-black uppercase tracking-wider text-sm flex items-center gap-2 text-slate-900"><Building2 className="text-blue-600" size={18}/> Пости / підйомники</h3><p className="text-xs font-semibold text-slate-500 mt-1">Робочі місця СТО для планування завантаження, майстрів і аналітики.</p></div>
         <Button type="button" onClick={onAdd} icon={<Plus size={16}/>}>Додати пост</Button>
       </div>
-
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-left">
-          <thead className="bg-white border-b border-slate-100">
-            <tr>
-              <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Пост</th>
-              <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Опис</th>
-              <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Статус</th>
-              <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Дії</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedPosts.map((post) => (
-              <tr key={post.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <span className="h-10 w-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center font-black">{post.number || '—'}</span>
-                    <div>
-                      <p className="font-black text-slate-950">{workPostLabel(post)}</p>
-                      <p className="text-[11px] font-bold uppercase text-slate-400">Сортування {post.sort_order || post.number || '—'}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-5 py-4 text-sm font-semibold text-slate-500 max-w-md">{post.description || '—'}</td>
-                <td className="px-5 py-4"><StatusPill active={post.is_active !== false} /></td>
-                <td className="px-5 py-4">
-                  <div className="flex justify-end gap-2">
-                    <IconButton label="Редагувати" tone="blue" onClick={() => onEdit(post)}><Pencil size={15}/></IconButton>
-                    <IconButton label="Видалити" tone="red" onClick={() => onDelete(post.id)}><Trash2 size={15}/></IconButton>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
+        <table className="w-full text-left"><thead className="bg-white border-b border-slate-100"><tr><th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Пост</th><th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Опис</th><th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Статус</th><th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Дії</th></tr></thead>
+          <tbody>{sortedPosts.map((post) => <tr key={post.id} className="border-b border-slate-50 last:border-0"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="h-10 w-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center font-black">{post.number || '—'}</span><div><p className="font-black text-slate-950">{workPostLabel(post)}</p><p className="text-[11px] font-bold uppercase text-slate-400">Сортування {post.sort_order || post.number || '—'}</p></div></div></td><td className="px-5 py-4 text-sm font-semibold text-slate-500 max-w-md">{post.description || '—'}</td><td className="px-5 py-4"><StatusPill active={post.is_active !== false} /></td><td className="px-5 py-4"><div className="flex justify-end gap-2"><IconButton label="Редагувати" tone="blue" onClick={() => onEdit(post)}><Pencil size={15}/></IconButton><IconButton label="Видалити" tone="red" onClick={() => onDelete(post.id)}><Trash2 size={15}/></IconButton></div></td></tr>)}</tbody>
         </table>
       </div>
-
-      <div className="md:hidden p-4 space-y-3">
-        {sortedPosts.map((post) => (
-          <div key={post.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-black text-slate-950 truncate">{workPostLabel(post)}</p>
-                  <span className="text-[11px] font-black uppercase px-2 py-1 rounded-full bg-blue-50 text-blue-700">№{post.number || '—'}</span>
-                </div>
-                <p className="text-xs font-semibold text-slate-500 mt-1">{post.description || 'Без опису'}</p>
-                <div className="mt-3"><StatusPill active={post.is_active !== false} /></div>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <IconButton label="Редагувати" tone="blue" onClick={() => onEdit(post)}><Pencil size={15}/></IconButton>
-                <IconButton label="Видалити" tone="red" onClick={() => onDelete(post.id)}><Trash2 size={15}/></IconButton>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
+      <div className="md:hidden p-4 space-y-3">{sortedPosts.map((post) => <div key={post.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-black text-slate-950 truncate">{workPostLabel(post)}</p><span className="text-[11px] font-black uppercase px-2 py-1 rounded-full bg-blue-50 text-blue-700">№{post.number || '—'}</span></div><p className="text-xs font-semibold text-slate-500 mt-1">{post.description || 'Без опису'}</p><div className="mt-3"><StatusPill active={post.is_active !== false} /></div></div><div className="flex gap-1 shrink-0"><IconButton label="Редагувати" tone="blue" onClick={() => onEdit(post)}><Pencil size={15}/></IconButton><IconButton label="Видалити" tone="red" onClick={() => onDelete(post.id)}><Trash2 size={15}/></IconButton></div></div></div>)}</div>
       {sortedPosts.length === 0 && <div className="p-5"><EmptyInline icon={<Building2 size={34}/>} title="Пости ще не створені" text="Додайте “Пост 1”, “Підйомник 2”, “Діагностика” або інші робочі місця." /></div>}
     </section>
   );
@@ -934,30 +896,8 @@ function WorkPostsPanel({ posts = [], onAdd, onEdit, onDelete }) {
 function BillingCard({ billing = {}, tone, notice, loading, onPayment }) {
   return (
     <section className={`rounded-[34px] overflow-hidden shadow-xl shadow-slate-200/70 bg-gradient-to-r ${tone.box} text-white`}>
-      <div className="p-5 md:p-7 grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-6 items-stretch">
-        <div>
-          <div className="flex items-center gap-2 text-white/80 text-[11px] font-black uppercase tracking-widest"><CreditCard size={15}/> Білінг і тариф</div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl md:text-3xl font-black uppercase italic">{billing.plan_name || 'VIN-matrix Full'}</h2>
-            <span className={`px-3 py-1.5 rounded-full border text-[11px] font-black uppercase ${tone.badge}`}>{billing.label || 'Активний'}</span>
-          </div>
-          <p className="mt-3 text-sm md:text-base font-bold text-white/90 max-w-2xl">{billing.message || '14 днів безкоштовно, потім 2000 грн/місяць. Усі функції включені.'}</p>
-          {notice && <div className="mt-4 bg-white/15 border border-white/20 rounded-2xl px-4 py-3 text-sm font-bold">{notice}</div>}
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <BillingMetric icon={<DollarSign size={16}/>} label="Сума" value={money(billing.price || 2000, billing.currency || 'UAH')} />
-          <BillingMetric icon={tone.icon} label="Статус" value={billing.label || 'Активний'} />
-          <BillingMetric icon={<CalendarDays size={16}/>} label="Дата" value={billing.subscription_end_display || billing.trial_until_display || '14 днів тест'} />
-          <BillingMetric icon={<Clock3 size={16}/>} label="Днів" value={billing.days_left !== null && billing.days_left !== undefined ? `${billing.days_left} дн.` : billing.grace_days_left ? `${billing.grace_days_left} дн.` : '—'} />
-        </div>
-      </div>
-      <div className="bg-white/12 border-t border-white/15 p-4 md:px-6 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <p className="text-xs font-bold text-white/80">Оплата поки вручну: Monobank банка або готівка. Після перевірки адміністратор підтвердить доступ.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full md:w-auto">
-          <button disabled={loading} onClick={() => onPayment('monobank_jar')} className="bg-white text-slate-900 rounded-2xl px-5 py-3 text-xs font-black uppercase hover:bg-slate-50 disabled:opacity-60">{loading ? 'Зачекайте...' : 'Я оплатив'}</button>
-          <button disabled={loading} onClick={() => onPayment('cash')} className="bg-slate-900/35 border border-white/20 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase hover:bg-slate-900/50 disabled:opacity-60">Оплата готівкою</button>
-        </div>
-      </div>
+      <div className="p-5 md:p-7 grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-6 items-stretch"><div><div className="flex items-center gap-2 text-white/80 text-[11px] font-black uppercase tracking-widest"><CreditCard size={15}/> Білінг і тариф</div><div className="mt-4 flex flex-wrap items-center gap-3"><h2 className="text-2xl md:text-3xl font-black uppercase italic">{billing.plan_name || 'VIN-matrix Full'}</h2><span className={`px-3 py-1.5 rounded-full border text-[11px] font-black uppercase ${tone.badge}`}>{billing.label || 'Активний'}</span></div><p className="mt-3 text-sm md:text-base font-bold text-white/90 max-w-2xl">{billing.message || '14 днів безкоштовно, потім 2000 грн/місяць. Усі функції включені.'}</p>{notice && <div className="mt-4 bg-white/15 border border-white/20 rounded-2xl px-4 py-3 text-sm font-bold">{notice}</div>}</div><div className="grid grid-cols-2 gap-3"><BillingMetric icon={<DollarSign size={16}/>} label="Сума" value={money(billing.price || 2000, billing.currency || 'UAH')} /><BillingMetric icon={tone.icon} label="Статус" value={billing.label || 'Активний'} /><BillingMetric icon={<CalendarDays size={16}/>} label="Дата" value={billing.subscription_end_display || billing.trial_until_display || '14 днів тест'} /><BillingMetric icon={<Clock3 size={16}/>} label="Днів" value={billing.days_left !== null && billing.days_left !== undefined ? `${billing.days_left} дн.` : billing.grace_days_left ? `${billing.grace_days_left} дн.` : '—'} /></div></div>
+      <div className="bg-white/12 border-t border-white/15 p-4 md:px-6 flex flex-col md:flex-row md:items-center justify-between gap-3"><p className="text-xs font-bold text-white/80">Оплата поки вручну: Monobank банка або готівка. Після перевірки адміністратор підтвердить доступ.</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full md:w-auto"><button disabled={loading} onClick={() => onPayment('monobank_jar')} className="bg-white text-slate-900 rounded-2xl px-5 py-3 text-xs font-black uppercase hover:bg-slate-50 disabled:opacity-60">{loading ? 'Зачекайте...' : 'Я оплатив'}</button><button disabled={loading} onClick={() => onPayment('cash')} className="bg-slate-900/35 border border-white/20 text-white rounded-2xl px-5 py-3 text-xs font-black uppercase hover:bg-slate-900/50 disabled:opacity-60">Оплата готівкою</button></div></div>
     </section>
   );
 }
@@ -966,305 +906,113 @@ function ProfileForm({ formData, setFormData, profile, saveLoading, billingNotic
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {billingNotice && <Alert variant={billingNotice.includes('Помилка') ? 'error' : 'success'}>{billingNotice}</Alert>}
-
-      <Card className="space-y-4">
-        <SectionTitle title="Дані компанії" desc="Основні контакти для CRM і документів." />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Input label="Ваше ім'я" value={formData.first_name} onChange={e => setFormData({ ...formData, first_name: e.target.value })} />
-          <Input label="Назва компанії" value={formData.company_name} onChange={e => setFormData({ ...formData, company_name: e.target.value })} />
-          <Input label="Адреса" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
-        </div>
-        <CompanyPhoneFields phones={formData.phones} onChange={(phones) => setFormData({ ...formData, phones })} />
-      </Card>
-
-      <Card className="space-y-4">
-        <SectionTitle title="Режим бізнесу" desc="Впливає на назви дошок і робочі сценарії." />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Select label="Тип бізнесу" value={formData.business_type} onChange={e => setFormData({ ...formData, business_type: e.target.value })} options={[{ value: 'sto', label: 'СТО' }, { value: 'store', label: 'Магазин автозапчастин' }]} />
-          <Input type="number" label="Глобальна націнка, %" value={formData.global_margin_percent} onChange={e => setFormData({ ...formData, global_margin_percent: e.target.value })} />
-        </div>
-      </Card>
-
-      <Card className="space-y-4">
-        <SectionTitle title="Оплата" desc="Окремий блок для посилання, реквізитів і короткої інструкції клієнту." />
-        <Input label="Посилання на оплату" value={formData.payment_link} onChange={e => setFormData({ ...formData, payment_link: e.target.value })} placeholder="https://..." />
-        <Textarea label="Реквізити для оплати" value={formData.payment_requisites} onChange={v => setFormData({ ...formData, payment_requisites: v })} />
-        <Textarea label="Коротка інструкція для клієнта" value={formData.payment_instruction} onChange={v => setFormData({ ...formData, payment_instruction: v })} compact />
-      </Card>
-
-      <Card className="space-y-4">
-        <SectionTitle title="Документи" desc="Реквізити, футер, підпис і гарантійний текст для PDF." />
-        <Textarea label="Текст у футері документів" value={formData.document_footer} onChange={v => setFormData({ ...formData, document_footer: v })} />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Input label="Підпис" value={formData.document_signature} onChange={e => setFormData({ ...formData, document_signature: e.target.value })} />
-          <Textarea label="Текст гарантії" value={formData.document_warranty_text} onChange={v => setFormData({ ...formData, document_warranty_text: v })} compact />
-        </div>
-        <Textarea label="Реквізити для документів" value={formData.document_requisites} onChange={v => setFormData({ ...formData, document_requisites: v })} />
-      </Card>
-
-      <Card className="space-y-4">
-        <SectionTitle title="Логотип" desc="PNG або JPG для документів і шапки компанії." />
-        <label className="block rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/50 transition">
-          <input type="file" accept="image/*" onChange={e => setFormData({ ...formData, logo: e.target.files?.[0] || null })} className="hidden" />
-          <ImageIcon className="mx-auto text-blue-600" size={28}/>
-          <p className="mt-2 font-black text-slate-900">{formData.logo?.name || 'Оберіть файл логотипа'}</p>
-          <p className="text-xs font-semibold text-slate-500 mt-1">Поточний логотип не буде змінено, якщо файл не обрано.</p>
-        </label>
-        {profile.company?.logo && <img src={profile.company.logo} alt="Логотип" className="max-h-20 rounded-2xl border border-slate-100 bg-white p-2" />}
-      </Card>
-
-      <div className="sticky bottom-0 -mx-6 -mb-6 bg-white/95 border-t border-slate-100 p-5 rounded-b-3xl flex flex-col sm:flex-row gap-3 sm:justify-end">
-        <Button type="button" variant="secondary" onClick={onClose}>Скасувати</Button>
-        <Button type="submit" loading={saveLoading} icon={<Save size={18}/>}>Зберегти</Button>
-      </div>
+      <Card className="space-y-4"><SectionTitle title="Дані компанії" desc="Основні контакти для CRM і документів." /><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Input label="Ваше ім'я" value={formData.first_name} onChange={e => setFormData({ ...formData, first_name: e.target.value })} /><Input label="Назва компанії" value={formData.company_name} onChange={e => setFormData({ ...formData, company_name: e.target.value })} /><Input label="Адреса" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></div><CompanyPhoneFields phones={formData.phones} onChange={(phones) => setFormData({ ...formData, phones })} /></Card>
+      <Card className="space-y-4"><SectionTitle title="Режим бізнесу" desc="Впливає на назви дошок і робочі сценарії." /><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Select label="Тип бізнесу" value={formData.business_type} onChange={e => setFormData({ ...formData, business_type: e.target.value })} options={[{ value: 'sto', label: 'СТО' }, { value: 'store', label: 'Магазин автозапчастин' }]} /><Input type="number" label="Глобальна націнка, %" value={formData.global_margin_percent} onChange={e => setFormData({ ...formData, global_margin_percent: e.target.value })} /></div></Card>
+      <Card className="space-y-4"><SectionTitle title="Оплата" desc="Окремий блок для посилання, реквізитів і короткої інструкції клієнту." /><Input label="Посилання на оплату" value={formData.payment_link} onChange={e => setFormData({ ...formData, payment_link: e.target.value })} placeholder="https://..." /><Textarea label="Реквізити для оплати" value={formData.payment_requisites} onChange={v => setFormData({ ...formData, payment_requisites: v })} /><Textarea label="Коротка інструкція для клієнта" value={formData.payment_instruction} onChange={v => setFormData({ ...formData, payment_instruction: v })} compact /></Card>
+      <Card className="space-y-4"><SectionTitle title="Документи" desc="Реквізити, футер, підпис і гарантійний текст для PDF." /><Textarea label="Текст у футері документів" value={formData.document_footer} onChange={v => setFormData({ ...formData, document_footer: v })} /><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Input label="Підпис" value={formData.document_signature} onChange={e => setFormData({ ...formData, document_signature: e.target.value })} /><Textarea label="Текст гарантії" value={formData.document_warranty_text} onChange={v => setFormData({ ...formData, document_warranty_text: v })} compact /></div><Textarea label="Реквізити для документів" value={formData.document_requisites} onChange={v => setFormData({ ...formData, document_requisites: v })} /></Card>
+      <Card className="space-y-4"><SectionTitle title="Логотип" desc="PNG або JPG для документів і шапки компанії." /><label className="block rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 p-5 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/50 transition"><input type="file" accept="image/*" onChange={e => setFormData({ ...formData, logo: e.target.files?.[0] || null })} className="hidden" /><ImageIcon className="mx-auto text-blue-600" size={28}/><p className="mt-2 font-black text-slate-900">{formData.logo?.name || 'Оберіть файл логотипа'}</p><p className="text-xs font-semibold text-slate-500 mt-1">Поточний логотип не буде змінено, якщо файл не обрано.</p></label>{profile.company?.logo && <img src={profile.company.logo} alt="Логотип" className="max-h-20 rounded-2xl border border-slate-100 bg-white p-2" />}</Card>
+      <div className="sticky bottom-0 -mx-6 -mb-6 bg-white/95 border-t border-slate-100 p-5 rounded-b-3xl flex flex-col sm:flex-row gap-3 sm:justify-end"><Button type="button" variant="secondary" onClick={onClose}>Скасувати</Button><Button type="submit" loading={saveLoading} icon={<Save size={18}/>}>Зберегти</Button></div>
     </form>
   );
 }
 
 function PasswordModal({ data, setData, onSubmit, onClose }) {
-  return (
-    <Modal title="Зміна пароля" onClose={onClose} maxWidth="max-w-xl">
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Card className="space-y-3">
-          <SectionTitle title="Безпека акаунта" desc="Після зміни пароля використовуйте новий пароль для входу." />
-          <Input password label="Старий пароль" value={data.old} onChange={e => setData({ ...data, old: e.target.value })} required />
-          <Input password label="Новий пароль" value={data.new} onChange={e => setData({ ...data, new: e.target.value })} required />
-          <Input password label="Повторіть новий пароль" value={data.confirm} onChange={e => setData({ ...data, confirm: e.target.value })} required />
-        </Card>
-        <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-          <Button type="button" variant="secondary" onClick={onClose}>Скасувати</Button>
-          <Button type="submit" variant="dark" icon={<Key size={18}/>}>Оновити пароль</Button>
-        </div>
-      </form>
-    </Modal>
-  );
+  return <Modal title="Зміна пароля" onClose={onClose} maxWidth="max-w-xl"><form onSubmit={onSubmit} className="space-y-4"><Card className="space-y-3"><SectionTitle title="Безпека акаунта" desc="Після зміни пароля використовуйте новий пароль для входу." /><Input password label="Старий пароль" value={data.old} onChange={e => setData({ ...data, old: e.target.value })} required /><Input password label="Новий пароль" value={data.new} onChange={e => setData({ ...data, new: e.target.value })} required /><Input password label="Повторіть новий пароль" value={data.confirm} onChange={e => setData({ ...data, confirm: e.target.value })} required /></Card><div className="flex flex-col sm:flex-row gap-3 sm:justify-end"><Button type="button" variant="secondary" onClick={onClose}>Скасувати</Button><Button type="submit" variant="dark" icon={<Key size={18}/>}>Оновити пароль</Button></div></form></Modal>;
 }
 
 function WorkPostModal({ title, data, setData, onSubmit, onClose }) {
-  return (
-    <Modal title={title} onClose={onClose} maxWidth="max-w-2xl">
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Card className="space-y-4">
-          <SectionTitle title="Робоче місце" desc="Назва і номер поста будуть показуватись у візитах та аналітиці." />
-          <Input required label="Назва" placeholder="Наприклад: Пост 1 або Діагностика" value={data.name || ''} onChange={e => setData({ ...data, name: e.target.value })} />
-          <Input type="number" min="1" label="Номер поста" value={data.number || 1} onChange={e => setData({ ...data, number: e.target.value })} helperText="Пости у списку автоматично йдуть за номером: 1, 2, 3..." />
-          <Textarea label="Опис" value={data.description || ''} onChange={v => setData({ ...data, description: v })} compact />
-          <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl font-bold text-sm border border-slate-100">
-            <input type="checkbox" checked={data.is_active !== false} onChange={e => setData({ ...data, is_active: e.target.checked })} />
-            Активний пост
-          </label>
-        </Card>
-        <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-          <Button type="button" variant="secondary" onClick={onClose}>Скасувати</Button>
-          <Button type="submit" icon={<Save size={18}/>}>Зберегти пост</Button>
-        </div>
-      </form>
-    </Modal>
-  );
+  return <Modal title={title} onClose={onClose} maxWidth="max-w-2xl"><form onSubmit={onSubmit} className="space-y-4"><Card className="space-y-4"><SectionTitle title="Робоче місце" desc="Назва і номер поста будуть показуватись у візитах та аналітиці." /><Input required label="Назва" placeholder="Наприклад: Пост 1 або Діагностика" value={data.name || ''} onChange={e => setData({ ...data, name: e.target.value })} /><Input type="number" min="1" label="Номер поста" value={data.number || 1} onChange={e => setData({ ...data, number: e.target.value })} helperText="Пости у списку автоматично йдуть за номером: 1, 2, 3..." /><Textarea label="Опис" value={data.description || ''} onChange={v => setData({ ...data, description: v })} compact /><label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl font-bold text-sm border border-slate-100"><input type="checkbox" checked={data.is_active !== false} onChange={e => setData({ ...data, is_active: e.target.checked })} />Активний пост</label></Card><div className="flex flex-col sm:flex-row gap-3 sm:justify-end"><Button type="button" variant="secondary" onClick={onClose}>Скасувати</Button><Button type="submit" icon={<Save size={18}/>}>Зберегти пост</Button></div></form></Modal>;
 }
 
 function MechanicModal({ title, data, setData, onSubmit, onClose, isEdit }) {
+  const scheme = data.salary_scheme || 'services_only';
+  const percentageScheme = scheme !== 'fixed';
+  const showWorkPercent = ['services_only', 'services_and_parts_profit', 'order_profit'].includes(scheme);
+  const showPartsPercent = ['parts_profit_only', 'services_and_parts_profit'].includes(scheme);
+  const schemeOptions = [
+    { value: 'services_only', label: 'Відсоток від робіт' },
+    { value: 'parts_profit_only', label: 'Відсоток від маржі запчастин' },
+    { value: 'services_and_parts_profit', label: 'Роботи + маржа запчастин' },
+    { value: 'fixed', label: 'Фіксована сума' },
+    ...(scheme === 'order_profit' ? [{ value: 'order_profit', label: 'Стара схема: % від прибутку замовлення' }] : []),
+  ];
+  const periodOptions = [
+    { value: 'daily', label: 'Щодня' },
+    { value: 'weekly', label: 'Щотижня' },
+    { value: 'monthly', label: 'Щомісяця' },
+    ...(data.payout_period === 'custom' ? [{ value: 'custom', label: 'Старий режим: довільний період' }] : []),
+  ];
+
   return (
     <Modal title={title} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Card className="space-y-4">
-          <SectionTitle title="Дані працівника" desc="Логін і доступи для роботи в системі." />
-          <Input label="Ім'я майстра" value={data.first_name || ''} onChange={e => setData({ ...data, first_name: e.target.value })} />
-          {!isEdit && <Input label="Логін" value={data.username || ''} onChange={e => setData({ ...data, username: e.target.value })} />}
-          <Input password label={isEdit ? "Новий пароль (необов'язково)" : 'Пароль'} value={isEdit ? (data.new_password || '') : (data.password || '')} onChange={e => setData({ ...data, [isEdit ? 'new_password' : 'password']: e.target.value })} />
-        </Card>
+        <Card className="space-y-4"><SectionTitle title="Дані працівника" desc="Логін і дані для входу в систему." /><Input label="Ім'я майстра" value={data.first_name || ''} onChange={e => setData({ ...data, first_name: e.target.value })} />{!isEdit && <Input label="Логін" value={data.username || ''} onChange={e => setData({ ...data, username: e.target.value })} />}<Input password label={isEdit ? "Новий пароль (необов'язково)" : 'Пароль'} value={isEdit ? (data.new_password || '') : (data.password || '')} onChange={e => setData({ ...data, [isEdit ? 'new_password' : 'password']: e.target.value })} /></Card>
 
         <Card className="space-y-4 bg-blue-50/50 border-blue-100">
-          <SectionTitle title="Зарплата майстра" desc="Ці правила підтягнуться у роботи та аналітику. Відсоток у вже створених роботах зберігається окремо." />
-          <Select label="Схема нарахування" value={data.salary_scheme || 'services_only'} onChange={e => setData({ ...data, salary_scheme: e.target.value })} options={[
-            { value: 'services_only', label: 'Відсоток тільки від робіт' },
-            { value: 'services_and_parts_profit', label: 'Роботи + відсоток від маржі запчастин' },
-            { value: 'order_profit', label: 'Відсоток від прибутку замовлення' },
-            { value: 'fixed', label: 'Фіксована схема' },
-          ]} />
+          <SectionTitle title="Зарплата майстра" desc="Відсоткова й фіксована схеми розраховуються окремо. Старі роботи зберігають уже зафіксовані нарахування." />
+          <Select label="Схема нарахування" value={scheme} onChange={e => setData({ ...data, salary_scheme: e.target.value })} options={schemeOptions} />
+
+          {percentageScheme && (
+            <div className={`grid grid-cols-1 ${showWorkPercent && showPartsPercent ? 'sm:grid-cols-2' : ''} gap-3`}>
+              {showWorkPercent && <Input type="number" min="0" max="100" step="0.01" label={scheme === 'order_profit' ? '% від прибутку замовлення' : '% від робіт'} value={data.commission_percent ?? 40} onChange={e => setData({ ...data, commission_percent: e.target.value })} />}
+              {showPartsPercent && <Input type="number" min="0" max="100" step="0.01" label="% від маржі запчастин" value={data.parts_commission_percent ?? 0} onChange={e => setData({ ...data, parts_commission_percent: e.target.value })} />}
+            </div>
+          )}
+
+          {scheme === 'fixed' && (
+            <Input type="number" min="0" step="0.01" label="Фіксована сума, ₴" value={data.fixed_salary_amount ?? 0} onChange={e => setData({ ...data, fixed_salary_amount: e.target.value })} helperText="Ця сума списується в аналітиці як зарплата у вибраний день виплати, а не за кожну виконану роботу." />
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input type="number" min="0" max="100" step="0.01" label="% від робіт" value={data.commission_percent ?? 40} onChange={e => setData({ ...data, commission_percent: e.target.value })} />
-            <Input type="number" min="0" max="100" step="0.01" label="% від маржі запчастин" value={data.parts_commission_percent ?? 0} onChange={e => setData({ ...data, parts_commission_percent: e.target.value })} />
+            <Select label="Період зарплати" value={data.payout_period || 'monthly'} onChange={e => setData({ ...data, payout_period: e.target.value })} options={periodOptions} />
+            {data.payout_period === 'weekly' && <Select label="День виплати" value={Number(data.payout_weekday ?? 4)} onChange={e => setData({ ...data, payout_weekday: Number(e.target.value) })} options={WEEKDAY_OPTIONS} />}
+            {data.payout_period === 'monthly' && <Select label="День виплати" value={String(data.payout_month_day || '5')} onChange={e => setData({ ...data, payout_month_day: e.target.value })} options={MONTH_DAY_OPTIONS} />}
           </div>
-          <Select label="Період виплати" value={data.payout_period || 'monthly'} onChange={e => setData({ ...data, payout_period: e.target.value })} options={[
-            { value: 'daily', label: 'Щодня' },
-            { value: 'weekly', label: 'Щотижня' },
-            { value: 'monthly', label: 'Щомісяця' },
-            { value: 'custom', label: 'Довільний період' },
-          ]} />
-          <div className="bg-white/80 rounded-2xl p-3 border border-blue-100">
-            <p className="text-[11px] font-black uppercase text-slate-400">Як буде показано</p>
-            <p className="text-xs font-black text-slate-800 mt-1">{mechanicPayrollSummary(data)}</p>
-          </div>
-          <label className="flex items-center gap-3 p-4 bg-white rounded-2xl font-bold text-sm border border-blue-100">
-            <input type="checkbox" checked={data.is_salary_active !== false} onChange={e => setData({ ...data, is_salary_active: e.target.checked })} />
-            Нарахування зарплати активне
-          </label>
+
+          <div className="bg-white/90 rounded-2xl p-4 border border-blue-100"><p className="text-[11px] font-black uppercase text-slate-400">Як буде показано</p><p className="text-sm font-black text-slate-800 mt-1">{mechanicPayrollSummary(data)}</p></div>
+          <div className="rounded-2xl border border-blue-100 bg-blue-100/40 p-3 text-xs font-semibold leading-relaxed text-blue-900">При зміні схеми старі відсотки не стираються. Вони просто не беруть участі в нових розрахунках, доки знову не виберете відповідну відсоткову схему.</div>
+          <label className="flex items-center gap-3 p-4 bg-white rounded-2xl font-bold text-sm border border-blue-100"><input type="checkbox" checked={data.is_salary_active !== false} onChange={e => setData({ ...data, is_salary_active: e.target.checked })} />Нарахування зарплати активне</label>
         </Card>
 
         <Card className="space-y-3">
-          <SectionTitle title="Права доступу" desc="Що працівник може робити в системі." />
-          <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl font-bold text-sm border border-slate-100">
-            <input type="checkbox" checked={Boolean(data.can_create_visits)} onChange={e => setData({ ...data, can_create_visits: e.target.checked })} />
-            Створювати візити
-          </label>
-          <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl font-bold text-sm border border-slate-100">
-            <input type="checkbox" checked={Boolean(data.can_view_finances)} onChange={e => setData({ ...data, can_view_finances: e.target.checked })} />
-            Бачити фінанси
-          </label>
+          <SectionTitle title="Права доступу" desc="Додаткові можливості працівника. Перегляд робочих візитів і зміна робочих статусів залишаються базовим доступом майстра." />
+          <PermissionToggle checked={Boolean(data.can_create_visits)} onChange={(value) => setData({ ...data, can_create_visits: value })} title="Створювати нові візити" description="Може самостійно додавати новий запис / авто на дошку." />
+          <PermissionToggle checked={Boolean(data.can_view_clients)} onChange={(value) => setData({ ...data, can_view_clients: value })} title="Клієнтська база та історія" description="Показує окремий розділ «Клієнти» з історією звернень." />
+          <PermissionToggle checked={Boolean(data.can_manage_inventory)} onChange={(value) => setData({ ...data, can_manage_inventory: value })} title="Керувати складом" description="Дозволяє відкривати склад і змінювати товарні залишки." />
+          <PermissionToggle checked={Boolean(data.can_take_payments)} onChange={(value) => setData({ ...data, can_take_payments: value })} title="Приймати та закривати оплати" description="Може додавати оплату клієнта та закривати борг." />
+          <PermissionToggle checked={Boolean(data.can_view_analytics)} onChange={(value) => setData({ ...data, can_view_analytics: value })} title="Бачити аналітику" description="Доступ до показників виручки, прибутку, майстрів та ефективності." />
+          <PermissionToggle checked={Boolean(data.can_view_finances)} onChange={(value) => setData({ ...data, can_view_finances: value })} title="Бачити фінанси" description="Доступ до кас, рахунків, ФОП / ТОВ та фінансових операцій." />
         </Card>
 
-        <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-          <Button type="button" variant="secondary" onClick={onClose}>Скасувати</Button>
-          <Button type="submit" icon={<Save size={18}/>}>Зберегти</Button>
-        </div>
+        <div className="flex flex-col sm:flex-row gap-3 sm:justify-end"><Button type="button" variant="secondary" onClick={onClose}>Скасувати</Button><Button type="submit" icon={<Save size={18}/>}>Зберегти</Button></div>
       </form>
     </Modal>
   );
 }
 
+function PermissionToggle({ checked, onChange, title, description }) {
+  return <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${checked ? 'border-blue-200 bg-blue-50/60' : 'border-slate-100 bg-slate-50'}`}><input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="mt-1"/><span><span className="block text-sm font-black text-slate-900">{title}</span><span className="mt-1 block text-xs font-semibold leading-relaxed text-slate-500">{description}</span></span></label>;
+}
+
 function Modal({ title, children, onClose, maxWidth = 'max-w-[940px]' }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 overflow-hidden">
-      <div className={`bg-white w-full ${maxWidth} rounded-[30px] shadow-2xl max-h-[calc(100vh-40px)] overflow-hidden flex flex-col`}>
-        <div className="shrink-0 flex items-start justify-between gap-4 px-5 md:px-6 py-5 border-b border-slate-200 bg-white">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 mb-1">VIN-matrix</p>
-            <h2 className="text-2xl md:text-3xl font-black uppercase text-slate-950 leading-tight">{title}</h2>
-          </div>
-          <button onClick={onClose} type="button" className="h-11 w-11 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center shrink-0">
-            <X size={20}/>
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 md:p-6">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 overflow-hidden"><div className={`bg-white w-full ${maxWidth} rounded-[30px] shadow-2xl max-h-[calc(100vh-40px)] overflow-hidden flex flex-col`}><div className="shrink-0 flex items-start justify-between gap-4 px-5 md:px-6 py-5 border-b border-slate-200 bg-white"><div><p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 mb-1">VIN-matrix</p><h2 className="text-2xl md:text-3xl font-black uppercase text-slate-950 leading-tight">{title}</h2></div><button onClick={onClose} type="button" className="h-11 w-11 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center shrink-0"><X size={20}/></button></div><div className="min-h-0 flex-1 overflow-y-auto p-5 md:p-6">{children}</div></div></div>;
 }
 
 function ConfirmModal({ dialog, onCancel, onConfirm }) {
   const danger = dialog.tone === 'danger';
-  return (
-    <div className="fixed inset-0 z-[70] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="p-5 border-b border-slate-100">
-          <p className={`text-[11px] font-black uppercase tracking-[0.18em] mb-1 ${danger ? 'text-rose-600' : 'text-blue-600'}`}>Підтвердження</p>
-          <h3 className="text-xl font-black uppercase text-slate-950">{dialog.title || 'Підтвердити дію?'}</h3>
-          {dialog.message && <p className="mt-2 text-sm font-semibold text-slate-500 leading-relaxed">{dialog.message}</p>}
-        </div>
-        <div className="p-4 flex flex-col sm:flex-row sm:justify-end gap-2 bg-slate-50">
-          <button type="button" onClick={onCancel} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase text-slate-700 hover:bg-slate-100">Скасувати</button>
-          <button type="button" onClick={onConfirm} className={`rounded-2xl px-5 py-3 text-xs font-black uppercase text-white shadow-lg ${danger ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'}`}>{dialog.confirmText || 'Підтвердити'}</button>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="fixed inset-0 z-[70] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4"><div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl border border-slate-100 overflow-hidden"><div className="p-5 border-b border-slate-100"><p className={`text-[11px] font-black uppercase tracking-[0.18em] mb-1 ${danger ? 'text-rose-600' : 'text-blue-600'}`}>Підтвердження</p><h3 className="text-xl font-black uppercase text-slate-950">{dialog.title || 'Підтвердити дію?'}</h3>{dialog.message && <p className="mt-2 text-sm font-semibold text-slate-500 leading-relaxed">{dialog.message}</p>}</div><div className="p-4 flex flex-col sm:flex-row sm:justify-end gap-2 bg-slate-50"><button type="button" onClick={onCancel} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase text-slate-700 hover:bg-slate-100">Скасувати</button><button type="button" onClick={onConfirm} className={`rounded-2xl px-5 py-3 text-xs font-black uppercase text-white shadow-lg ${danger ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'}`}>{dialog.confirmText || 'Підтвердити'}</button></div></div></div>;
 }
 
 function MechanicAccountView({ profile, onLogout }) {
-  return (
-    <div className="max-w-md mx-auto pt-20 text-center space-y-8 p-4 w-full">
-      <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-        <div className="bg-blue-100 w-20 h-20 rounded-3xl text-blue-600 flex items-center justify-center mx-auto mb-6"><User size={40}/></div>
-        <h1 className="text-2xl font-black text-slate-900">{profile.user?.first_name || profile.user?.username || 'Працівник'}</h1>
-        <p className="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2">{profile.company?.name || 'Компанія'} • Працівник</p>
-        <button onClick={onLogout} className="w-full flex items-center justify-center gap-3 bg-red-50 text-red-500 py-4 rounded-xl font-black uppercase tracking-widest mt-10 hover:bg-red-100 transition-colors"><LogOut size={20}/> Вийти з акаунта</button>
-      </div>
-    </div>
-  );
+  return <div className="max-w-md mx-auto pt-20 text-center space-y-8 p-4 w-full"><div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100"><div className="bg-blue-100 w-20 h-20 rounded-3xl text-blue-600 flex items-center justify-center mx-auto mb-6"><User size={40}/></div><h1 className="text-2xl font-black text-slate-900">{profile.user?.first_name || profile.user?.username || 'Працівник'}</h1><p className="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2">{profile.company?.name || 'Компанія'} • Працівник</p><button onClick={onLogout} className="w-full flex items-center justify-center gap-3 bg-red-50 text-red-500 py-4 rounded-xl font-black uppercase tracking-widest mt-10 hover:bg-red-100 transition-colors"><LogOut size={20}/> Вийти з акаунта</button></div></div>;
 }
 
-function SectionTitle({ title, desc }) {
-  return (
-    <div>
-      <h3 className="text-sm font-black uppercase tracking-[0.14em] text-slate-950">{title}</h3>
-      {desc && <p className="mt-1 text-sm font-bold text-slate-500 leading-snug">{desc}</p>}
-    </div>
-  );
-}
-
-function Textarea({ label, value, onChange, compact }) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-sm font-semibold text-slate-700">{label}</span>
-      <textarea
-        value={value || ''}
-        onChange={e => onChange(e.target.value)}
-        className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 ${compact ? 'min-h-[92px]' : 'min-h-[128px]'}`}
-      />
-    </label>
-  );
-}
-
-function MiniMetric({ label, value }) {
-  return (
-    <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="mt-1 font-black text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function InfoBox({ icon, label, value, mono }) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 min-w-0">
-      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{icon}{label}</div>
-      <p className={`mt-2 text-sm font-bold text-slate-800 break-words ${mono ? 'font-mono' : ''}`}>{value}</p>
-    </div>
-  );
-}
-
-function StatusPill({ active }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-black uppercase ${active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-      {active ? 'Активний' : 'Вимкнений'}
-    </span>
-  );
-}
-
-function IconButton({ children, onClick, label, tone = 'blue' }) {
-  const cls = tone === 'red'
-    ? 'text-rose-600 bg-rose-50 hover:bg-rose-100'
-    : 'text-blue-600 bg-blue-50 hover:bg-blue-100';
-  return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} className={`h-9 w-9 rounded-xl flex items-center justify-center transition ${cls}`}>
-      {children}
-    </button>
-  );
-}
-
-function EmptyInline({ icon, title, text }) {
-  return (
-    <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-      <div className="mx-auto w-12 h-12 rounded-2xl bg-white text-slate-300 flex items-center justify-center mb-3">{icon}</div>
-      <p className="text-sm font-black text-slate-500 uppercase">{title}</p>
-      <p className="text-xs font-semibold text-slate-400 mt-1 max-w-sm mx-auto">{text}</p>
-    </div>
-  );
-}
-
-function BillingMetric({ icon, label, value }) {
-  return (
-    <div className="bg-white/15 border border-white/20 rounded-2xl p-3">
-      <div className="flex items-center gap-2 text-white/75 text-[10px] font-black uppercase tracking-wider">{icon}{label}</div>
-      <p className="mt-2 font-black text-lg leading-tight">{value}</p>
-    </div>
-  );
-}
-
-function SettingsNavCard({ icon, title, desc, onClick }) {
-  return (
-    <button onClick={onClick} className="group bg-white border border-slate-100 rounded-[28px] p-5 text-left shadow-sm hover:shadow-xl hover:shadow-blue-100/50 hover:border-blue-100 transition-all flex items-center justify-between gap-4">
-      <div className="flex items-center gap-4 min-w-0">
-        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">{icon}</div>
-        <div className="min-w-0">
-          <h3 className="font-black uppercase text-sm text-slate-900 truncate">{title}</h3>
-          <p className="text-xs font-semibold text-slate-500 mt-1 line-clamp-2">{desc}</p>
-        </div>
-      </div>
-      <ArrowRight className="text-slate-300 group-hover:text-blue-600 shrink-0" size={18}/>
-    </button>
-  );
-}
+function SectionTitle({ title, desc }) { return <div><h3 className="text-sm font-black uppercase tracking-[0.14em] text-slate-950">{title}</h3>{desc && <p className="mt-1 text-sm font-bold text-slate-500 leading-snug">{desc}</p>}</div>; }
+function Textarea({ label, value, onChange, compact }) { return <label className="block space-y-1.5"><span className="text-sm font-semibold text-slate-700">{label}</span><textarea value={value || ''} onChange={e => onChange(e.target.value)} className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 ${compact ? 'min-h-[92px]' : 'min-h-[128px]'}`} /></label>; }
+function MiniMetric({ label, value }) { return <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p><p className="mt-1 font-black text-slate-950">{value}</p></div>; }
+function InfoBox({ icon, label, value, mono }) { return <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 min-w-0"><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{icon}{label}</div><p className={`mt-2 text-sm font-bold text-slate-800 break-words ${mono ? 'font-mono' : ''}`}>{value}</p></div>; }
+function StatusPill({ active }) { return <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-black uppercase ${active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{active ? 'Активний' : 'Вимкнений'}</span>; }
+function IconButton({ children, onClick, label, tone = 'blue' }) { const cls = tone === 'red' ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'; return <button type="button" aria-label={label} title={label} onClick={onClick} className={`h-9 w-9 rounded-xl flex items-center justify-center transition ${cls}`}>{children}</button>; }
+function EmptyInline({ icon, title, text }) { return <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200"><div className="mx-auto w-12 h-12 rounded-2xl bg-white text-slate-300 flex items-center justify-center mb-3">{icon}</div><p className="text-sm font-black text-slate-500 uppercase">{title}</p><p className="text-xs font-semibold text-slate-400 mt-1 max-w-sm mx-auto">{text}</p></div>; }
+function BillingMetric({ icon, label, value }) { return <div className="bg-white/15 border border-white/20 rounded-2xl p-3"><div className="flex items-center gap-2 text-white/75 text-[10px] font-black uppercase tracking-wider">{icon}{label}</div><p className="mt-2 font-black text-lg leading-tight">{value}</p></div>; }
+function SettingsNavCard({ icon, title, desc, onClick }) { return <button onClick={onClick} className="group bg-white border border-slate-100 rounded-[28px] p-5 text-left shadow-sm hover:shadow-xl hover:shadow-blue-100/50 hover:border-blue-100 transition-all flex items-center justify-between gap-4"><div className="flex items-center gap-4 min-w-0"><div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">{icon}</div><div className="min-w-0"><h3 className="font-black uppercase text-sm text-slate-900 truncate">{title}</h3><p className="text-xs font-semibold text-slate-500 mt-1 line-clamp-2">{desc}</p></div></div><ArrowRight className="text-slate-300 group-hover:text-blue-600 shrink-0" size={18}/></button>; }

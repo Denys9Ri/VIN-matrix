@@ -94,7 +94,7 @@ def default_mechanic_settings(employee):
 def service_commission_amount(service):
     try:
         base = getattr(service, 'commission_base', Employee.SALARY_SERVICES_ONLY)
-        if base in {Employee.SALARY_FIXED, Employee.SALARY_PARTS_PROFIT_ONLY}:
+        if base in {Employee.SALARY_FIXED, Employee.SALARY_PARTS_PROFIT_ONLY, Employee.SALARY_ORDER_PROFIT}:
             return Decimal('0.00')
         total = money_value(service.price) * money_value(service.quantity or 1)
         return (total * money_value(service.commission_percent) / Decimal('100')).quantize(Decimal('0.01'))
@@ -537,12 +537,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class InventoryItemViewSet(viewsets.ModelViewSet):
     serializer_class = InventoryItemSerializer
-    permission_classes = [IsAuthenticated]
-    def get_permissions(self):
-        classes = [IsAuthenticated]
-        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
-            classes.append(CanManageInventory)
-        return [permission() for permission in classes]
+    permission_classes = [IsAuthenticated, CanManageInventory]
     def get_queryset(self): company = safe_ensure_company(self.request.user); return InventoryItem.objects.filter(company=company) if company else InventoryItem.objects.none()
     def perform_create(self, serializer): company = safe_ensure_company(self.request.user); item = serializer.save(company=company); log_activity(company=company, user=self.request.user, inventory_item=item, action_type='stock_adjusted', title='Створено товар на складі', description=f"{item.brand} {item.article} · {item.quantity} шт")
 class SupplierViewSet(viewsets.ModelViewSet):

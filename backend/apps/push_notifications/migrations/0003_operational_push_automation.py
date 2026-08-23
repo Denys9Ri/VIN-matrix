@@ -16,6 +16,11 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AddField(
+            model_name='webpushvapidkey',
+            name='scheduler_heartbeat_at',
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AddField(
             model_name='webpushpreference',
             name='visit_reminder_minutes',
             field=models.PositiveSmallIntegerField(default=60),

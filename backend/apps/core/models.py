@@ -1,6 +1,7 @@
 from django.db import models
 import uuid
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 class Company(models.Model):
     name = models.CharField(max_length=255, verbose_name="Company name")
@@ -23,11 +24,13 @@ class Company(models.Model):
 
 class Employee(models.Model):
     SALARY_SERVICES_ONLY = 'services_only'
+    SALARY_PARTS_PROFIT_ONLY = 'parts_profit_only'
     SALARY_SERVICES_AND_PARTS_PROFIT = 'services_and_parts_profit'
     SALARY_ORDER_PROFIT = 'order_profit'
     SALARY_FIXED = 'fixed'
     SALARY_SCHEME_CHOICES = [
         (SALARY_SERVICES_ONLY, 'Відсоток тільки від робіт'),
+        (SALARY_PARTS_PROFIT_ONLY, 'Відсоток тільки від маржі запчастин'),
         (SALARY_SERVICES_AND_PARTS_PROFIT, 'Відсоток від робіт + маржі запчастин'),
         (SALARY_ORDER_PROFIT, 'Відсоток від прибутку замовлення'),
         (SALARY_FIXED, 'Фіксована сума'),
@@ -48,12 +51,20 @@ class Employee(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='employees')
     role = models.CharField(max_length=20, default='mechanic')
     can_create_visits = models.BooleanField(default=False)
+    can_view_clients = models.BooleanField(default=False)
+    can_manage_inventory = models.BooleanField(default=False)
+    can_take_payments = models.BooleanField(default=False)
+    can_view_analytics = models.BooleanField(default=False)
     can_view_finances = models.BooleanField(default=False)
     partner_code = models.CharField(max_length=20, unique=True, null=True, blank=True)
     commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=40.00)
     parts_commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    fixed_salary_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     salary_scheme = models.CharField(max_length=40, choices=SALARY_SCHEME_CHOICES, default=SALARY_SERVICES_ONLY)
     payout_period = models.CharField(max_length=20, choices=PAYOUT_PERIOD_CHOICES, default=PAYOUT_MONTHLY)
+    payout_weekday = models.PositiveSmallIntegerField(default=4)
+    payout_month_day = models.CharField(max_length=8, default='5')
+    salary_effective_from = models.DateField(default=timezone.localdate)
     is_salary_active = models.BooleanField(default=True)
     def __str__(self): return f"{self.user.username} - {self.company.name}"
 
@@ -233,14 +244,16 @@ class OrderPart(models.Model):
 
 class OrderService(models.Model):
     COMMISSION_SERVICES_ONLY = 'services_only'
+    COMMISSION_PARTS_PROFIT_ONLY = 'parts_profit_only'
     COMMISSION_SERVICES_AND_PARTS_PROFIT = 'services_and_parts_profit'
     COMMISSION_ORDER_PROFIT = 'order_profit'
     COMMISSION_FIXED = 'fixed'
     COMMISSION_BASE_CHOICES = [
         (COMMISSION_SERVICES_ONLY, 'Тільки роботи'),
+        (COMMISSION_PARTS_PROFIT_ONLY, 'Тільки маржа запчастин'),
         (COMMISSION_SERVICES_AND_PARTS_PROFIT, 'Роботи + маржа запчастин'),
         (COMMISSION_ORDER_PROFIT, 'Прибуток замовлення'),
-        (COMMISSION_FIXED, 'Фіксована сума'),
+        (COMMISSION_FIXED, 'Періодична фіксована сума'),
     ]
 
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, related_name='services')

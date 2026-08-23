@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .access_control import CanTakePayments
 from .activity import log_activity
 from .company_options import seed_company_options
 from .models import CRMTask, CompanyOption, Visit
@@ -146,6 +147,12 @@ def add_payment(visit, user, amount, payment_type='cash', purpose='partial', com
 class VisitPaymentListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        classes = [IsAuthenticated]
+        if self.request.method == 'POST':
+            classes.append(CanTakePayments)
+        return [permission() for permission in classes]
+
     def get(self, request):
         company = safe_ensure_company(request.user)
         visit_id = request.query_params.get('visit')
@@ -169,7 +176,7 @@ class VisitPaymentListView(APIView):
 
 
 class VisitAddPaymentView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanTakePayments]
 
     def post(self, request, pk):
         company = safe_ensure_company(request.user)
@@ -184,7 +191,7 @@ class VisitAddPaymentView(APIView):
 
 
 class VisitMarkPaidView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanTakePayments]
 
     def post(self, request, pk):
         company = safe_ensure_company(request.user)

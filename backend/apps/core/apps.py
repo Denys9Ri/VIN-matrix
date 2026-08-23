@@ -7,5 +7,6 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         # Register small cross-model automations only after Django has loaded
-        # all models. Importing the module is enough to connect its signals.
+        # all models. Importing the modules is enough to connect their signals.
         from . import service_catalog_sync  # noqa: F401
+        from . import payroll_commissions  # noqa: F401

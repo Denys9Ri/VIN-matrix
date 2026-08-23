@@ -19,11 +19,21 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 
+const DEFAULT_PERMISSIONS = {
+  can_create_visits: false,
+  can_view_clients: false,
+  can_manage_inventory: false,
+  can_take_payments: false,
+  can_view_analytics: false,
+  can_view_finances: false,
+  can_manage_partners: false,
+  can_manage_accounts: false,
+};
+
 const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollapse }) => {
   const [role, setRole] = useState('client');
   const [businessType, setBusinessType] = useState('sto');
-  const [canManagePartners, setCanManagePartners] = useState(false);
-  const [canManageAccounts, setCanManageAccounts] = useState(false);
+  const [permissions, setPermissions] = useState(DEFAULT_PERMISSIONS);
   const [accessAllowed, setAccessAllowed] = useState(true);
 
   useEffect(() => {
@@ -39,8 +49,7 @@ const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollaps
 
         setRole(data.actual_role || data.account_role || data.role || 'client');
         setBusinessType(data.company?.business_type || 'sto');
-        setCanManagePartners(data.permissions?.can_manage_partners === true);
-        setCanManageAccounts(data.permissions?.can_manage_accounts === true);
+        setPermissions({ ...DEFAULT_PERMISSIONS, ...(data.permissions || {}) });
         setAccessAllowed(data.access_allowed !== false);
       } catch (error) {
         console.error('Помилка перевірки', error);
@@ -55,18 +64,23 @@ const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollaps
   }, []);
 
   const isStore = businessType === 'store';
+  const isMechanic = role === 'mechanic';
   const workLabel = isStore ? 'Замовлення' : 'Візити';
   const WorkIcon = isStore ? ShoppingCart : Wrench;
 
   const workItems = [
     { name: workLabel, icon: <WorkIcon size={20} />, path: '/visits' },
     { name: 'Пошук запчастин', icon: <Search size={20} />, path: '/search' },
-    { name: 'Клієнти', icon: <Users size={20} />, path: '/clients' },
-    { name: 'Склад', icon: <Package size={20} />, path: '/inventory' },
+    ...(!isMechanic || permissions.can_view_clients
+      ? [{ name: 'Клієнти', icon: <Users size={20} />, path: '/clients' }]
+      : []),
+    ...(!isMechanic || permissions.can_manage_inventory
+      ? [{ name: 'Склад', icon: <Package size={20} />, path: '/inventory' }]
+      : []),
   ];
 
   const goodsAndServicesItems = [
-    ...(!isStore
+    ...(!isStore && !isMechanic
       ? [
           {
             name: 'Пакети послуг',
@@ -75,7 +89,7 @@ const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollaps
           },
         ]
       : []),
-    ...(!isStore
+    ...(!isStore && !isMechanic
       ? [
           {
             name: 'Закупівлі',
@@ -88,12 +102,16 @@ const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollaps
 
   const controlItems = [
     { name: 'Панель', icon: <LayoutDashboard size={20} />, path: '/' },
-    { name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' },
-    { name: 'Фінанси', icon: <WalletCards size={20} />, path: '/finance' },
+    ...(!isMechanic || permissions.can_view_analytics
+      ? [{ name: 'Аналітика', icon: <LineChart size={20} />, path: '/analytics' }]
+      : []),
+    ...(!isMechanic || permissions.can_view_finances
+      ? [{ name: 'Фінанси', icon: <WalletCards size={20} />, path: '/finance' }]
+      : []),
   ];
 
   const accessItems = [
-    ...(accessAllowed && canManageAccounts
+    ...(accessAllowed && permissions.can_manage_accounts
       ? [
           {
             name: 'Акаунти',
@@ -102,7 +120,7 @@ const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollaps
           },
         ]
       : []),
-    ...(accessAllowed && canManagePartners
+    ...(accessAllowed && permissions.can_manage_partners
       ? [
           {
             name: 'Партнери',
@@ -114,7 +132,7 @@ const Sidebar = ({ isOpen, closeMenu, desktopCollapsed = false, onDesktopCollaps
   ];
 
   const systemItems = [
-    { name: 'Тариф', icon: <CreditCard size={20} />, path: '/billing' },
+    ...(!isMechanic ? [{ name: 'Тариф', icon: <CreditCard size={20} />, path: '/billing' }] : []),
     {
       name: 'Налаштування',
       icon: <Settings size={20} />,

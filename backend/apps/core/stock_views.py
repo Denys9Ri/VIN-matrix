@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .access_control import CanManageInventory
 from .models import Category, Company, InventoryItem, OrderPart, StockMovement, Supplier
 from .safe_crm_views import safe_ensure_company
 
@@ -107,7 +108,7 @@ class StockMovementSerializer(serializers.ModelSerializer):
 
 class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = StockMovementSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageInventory]
 
     def get_queryset(self):
         company = safe_ensure_company(self.request.user)
@@ -119,7 +120,7 @@ class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class StockReceiveViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageInventory]
 
     def _receive_payload(self, request, data):
         company = safe_ensure_company(request.user)
@@ -135,9 +136,6 @@ class StockReceiveViewSet(viewsets.ViewSet):
         quantity = to_int(data.get('quantity'))
         buy_price = to_decimal(data.get('buy_price'))
 
-        # Lock the company row first. InventoryItem has no uniqueness constraint on
-        # company + brand + article, so this prevents simultaneous receipts from
-        # creating duplicate rows for the same item.
         with transaction.atomic():
             company = Company.objects.select_for_update().get(pk=company.pk)
             sell_price = apply_company_margin(buy_price, data.get('sell_price'), company)
@@ -230,8 +228,6 @@ class StockReceiveViewSet(viewsets.ViewSet):
 
         created = updated = skipped = 0
         try:
-            # The whole file is atomic: an unexpected database failure cannot leave
-            # a partially imported inventory behind.
             with transaction.atomic():
                 for row in rows[1:]:
                     def cell(key, default=''):

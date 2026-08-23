@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .access_control import CanViewClients
 from .models import Visit, OrderPart
 from .safe_crm_views import safe_ensure_company
 from .crm_client_views import build_clients, normalize_phone
@@ -34,7 +35,7 @@ def find_client_visits(company, wanted):
 
 
 class StoreClientUpdateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanViewClients]
 
     def patch(self, request):
         company = safe_ensure_company(request.user)
@@ -84,7 +85,7 @@ class StoreClientUpdateView(APIView):
 
 
 class StoreClientRepeatSaleView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanViewClients]
 
     def post(self, request):
         company = safe_ensure_company(request.user)

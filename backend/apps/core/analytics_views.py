@@ -1,3 +1,4 @@
+import calendar
 from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -9,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .access_control import CanViewAnalytics
 from .models import Employee, InventoryItem, OrderPart, StoExpense, Visit, WorkPost
 from .safe_crm_views import safe_ensure_company
 
@@ -54,7 +56,6 @@ def chart_seed(date, label):
         'average_check': Decimal('0'),
         'debt': Decimal('0'),
     }
-
 
 
 def money(value):
@@ -117,7 +118,6 @@ def add_month(date_value, months):
 
 def period_bounds(request):
     today = timezone.localdate()
-    tomorrow_start = local_start_of_day(today + timedelta(days=1))
     period = (request.query_params.get('period') or '30d').strip()
 
     if period == 'today':
@@ -222,14 +222,6 @@ def part_totals(part):
 
 
 def normalize_supplier_name(value):
-    """
-    Групуємо оборот саме по постачальнику, а не по складу.
-    Приклади:
-    - Vesna-auto (Київ) -> Vesna-auto
-    - Vesna-auto (Закарпаття) -> Vesna-auto
-    - Техномир (METR (2 дн.)) -> Техномир
-    - Мій склад (Мій склад) -> Мій склад
-    """
     raw = str(value or '').strip()
     if not raw:
         return 'Без постачальника'
@@ -240,8 +232,6 @@ def normalize_supplier_name(value):
     if 'мій склад' in lowered or 'мой склад' in lowered:
         return 'Мій склад'
 
-    # Забираємо склад/місто/термін доставки у дужках в кінці назви.
-    # Працює і для вкладених дужок: "Техномир (METR (2 дн.))".
     while name.endswith(')') and '(' in name:
         start = name.find('(')
         if start <= 0:
@@ -249,7 +239,6 @@ def normalize_supplier_name(value):
         name = name[:start].strip()
         lowered = name.lower()
 
-    # Невелика канонізація популярних назв, щоб різні регістри не дробили статистику.
     if lowered.startswith('vesna') or 'весна' in lowered:
         return 'Vesna-auto'
     if 'omega' in lowered or 'омега' in lowered:
@@ -326,8 +315,12 @@ def employee_payload(employee):
         'username': getattr(user, 'username', '') if user else '',
         'commission_percent': round_money(getattr(employee, 'commission_percent', 0)),
         'parts_commission_percent': round_money(getattr(employee, 'parts_commission_percent', 0)),
+        'fixed_salary_amount': round_money(getattr(employee, 'fixed_salary_amount', 0)),
         'salary_scheme': getattr(employee, 'salary_scheme', 'services_only'),
         'payout_period': getattr(employee, 'payout_period', 'monthly'),
+        'payout_weekday': getattr(employee, 'payout_weekday', 4),
+        'payout_month_day': getattr(employee, 'payout_month_day', '5'),
+        'salary_effective_from': getattr(employee, 'salary_effective_from', None).isoformat() if getattr(employee, 'salary_effective_from', None) else None,
         'is_salary_active': bool(getattr(employee, 'is_salary_active', True)),
     }
 
@@ -347,8 +340,12 @@ def build_empty_mechanic_row(employee=None, user=None):
             'username': getattr(user, 'username', '') if user else '',
             'commission_percent': 0,
             'parts_commission_percent': 0,
+            'fixed_salary_amount': 0,
             'salary_scheme': 'services_only',
             'payout_period': 'monthly',
+            'payout_weekday': 4,
+            'payout_month_day': '5',
+            'salary_effective_from': None,
             'is_salary_active': True,
         }
 
@@ -359,6 +356,8 @@ def build_empty_mechanic_row(employee=None, user=None):
         'parts_profit': Decimal('0'),
         'service_commission': Decimal('0'),
         'parts_commission': Decimal('0'),
+        'fixed_salary_total': Decimal('0'),
+        'fixed_salary_payments': 0,
         'commission_total': Decimal('0'),
         'average_commission_percent': 0,
         '_visit_ids': set(),
@@ -372,9 +371,47 @@ def mechanic_is_parts_commission_eligible(employee):
         return False
     if not getattr(employee, 'is_salary_active', True):
         return False
-    if getattr(employee, 'salary_scheme', '') != 'services_and_parts_profit':
+    if getattr(employee, 'salary_scheme', '') not in {Employee.SALARY_PARTS_PROFIT_ONLY, Employee.SALARY_SERVICES_AND_PARTS_PROFIT}:
         return False
     return money(getattr(employee, 'parts_commission_percent', 0)) > 0
+
+
+def fixed_salary_payout_dates(employee, bounds):
+    if not employee or not getattr(employee, 'is_salary_active', True):
+        return []
+    if getattr(employee, 'salary_scheme', '') != Employee.SALARY_FIXED:
+        return []
+    if money(getattr(employee, 'fixed_salary_amount', 0)) <= 0:
+        return []
+
+    today = timezone.localdate()
+    effective = getattr(employee, 'salary_effective_from', None) or today
+    start = parse_iso_date(bounds.get('start_date')) if bounds.get('start_date') else effective
+    end = parse_iso_date(bounds.get('end_date')) if bounds.get('end_date') else today
+    start = max(start or effective, effective)
+    end = min(end or today, today)
+    if end < start:
+        return []
+
+    period = getattr(employee, 'payout_period', Employee.PAYOUT_MONTHLY)
+    result = []
+    cursor = start
+    while cursor <= end:
+        include = False
+        if period == Employee.PAYOUT_DAILY:
+            include = True
+        elif period == Employee.PAYOUT_WEEKLY:
+            include = cursor.weekday() == safe_int(getattr(employee, 'payout_weekday', 4), 4)
+        elif period == Employee.PAYOUT_MONTHLY:
+            month_day = str(getattr(employee, 'payout_month_day', '5') or '5')
+            if month_day == 'last':
+                include = cursor.day == calendar.monthrange(cursor.year, cursor.month)[1]
+            else:
+                include = cursor.day == max(1, min(safe_int(month_day, 5), 28))
+        if include:
+            result.append(cursor)
+        cursor += timedelta(days=1)
+    return result
 
 
 def ensure_mechanic_row(mechanics, user, employee=None):
@@ -545,14 +582,16 @@ def normalize_mechanic_row(row):
     details = row.get('_details') or []
     history = normalize_mechanic_history(details)
     clean_row = {key: value for key, value in row.items() if not str(key).startswith('_')}
+    average_percent = 0 if row.get('salary_scheme') == Employee.SALARY_FIXED else (percent(commission_total, service_revenue) if service_revenue else round_number(row.get('commission_percent', 0), 1))
     return {
         **clean_row,
         'services_revenue': round_money(service_revenue),
         'parts_profit': round_money(row.get('parts_profit', 0)),
         'service_commission': round_money(row.get('service_commission', 0)),
         'parts_commission': round_money(row.get('parts_commission', 0)),
+        'fixed_salary_total': round_money(row.get('fixed_salary_total', 0)),
         'commission_total': round_money(commission_total),
-        'average_commission_percent': percent(commission_total, service_revenue) if service_revenue else round_number(row.get('commission_percent', 0), 1),
+        'average_commission_percent': average_percent,
         'history_count': len(details),
         'history_by_date': history,
     }
@@ -578,7 +617,7 @@ def normalize_work_post_row(row):
 
 
 class AnalyticsSummaryView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanViewAnalytics]
 
     def get(self, request):
         company = safe_ensure_company(request.user)
@@ -656,6 +695,7 @@ class AnalyticsSummaryView(APIView):
             'services_profit': Decimal('0'),
             'gross_profit': Decimal('0'),
             'mechanic_commission': Decimal('0'),
+            'fixed_salary_total': Decimal('0'),
             'operating_expenses': Decimal('0'),
             'net_profit_before_expenses': Decimal('0'),
             'net_profit': Decimal('0'),
@@ -855,8 +895,6 @@ class AnalyticsSummaryView(APIView):
 
                 parts_commission_total = Decimal('0')
 
-                # Пріоритет 1: якщо у візиті обраний відповідальний майстер і в нього ввімкнено
-                # схему "роботи + маржа запчастин", увесь відсоток від маржі запчастин іде йому.
                 if mechanic_is_parts_commission_eligible(responsible_employee):
                     employee_percent = money(getattr(responsible_employee, 'parts_commission_percent', 0))
                     parts_commission = totals['parts_profit'] * employee_percent / Decimal('100')
@@ -871,9 +909,6 @@ class AnalyticsSummaryView(APIView):
                     detail['commission_total'] += parts_commission
                     detail['parts'].extend([normalize_part_detail(part_item, Decimal('1'), employee_percent) for part_item in visit_parts_items])
 
-                # Пріоритет 2: якщо відповідальний майстер не заданий або в нього немає такої схеми,
-                # відсоток від запчастин отримують майстри, які фактично виконували роботи у цьому візиті.
-                # Якщо робіт кілька — маржу запчастин ділимо пропорційно сумі робіт кожного майстра.
                 elif totals['parts_profit'] > 0 and service_revenue_by_mechanic:
                     eligible_ids = [
                         user_id for user_id in service_revenue_by_mechanic.keys()
@@ -912,6 +947,27 @@ class AnalyticsSummaryView(APIView):
                     summary['mechanic_commission'] += parts_commission_total
                     chart[key]['mechanic_commission'] += parts_commission_total
                     work_posts[post_key]['mechanic_commission'] += parts_commission_total
+
+        # Fixed salary is a periodic payroll expense, never a hidden commission per work item.
+        for employee in employees:
+            payout_dates = fixed_salary_payout_dates(employee, bounds)
+            if not payout_dates:
+                continue
+            amount = money(getattr(employee, 'fixed_salary_amount', 0))
+            row = mechanics.get(employee.user_id)
+            total_fixed = amount * Decimal(len(payout_dates))
+            if row is not None:
+                row['fixed_salary_total'] += total_fixed
+                row['fixed_salary_payments'] += len(payout_dates)
+                row['commission_total'] += total_fixed
+            summary['fixed_salary_total'] += total_fixed
+            summary['mechanic_commission'] += total_fixed
+            for payout_date in payout_dates:
+                payout_dt = local_start_of_day(payout_date)
+                payout_key, payout_label = chart_key(payout_dt, bounds.get('group_by'))
+                if payout_key not in chart:
+                    chart[payout_key] = chart_seed(payout_key, payout_label)
+                chart[payout_key]['mechanic_commission'] += amount
 
         expenses_for_period = expense_queryset_for_bounds(company, bounds)
         for expense in expenses_for_period:
@@ -1085,6 +1141,7 @@ class AnalyticsSummaryView(APIView):
                 'services_profit': round_money(summary['services_profit']),
                 'gross_profit': round_money(summary['gross_profit']),
                 'mechanic_commission': round_money(summary['mechanic_commission']),
+                'fixed_salary_total': round_money(summary['fixed_salary_total']),
                 'operating_expenses': round_money(summary['operating_expenses']),
                 'net_profit_before_expenses': round_money(summary['net_profit_before_expenses']),
                 'net_profit': round_money(summary['net_profit']),
@@ -1144,6 +1201,7 @@ class AnalyticsSummaryView(APIView):
                 'summary': {
                     'count': len(mechanics),
                     'commission_total': round_money(summary['mechanic_commission']),
+                    'fixed_salary_total': round_money(summary['fixed_salary_total']),
                 },
                 'items': sorted([normalize_mechanic_row(row) for row in mechanics.values()], key=lambda item: item['commission_total'], reverse=True),
             },

@@ -14,6 +14,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .access_control import CanCreateVisits, CanManageInventory
 from .activity import log_activity
 from .models import Category, Employee, InventoryItem, OrderPart, OrderService, ServiceCatalog, Supplier, SupplierAccount, Visit, VehicleRecommendation, CRMTask, WorkPost
 from .serializers import CategorySerializer, InventoryItemSerializer, OrderPartSerializer, OrderServiceSerializer, ServiceCatalogSerializer, SupplierSerializer, VisitSerializer, VehicleRecommendationSerializer, WorkPostSerializer
@@ -81,19 +82,82 @@ def mechanic_user_for_company(company, mechanic_id):
         return None, None
 
 def default_mechanic_settings(employee):
+    scheme = getattr(employee, 'salary_scheme', Employee.SALARY_SERVICES_ONLY) if employee else Employee.SALARY_SERVICES_ONLY
+    work_percent = money_value(getattr(employee, 'commission_percent', 0)) if employee else Decimal('0.00')
+    if scheme in {Employee.SALARY_FIXED, Employee.SALARY_PARTS_PROFIT_ONLY}:
+        work_percent = Decimal('0.00')
     return {
-        'commission_percent': money_value(getattr(employee, 'commission_percent', 0)) if employee else Decimal('0.00'),
-        'commission_base': getattr(employee, 'salary_scheme', 'services_only') if employee else 'services_only',
+        'commission_percent': work_percent,
+        'commission_base': scheme,
     }
 
 def service_commission_amount(service):
     try:
-        if getattr(service, 'commission_base', 'services_only') == 'fixed':
-            return money_value(service.commission_percent)
+        base = getattr(service, 'commission_base', Employee.SALARY_SERVICES_ONLY)
+        if base in {Employee.SALARY_FIXED, Employee.SALARY_PARTS_PROFIT_ONLY, Employee.SALARY_ORDER_PROFIT}:
+            return Decimal('0.00')
         total = money_value(service.price) * money_value(service.quantity or 1)
         return (total * money_value(service.commission_percent) / Decimal('100')).quantize(Decimal('0.01'))
     except Exception:
         return Decimal('0.00')
+
+
+def _bool_payload(data, field, default=False):
+    return data.get(field) is True if field in data else default
+
+
+def _percent_payload(value, field):
+    number = money_value(value)
+    if number < 0 or number > 100:
+        raise serializers.ValidationError({field: 'Вкажіть значення від 0 до 100%.'})
+    return number
+
+
+def _payroll_values(data, current=None):
+    current = current or {}
+    scheme = data.get('salary_scheme', current.get('salary_scheme', Employee.SALARY_SERVICES_ONLY)) or Employee.SALARY_SERVICES_ONLY
+    if scheme not in dict(Employee.SALARY_SCHEME_CHOICES):
+        raise serializers.ValidationError({'salary_scheme': 'Некоректна схема нарахування зарплати.'})
+
+    period = data.get('payout_period', current.get('payout_period', Employee.PAYOUT_MONTHLY)) or Employee.PAYOUT_MONTHLY
+    if period not in dict(Employee.PAYOUT_PERIOD_CHOICES):
+        raise serializers.ValidationError({'payout_period': 'Некоректний період виплати.'})
+
+    work_percent = _percent_payload(data.get('commission_percent', current.get('commission_percent', 40)), 'commission_percent')
+    parts_percent = _percent_payload(data.get('parts_commission_percent', current.get('parts_commission_percent', 0)), 'parts_commission_percent')
+    fixed_amount = money_value(data.get('fixed_salary_amount', current.get('fixed_salary_amount', 0)))
+    if fixed_amount < 0:
+        raise serializers.ValidationError({'fixed_salary_amount': 'Фіксована зарплата не може бути відʼємною.'})
+    if scheme == Employee.SALARY_FIXED and fixed_amount <= 0:
+        raise serializers.ValidationError({'fixed_salary_amount': 'Для фіксованої схеми вкажіть суму більше 0.'})
+
+    try:
+        weekday = int(data.get('payout_weekday', current.get('payout_weekday', 4)))
+    except (TypeError, ValueError):
+        weekday = -1
+    if weekday < 0 or weekday > 6:
+        raise serializers.ValidationError({'payout_weekday': 'Оберіть день тижня.'})
+
+    month_day = str(data.get('payout_month_day', current.get('payout_month_day', '5')) or '5')
+    if month_day != 'last':
+        try:
+            numeric_day = int(month_day)
+        except (TypeError, ValueError):
+            numeric_day = 0
+        if numeric_day < 1 or numeric_day > 28:
+            raise serializers.ValidationError({'payout_month_day': 'Оберіть число від 1 до 28 або останній день місяця.'})
+        month_day = str(numeric_day)
+
+    return {
+        'salary_scheme': scheme,
+        'payout_period': period,
+        'commission_percent': work_percent,
+        'parts_commission_percent': parts_percent,
+        'fixed_salary_amount': fixed_amount,
+        'payout_weekday': weekday,
+        'payout_month_day': month_day,
+    }
+
 
 class WorkPostViewSet(viewsets.ModelViewSet):
     serializer_class = WorkPostSerializer
@@ -116,6 +180,13 @@ class WorkPostViewSet(viewsets.ModelViewSet):
 class VisitViewSet(BaseVisitViewSet):
     serializer_class = VisitSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        classes = [IsAuthenticated]
+        if self.action == 'create':
+            classes.append(CanCreateVisits)
+        return [permission() for permission in classes]
+
     def get_queryset(self):
         company = safe_ensure_company(self.request.user)
         queryset = Visit.objects.filter(company=company) if company else Visit.objects.none()
@@ -404,7 +475,8 @@ class OrderServiceViewSet(viewsets.ModelViewSet):
                 instance.mechanic = mechanic_user
 
                 if employee and ('commission_percent' not in request.data or request.data.get('commission_percent') in [None, '']):
-                    instance.commission_percent = employee.commission_percent
+                    employee_scheme = employee.salary_scheme
+                    instance.commission_percent = 0 if employee_scheme in {Employee.SALARY_FIXED, Employee.SALARY_PARTS_PROFIT_ONLY} else employee.commission_percent
                 if employee and ('commission_base' not in request.data or not request.data.get('commission_base')):
                     instance.commission_base = employee.salary_scheme
 
@@ -464,7 +536,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
     def get_queryset(self): company = safe_ensure_company(self.request.user); return Category.objects.filter(company=company) if company else Category.objects.none()
     def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class InventoryItemViewSet(viewsets.ModelViewSet):
-    serializer_class = InventoryItemSerializer; permission_classes = [IsAuthenticated]
+    serializer_class = InventoryItemSerializer
+    permission_classes = [IsAuthenticated, CanManageInventory]
     def get_queryset(self): company = safe_ensure_company(self.request.user); return InventoryItem.objects.filter(company=company) if company else InventoryItem.objects.none()
     def perform_create(self, serializer): company = safe_ensure_company(self.request.user); item = serializer.save(company=company); log_activity(company=company, user=self.request.user, inventory_item=item, action_type='stock_adjusted', title='Створено товар на складі', description=f"{item.brand} {item.article} · {item.quantity} шт")
 class SupplierViewSet(viewsets.ModelViewSet):
@@ -473,6 +546,15 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer): company = safe_ensure_company(self.request.user); serializer.save(company=company)
 class MechanicViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
+
+    ACCESS_FIELDS = (
+        'can_create_visits',
+        'can_view_clients',
+        'can_manage_inventory',
+        'can_take_payments',
+        'can_view_analytics',
+        'can_view_finances',
+    )
 
     def _serialize_employee(self, employee):
         user = employee.user
@@ -483,12 +565,15 @@ class MechanicViewSet(viewsets.ViewSet):
             'first_name': user.first_name,
             'email': user.email,
             'role': employee.role,
-            'can_create_visits': employee.can_create_visits,
-            'can_view_finances': employee.can_view_finances,
+            **{field: bool(getattr(employee, field, False)) for field in self.ACCESS_FIELDS},
             'commission_percent': float(employee.commission_percent or 0),
             'parts_commission_percent': float(employee.parts_commission_percent or 0),
+            'fixed_salary_amount': float(employee.fixed_salary_amount or 0),
             'salary_scheme': employee.salary_scheme,
             'payout_period': employee.payout_period,
+            'payout_weekday': employee.payout_weekday,
+            'payout_month_day': employee.payout_month_day,
+            'salary_effective_from': employee.salary_effective_from.isoformat() if employee.salary_effective_from else None,
             'is_salary_active': employee.is_salary_active,
         }
 
@@ -512,17 +597,19 @@ class MechanicViewSet(viewsets.ViewSet):
             return Response({'error': 'Логін зайнятий'}, status=400)
 
         try:
+            payroll = _payroll_values(request.data)
+        except serializers.ValidationError as exc:
+            return Response(exc.detail, status=400)
+
+        try:
             user = User.objects.create_user(username=username, password=password, first_name=first_name)
             employee = Employee.objects.create(
                 user=user,
                 company=company,
                 role='mechanic',
-                can_create_visits=request.data.get('can_create_visits') is True,
-                can_view_finances=request.data.get('can_view_finances') is True,
-                commission_percent=money_value(request.data.get('commission_percent') or 40),
-                parts_commission_percent=money_value(request.data.get('parts_commission_percent') or 0),
-                salary_scheme=request.data.get('salary_scheme') or 'services_only',
-                payout_period=request.data.get('payout_period') or 'monthly',
+                **{field: request.data.get(field) is True for field in self.ACCESS_FIELDS},
+                **payroll,
+                salary_effective_from=timezone.localdate(),
                 is_salary_active=request.data.get('is_salary_active') is not False,
             )
             return Response(self._serialize_employee(employee), status=201)
@@ -546,18 +633,29 @@ class MechanicViewSet(viewsets.ViewSet):
                 user.set_password(request.data.get('new_password'))
             user.save()
 
-            if 'can_create_visits' in request.data:
-                employee.can_create_visits = request.data.get('can_create_visits') is True
-            if 'can_view_finances' in request.data:
-                employee.can_view_finances = request.data.get('can_view_finances') is True
-            if 'commission_percent' in request.data:
-                employee.commission_percent = money_value(request.data.get('commission_percent'))
-            if 'parts_commission_percent' in request.data:
-                employee.parts_commission_percent = money_value(request.data.get('parts_commission_percent'))
-            if request.data.get('salary_scheme'):
-                employee.salary_scheme = request.data.get('salary_scheme')
-            if request.data.get('payout_period'):
-                employee.payout_period = request.data.get('payout_period')
+            current = {
+                'salary_scheme': employee.salary_scheme,
+                'payout_period': employee.payout_period,
+                'commission_percent': employee.commission_percent,
+                'parts_commission_percent': employee.parts_commission_percent,
+                'fixed_salary_amount': employee.fixed_salary_amount,
+                'payout_weekday': employee.payout_weekday,
+                'payout_month_day': employee.payout_month_day,
+            }
+            try:
+                payroll = _payroll_values(request.data, current=current)
+            except serializers.ValidationError as exc:
+                return Response(exc.detail, status=400)
+
+            for field in self.ACCESS_FIELDS:
+                if field in request.data:
+                    setattr(employee, field, request.data.get(field) is True)
+
+            payroll_changed = any(str(getattr(employee, field)) != str(value) for field, value in payroll.items())
+            for field, value in payroll.items():
+                setattr(employee, field, value)
+            if payroll_changed:
+                employee.salary_effective_from = timezone.localdate()
             if 'is_salary_active' in request.data:
                 employee.is_salary_active = request.data.get('is_salary_active') is True
 

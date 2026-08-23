@@ -5,10 +5,13 @@ PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
 NO_ACCESS_MESSAGE = 'Немає доступу через завершення підписки або відсутність оплати.'
 
 # Some paid wrappers intentionally replace permission_classes of their safe base
-# view. Keep the mechanic-specific restrictions here as a second backend gate so
-# a wrapper can never accidentally reopen sensitive data.
+# view. Keep mechanic-specific restrictions here as a second backend gate so a
+# wrapper can never accidentally reopen sensitive data.
 PAID_VIEW_MECHANIC_FEATURES = {
     'InventoryItemViewSet': 'can_manage_inventory',
+    'CategoryViewSet': 'can_manage_inventory',
+    'SupplierViewSet': 'can_manage_inventory',
+    'SupplierAccountViewSet': 'can_manage_inventory',
 }
 
 
@@ -27,7 +30,11 @@ def get_platform_client(user):
 
 
 def is_platform_admin(user):
-    return bool(user and user.is_authenticated and (user.username in PLATFORM_ADMIN_USERNAMES or user.is_staff or user.is_superuser))
+    return bool(
+        user
+        and user.is_authenticated
+        and (user.username in PLATFORM_ADMIN_USERNAMES or user.is_staff or user.is_superuser)
+    )
 
 
 def is_partner_user(user):
@@ -49,6 +56,10 @@ def is_company_owner(user):
         return False
 
 
+def is_company_owner_or_platform_admin(user):
+    return is_company_owner(user) or is_platform_admin(user)
+
+
 def mechanic_feature_allowed(user, field):
     """Owners/admins/partners pass automatically; mechanics use the saved feature flag."""
     if not user or not user.is_authenticated:
@@ -57,6 +68,23 @@ def mechanic_feature_allowed(user, field):
     if not employee or employee.role != 'mechanic':
         return True
     return bool(getattr(employee, field, False))
+
+
+def can_view_financial_data(user):
+    """Single source of truth used by API permissions and response redaction."""
+    return mechanic_feature_allowed(user, 'can_view_finances')
+
+
+def can_view_client_data(user):
+    return mechanic_feature_allowed(user, 'can_view_clients')
+
+
+def can_manage_inventory_data(user):
+    return mechanic_feature_allowed(user, 'can_manage_inventory')
+
+
+def can_take_payment_data(user):
+    return mechanic_feature_allowed(user, 'can_take_payments')
 
 
 def is_blocked_client(user):
@@ -87,12 +115,12 @@ class HasPaidAccess(BasePermission):
         view_name = view.__class__.__name__
         feature = PAID_VIEW_MECHANIC_FEATURES.get(view_name)
         if feature and not mechanic_feature_allowed(request.user, feature):
-            self.message = 'У вас немає доступу до складу.'
+            self.message = 'У вас немає доступу до цієї функції.'
             return False
 
         # Employee management contains passwords, access flags and payroll data.
         # Only the company owner/platform admin may call this API.
-        if view_name == 'MechanicViewSet' and not (is_company_owner(request.user) or is_platform_admin(request.user)):
+        if view_name == 'MechanicViewSet' and not is_company_owner_or_platform_admin(request.user):
             self.message = 'Керування працівниками доступне тільки власнику.'
             return False
 
@@ -108,6 +136,26 @@ class HasPaidAccessForWrites(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return not is_blocked_client(request.user)
+
+
+class CompanyOwnerOrPlatformAdmin(BasePermission):
+    """Hard boundary for exports, credentials, company configuration and other owner data."""
+
+    message = 'Ця дія доступна тільки власнику компанії.'
+
+    def has_permission(self, request, view):
+        return is_company_owner_or_platform_admin(request.user)
+
+
+class OwnerWritePermission(BasePermission):
+    """Authenticated staff may read, but only the company owner/admin may mutate configuration."""
+
+    message = 'Змінювати ці дані може тільки власник компанії.'
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        return is_company_owner_or_platform_admin(request.user)
 
 
 class MechanicFeaturePermission(BasePermission):
@@ -132,6 +180,17 @@ class CanViewFinances(MechanicFeaturePermission):
     feature_field = 'can_view_finances'
     message = 'У вас немає доступу до фінансів.'
 
+    def has_permission(self, request, view):
+        if not mechanic_feature_allowed(request.user, self.feature_field):
+            return False
+        # The flag is intentionally named can_view_finances. A mechanic may
+        # inspect finance data when the owner enables it, but must not create,
+        # alter or delete company accounting configuration or ledger rows.
+        if request.method not in SAFE_METHODS and is_mechanic_user(request.user):
+            self.message = 'Змінювати фінанси може тільки власник компанії.'
+            return False
+        return True
+
 
 class CanViewAnalytics(MechanicFeaturePermission):
     feature_field = 'can_view_analytics'
@@ -146,3 +205,12 @@ class CanManageInventory(MechanicFeaturePermission):
 class CanTakePayments(MechanicFeaturePermission):
     feature_field = 'can_take_payments'
     message = 'У вас немає права приймати або закривати оплати.'
+
+
+class CanReadPayments(BasePermission):
+    """Payment history is available to finance viewers or employees allowed to take payments."""
+
+    message = 'У вас немає доступу до оплат.'
+
+    def has_permission(self, request, view):
+        return can_view_financial_data(request.user) or can_take_payment_data(request.user)

@@ -2,9 +2,12 @@ import logging
 import re
 
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.landing_growth.engine import record_registration_conversion
@@ -45,6 +48,8 @@ def validate_registration(username, password, full_name, phone, email):
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'registration'
 
     def post(self, request):
         username = (request.data.get('username') or '').strip()
@@ -66,6 +71,10 @@ class RegisterView(APIView):
         validation_error = validate_registration(username, password, full_name, phone, email)
         if validation_error:
             return Response({'error': validation_error}, status=400)
+        try:
+            validate_password(password, user=User(username=username, first_name=full_name, email=email))
+        except DjangoValidationError as exc:
+            return Response({'error': ' '.join(exc.messages)}, status=400)
         if User.objects.filter(username=username).exists():
             return Response({'error': 'Логін зайнятий.'}, status=400)
 

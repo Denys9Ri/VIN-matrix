@@ -18,7 +18,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements.txt
-      - run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_diagnostic_recommendation_flow apps.core.tests.test_mechanic_access_payroll apps.push_notifications --verbosity 2
+      - run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_diagnostic_recommendation_flow apps.core.tests.test_mechanic_access_payroll apps.core.tests.test_security_boundaries apps.push_notifications --verbosity 2
         env:
           DEBUG: 'False'
           SECRET_KEY: ci-only-secret-key-with-enough-length-for-tests

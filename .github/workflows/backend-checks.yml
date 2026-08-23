@@ -49,7 +49,7 @@ jobs:
         run: python manage.py test apps.landing_growth.tests --verbosity 2
 
       - name: Run core stability and API tests
-        run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_system_stability apps.core.tests.test_supplier_visibility apps.core.tests.test_diagnostic_recommendation_flow apps.core.tests.test_mechanic_access_payroll --verbosity 2
+        run: python manage.py test apps.core.tests.test_api_smoke apps.core.tests.test_system_stability apps.core.tests.test_supplier_visibility apps.core.tests.test_diagnostic_recommendation_flow apps.core.tests.test_mechanic_access_payroll apps.core.tests.test_security_boundaries --verbosity 2
 
       - name: Run Finance workspace tests
         run: python manage.py test apps.finance.tests --verbosity 2

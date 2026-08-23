@@ -78,6 +78,13 @@ TEMPLATES = [
     }
 ]
 
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 10}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
+
 MIDDLEWARE = [
     # Request id must be outermost so every API failure can be correlated in logs and support.
     'apps.core.request_context.RequestIdMiddleware',
@@ -116,11 +123,13 @@ CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
 
 CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000')
 
-# Transport and browser hardening remain opt-in for the current HTTP deployment.
+# Transport and browser hardening. HTTPS redirect/HSTS stay explicit because the
+# deployment proxy must be configured correctly first; cookies are secure by
+# default in non-debug environments.
 SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', False)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if env_bool('USE_X_FORWARDED_PROTO', False) else None
-SESSION_COOKIE_SECURE = SECURE_SSL_REDIRECT
-CSRF_COOKIE_SECURE = SECURE_SSL_REDIRECT
+SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', not DEBUG)
+CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', not DEBUG)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
@@ -128,9 +137,14 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
 SECURE_HSTS_SECONDS = env_int('SECURE_HSTS_SECONDS', 0) if SECURE_SSL_REDIRECT else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', False)
 SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', False)
+
+# Keep unexpectedly large requests from consuming unbounded application memory.
+DATA_UPLOAD_MAX_MEMORY_SIZE = env_int('DATA_UPLOAD_MAX_MEMORY_SIZE', 20 * 1024 * 1024)
+FILE_UPLOAD_MAX_MEMORY_SIZE = env_int('FILE_UPLOAD_MAX_MEMORY_SIZE', 5 * 1024 * 1024)
 
 # Налаштування Бази Даних
 if env_bool('USE_POSTGRES', False):
@@ -163,12 +177,18 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_login': os.getenv('AUTH_LOGIN_RATE', '20/min'),
+        'auth_refresh': os.getenv('AUTH_REFRESH_RATE', '60/min'),
+        'registration': os.getenv('REGISTRATION_RATE', '20/hour'),
+        'password_change': os.getenv('PASSWORD_CHANGE_RATE', '10/hour'),
+    },
     'EXCEPTION_HANDLER': 'apps.core.api_errors.vin_matrix_exception_handler',
 }
 
 # Налаштування часу життя токенів
-# Важливо: refresh-токени не ротуються і не blacklist-яться після оновлення.
-# Це дозволяє одному акаунту стабільно працювати одночасно на телефоні, комп'ютері та ще одному пристрої.
+# Refresh-токени залишаються окремими для кожного пристрою, щоб один акаунт міг
+# стабільно працювати на телефоні й комп'ютері одночасно.
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=14),

@@ -3,7 +3,6 @@ from django.urls import path, include, re_path
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.views.static import serve
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 
 from apps.core.billing_client_link_views import BillingAdminClientLinkView
@@ -16,56 +15,58 @@ from apps.core.billing_views import (
     BillingAdminConfirmPaymentView,
     BillingAdminRejectPaymentView,
 )
-from apps.core.onboarding_views import OnboardingView
 from apps.core.system_health_views import SystemHealthView
 from apps.core.landing_views import LandingLeadView
-
-from apps.core.data_exchange_views import (
-    OrdersExportView,
-    ClientsExportView,
-    InventoryExportView,
+from apps.core.security_auth_views import (
+    SecureChangePasswordView,
+    SecureTokenObtainPairView,
+    SecureTokenRefreshView,
+)
+from apps.core.security_endpoint_wrappers import (
+    ActivityLogView,
     BackupExportView,
-    LegacyClientsImportView,
-)
-
-from apps.core.company_option_views import (
-    CompanyOptionListCreateView,
-    CompanyOptionDetailView,
-    CompanyOptionBulkView,
+    ClientsExportView,
     CompanyDictionariesView,
+    CompanyOptionBulkView,
+    CompanyOptionDetailView,
+    CompanyOptionListCreateView,
+    DashboardSummaryView,
+    InventoryExportView,
+    InventoryInsightsView,
+    LegacyClientsImportView,
+    NotificationsSummaryView,
+    NovaPostProfileDetailView,
+    NovaPostProfileListCreateView,
+    NovaPostProfileTestView,
+    OnboardingView,
+    OrdersExportView,
+    ProfileSettingsView,
+    StoExpenseViewSet,
+    VisitDebtReminderView,
+    VisitPaymentListView,
 )
-
-from apps.core.views import (
-    LogoutView,
-    ChangePasswordView,
-)
-from apps.core.safe_crm_views import (
+from apps.core.security_wrappers import (
+    CRMClientStatusViewSet,
+    CRMCommunicationViewSet,
+    CRMServiceReminderViewSet,
+    CRMTaskViewSet,
+    MechanicViewSet,
+    OrderPartViewSet,
+    OrderServiceViewSet,
+    ServiceCatalogViewSet,
+    ServiceComplexViewSet,
+    VehicleRecommendationViewSet,
     VisitViewSet,
     WorkPostViewSet,
-    ServiceCatalogViewSet,
-    OrderServiceViewSet,
-    VehicleRecommendationViewSet,
-    CRMTaskViewSet,
 )
-from apps.core.finance_supplier_views import (
-    OrderPartViewSet,
-    SupplierViewSet,
-    SupplierAccountViewSet,
-)
-from apps.core.communication_views import (
-    CRMCommunicationViewSet,
-    CRMClientStatusViewSet,
-    CRMServiceReminderViewSet,
-)
+from apps.core.views import LogoutView
 from apps.core.visit_workflow_views import (
     VisitAcceptanceActView,
     VisitDiagnosticChecklistView,
 )
 from apps.core.document_views import VisitDocumentView
 from apps.core.ocr_views import RecognizeDocumentView
-from apps.core.complex_views import ServiceComplexViewSet
 from apps.core.stock_views import StockReceiveViewSet, StockMovementViewSet
-from apps.core.inventory_insights_views import InventoryInsightsView
 from apps.core.stock_actions import (
     StockMinQuantityView,
     StockReserveView,
@@ -74,33 +75,16 @@ from apps.core.stock_actions import (
 )
 from apps.core.crm_client_views import StoreClientListView, StoreClientDetailView
 from apps.core.crm_client_update_views import StoreClientUpdateView, StoreClientRepeatSaleView
-from apps.core.notification_views import NotificationsSummaryView
-from apps.core.dashboard_views import DashboardSummaryView
 from apps.core.analytics_views import AnalyticsSummaryView
-from apps.core.expense_views import StoExpenseViewSet
-from apps.core.activity_views import ActivityLogView
-from apps.core.payment_views import (
-    VisitAddPaymentView,
-    VisitDebtReminderView,
-    VisitMarkPaidView,
-    VisitPaymentListView,
-)
-from apps.core.paid_views import (
-    PartSearchView,
-    MechanicViewSet,
-    CategoryViewSet,
-    InventoryItemViewSet,
-)
+from apps.core.payment_views import VisitAddPaymentView, VisitMarkPaidView
+from apps.core.paid_views import PartSearchView, CategoryViewSet, InventoryItemViewSet
+from apps.core.finance_supplier_views import SupplierViewSet, SupplierAccountViewSet
 from apps.core.partner_views import PartnerManagementViewSet
 from apps.core.platform_auth_views import RegisterView
 from apps.core.platform_client_views import SecurePlatformClientViewSet
-from apps.core.profile_views import ProfileSettingsView
 from apps.core.support_access_views import SupportExitView, SupportStartView, SupportStatusView
 
 from apps.core.novapost_views import (
-    NovaPostProfileListCreateView,
-    NovaPostProfileDetailView,
-    NovaPostProfileTestView,
     NovaPostCitiesView,
     NovaPostWarehousesView,
     NovaPostDeliveryView,
@@ -171,14 +155,21 @@ def api_root(request):
     })
 
 
+def private_supplier_price_file(request, path):
+    # Supplier price lists may contain commercial terms and must never be served
+    # as guessable public media URLs. Backend integrations can still read the
+    # FileField directly from storage.
+    return JsonResponse({'detail': 'Not found.'}, status=404)
+
+
 urlpatterns = [
     path('', api_root),
     path('admin/', admin.site.urls),
     path('schema/', openapi_schema, name='schema'),
     path('docs/', swagger_ui, name='swagger-ui'),
 
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('token/', SecureTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', SecureTokenRefreshView.as_view(), name='token_refresh'),
 
     path('api/logout/', LogoutView.as_view(), name='logout'),
     path('api/register/', RegisterView.as_view(), name='register'),
@@ -191,8 +182,8 @@ urlpatterns = [
 
     path('api/settings/', ProfileSettingsView.as_view(), name='profile-settings'),
     path('api/profile/settings/', ProfileSettingsView.as_view(), name='profile-settings-alt'),
-    path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
-    path('api/profile/change-password/', ChangePasswordView.as_view(), name='change-password-alt'),
+    path('api/change-password/', SecureChangePasswordView.as_view(), name='change-password'),
+    path('api/profile/change-password/', SecureChangePasswordView.as_view(), name='change-password-alt'),
 
     path('api/settings/dictionaries/', CompanyDictionariesView.as_view(), name='settings-dictionaries'),
     path('api/settings/options/', CompanyOptionListCreateView.as_view(), name='settings-options'),
@@ -266,5 +257,6 @@ urlpatterns = [
 ]
 
 urlpatterns += [
+    re_path(r'^media/supplier_prices/(?P<path>.*)$', private_supplier_price_file, name='private-supplier-price-file'),
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 ]

@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -153,9 +154,16 @@ class WebPushStatusView(APIView):
             user=request.user,
             is_active=True,
         ).count()
+        heartbeat = vapid.scheduler_heartbeat_at
+        scheduler_ready = bool(
+            heartbeat
+            and heartbeat >= timezone.now() - timedelta(minutes=3)
+        )
         preferences = get_user_push_preferences(request.user)
         return Response({
             'server_ready': True,
+            'scheduler_ready': scheduler_ready,
+            'scheduler_heartbeat_at': heartbeat.isoformat() if heartbeat else None,
             'public_key': vapid.public_key,
             'active_subscriptions': active_count,
             **_preferences_payload(preferences),

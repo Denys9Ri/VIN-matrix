@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.access_control import CanViewFinances
 from apps.core.models import Employee, Supplier, Visit
 
 from .models import (
@@ -36,6 +37,10 @@ from .services import (
     visit_assignment_payload,
     build_ledger,
 )
+
+
+class FinanceAccessAPIView(APIView):
+    permission_classes = [IsAuthenticated, CanViewFinances]
 
 
 def bool_value(value, default=False):
@@ -130,9 +135,7 @@ def serialize_manual_transaction(item):
     }
 
 
-class FinanceSummaryView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class FinanceSummaryView(FinanceAccessAPIView):
     def get(self, request):
         company = ensure_finance_company(request.user)
         bounds = period_bounds(
@@ -144,9 +147,7 @@ class FinanceSummaryView(APIView):
         return Response(finance_summary(company, bounds, legal_entity_id=entity_id))
 
 
-class LegalEntityListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class LegalEntityListCreateView(FinanceAccessAPIView):
     def get(self, request):
         company = ensure_finance_company(request.user)
         bootstrap_company_finance(company, request.user)
@@ -193,9 +194,7 @@ class LegalEntityListCreateView(APIView):
         return Response(legal_entity_payload(entity), status=status.HTTP_201_CREATED)
 
 
-class LegalEntityDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class LegalEntityDetailView(FinanceAccessAPIView):
     def patch(self, request, pk):
         company = ensure_finance_company(request.user)
         entity = LegalEntity.objects.filter(company=company, id=pk).first()
@@ -265,9 +264,7 @@ class LegalEntityDetailView(APIView):
         return Response({'ok': True})
 
 
-class FinanceAccountListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class FinanceAccountListCreateView(FinanceAccessAPIView):
     def get(self, request):
         company = ensure_finance_company(request.user)
         bootstrap_company_finance(company, request.user)
@@ -304,9 +301,7 @@ class FinanceAccountListCreateView(APIView):
         return Response(account_payload(account), status=201)
 
 
-class FinanceAccountDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class FinanceAccountDetailView(FinanceAccessAPIView):
     def patch(self, request, pk):
         company = ensure_finance_company(request.user)
         account = FinanceAccount.objects.filter(company=company, id=pk).select_related('legal_entity').first()
@@ -359,9 +354,7 @@ class FinanceAccountDetailView(APIView):
         return Response({'ok': True})
 
 
-class ManualTransactionListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class ManualTransactionListCreateView(FinanceAccessAPIView):
     def get(self, request):
         company = ensure_finance_company(request.user)
         rows = FinanceTransaction.objects.filter(company=company).select_related('legal_entity', 'account', 'target_account', 'employee__user', 'supplier').order_by('-occurred_at', '-id')[:500]
@@ -455,9 +448,7 @@ class ManualTransactionDetailView(ManualTransactionListCreateView):
         return Response({'ok': True})
 
 
-class VisitAssignmentView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class VisitAssignmentView(FinanceAccessAPIView):
     def _visit(self, company, visit_id):
         return Visit.objects.filter(company=company, id=visit_id).prefetch_related('parts', 'services').first()
 
@@ -495,9 +486,7 @@ class VisitAssignmentView(APIView):
         return Response(after)
 
 
-class SourceAllocationView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class SourceAllocationView(FinanceAccessAPIView):
     def get(self, request):
         company = ensure_finance_company(request.user)
         bootstrap_company_finance(company, request.user)
@@ -566,9 +555,7 @@ class SourceAllocationView(APIView):
         return Response(after_payload)
 
 
-class FinanceExportView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class FinanceExportView(FinanceAccessAPIView):
     def get(self, request):
         company = ensure_finance_company(request.user)
         bounds = period_bounds(

@@ -92,6 +92,11 @@ class CanCreateVisits(MechanicFeaturePermission):
     message = 'У вас немає права створювати нові візити.'
 
 
+class CanViewClients(MechanicFeaturePermission):
+    feature_field = 'can_view_clients'
+    message = 'У вас немає доступу до клієнтської бази та історії.'
+
+
 class CanViewFinances(MechanicFeaturePermission):
     feature_field = 'can_view_finances'
     message = 'У вас немає доступу до фінансів.'
@@ -104,7 +109,7 @@ class CanViewAnalytics(MechanicFeaturePermission):
 
 class CanManageInventory(MechanicFeaturePermission):
     feature_field = 'can_manage_inventory'
-    message = 'У вас немає права змінювати склад.'
+    message = 'У вас немає доступу до складу.'
 
 
 class CanTakePayments(MechanicFeaturePermission):

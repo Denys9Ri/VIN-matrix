@@ -42,15 +42,18 @@ class ProfileSettingsView(BaseProfileSettingsView):
             access_allowed = False
             access_message = billing.get('message') or 'Немає доступу через відсутність оплати.'
 
+        full_account = actual_role in ['admin', 'partner', 'client']
         permissions = {
-            'can_create_visits': actual_role in ['admin', 'partner', 'client'] or bool(employee and employee.can_create_visits),
-            'can_view_finances': actual_role in ['admin', 'partner', 'client'] or bool(employee and employee.can_view_finances),
-            'can_view_clients': actual_role in ['admin', 'partner', 'client'],
-            'can_view_analytics': actual_role in ['admin', 'partner', 'client'],
+            'can_create_visits': full_account or bool(employee and employee.can_create_visits),
+            'can_view_finances': full_account or bool(employee and employee.can_view_finances),
+            'can_view_clients': full_account or bool(employee and getattr(employee, 'can_view_clients', False)),
+            'can_manage_inventory': full_account or bool(employee and getattr(employee, 'can_manage_inventory', False)),
+            'can_take_payments': full_account or bool(employee and getattr(employee, 'can_take_payments', False)),
+            'can_view_analytics': full_account or bool(employee and getattr(employee, 'can_view_analytics', False)),
             'can_manage_partners': actual_role == 'admin',
             'can_manage_accounts': actual_role in ['admin', 'partner'],
             'can_view_partner_clients': actual_role == 'partner',
-            'can_manage_mechanics': actual_role in ['admin', 'partner', 'client'],
+            'can_manage_mechanics': full_account,
         }
 
         company_data = CompanySerializer(company, context={'request': request}).data if company else {

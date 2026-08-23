@@ -4,6 +4,13 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission
 PLATFORM_ADMIN_USERNAMES = {'Denys9Ri'}
 NO_ACCESS_MESSAGE = 'Немає доступу через завершення підписки або відсутність оплати.'
 
+# Some paid wrappers intentionally replace permission_classes of their safe base
+# view. Keep the mechanic-specific restrictions here as a second backend gate so
+# a wrapper can never accidentally reopen sensitive data.
+PAID_VIEW_MECHANIC_FEATURES = {
+    'InventoryItemViewSet': 'can_manage_inventory',
+}
+
 
 def get_employee(user):
     try:
@@ -33,6 +40,15 @@ def is_mechanic_user(user):
     return bool(employee and employee.role == 'mechanic')
 
 
+def is_company_owner(user):
+    if not user or not user.is_authenticated:
+        return False
+    try:
+        return bool(user.company)
+    except Exception:
+        return False
+
+
 def mechanic_feature_allowed(user, field):
     """Owners/admins/partners pass automatically; mechanics use the saved feature flag."""
     if not user or not user.is_authenticated:
@@ -60,12 +76,27 @@ def is_blocked_client(user):
 
 
 class HasPaidAccess(BasePermission):
-    """Full paid-access gate for endpoints that must be hidden for blocked clients."""
+    """Paid-access gate plus a fail-closed guard for sensitive paid wrappers."""
 
     message = NO_ACCESS_MESSAGE
 
     def has_permission(self, request, view):
-        return not is_blocked_client(request.user)
+        if is_blocked_client(request.user):
+            return False
+
+        view_name = view.__class__.__name__
+        feature = PAID_VIEW_MECHANIC_FEATURES.get(view_name)
+        if feature and not mechanic_feature_allowed(request.user, feature):
+            self.message = 'У вас немає доступу до складу.'
+            return False
+
+        # Employee management contains passwords, access flags and payroll data.
+        # Only the company owner/platform admin may call this API.
+        if view_name == 'MechanicViewSet' and not (is_company_owner(request.user) or is_platform_admin(request.user)):
+            self.message = 'Керування працівниками доступне тільки власнику.'
+            return False
+
+        return True
 
 
 class HasPaidAccessForWrites(BasePermission):

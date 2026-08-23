@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bell, Clock3, CreditCard, ExternalLink, PackageMinus, RefreshCcw, RotateCcw, Truck, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { notificationActionUrl } from '../../utils/notificationDeepLinks';
 
 const iconMap = {
   low_stock: PackageMinus,
@@ -10,6 +11,8 @@ const iconMap = {
   overdue_orders: Clock3,
   np_returns: RotateCcw,
   parts_in_transit: Truck,
+  np_received: Truck,
+  np_cod_waiting: CreditCard,
   crm_tasks: AlertTriangle,
   service_reminders: Clock3,
   recommendations: AlertTriangle,
@@ -31,16 +34,6 @@ function formatAmount(value) {
   const number = Number(value || 0);
   if (!number) return '';
   return `${number.toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
-}
-
-function actionUrl(section, item) {
-  if (!item?.id) return section?.url || '/';
-  if (section?.key === 'debts') return `/attention?visit_id=${item.id}&type=debt`;
-  if (section?.key === 'payment_due') return `/attention?visit_id=${item.id}&type=payment`;
-  if (section?.key === 'overdue_orders') return `/attention?visit_id=${item.id}&type=overdue`;
-  if (section?.key === 'parts_in_transit') return `/attention?visit_id=${item.id}&type=part_delay&tab=parts`;
-  if (section?.key === 'np_returns') return `/attention?visit_id=${item.id}&type=delivery&tab=delivery`;
-  return item.url || section?.url || '/';
 }
 
 export default function NotificationBell() {
@@ -107,7 +100,7 @@ export default function NotificationBell() {
 
   const itemClick = (event, section, item) => {
     event.stopPropagation();
-    goTo(actionUrl(section, item));
+    goTo(notificationActionUrl(section, item));
   };
 
   const toggleExpand = (event, key) => {

@@ -71,7 +71,7 @@ class Migration(migrations.Migration):
                 'verbose_name': 'Web Push dispatch log',
                 'verbose_name_plural': 'Web Push dispatch logs',
                 'ordering': ['-created_at', '-id'],
-                'indexes': [models.Index(fields=['category', 'created_at'], name='push_notifi_categor_0eae64_idx')],
+                'indexes': [models.Index(fields=['category', 'created_at'], name='push_dispatch_category_idx')],
                 'constraints': [models.UniqueConstraint(fields=('user', 'event_key'), name='push_dispatch_user_event_uniq')],
             },
         ),

@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .access_control import CanViewClients
 from .models import CRMClientStatus, CRMCommunication, CRMServiceReminder, CRMTask, OrderService, VehicleRecommendation, Visit
 from .safe_crm_views import safe_ensure_company
 
@@ -401,7 +402,7 @@ def build_clients(company, search=''):
 
 
 class StoreClientListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanViewClients]
 
     def get(self, request):
         company = safe_ensure_company(request.user)
@@ -417,7 +418,7 @@ class StoreClientListView(APIView):
 
 
 class StoreClientDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanViewClients]
 
     def get(self, request):
         company = safe_ensure_company(request.user)

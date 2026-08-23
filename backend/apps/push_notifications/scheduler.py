@@ -78,7 +78,9 @@ def _client_search_url(phone='', client='', plate=''):
 
 
 def _process_visit_reminders(user, company, preference, now, local_now):
-    if not preference.visit_reminders or _quiet_now(preference, local_now):
+    # Appointment reminders are time-critical: if a car is due in one hour,
+    # delaying the push until quiet hours end makes the reminder useless.
+    if not preference.visit_reminders:
         return 0
 
     minutes = max(5, min(int(preference.visit_reminder_minutes or 60), 24 * 60))
@@ -155,7 +157,8 @@ def _process_debts(user, company, preference, local_now):
 
 
 def _crm_due_date(preference, local_now):
-    days = max(0, min(int(preference.crm_reminder_days_before or 1), 30))
+    raw_days = preference.crm_reminder_days_before
+    days = max(0, min(int(1 if raw_days is None else raw_days), 30))
     return local_now.date() + timedelta(days=days)
 
 

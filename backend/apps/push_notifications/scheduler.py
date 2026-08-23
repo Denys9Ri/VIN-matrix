@@ -9,7 +9,7 @@ from apps.core.models import CRMServiceReminder, CRMTask, VehicleRecommendation,
 from apps.core.serializers import _visit_finance
 
 from .models import WebPushPreference, WebPushSubscription
-from .service import get_user_push_preferences, send_scheduled_user_push
+from .service import get_user_push_preferences, get_vapid_keypair, send_scheduled_user_push
 
 
 logger = logging.getLogger('vin_matrix.push')
@@ -220,6 +220,13 @@ def process_scheduled_pushes(now=None):
     """Process all time-based push rules. Safe to call repeatedly; dispatch logs prevent duplicates."""
     now = now or timezone.now()
     local_now = timezone.localtime(now)
+
+    # Heartbeat lets the UI distinguish a valid browser subscription from a
+    # running scheduler that is actually processing time-based rules.
+    vapid = get_vapid_keypair()
+    vapid.scheduler_heartbeat_at = now
+    vapid.save(update_fields=['scheduler_heartbeat_at'])
+
     active_user_ids = WebPushSubscription.objects.filter(is_active=True).values_list('user_id', flat=True).distinct()
     users = User.objects.filter(id__in=active_user_ids, is_active=True).order_by('id')
 

@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/part-search/', VesnaPartSearchView.as_view(), name='part-search-alt'),
     path('api/landing-growth/', include('apps.landing_growth.urls')),
     path('api/finance/', include('apps.finance.urls')),
+    path('api/push/', include('apps.push_notifications.urls')),
     *core_urlpatterns,
     path('api/agent/', include('apps.agent.urls')),
     path('api/agent/', include('apps.agent.routes_read')),

@@ -35,6 +35,7 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 APP_VERSION = os.getenv('APP_VERSION', 'unknown')
+WEB_PUSH_SUBJECT = os.getenv('WEB_PUSH_SUBJECT', 'https://vin-matrix.com')
 
 # Реєструємо сторонні бібліотеки та наші модулі
 INSTALLED_APPS = [
@@ -58,6 +59,7 @@ INSTALLED_APPS = [
     'apps.crm.apps.CrmConfig',
     'apps.agent.apps.AgentConfig',
     'apps.finance.apps.FinanceConfig',
+    'apps.push_notifications.apps.PushNotificationsConfig',
 ]
 
 TEMPLATES = [

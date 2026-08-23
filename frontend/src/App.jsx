@@ -11,6 +11,7 @@ const DashboardOnboarding = lazy(() => import('./pages/DashboardOnboarding'));
 const UniversalSearch = lazy(() => import('./pages/UniversalSearch'));
 const Inventory = lazy(() => import('./pages/InventoryStage6'));
 const Settings = lazy(() => import('./pages/Settings'));
+const PushNotifications = lazy(() => import('./pages/PushNotifications'));
 const Billing = lazy(() => import('./pages/Billing'));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
 const DocumentSettings = lazy(() => import('./pages/DocumentSettings'));
@@ -164,6 +165,7 @@ function App() {
             <Route path="inventory" element={<Inventory />} />
             <Route path="billing" element={<Billing />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="settings/notifications" element={<PushNotifications />} />
             <Route path="settings/ai-agent" element={<Agent />} />
             <Route path="settings/services" element={<ServicesSettings />} />
             <Route path="settings/documents" element={<DocumentSettings />} />

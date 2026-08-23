@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from pywebpush import WebPushException, webpush
 
@@ -203,12 +203,15 @@ def send_scheduled_user_push(user, event_key, payload, category):
         return {'delivered': 0, 'failed': 0, 'skipped': True, 'duplicate': False}
 
     try:
-        dispatch = WebPushDispatchLog.objects.create(
-            user=user,
-            event_key=event_key,
-            category=category,
-            payload=payload,
-        )
+        # Use an inner savepoint so a duplicate claim rolls back cleanly without
+        # poisoning a surrounding request/test transaction.
+        with transaction.atomic():
+            dispatch = WebPushDispatchLog.objects.create(
+                user=user,
+                event_key=event_key,
+                category=category,
+                payload=payload,
+            )
     except IntegrityError:
         return {'delivered': 0, 'failed': 0, 'skipped': False, 'duplicate': True}
 

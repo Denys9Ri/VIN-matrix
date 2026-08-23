@@ -117,7 +117,7 @@ class WebPushDispatchLog(models.Model):
             models.UniqueConstraint(fields=['user', 'event_key'], name='push_dispatch_user_event_uniq'),
         ]
         indexes = [
-            models.Index(fields=['category', 'created_at']),
+            models.Index(fields=['category', 'created_at'], name='push_dispatch_category_idx'),
         ]
         verbose_name = 'Web Push dispatch log'
         verbose_name_plural = 'Web Push dispatch logs'

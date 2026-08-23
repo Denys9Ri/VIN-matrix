@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .access_control import CanManageInventory
 from .models import InventoryItem, OrderPart, StockMovement, Visit
 from .safe_crm_views import safe_ensure_company
 
@@ -45,7 +46,7 @@ def log_move(request, item, move_type, quantity, note='', part=None):
 
 
 class StockMinQuantityView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageInventory]
 
     def post(self, request):
         company = safe_ensure_company(request.user)
@@ -59,7 +60,7 @@ class StockMinQuantityView(APIView):
 
 
 class StockReserveView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageInventory]
 
     @transaction.atomic
     def post(self, request):
@@ -84,7 +85,7 @@ class StockReserveView(APIView):
 
 
 class StockReleaseView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageInventory]
 
     @transaction.atomic
     def post(self, request):
@@ -105,7 +106,7 @@ class StockReleaseView(APIView):
 
 
 class StockWriteOffVisitView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageInventory]
 
     @transaction.atomic
     def post(self, request):

@@ -5,6 +5,7 @@ psycopg2-binary>=2.9
 openpyxl==3.1.2
 python-dotenv>=1.0
 requests==2.31.0
+pywebpush>=2.0.3,<3
 djangorestframework-simplejwt==5.3.1
 gunicorn==21.2.0
 whitenoise==6.6.0

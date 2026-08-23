@@ -28,6 +28,21 @@ def is_partner_user(user):
     return bool(employee and employee.role == 'partner')
 
 
+def is_mechanic_user(user):
+    employee = get_employee(user)
+    return bool(employee and employee.role == 'mechanic')
+
+
+def mechanic_feature_allowed(user, field):
+    """Owners/admins/partners pass automatically; mechanics use the saved feature flag."""
+    if not user or not user.is_authenticated:
+        return False
+    employee = get_employee(user)
+    if not employee or employee.role != 'mechanic':
+        return True
+    return bool(getattr(employee, field, False))
+
+
 def is_blocked_client(user):
     if not user or not user.is_authenticated:
         return False
@@ -62,3 +77,36 @@ class HasPaidAccessForWrites(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return not is_blocked_client(request.user)
+
+
+class MechanicFeaturePermission(BasePermission):
+    feature_field = ''
+    message = 'Для цього працівника функція вимкнена власником.'
+
+    def has_permission(self, request, view):
+        return mechanic_feature_allowed(request.user, self.feature_field)
+
+
+class CanCreateVisits(MechanicFeaturePermission):
+    feature_field = 'can_create_visits'
+    message = 'У вас немає права створювати нові візити.'
+
+
+class CanViewFinances(MechanicFeaturePermission):
+    feature_field = 'can_view_finances'
+    message = 'У вас немає доступу до фінансів.'
+
+
+class CanViewAnalytics(MechanicFeaturePermission):
+    feature_field = 'can_view_analytics'
+    message = 'У вас немає доступу до аналітики.'
+
+
+class CanManageInventory(MechanicFeaturePermission):
+    feature_field = 'can_manage_inventory'
+    message = 'У вас немає права змінювати склад.'
+
+
+class CanTakePayments(MechanicFeaturePermission):
+    feature_field = 'can_take_payments'
+    message = 'У вас немає права приймати або закривати оплати.'

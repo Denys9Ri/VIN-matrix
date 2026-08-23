@@ -50,6 +50,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='webpushsubscription',
-            index=models.Index(fields=['user', 'is_active'], name='push_notifi_user_id_9fdab8_idx'),
+            index=models.Index(fields=['user', 'is_active'], name='push_notifi_user_id_b2480a_idx'),
         ),
     ]

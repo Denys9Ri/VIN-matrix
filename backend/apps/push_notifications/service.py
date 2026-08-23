@@ -79,11 +79,12 @@ def serialize_push_preferences(preferences):
 
 
 def serialize_push_automation(preferences):
+    crm_days = preferences.crm_reminder_days_before
     return {
         'visit_reminder_minutes': int(preferences.visit_reminder_minutes or 60),
         'debt_schedule_days': preferences.debt_schedule_days or WebPushPreference.DEBT_DAYS_WEEKDAYS,
         'debt_notification_times': list(preferences.debt_notification_times or []),
-        'crm_reminder_days_before': int(preferences.crm_reminder_days_before or 1),
+        'crm_reminder_days_before': int(1 if crm_days is None else crm_days),
         'crm_notification_time': preferences.crm_notification_time.strftime('%H:%M'),
         'quiet_hours_enabled': bool(preferences.quiet_hours_enabled),
         'quiet_hours_start': preferences.quiet_hours_start.strftime('%H:%M'),

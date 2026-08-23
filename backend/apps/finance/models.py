@@ -331,3 +331,65 @@ class FinanceChangeLog(models.Model):
 
     def __str__(self):
         return f'{self.object_type}:{self.object_id} — {self.action}'
+
+
+class MechanicPayrollRule(models.Model):
+    """Versioned payroll settings for a mechanic.
+
+    OrderService keeps its own commission snapshot for percentage-based work.
+    This history is primarily needed for fixed payroll so analytics never
+    rewrites old periods after a mechanic's scheme or amount changes.
+    """
+
+    SCHEME_SERVICES_ONLY = 'services_only'
+    SCHEME_PARTS_ONLY = 'parts_only'
+    SCHEME_SERVICES_AND_PARTS = 'services_and_parts_profit'
+    SCHEME_ORDER_PROFIT = 'order_profit'
+    SCHEME_FIXED = 'fixed'
+    SCHEME_CHOICES = [
+        (SCHEME_SERVICES_ONLY, 'Відсоток від робіт'),
+        (SCHEME_PARTS_ONLY, 'Відсоток від маржі запчастин'),
+        (SCHEME_SERVICES_AND_PARTS, 'Відсоток від робіт + маржі запчастин'),
+        (SCHEME_ORDER_PROFIT, 'Відсоток від прибутку замовлення'),
+        (SCHEME_FIXED, 'Фіксована сума'),
+    ]
+
+    PAYOUT_DAILY = 'daily'
+    PAYOUT_WEEKLY = 'weekly'
+    PAYOUT_MONTHLY = 'monthly'
+    PAYOUT_CUSTOM = 'custom'
+    PAYOUT_CHOICES = [
+        (PAYOUT_DAILY, 'Щодня'),
+        (PAYOUT_WEEKLY, 'Щотижня'),
+        (PAYOUT_MONTHLY, 'Щомісяця'),
+        (PAYOUT_CUSTOM, 'Довільний період'),
+    ]
+
+    company = models.ForeignKey('core.Company', on_delete=models.CASCADE, related_name='mechanic_payroll_rules')
+    employee = models.ForeignKey('core.Employee', on_delete=models.CASCADE, related_name='payroll_rules')
+    salary_scheme = models.CharField(max_length=40, choices=SCHEME_CHOICES, default=SCHEME_SERVICES_ONLY)
+    commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    parts_commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    fixed_salary_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payout_period = models.CharField(max_length=20, choices=PAYOUT_CHOICES, default=PAYOUT_MONTHLY)
+    is_salary_active = models.BooleanField(default=True)
+    effective_from = models.DateTimeField()
+    effective_to = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['employee_id', '-effective_from', '-id']
+        indexes = [
+            models.Index(fields=['company', 'effective_from'], name='finance_payroll_company_idx'),
+            models.Index(fields=['employee', 'effective_from'], name='finance_payroll_employee_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['employee'],
+                condition=models.Q(effective_to__isnull=True),
+                name='finance_payroll_one_active_rule',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.employee_id} · {self.salary_scheme} · {self.effective_from:%Y-%m-%d}'

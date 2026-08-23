@@ -180,6 +180,17 @@ class CanViewFinances(MechanicFeaturePermission):
     feature_field = 'can_view_finances'
     message = 'У вас немає доступу до фінансів.'
 
+    def has_permission(self, request, view):
+        if not mechanic_feature_allowed(request.user, self.feature_field):
+            return False
+        # The flag is intentionally named can_view_finances. A mechanic may
+        # inspect finance data when the owner enables it, but must not create,
+        # alter or delete company accounting configuration or ledger rows.
+        if request.method not in SAFE_METHODS and is_mechanic_user(request.user):
+            self.message = 'Змінювати фінанси може тільки власник компанії.'
+            return False
+        return True
+
 
 class CanViewAnalytics(MechanicFeaturePermission):
     feature_field = 'can_view_analytics'

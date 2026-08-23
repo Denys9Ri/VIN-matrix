@@ -1,11 +1,12 @@
-"""Response serializers that fail closed for employee-level sensitive data.
+"""Permission-aware response serializers for sensitive business data.
 
-The base serializers remain the canonical write/validation layer. These wrappers
-only remove fields from API responses when a mechanic was not granted the
-corresponding financial permission by the company owner.
+The base serializers remain the canonical validation/write layer. These wrappers
+remove internal costs, margin and payroll data unless the owner explicitly grants
+finance access. Employees allowed to take payments can still see the customer-
+facing totals they need to close a bill, without seeing internal profit data.
 """
 
-from .access_control import can_view_financial_data
+from .access_control import can_take_payment_data, can_view_financial_data
 from .serializers import (
     OrderPartSerializer,
     OrderServiceSerializer,
@@ -14,9 +15,7 @@ from .serializers import (
 )
 
 
-SENSITIVE_PART_FIELDS = {
-    'buy_price',
-}
+SENSITIVE_PART_FIELDS = {'buy_price'}
 
 SENSITIVE_SERVICE_FIELDS = {
     'commission_percent',
@@ -25,39 +24,62 @@ SENSITIVE_SERVICE_FIELDS = {
     'commission_label',
 }
 
-SENSITIVE_VISIT_FIELDS = {
-    'finance',
+PAYMENT_VISIT_FIELDS = {
     'payments',
     'paid_amount',
     'debt_amount',
+    'grand_total',
     'prepayment_amount',
+    'payment_status',
+}
+
+INTERNAL_FINANCE_KEYS = {
+    'profit',
+    'profit_after_mechanics',
+    'mechanic_commission_total',
+    'margin',
 }
 
 
+def _request(serializer):
+    return serializer.context.get('request') if getattr(serializer, 'context', None) else None
+
+
 def _request_can_view_finances(serializer):
-    request = serializer.context.get('request') if getattr(serializer, 'context', None) else None
-    # Internal serializer use without an HTTP request keeps the historical full
-    # payload. Every DRF API response has request context and therefore uses the
-    # permission-aware branch below.
+    request = _request(serializer)
+    # Internal serializer use without HTTP request keeps historical full payload.
     if request is None:
         return True
     return can_view_financial_data(request.user)
 
 
+def _request_can_take_payments(serializer):
+    request = _request(serializer)
+    if request is None:
+        return True
+    return can_take_payment_data(request.user)
+
+
 def _redact_part(data):
-    if not isinstance(data, dict):
-        return data
-    for field in SENSITIVE_PART_FIELDS:
-        data.pop(field, None)
+    if isinstance(data, dict):
+        for field in SENSITIVE_PART_FIELDS:
+            data.pop(field, None)
     return data
 
 
 def _redact_service(data):
-    if not isinstance(data, dict):
-        return data
-    for field in SENSITIVE_SERVICE_FIELDS:
-        data.pop(field, None)
+    if isinstance(data, dict):
+        for field in SENSITIVE_SERVICE_FIELDS:
+            data.pop(field, None)
     return data
+
+
+def _redact_internal_finance(finance):
+    if not isinstance(finance, dict):
+        return finance
+    for field in INTERNAL_FINANCE_KEYS:
+        finance.pop(field, None)
+    return finance
 
 
 class SecureOrderPartSerializer(OrderPartSerializer):
@@ -79,15 +101,24 @@ class SecureOrderServiceSerializer(OrderServiceSerializer):
 class SecureVisitSerializer(VisitSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        if _request_can_view_finances(self):
-            return data
+        can_finance = _request_can_view_finances(self)
+        can_payments = _request_can_take_payments(self)
 
-        for field in SENSITIVE_VISIT_FIELDS:
-            data.pop(field, None)
-        for part in data.get('parts') or []:
-            _redact_part(part)
-        for service in data.get('services') or []:
-            _redact_service(service)
+        if not can_finance:
+            for part in data.get('parts') or []:
+                _redact_part(part)
+            for service in data.get('services') or []:
+                _redact_service(service)
+
+            if can_payments:
+                # Payment operators need the amount the customer owes, not the
+                # company's internal margin, costs or payroll calculation.
+                _redact_internal_finance(data.get('finance'))
+            else:
+                data.pop('finance', None)
+                for field in PAYMENT_VISIT_FIELDS:
+                    data.pop(field, None)
+
         return data
 
 

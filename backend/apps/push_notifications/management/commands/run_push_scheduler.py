@@ -1,6 +1,7 @@
 import time
 
 from django.core.management.base import BaseCommand
+from django.db import close_old_connections
 
 from apps.push_notifications.scheduler import process_scheduled_pushes
 
@@ -16,10 +17,13 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'Push scheduler started. Interval: {interval}s'))
         while True:
             try:
+                close_old_connections()
                 process_scheduled_pushes()
             except KeyboardInterrupt:
                 self.stdout.write('Push scheduler stopped.')
                 return
             except Exception as exc:
                 self.stderr.write(self.style.ERROR(f'Push scheduler tick failed: {exc}'))
+            finally:
+                close_old_connections()
             time.sleep(interval)

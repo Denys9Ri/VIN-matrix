@@ -6,7 +6,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import WebPushSubscription
-from .service import get_vapid_keypair, send_web_push
+from .service import (
+    PREFERENCE_FIELDS,
+    get_user_push_preferences,
+    get_vapid_keypair,
+    send_web_push,
+    serialize_push_preferences,
+)
 
 
 MAX_ENDPOINT_LENGTH = 2048
@@ -54,10 +60,47 @@ class WebPushStatusView(APIView):
             user=request.user,
             is_active=True,
         ).count()
+        preferences = get_user_push_preferences(request.user)
         return Response({
             'server_ready': True,
             'public_key': vapid.public_key,
             'active_subscriptions': active_count,
+            'preferences': serialize_push_preferences(preferences),
+        })
+
+
+class WebPushPreferencesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        preferences = get_user_push_preferences(request.user)
+        return Response({'preferences': serialize_push_preferences(preferences)})
+
+    def patch(self, request):
+        preferences = get_user_push_preferences(request.user)
+        payload = request.data.get('preferences') if isinstance(request.data, dict) else None
+        if not isinstance(payload, dict):
+            payload = request.data if isinstance(request.data, dict) else {}
+
+        changed = []
+        for field in PREFERENCE_FIELDS:
+            if field not in payload:
+                continue
+            value = payload[field]
+            if not isinstance(value, bool):
+                return Response(
+                    {'error': f'Поле {field} має бути true або false.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            setattr(preferences, field, value)
+            changed.append(field)
+
+        if changed:
+            preferences.save(update_fields=[*changed, 'updated_at'])
+
+        return Response({
+            'saved': True,
+            'preferences': serialize_push_preferences(preferences),
         })
 
 
@@ -82,6 +125,7 @@ class WebPushSubscribeView(APIView):
                 'last_error': '',
             },
         )
+        get_user_push_preferences(request.user)
         return Response({
             'subscribed': True,
             'created': created,
@@ -128,9 +172,9 @@ class WebPushTestView(APIView):
 
         payload = {
             'title': 'VIN Matrix',
-            'body': 'Тестове сповіщення працює ✅',
+            'body': 'Сповіщення на цьому пристрої працюють ✅',
             'url': '/settings/notifications',
-            'tag': 'vin-matrix-test',
+            'tag': 'vin-matrix-diagnostic',
         }
         delivered, status_code, _ = send_web_push(subscription, payload)
         if not delivered:
@@ -140,8 +184,8 @@ class WebPushTestView(APIView):
                     status=status.HTTP_409_CONFLICT,
                 )
             return Response(
-                {'error': 'Не вдалося доставити тестове сповіщення. Спробуйте ще раз.'},
+                {'error': 'Не вдалося доставити перевірочне сповіщення. Спробуйте ще раз.'},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        return Response({'sent': True, 'message': 'Тестове сповіщення відправлено.'})
+        return Response({'sent': True, 'message': 'Перевірочне сповіщення відправлено.'})

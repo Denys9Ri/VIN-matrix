@@ -1,11 +1,8 @@
 #!/bin/sh
 set -eu
 
-echo "Running VIN Matrix database compatibility repair..."
+echo "Running VIN Matrix database repair and migrations..."
 python fix_db.py
-
-echo "Applying database migrations..."
-python manage.py migrate --noinput
 
 echo "Bootstrapping landing growth data..."
 python manage.py landing_growth_bootstrap

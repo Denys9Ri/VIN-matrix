@@ -9,10 +9,28 @@ from django.db import IntegrityError
 from django.utils import timezone
 from pywebpush import WebPushException, webpush
 
-from .models import WebPushSubscription, WebPushVapidKey
+from .models import WebPushPreference, WebPushSubscription, WebPushVapidKey
 
 
 logger = logging.getLogger('vin_matrix.push')
+
+PREFERENCE_FIELDS = (
+    'visit_reminders',
+    'status_updates',
+    'payments',
+    'inventory',
+    'delivery',
+    'crm',
+)
+
+CATEGORY_TO_PREFERENCE = {
+    'visit_reminders': 'visit_reminders',
+    'status_updates': 'status_updates',
+    'payments': 'payments',
+    'inventory': 'inventory',
+    'delivery': 'delivery',
+    'crm': 'crm',
+}
 
 
 def _b64url(value: bytes) -> str:
@@ -46,8 +64,23 @@ def get_vapid_keypair():
                 public_key=public_key,
             )
         except IntegrityError:
-            # Two workers may race on the first request. The winner created the key.
             return WebPushVapidKey.objects.get(pk=1)
+
+
+def get_user_push_preferences(user):
+    preferences, _ = WebPushPreference.objects.get_or_create(user=user)
+    return preferences
+
+
+def serialize_push_preferences(preferences):
+    return {field: bool(getattr(preferences, field)) for field in PREFERENCE_FIELDS}
+
+
+def category_enabled_for_user(user, category):
+    field = CATEGORY_TO_PREFERENCE.get(category)
+    if not field:
+        return True
+    return bool(getattr(get_user_push_preferences(user), field))
 
 
 def send_web_push(subscription: WebPushSubscription, payload: dict):
@@ -101,3 +134,20 @@ def send_web_push(subscription: WebPushSubscription, payload: dict):
     subscription.is_active = True
     subscription.save(update_fields=['last_success_at', 'last_error', 'is_active', 'updated_at'])
     return True, None, ''
+
+
+def send_user_push(user, payload, category=None):
+    """Send an operational push to every active device for a user, respecting category preferences."""
+    if category and not category_enabled_for_user(user, category):
+        return {'delivered': 0, 'failed': 0, 'skipped': True}
+
+    delivered = 0
+    failed = 0
+    for subscription in WebPushSubscription.objects.filter(user=user, is_active=True):
+        ok, _, _ = send_web_push(subscription, payload)
+        if ok:
+            delivered += 1
+        else:
+            failed += 1
+
+    return {'delivered': delivered, 'failed': failed, 'skipped': False}

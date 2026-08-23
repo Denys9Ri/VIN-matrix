@@ -48,3 +48,27 @@ class WebPushSubscription(models.Model):
     def __str__(self):
         state = 'active' if self.is_active else 'inactive'
         return f'{self.user_id} · {state} · {self.endpoint[:80]}'
+
+
+class WebPushPreference(models.Model):
+    """Per-user choices for which operational push categories VIN Matrix may send."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='web_push_preferences',
+    )
+    visit_reminders = models.BooleanField(default=True)
+    status_updates = models.BooleanField(default=True)
+    payments = models.BooleanField(default=True)
+    inventory = models.BooleanField(default=True)
+    delivery = models.BooleanField(default=True)
+    crm = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Web Push preference'
+        verbose_name_plural = 'Web Push preferences'
+
+    def __str__(self):
+        return f'Push preferences · user {self.user_id}'

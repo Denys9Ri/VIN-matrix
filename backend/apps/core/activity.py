@@ -61,31 +61,34 @@ def log_activity(company=None, user=None, visit=None, order_part=None, inventory
             data.setdefault('inventory_brand', getattr(inventory_item, 'brand', '') or '')
         data.setdefault('actor', actor_name(user))
         payload = json.dumps(data, ensure_ascii=False, default=_json_default)
+        metadata_placeholder = '%s::jsonb' if connection.vendor == 'postgresql' else '%s'
+        sql = f"""
+            INSERT INTO core_activitylog
+            (company_id, user_id, visit_id, order_part_id, inventory_item_id, mode, action_type, title, description, old_value, new_value, metadata, created_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,{metadata_placeholder},%s)
+        """
+        params = [
+            company.id,
+            user.id if user and getattr(user, 'is_authenticated', False) else None,
+            getattr(visit, 'id', None),
+            getattr(order_part, 'id', None),
+            getattr(inventory_item, 'id', None),
+            _safe_text(mode or 'system', 20),
+            _safe_text(action_type or 'system', 80),
+            _safe_text(title or 'Дія', 255),
+            description or '',
+            None if old_value is None else str(old_value),
+            None if new_value is None else str(new_value),
+            payload,
+            timezone.now(),
+        ]
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO core_activitylog
-                (company_id, user_id, visit_id, order_part_id, inventory_item_id, mode, action_type, title, description, old_value, new_value, metadata, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
-                RETURNING id
-                """,
-                [
-                    company.id,
-                    user.id if user and getattr(user, 'is_authenticated', False) else None,
-                    getattr(visit, 'id', None),
-                    getattr(order_part, 'id', None),
-                    getattr(inventory_item, 'id', None),
-                    _safe_text(mode or 'system', 20),
-                    _safe_text(action_type or 'system', 80),
-                    _safe_text(title or 'Дія', 255),
-                    description or '',
-                    None if old_value is None else str(old_value),
-                    None if new_value is None else str(new_value),
-                    payload,
-                    timezone.now(),
-                ],
-            )
-            return cursor.fetchone()[0]
+            cursor.execute(sql, params)
+            if connection.vendor == 'postgresql':
+                cursor.execute('SELECT currval(pg_get_serial_sequence(\'core_activitylog\', \'id\'))')
+                row = cursor.fetchone()
+                return row[0] if row else None
+            return cursor.lastrowid
     except Exception as exc:
         print(f'ACTIVITY LOG failed: {exc}')
         return None
@@ -126,8 +129,12 @@ def activity_query(company, visit_id=None, phone=None, mode=None, action_type=No
         params.append(visit_id)
     if phone:
         digits = ''.join(ch for ch in str(phone) if ch.isdigit())
-        where.append("regexp_replace(COALESCE(a.metadata->>'phone',''), '[^0-9]', '', 'g') = %s")
-        params.append(digits)
+        if connection.vendor == 'postgresql':
+            where.append("regexp_replace(COALESCE(a.metadata->>'phone',''), '[^0-9]', '', 'g') = %s")
+            params.append(digits)
+        else:
+            where.append("COALESCE(json_extract(a.metadata, '$.phone'), '') = %s")
+            params.append(phone)
     if mode:
         where.append('a.mode = %s')
         params.append(mode)

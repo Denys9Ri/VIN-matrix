@@ -1,10 +1,12 @@
 import React from 'react';
-import { Bot, Settings2 } from 'lucide-react';
+import { Bell, Bot, Settings2 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 
 const SettingsSectionNav = () => {
   const location = useLocation();
-  const visible = location.pathname === '/settings' || location.pathname === '/settings/ai-agent';
+  const visible = location.pathname === '/settings'
+    || location.pathname === '/settings/ai-agent'
+    || location.pathname === '/settings/notifications';
 
   if (!visible) return null;
 
@@ -21,6 +23,10 @@ const SettingsSectionNav = () => {
         <NavLink to="/settings" end className={itemClass}>
           <Settings2 size={16} />
           Основні налаштування
+        </NavLink>
+        <NavLink to="/settings/notifications" className={itemClass}>
+          <Bell size={16} />
+          Сповіщення
         </NavLink>
         <NavLink to="/settings/ai-agent" className={itemClass}>
           <Bot size={16} />

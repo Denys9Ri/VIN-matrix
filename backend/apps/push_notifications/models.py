@@ -14,6 +14,7 @@ class WebPushVapidKey(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     private_key = models.TextField()
     public_key = models.CharField(max_length=255)
+    scheduler_heartbeat_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

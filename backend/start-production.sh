@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+echo "Running VIN Matrix database compatibility repair..."
+python fix_db.py
+
 echo "Applying database migrations..."
 python manage.py migrate --noinput
 

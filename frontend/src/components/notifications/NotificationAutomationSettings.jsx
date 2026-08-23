@@ -125,7 +125,7 @@ export default function NotificationAutomationSettings({ enabled }) {
 
           <div className="mt-3 space-y-2">
             {(automation.debt_notification_times || []).map((value, index) => (
-              <div key={`${index}-${value}`} className="flex items-center gap-2">
+              <div key={index} className="flex items-center gap-2">
                 <input
                   type="time"
                   value={value}
@@ -185,9 +185,9 @@ export default function NotificationAutomationSettings({ enabled }) {
           <Hint>Сюди входять задачі, рекомендації по авто та сервісні нагадування.</Hint>
         </SettingCard>
 
-        <SettingCard icon={Moon} title="Тихі години" description="Планові нагадування не турбують поза робочим часом.">
+        <SettingCard icon={Moon} title="Тихі години" description="Зведення по боргах і CRM не турбують поза робочим часом.">
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div><p className="text-sm font-black text-slate-800">Не надсилати планові push</p><p className="text-xs font-semibold text-slate-500">Миттєві зміни статусів приходять одразу.</p></div>
+            <div><p className="text-sm font-black text-slate-800">Не надсилати борги та CRM</p><p className="text-xs font-semibold text-slate-500">Статуси та нагадування про записи приходять вчасно.</p></div>
             <button
               type="button"
               role="switch"

@@ -10,6 +10,8 @@ const iconMap = {
   overdue_orders: Clock3,
   np_returns: RotateCcw,
   parts_in_transit: Truck,
+  np_received: Truck,
+  np_cod_waiting: CreditCard,
   crm_tasks: AlertTriangle,
   service_reminders: Clock3,
   recommendations: AlertTriangle,
@@ -33,13 +35,52 @@ function formatAmount(value) {
   return `${number.toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
 }
 
-function actionUrl(section, item) {
-  if (!item?.id) return section?.url || '/';
-  if (section?.key === 'debts') return `/attention?visit_id=${item.id}&type=debt`;
-  if (section?.key === 'payment_due') return `/attention?visit_id=${item.id}&type=payment`;
-  if (section?.key === 'overdue_orders') return `/attention?visit_id=${item.id}&type=overdue`;
-  if (section?.key === 'parts_in_transit') return `/attention?visit_id=${item.id}&type=part_delay&tab=parts`;
-  if (section?.key === 'np_returns') return `/attention?visit_id=${item.id}&type=delivery&tab=delivery`;
+function visitIdOf(item) {
+  return item?.visit_id || item?.order_id || item?.id || '';
+}
+
+function crmSearchValue(item) {
+  const explicit = String(item?.client_key || item?.meta || '').trim();
+  if (explicit) return explicit;
+  const subtitle = String(item?.subtitle || '').trim();
+  return subtitle.split(' • ')[0]?.trim() || '';
+}
+
+export function notificationActionUrl(section, item) {
+  if (!item) return section?.url || '/';
+
+  const visitId = visitIdOf(item);
+  const key = section?.key || '';
+
+  if (key === 'debts' && visitId) return `/attention?visit_id=${visitId}&type=debt`;
+  if (key === 'payment_due' && visitId) return `/attention?visit_id=${visitId}&type=payment`;
+
+  if (key === 'overdue_orders' && visitId) {
+    return `/visits?visit_id=${visitId}&open=board`;
+  }
+
+  if (key === 'parts_in_transit' && visitId) {
+    return `/visits?visit_id=${visitId}&tab=parts&open=board`;
+  }
+
+  if (['np_returns', 'np_received', 'np_cod_waiting'].includes(key) && visitId) {
+    return `/visits?visit_id=${visitId}&tab=delivery&open=board`;
+  }
+
+  if (['crm_tasks', 'service_reminders', 'recommendations'].includes(key)) {
+    const search = crmSearchValue(item);
+    const base = item.url || section?.url || '/crm';
+    if (search) {
+      const separator = base.includes('?') ? '&' : '?';
+      return `${base}${separator}search=${encodeURIComponent(search)}&autopen=1`;
+    }
+    return base;
+  }
+
+  if (String(item.url || '').startsWith('/clients') && item.client_key) {
+    return `/clients?search=${encodeURIComponent(item.client_key)}&autopen=1`;
+  }
+
   return item.url || section?.url || '/';
 }
 
@@ -107,7 +148,7 @@ export default function NotificationBell() {
 
   const itemClick = (event, section, item) => {
     event.stopPropagation();
-    goTo(actionUrl(section, item));
+    goTo(notificationActionUrl(section, item));
   };
 
   const toggleExpand = (event, key) => {

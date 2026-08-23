@@ -5,14 +5,16 @@ import logging
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from django.conf import settings
-from django.db import IntegrityError
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from pywebpush import WebPushException, webpush
 
-from .models import WebPushPreference, WebPushSubscription, WebPushVapidKey
+from .models import WebPushDispatchLog, WebPushPreference, WebPushSubscription, WebPushVapidKey
 
 
 logger = logging.getLogger('vin_matrix.push')
+User = get_user_model()
 
 PREFERENCE_FIELDS = (
     'visit_reminders',
@@ -76,11 +78,41 @@ def serialize_push_preferences(preferences):
     return {field: bool(getattr(preferences, field)) for field in PREFERENCE_FIELDS}
 
 
+def serialize_push_automation(preferences):
+    crm_days = preferences.crm_reminder_days_before
+    return {
+        'visit_reminder_minutes': int(preferences.visit_reminder_minutes or 60),
+        'debt_schedule_days': preferences.debt_schedule_days or WebPushPreference.DEBT_DAYS_WEEKDAYS,
+        'debt_notification_times': list(preferences.debt_notification_times or []),
+        'crm_reminder_days_before': int(1 if crm_days is None else crm_days),
+        'crm_notification_time': preferences.crm_notification_time.strftime('%H:%M'),
+        'quiet_hours_enabled': bool(preferences.quiet_hours_enabled),
+        'quiet_hours_start': preferences.quiet_hours_start.strftime('%H:%M'),
+        'quiet_hours_end': preferences.quiet_hours_end.strftime('%H:%M'),
+    }
+
+
 def category_enabled_for_user(user, category):
     field = CATEGORY_TO_PREFERENCE.get(category)
     if not field:
         return True
     return bool(getattr(get_user_push_preferences(user), field))
+
+
+def company_push_users(company):
+    user_ids = {getattr(company, 'owner_id', None)}
+    try:
+        user_ids.update(company.employees.values_list('user_id', flat=True))
+    except Exception:
+        pass
+    user_ids.discard(None)
+    if not user_ids:
+        return User.objects.none()
+    active_user_ids = WebPushSubscription.objects.filter(
+        user_id__in=user_ids,
+        is_active=True,
+    ).values_list('user_id', flat=True).distinct()
+    return User.objects.filter(id__in=active_user_ids, is_active=True)
 
 
 def send_web_push(subscription: WebPushSubscription, payload: dict):
@@ -151,3 +183,46 @@ def send_user_push(user, payload, category=None):
             failed += 1
 
     return {'delivered': delivered, 'failed': failed, 'skipped': False}
+
+
+def send_company_push(company, payload, category=None):
+    """Send one operational event to every subscribed user of a company."""
+    delivered = 0
+    failed = 0
+    skipped = 0
+    for user in company_push_users(company):
+        result = send_user_push(user, payload, category=category)
+        delivered += result['delivered']
+        failed += result['failed']
+        skipped += 1 if result.get('skipped') else 0
+    return {'delivered': delivered, 'failed': failed, 'skipped_users': skipped}
+
+
+def send_scheduled_user_push(user, event_key, payload, category):
+    """Claim a scheduled event before sending so repeated scheduler runs cannot duplicate it."""
+    if category and not category_enabled_for_user(user, category):
+        return {'delivered': 0, 'failed': 0, 'skipped': True, 'duplicate': False}
+
+    try:
+        # Use an inner savepoint so a duplicate claim rolls back cleanly without
+        # poisoning a surrounding request/test transaction.
+        with transaction.atomic():
+            dispatch = WebPushDispatchLog.objects.create(
+                user=user,
+                event_key=event_key,
+                category=category,
+                payload=payload,
+            )
+    except IntegrityError:
+        return {'delivered': 0, 'failed': 0, 'skipped': False, 'duplicate': True}
+
+    result = send_user_push(user, payload, category=category)
+    dispatch.delivered = result['delivered']
+    dispatch.failed = result['failed']
+    dispatch.save(update_fields=['delivered', 'failed'])
+
+    # A transient total failure should be retried by the next scheduler tick.
+    if result['delivered'] == 0 and result['failed'] > 0:
+        dispatch.delete()
+
+    return {**result, 'duplicate': False}

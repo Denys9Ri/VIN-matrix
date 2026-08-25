@@ -1,8 +1,11 @@
 import hashlib
 import os
+from io import BytesIO
 from pathlib import Path
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.db.models import Q
 from django.http import FileResponse
@@ -19,15 +22,22 @@ from apps.core.visit_workflow_views import ensure_visit_workflow_tables
 from .models import VisitAcceptancePhoto
 
 
+# iPhone cameras commonly upload HEIC/HEIF. Register the Pillow decoder once at
+# module import time, then normalize those files to JPEG before private storage
+# so every browser/device can display the evidence consistently.
+register_heif_opener()
+
 MAX_PHOTO_BYTES = 12 * 1024 * 1024
 MAX_PHOTOS_PER_CATEGORY = 20
 MAX_PHOTOS_PER_VISIT = 60
+MAX_NORMALIZED_EDGE = 4096
 CLOSED_VISIT_STATUSES = {'COMPLETED', 'CANCELLED'}
 ALLOWED_FORMATS = {
     'JPEG': ('image/jpeg', '.jpg'),
     'PNG': ('image/png', '.png'),
     'WEBP': ('image/webp', '.webp'),
 }
+HEIF_FORMATS = {'HEIF', 'HEIC'}
 
 
 def _company(request):
@@ -100,7 +110,50 @@ def _photo_payload(photo, locked=None):
     }
 
 
-def _validate_upload(upload):
+def _sha256_upload(upload):
+    digest = hashlib.sha256()
+    upload.seek(0)
+    for chunk in upload.chunks():
+        digest.update(chunk)
+    upload.seek(0)
+    return digest.hexdigest()
+
+
+def _jpeg_from_heif(upload, original_name):
+    """Decode an iPhone HEIC/HEIF image and return a browser-safe JPEG upload."""
+    upload.seek(0)
+    with Image.open(upload) as source:
+        image = ImageOps.exif_transpose(source)
+        if max(image.size or (0, 0)) > MAX_NORMALIZED_EDGE:
+            image.thumbnail((MAX_NORMALIZED_EDGE, MAX_NORMALIZED_EDGE), Image.Resampling.LANCZOS)
+        if image.mode != 'RGB':
+            if 'A' in image.getbands():
+                background = Image.new('RGB', image.size, 'white')
+                alpha = image.getchannel('A')
+                background.paste(image.convert('RGB'), mask=alpha)
+                image = background
+            else:
+                image = image.convert('RGB')
+
+        output = BytesIO()
+        image.save(output, format='JPEG', quality=90, optimize=True)
+
+    payload = output.getvalue()
+    if not payload:
+        raise ValueError('Не вдалося обробити фото з iPhone.')
+    if len(payload) > MAX_PHOTO_BYTES:
+        raise ValueError('Фото після обробки завелике. Спробуйте зробити фото з меншою роздільною здатністю.')
+
+    base_name = os.path.splitext(original_name)[0][:180] or 'iphone-photo'
+    processed = SimpleUploadedFile(
+        f'{base_name}.jpg',
+        payload,
+        content_type='image/jpeg',
+    )
+    return processed, hashlib.sha256(payload).hexdigest()
+
+
+def _prepare_upload(upload):
     if not upload:
         raise ValueError('Оберіть фото.')
     if int(getattr(upload, 'size', 0) or 0) <= 0:
@@ -108,12 +161,14 @@ def _validate_upload(upload):
     if int(upload.size) > MAX_PHOTO_BYTES:
         raise ValueError('Фото завелике. Максимальний розмір — 12 МБ.')
 
+    original_name = Path(str(getattr(upload, 'name', '') or 'photo')).name[:255]
+
     try:
         upload.seek(0)
         image = Image.open(upload)
-        image.verify()
         image_format = str(image.format or '').upper()
-    except (UnidentifiedImageError, OSError, ValueError):
+        image.verify()
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
         raise ValueError('Файл не є коректним зображенням.')
     finally:
         try:
@@ -121,19 +176,23 @@ def _validate_upload(upload):
         except Exception:
             pass
 
+    if image_format in HEIF_FORMATS:
+        try:
+            processed, digest = _jpeg_from_heif(upload, original_name)
+        except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+            if isinstance(exc, ValueError) and str(exc):
+                raise
+            raise ValueError('Не вдалося обробити HEIC/HEIF фото з iPhone.')
+        return processed, 'image/jpeg', digest, original_name
+
     if image_format not in ALLOWED_FORMATS:
-        raise ValueError('Підтримуються фото JPEG, PNG або WebP.')
+        raise ValueError('Підтримуються фото JPEG, PNG, WebP, HEIC або HEIF.')
 
     expected_content_type, extension = ALLOWED_FORMATS[image_format]
-    digest = hashlib.sha256()
-    for chunk in upload.chunks():
-        digest.update(chunk)
-    upload.seek(0)
-
-    original_name = Path(str(getattr(upload, 'name', '') or 'photo')).name[:255]
+    digest = _sha256_upload(upload)
     base_name = os.path.splitext(original_name)[0][:180] or 'photo'
     upload.name = f'{base_name}{extension}'
-    return expected_content_type, digest.hexdigest(), original_name
+    return upload, expected_content_type, digest, original_name
 
 
 class VisitAcceptancePhotoListCreateView(APIView):
@@ -214,7 +273,7 @@ class VisitAcceptancePhotoListCreateView(APIView):
 
         upload = request.FILES.get('photo')
         try:
-            content_type, sha256, original_name = _validate_upload(upload)
+            upload, content_type, sha256, original_name = _prepare_upload(upload)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 

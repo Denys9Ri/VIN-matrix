@@ -22,6 +22,7 @@ from .models import VisitAcceptancePhoto
 MAX_PHOTO_BYTES = 12 * 1024 * 1024
 MAX_PHOTOS_PER_CATEGORY = 20
 MAX_PHOTOS_PER_VISIT = 60
+CLOSED_VISIT_STATUSES = {'COMPLETED', 'CANCELLED'}
 ALLOWED_FORMATS = {
     'JPEG': ('image/jpeg', '.jpg'),
     'PNG': ('image/png', '.png'),
@@ -40,6 +41,18 @@ def _visit_for_company(company, visit_id):
         return Visit.objects.get(pk=visit_id, company=company)
     except (Visit.DoesNotExist, TypeError, ValueError):
         return None
+
+
+def _can_open_visit_photos(user, visit):
+    """Client-history permission is required once a visit is closed.
+
+    Mechanics still need acceptance photos while a vehicle is actively in the
+    workshop. After the visit is completed/cancelled, those photos become part
+    of client history and follow can_view_clients.
+    """
+    if can_view_client_data(user):
+        return True
+    return str(getattr(visit, 'status', '') or '').upper() not in CLOSED_VISIT_STATUSES
 
 
 def _act_completed(company_id, visit_id):
@@ -143,6 +156,8 @@ class VisitAcceptancePhotoListCreateView(APIView):
             visit = _visit_for_company(company, visit_id)
             if not visit:
                 return Response([], status=status.HTTP_200_OK)
+            if not _can_open_visit_photos(request.user, visit):
+                return Response({'detail': 'У вас немає доступу до історії цього візиту.'}, status=status.HTTP_403_FORBIDDEN)
             queryset = queryset.filter(visit=visit)
             locked_by_visit = {visit.id: _act_completed(company.id, visit.id)}
         else:
@@ -175,6 +190,8 @@ class VisitAcceptancePhotoListCreateView(APIView):
         visit = _visit_for_company(company, request.data.get('visit'))
         if not visit:
             return Response({'detail': 'Візит не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_open_visit_photos(request.user, visit):
+            return Response({'detail': 'У вас немає доступу до історії цього візиту.'}, status=status.HTTP_403_FORBIDDEN)
 
         category = str(request.data.get('category') or '').strip()
         valid_categories = {key for key, _ in VisitAcceptancePhoto.CATEGORY_CHOICES}
@@ -221,8 +238,10 @@ class VisitAcceptancePhotoDetailView(APIView):
 
     def delete(self, request, pk):
         company = _company(request)
-        photo = VisitAcceptancePhoto.objects.filter(pk=pk, company=company).first()
+        photo = VisitAcceptancePhoto.objects.filter(pk=pk, company=company).select_related('visit').first()
         if not photo:
+            return Response({'detail': 'Фото не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_open_visit_photos(request.user, photo.visit):
             return Response({'detail': 'Фото не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
         if _act_completed(company.id, photo.visit_id):
             return Response(
@@ -244,8 +263,8 @@ class VisitAcceptancePhotoFileView(APIView):
 
     def get(self, request, pk):
         company = _company(request)
-        photo = VisitAcceptancePhoto.objects.filter(pk=pk, company=company).first()
-        if not photo or not photo.image:
+        photo = VisitAcceptancePhoto.objects.filter(pk=pk, company=company).select_related('visit').first()
+        if not photo or not photo.image or not _can_open_visit_photos(request.user, photo.visit):
             return Response({'detail': 'Фото не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
 
         try:

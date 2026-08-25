@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta
+from math import ceil
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
@@ -39,13 +40,30 @@ def _minutes_of_day(value):
     return value.hour * 60 + value.minute
 
 
-def _slot_is_due(local_now, value, window_minutes=10):
-    target = _parse_hhmm(value)
-    if not target:
+def _latest_due_slot(local_now, values):
+    """Return the latest configured slot already reached today.
+
+    Scheduled pushes must survive process restarts and delayed ticks. The old
+    implementation only allowed a ten-minute window after a configured time,
+    which meant a restart at 10:11 permanently lost a 10:00 notification.
+    """
+    current_minutes = _minutes_of_day(local_now.time())
+    due = []
+    for raw in values or []:
+        target = _parse_hhmm(raw)
+        if target is None:
+            continue
+        target_minutes = _minutes_of_day(target)
+        if target_minutes <= current_minutes:
+            due.append((target_minutes, target.strftime('%H:%M')))
+    return max(due, default=(None, None))[1]
+
+
+def _time_reached(local_now, value):
+    target = value if hasattr(value, 'hour') else _parse_hhmm(value)
+    if target is None:
         return False
-    now_minutes = _minutes_of_day(local_now.time())
-    target_minutes = _minutes_of_day(target)
-    return 0 <= now_minutes - target_minutes < window_minutes
+    return _minutes_of_day(local_now.time()) >= _minutes_of_day(target)
 
 
 def _quiet_now(preference, local_now):
@@ -77,20 +95,30 @@ def _client_search_url(phone='', client='', plate=''):
     return f'/crm?search={quote(query)}&autopen=1'
 
 
+def _visit_reminder_title(remaining_minutes):
+    remaining_minutes = max(1, int(remaining_minutes or 1))
+    if remaining_minutes < 60:
+        return f'🚗 Запис через {remaining_minutes} хв.'
+    hours, minutes = divmod(remaining_minutes, 60)
+    if minutes == 0:
+        return f'🚗 Запис через {hours} год.'
+    return f'🚗 Запис через {hours} год. {minutes} хв.'
+
+
 def _process_visit_reminders(user, company, preference, now, local_now):
-    # Appointment reminders are time-critical: if a car is due in one hour,
-    # delaying the push until quiet hours end makes the reminder useless.
+    # Appointment reminders are time-critical. Process every future visit that
+    # has entered the configured reminder window instead of relying on one
+    # narrow +/-5 minute scheduler slot. Dispatch logs keep it one-time-only.
     if not preference.visit_reminders:
         return 0
 
     minutes = max(5, min(int(preference.visit_reminder_minutes or 60), 24 * 60))
-    target = now + timedelta(minutes=minutes)
-    window = timedelta(minutes=5)
+    window_end = now + timedelta(minutes=minutes)
     visits = (
         Visit.objects.filter(
             company=company,
-            scheduled_datetime__gte=target - window,
-            scheduled_datetime__lt=target + window,
+            scheduled_datetime__gt=now,
+            scheduled_datetime__lte=window_end,
         )
         .exclude(status__in=CLOSED_VISIT_STATUSES)
         .order_by('scheduled_datetime', 'id')
@@ -100,9 +128,10 @@ def _process_visit_reminders(user, company, preference, now, local_now):
     for visit in visits:
         event_key = f'visit-reminder:{visit.id}:{visit.scheduled_datetime.isoformat()}:{minutes}'
         vehicle = visit.plate or f'Візит №{visit.id}'
+        remaining = ceil((visit.scheduled_datetime - now).total_seconds() / 60)
         result = send_scheduled_user_push(user, event_key, {
-            'title': f'🚗 Запис через {minutes // 60} год.' if minutes % 60 == 0 else f'🚗 Запис через {minutes} хв.',
-            'body': f'{vehicle} · {visit.client or "Клієнт"} · {_format_time(visit.scheduled_datetime)}',
+            'title': _visit_reminder_title(remaining),
+            'body': f'{vehicle} · {visit.client or "Клієнт"} · запис на {_format_time(visit.scheduled_datetime)}',
             'url': f'/visits?visit_id={visit.id}&open=board',
             'tag': f'visit-reminder-{visit.id}',
         }, 'visit_reminders')
@@ -138,22 +167,24 @@ def _process_debts(user, company, preference, local_now):
     if preference.debt_schedule_days == WebPushPreference.DEBT_DAYS_WEEKDAYS and local_now.weekday() >= 5:
         return 0
 
-    sent = 0
-    for slot in list(preference.debt_notification_times or []):
-        if not _slot_is_due(local_now, slot):
-            continue
-        count, amount = _company_debt_summary(company)
-        if count <= 0 or amount <= 0:
-            continue
-        event_key = f'debts:{local_now.date().isoformat()}:{slot}'
-        result = send_scheduled_user_push(user, event_key, {
-            'title': '💳 Є незакриті борги',
-            'body': f'{count} клієнт(ів) · загальна сума {_format_money(amount)}',
-            'url': '/clients?filter=debt',
-            'tag': f'debts-{local_now.date().isoformat()}-{str(slot).replace(":", "")}',
-        }, 'payments')
-        sent += int(result.get('delivered', 0) > 0)
-    return sent
+    # Use the latest already-reached slot. If the scheduler was restarted after
+    # 10:00, the daily debt reminder is delivered late rather than lost forever.
+    slot = _latest_due_slot(local_now, list(preference.debt_notification_times or []))
+    if not slot:
+        return 0
+
+    count, amount = _company_debt_summary(company)
+    if count <= 0 or amount <= 0:
+        return 0
+
+    event_key = f'debts:{local_now.date().isoformat()}:{slot}'
+    result = send_scheduled_user_push(user, event_key, {
+        'title': '💳 Є незакриті борги',
+        'body': f'{count} клієнт(ів) · загальна сума {_format_money(amount)}',
+        'url': '/clients?filter=debt',
+        'tag': f'debts-{local_now.date().isoformat()}-{slot.replace(":", "")}',
+    }, 'payments')
+    return int(result.get('delivered', 0) > 0)
 
 
 def _crm_due_date(preference, local_now):
@@ -165,7 +196,9 @@ def _crm_due_date(preference, local_now):
 def _process_crm_due(user, company, preference, local_now):
     if not preference.crm or _quiet_now(preference, local_now):
         return 0
-    if not _slot_is_due(local_now, preference.crm_notification_time.strftime('%H:%M')):
+    # As with debts, do not lose today's CRM reminder just because a process
+    # restart missed the exact ten-minute scheduler window.
+    if not _time_reached(local_now, preference.crm_notification_time):
         return 0
 
     due_date = _crm_due_date(preference, local_now)

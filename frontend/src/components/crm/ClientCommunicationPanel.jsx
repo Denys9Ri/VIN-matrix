@@ -3,6 +3,7 @@ import { ClipboardCheck, ClipboardList, History, ListChecks, MessageSquareText, 
 import CopyButton from '../common/CopyButton';
 import NextServicePanel from './NextServicePanel';
 import VisitWorkflowPanel from './VisitWorkflowPanel';
+import { ClientAcceptancePhotoHistory } from './AcceptancePhotos';
 import api from '../../api/axios';
 
 const statuses = [
@@ -244,7 +245,7 @@ export default function ClientCommunicationPanel({ selectedGroup, lastVisit, onR
         {activeSection === 'history' && <div className="space-y-4"><form onSubmit={addCommunication} className="bg-slate-50 border border-slate-100 rounded-2xl p-3 space-y-3"><div className="grid grid-cols-1 sm:grid-cols-[230px_1fr] gap-2"><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0">{statuses.map(([keyValue, label]) => <option key={keyValue} value={keyValue}>{label}</option>)}</select><input value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} placeholder="Коментар менеджера" className="bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 min-w-0" /></div><button disabled={saving} className="w-full bg-blue-600 text-white rounded-xl py-3 text-xs font-black uppercase disabled:opacity-50 min-h-[44px]">{saving ? 'Зберігаю...' : 'Додати запис комунікації'}</button></form>{loading ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Завантаження комунікації...</div> : items.length === 0 ? <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 sm:p-4 text-base sm:text-sm font-semibold text-slate-400 text-center">Історії спілкування ще немає</div> : <div className="space-y-2">{shownItems.map((item) => <CommunicationRow key={item.id} item={item} />)}</div>}</div>}
       </div>
 
-      {activeSection === 'workflow' && <VisitWorkflowPanel selectedGroup={selectedGroup} lastVisit={lastVisit} />}
+      {activeSection === 'workflow' && <div className="space-y-4"><VisitWorkflowPanel selectedGroup={selectedGroup} lastVisit={lastVisit} /><ClientAcceptancePhotoHistory selectedGroup={selectedGroup} /></div>}
       {activeSection === 'service' && <NextServicePanel selectedGroup={selectedGroup} lastVisit={lastVisit} lastMileage={parseMileageFromVisit(lastVisit)} />}
     </div>
   );

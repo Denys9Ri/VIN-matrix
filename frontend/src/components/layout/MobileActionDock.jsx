@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Menu, Package, Search, ShoppingCart, Wrench } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { shouldShowMobileActionDock } from '../../utils/mobileDockVisibility';
 
 const activeClass = 'text-blue-700';
 const inactiveClass = 'text-slate-500';
-const excludedPrefixes = ['/onboarding', '/login', '/register', '/attention'];
 
 export default function MobileActionDock({ onOpenMenu }) {
   const location = useLocation();
@@ -22,12 +22,10 @@ export default function MobileActionDock({ onOpenMenu }) {
     return () => { cancelled = true; };
   }, []);
 
-  const visible = useMemo(() => {
-    const path = location.pathname;
-    if (excludedPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) return false;
-    const params = new URLSearchParams(location.search);
-    return !(path === '/visits' && params.has('visit_id'));
-  }, [location.pathname, location.search]);
+  const visible = useMemo(
+    () => shouldShowMobileActionDock(location.pathname),
+    [location.pathname],
+  );
 
   if (!visible) return null;
 

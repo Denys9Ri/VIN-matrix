@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CarFront, CheckCircle2, ClipboardCheck, FileText, Gauge, Save } from 'lucide-react';
 import api from '../../api/axios';
+import { AcceptancePhotoPicker } from './AcceptancePhotos';
 
 const fuelOptions = ['Порожній', '1/4', '1/2', '3/4', 'Повний'];
 
@@ -358,7 +359,9 @@ export default function VisitWorkflowPanel({
                 })
               }
               placeholder="Подряпини, вмʼятини, сколи, стан ЛФП"
-            />
+            >
+              <AcceptancePhotoPicker visitId={visitId} category="damages" title="пошкодження кузова" completed={acceptance.status === 'completed'} />
+            </TextArea>
 
             <TextArea
               label="Салон / речі в авто"
@@ -370,7 +373,9 @@ export default function VisitWorkflowPanel({
                 })
               }
               placeholder="Документи, ключі, килимки, особисті речі"
-            />
+            >
+              <AcceptancePhotoPicker visitId={visitId} category="interior" title="салон / речі" completed={acceptance.status === 'completed'} />
+            </TextArea>
 
             <TextArea
               label="Зовнішній стан / примітка"
@@ -382,7 +387,9 @@ export default function VisitWorkflowPanel({
                 })
               }
               placeholder="Стан авто при прийманні"
-            />
+            >
+              <AcceptancePhotoPicker visitId={visitId} category="exterior" title="зовнішній стан" completed={acceptance.status === 'completed'} />
+            </TextArea>
           </div>
 
           <TextArea
@@ -541,7 +548,7 @@ function SmallInfo({ icon, label, value }) {
   );
 }
 
-function TextArea({ label, value, onChange, placeholder, rows = 3 }) {
+function TextArea({ label, value, onChange, placeholder, rows = 3, children }) {
   return (
     <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 min-w-0">
       <label className="text-[10px] font-black uppercase text-slate-400">
@@ -554,6 +561,7 @@ function TextArea({ label, value, onChange, placeholder, rows = 3 }) {
         placeholder={placeholder}
         className="mt-1 w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-blue-500 resize-none"
       />
+      {children}
     </div>
   );
 }

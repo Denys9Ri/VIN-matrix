@@ -1,6 +1,13 @@
+import os
+import uuid
+
+from django.conf import settings
 from django.db import models
-from apps.core.models import Company
+
+from apps.core.models import Company, Visit as CoreVisit
 from apps.integrations.models import SupplierConfig
+from .private_storage import acceptance_photo_storage
+
 
 class Client(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='clients')
@@ -101,3 +108,47 @@ class VisitService(models.Model):
     def __str__(self):
         name = self.service_catalog.name if self.service_catalog else self.custom_name
         return f"{name} - {self.price} UAH"
+
+
+def acceptance_photo_upload_to(instance, filename):
+    """Use opaque names and keep company/visit boundaries in the storage path."""
+    extension = os.path.splitext(str(filename or 'photo.jpg'))[1].lower()
+    if extension not in {'.jpg', '.jpeg', '.png', '.webp'}:
+        extension = '.jpg'
+    return f'company_{instance.company_id}/visit_{instance.visit_id}/{uuid.uuid4().hex}{extension}'
+
+
+class VisitAcceptancePhoto(models.Model):
+    CATEGORY_DAMAGES = 'damages'
+    CATEGORY_INTERIOR = 'interior'
+    CATEGORY_EXTERIOR = 'exterior'
+    CATEGORY_GENERAL = 'general'
+    CATEGORY_CHOICES = [
+        (CATEGORY_DAMAGES, 'Пошкодження кузова'),
+        (CATEGORY_INTERIOR, 'Салон / речі в авто'),
+        (CATEGORY_EXTERIOR, 'Зовнішній стан'),
+        (CATEGORY_GENERAL, 'Загальне фото'),
+    ]
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='visit_acceptance_photos')
+    visit = models.ForeignKey(CoreVisit, on_delete=models.CASCADE, related_name='acceptance_photos')
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    image = models.ImageField(storage=acceptance_photo_storage, upload_to=acceptance_photo_upload_to, max_length=500)
+    original_name = models.CharField(max_length=255, blank=True, default='')
+    content_type = models.CharField(max_length=100, blank=True, default='')
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    sha256 = models.CharField(max_length=64, db_index=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='acceptance_photos_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(fields=['company', 'visit', 'category'], name='accept_photo_visit_cat_idx'),
+            models.Index(fields=['company', 'created_at'], name='accept_photo_company_date_idx'),
+        ]
+        verbose_name = 'Фото акта приймання'
+        verbose_name_plural = 'Фото актів приймання'
+
+    def __str__(self):
+        return f'Visit {self.visit_id} · {self.get_category_display()} · {self.id}'

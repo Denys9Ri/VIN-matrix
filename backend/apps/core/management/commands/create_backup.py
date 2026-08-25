@@ -120,11 +120,19 @@ class Command(BaseCommand):
 
     def _backup_media(self, backup_dir):
         media_root = Path(settings.MEDIA_ROOT)
-        if not media_root.exists():
+        private_media_root = Path(settings.BASE_DIR) / 'private_media'
+        sources = [
+            (media_root, 'media'),
+            (private_media_root, 'private_media'),
+        ]
+        existing = [(source, arcname) for source, arcname in sources if source.exists()]
+        if not existing:
             return None
+
         target_path = backup_dir / 'media.tar.gz'
         with tarfile.open(target_path, 'w:gz') as archive:
-            archive.add(media_root, arcname='media')
+            for source, arcname in existing:
+                archive.add(source, arcname=arcname)
         os.chmod(target_path, 0o600)
         return target_path
 

@@ -3,6 +3,7 @@
 from django.urls import include, path
 
 from apps.core.vesna_search_view import VesnaPartSearchView
+from apps.crm.acceptance_act_guard import ImmutableVisitAcceptanceActView
 
 from .urls import urlpatterns as core_urlpatterns
 
@@ -14,6 +15,7 @@ urlpatterns = [
     path('api/landing-growth/', include('apps.landing_growth.urls')),
     path('api/finance/', include('apps.finance.urls')),
     path('api/push/', include('apps.push_notifications.urls')),
+    path('api/visit-acceptance-act/', ImmutableVisitAcceptanceActView.as_view(), name='immutable-visit-acceptance-act'),
     path('api/visit-acceptance-photos/', include('apps.crm.acceptance_photo_urls')),
     *core_urlpatterns,
     path('api/agent/', include('apps.agent.urls')),

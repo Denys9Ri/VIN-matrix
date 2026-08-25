@@ -93,12 +93,27 @@ class VisitAcceptancePhotoTests(TestCase):
         denied = mechanic_client.get('/api/visit-acceptance-photos/?phone=0501112233')
         self.assertEqual(denied.status_code, 403)
 
+        # The mechanic may still inspect evidence for an active vehicle in the workshop.
+        active_file = mechanic_client.get(upload.data['file_endpoint'])
+        self.assertEqual(active_file.status_code, 200)
+
+        # Once the visit is closed, those photos are client history and direct ID
+        # enumeration must not bypass can_view_clients.
+        self.visit.status = 'COMPLETED'
+        self.visit.save(update_fields=['status', 'updated_at'])
+        closed_file = mechanic_client.get(upload.data['file_endpoint'])
+        self.assertEqual(closed_file.status_code, 404)
+        closed_visit_list = mechanic_client.get(f'/api/visit-acceptance-photos/?visit={self.visit.id}')
+        self.assertEqual(closed_visit_list.status_code, 403)
+
         employee.can_view_clients = True
         employee.save(update_fields=['can_view_clients'])
         allowed = mechanic_client.get('/api/visit-acceptance-photos/?phone=0501112233')
         self.assertEqual(allowed.status_code, 200)
         self.assertEqual(len(allowed.data), 1)
         self.assertEqual(allowed.data[0]['visit_id'], self.visit.id)
+        allowed_file = mechanic_client.get(upload.data['file_endpoint'])
+        self.assertEqual(allowed_file.status_code, 200)
 
     def test_completed_acceptance_act_locks_existing_photos_and_rejects_changes(self):
         upload = self.upload_photo('damages')
@@ -112,11 +127,13 @@ class VisitAcceptancePhotoTests(TestCase):
                 'client': self.visit.client,
                 'phone': self.visit.phone,
                 'plate': self.visit.plate,
+                'damages': 'Подряпина була при прийманні',
                 'status': 'completed',
             },
             format='json',
         )
         self.assertEqual(act.status_code, 200)
+        self.assertEqual(act.data['status'], 'completed')
 
         listing = self.client.get(f'/api/visit-acceptance-photos/?visit={self.visit.id}')
         self.assertTrue(listing.data[0]['locked'])
@@ -127,6 +144,21 @@ class VisitAcceptancePhotoTests(TestCase):
 
         second_upload = self.upload_photo('exterior')
         self.assertEqual(second_upload.status_code, 409)
+
+        # A direct API call cannot revert the evidence to draft or overwrite it.
+        tamper = self.client.post(
+            '/api/visit-acceptance-act/',
+            {
+                'visit': self.visit.id,
+                'damages': 'Пошкоджень не було',
+                'status': 'draft',
+            },
+            format='json',
+        )
+        self.assertEqual(tamper.status_code, 200)
+        self.assertEqual(tamper.data['status'], 'completed')
+        self.assertEqual(tamper.data['damages'], 'Подряпина була при прийманні')
+        self.assertTrue(tamper.data['locked'])
 
     def test_invalid_file_is_rejected(self):
         bad_file = SimpleUploadedFile('not-photo.jpg', b'not an image', content_type='image/jpeg')

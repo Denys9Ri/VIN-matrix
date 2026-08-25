@@ -1,6 +1,7 @@
 from io import BytesIO
 
 from PIL import Image
+from pillow_heif import register_heif_opener
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -10,6 +11,7 @@ from apps.core.models import Company, Employee, Visit
 from .models import VisitAcceptancePhoto
 
 
+register_heif_opener()
 User = get_user_model()
 
 
@@ -17,6 +19,12 @@ def jpeg_file(name='car.jpg'):
     stream = BytesIO()
     Image.new('RGB', (40, 30), (230, 230, 230)).save(stream, format='JPEG')
     return SimpleUploadedFile(name, stream.getvalue(), content_type='image/jpeg')
+
+
+def heic_file(name='iphone-photo.HEIC'):
+    stream = BytesIO()
+    Image.new('RGB', (64, 48), (210, 220, 230)).save(stream, format='HEIF', quality=80)
+    return SimpleUploadedFile(name, stream.getvalue(), content_type='image/heic')
 
 
 class VisitAcceptancePhotoTests(TestCase):
@@ -41,15 +49,20 @@ class VisitAcceptancePhotoTests(TestCase):
             except Exception:
                 pass
 
+    def _remember_photo(self, response):
+        if response.status_code == 201:
+            photo = VisitAcceptancePhoto.objects.get(pk=response.data['id'])
+            self.created_photos.append(photo)
+            return photo
+        return None
+
     def upload_photo(self, category='damages'):
         response = self.client.post(
             '/api/visit-acceptance-photos/',
             {'visit': self.visit.id, 'category': category, 'photo': jpeg_file()},
             format='multipart',
         )
-        if response.status_code == 201:
-            photo = VisitAcceptancePhoto.objects.get(pk=response.data['id'])
-            self.created_photos.append(photo)
+        self._remember_photo(response)
         return response
 
     def test_owner_can_upload_list_and_fetch_private_photo(self):
@@ -68,6 +81,30 @@ class VisitAcceptancePhotoTests(TestCase):
         self.assertEqual(file_response.status_code, 200)
         self.assertEqual(file_response['Content-Type'], 'image/jpeg')
         self.assertEqual(file_response['Cache-Control'], 'private, max-age=300')
+
+    def test_iphone_heic_is_normalized_to_private_jpeg(self):
+        response = self.client.post(
+            '/api/visit-acceptance-photos/',
+            {'visit': self.visit.id, 'category': 'damages', 'photo': heic_file()},
+            format='multipart',
+        )
+        photo = self._remember_photo(response)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNotNone(photo)
+        self.assertEqual(response.data['original_name'], 'iphone-photo.HEIC')
+        self.assertEqual(response.data['content_type'], 'image/jpeg')
+        self.assertTrue(photo.image.name.lower().endswith('.jpg'))
+        self.assertEqual(len(response.data['sha256']), 64)
+
+        file_response = self.client.get(response.data['file_endpoint'])
+        self.assertEqual(file_response.status_code, 200)
+        self.assertEqual(file_response['Content-Type'], 'image/jpeg')
+
+        with photo.image.open('rb') as stored:
+            normalized = Image.open(stored)
+            self.assertEqual(normalized.format, 'JPEG')
+            self.assertEqual(normalized.size, (64, 48))
 
     def test_other_company_cannot_fetch_photo(self):
         upload = self.upload_photo('exterior')

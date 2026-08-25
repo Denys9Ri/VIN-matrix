@@ -27,6 +27,12 @@ def heic_file(name='iphone-photo.HEIC'):
     return SimpleUploadedFile(name, stream.getvalue(), content_type='image/heic')
 
 
+def tiff_file(name='camera-container.tiff'):
+    stream = BytesIO()
+    Image.new('RGB', (56, 42), (205, 215, 225)).save(stream, format='TIFF')
+    return SimpleUploadedFile(name, stream.getvalue(), content_type='image/tiff')
+
+
 class VisitAcceptancePhotoTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(username='photo-owner', password='Strong-password-123')
@@ -105,6 +111,25 @@ class VisitAcceptancePhotoTests(TestCase):
             normalized = Image.open(stored)
             self.assertEqual(normalized.format, 'JPEG')
             self.assertEqual(normalized.size, (64, 48))
+
+    def test_unusual_but_valid_raster_format_is_normalized_to_jpeg(self):
+        response = self.client.post(
+            '/api/visit-acceptance-photos/',
+            {'visit': self.visit.id, 'category': 'exterior', 'photo': tiff_file()},
+            format='multipart',
+        )
+        photo = self._remember_photo(response)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNotNone(photo)
+        self.assertEqual(response.data['original_name'], 'camera-container.tiff')
+        self.assertEqual(response.data['content_type'], 'image/jpeg')
+        self.assertTrue(photo.image.name.lower().endswith('.jpg'))
+
+        with photo.image.open('rb') as stored:
+            normalized = Image.open(stored)
+            self.assertEqual(normalized.format, 'JPEG')
+            self.assertEqual(normalized.size, (56, 42))
 
     def test_other_company_cannot_fetch_photo(self):
         upload = self.upload_photo('exterior')

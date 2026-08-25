@@ -23,8 +23,9 @@ from .models import VisitAcceptancePhoto
 
 
 # iPhone cameras commonly upload HEIC/HEIF. Register the Pillow decoder once at
-# module import time, then normalize those files to JPEG before private storage
-# so every browser/device can display the evidence consistently.
+# module import time. Any valid raster format outside our native browser-safe
+# allow-list is normalized to JPEG before private storage, which also strips
+# EXIF/GPS metadata from the stored copy.
 register_heif_opener()
 
 MAX_PHOTO_BYTES = 12 * 1024 * 1024
@@ -37,7 +38,6 @@ ALLOWED_FORMATS = {
     'PNG': ('image/png', '.png'),
     'WEBP': ('image/webp', '.webp'),
 }
-HEIF_FORMATS = {'HEIF', 'HEIC'}
 
 
 def _company(request):
@@ -119,11 +119,18 @@ def _sha256_upload(upload):
     return digest.hexdigest()
 
 
-def _jpeg_from_heif(upload, original_name):
-    """Decode an iPhone HEIC/HEIF image and return a browser-safe JPEG upload."""
+def _normalize_to_jpeg(upload, original_name):
+    """Decode any Pillow-supported still image and return a browser-safe JPEG."""
     upload.seek(0)
     with Image.open(upload) as source:
-        image = ImageOps.exif_transpose(source)
+        # Evidence is a still image. For multi-frame containers (for example
+        # MPO/GIF-like sources) deliberately use the first visual frame.
+        try:
+            source.seek(0)
+        except (EOFError, AttributeError):
+            pass
+        image = ImageOps.exif_transpose(source).copy()
+
         if max(image.size or (0, 0)) > MAX_NORMALIZED_EDGE:
             image.thumbnail((MAX_NORMALIZED_EDGE, MAX_NORMALIZED_EDGE), Image.Resampling.LANCZOS)
         if image.mode != 'RGB':
@@ -136,15 +143,17 @@ def _jpeg_from_heif(upload, original_name):
                 image = image.convert('RGB')
 
         output = BytesIO()
+        # Saving without EXIF intentionally strips GPS/device metadata from the
+        # stored private copy while our own DB timestamp/author remain intact.
         image.save(output, format='JPEG', quality=90, optimize=True)
 
     payload = output.getvalue()
     if not payload:
-        raise ValueError('Не вдалося обробити фото з iPhone.')
+        raise ValueError('Не вдалося обробити фото.')
     if len(payload) > MAX_PHOTO_BYTES:
         raise ValueError('Фото після обробки завелике. Спробуйте зробити фото з меншою роздільною здатністю.')
 
-    base_name = os.path.splitext(original_name)[0][:180] or 'iphone-photo'
+    base_name = os.path.splitext(original_name)[0][:180] or 'photo'
     processed = SimpleUploadedFile(
         f'{base_name}.jpg',
         payload,
@@ -176,23 +185,24 @@ def _prepare_upload(upload):
         except Exception:
             pass
 
-    if image_format in HEIF_FORMATS:
-        try:
-            processed, digest = _jpeg_from_heif(upload, original_name)
-        except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
-            if isinstance(exc, ValueError) and str(exc):
-                raise
-            raise ValueError('Не вдалося обробити HEIC/HEIF фото з iPhone.')
-        return processed, 'image/jpeg', digest, original_name
+    if image_format in ALLOWED_FORMATS:
+        expected_content_type, extension = ALLOWED_FORMATS[image_format]
+        digest = _sha256_upload(upload)
+        base_name = os.path.splitext(original_name)[0][:180] or 'photo'
+        upload.name = f'{base_name}{extension}'
+        return upload, expected_content_type, digest, original_name
 
-    if image_format not in ALLOWED_FORMATS:
-        raise ValueError('Підтримуються фото JPEG, PNG, WebP, HEIC або HEIF.')
-
-    expected_content_type, extension = ALLOWED_FORMATS[image_format]
-    digest = _sha256_upload(upload)
-    base_name = os.path.splitext(original_name)[0][:180] or 'photo'
-    upload.name = f'{base_name}{extension}'
-    return upload, expected_content_type, digest, original_name
+    # iOS and browser file inputs can expose camera images using container
+    # formats other than the literal HEIC/HEIF labels (for example MPO/TIFF-like
+    # decodable raster containers). Do not reject a genuine image merely because
+    # Pillow reports a different format name: normalize it to JPEG instead.
+    try:
+        processed, digest = _normalize_to_jpeg(upload, original_name)
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+        if isinstance(exc, ValueError) and str(exc):
+            raise
+        raise ValueError('Не вдалося обробити фото з цього пристрою.')
+    return processed, 'image/jpeg', digest, original_name
 
 
 class VisitAcceptancePhotoListCreateView(APIView):

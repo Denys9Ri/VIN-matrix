@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/landing-growth/', include('apps.landing_growth.urls')),
     path('api/finance/', include('apps.finance.urls')),
     path('api/push/', include('apps.push_notifications.urls')),
+    path('api/visit-acceptance-photos/', include('apps.crm.acceptance_photo_urls')),
     *core_urlpatterns,
     path('api/agent/', include('apps.agent.urls')),
     path('api/agent/', include('apps.agent.routes_read')),

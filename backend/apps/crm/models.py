@@ -140,6 +140,17 @@ class VisitAcceptancePhoto(models.Model):
     sha256 = models.CharField(max_length=64, db_index=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='acceptance_photos_created')
     created_at = models.DateTimeField(auto_now_add=True)
+    # Once a completed acceptance act is reopened for correction, the old photos
+    # remain immutable evidence. New photos may be appended to the correction,
+    # but the original evidence can never be silently deleted or replaced.
+    locked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    locked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acceptance_photos_locked',
+    )
 
     class Meta:
         ordering = ['created_at', 'id']
@@ -152,3 +163,31 @@ class VisitAcceptancePhoto(models.Model):
 
     def __str__(self):
         return f'Visit {self.visit_id} · {self.get_category_display()} · {self.id}'
+
+
+class VisitAcceptanceActRevision(models.Model):
+    """Immutable audit snapshot made before a completed act is corrected."""
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='acceptance_act_revisions')
+    visit = models.ForeignKey(CoreVisit, on_delete=models.CASCADE, related_name='acceptance_act_revisions')
+    snapshot = models.JSONField(default=dict)
+    reason = models.TextField(blank=True, default='')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acceptance_act_revisions_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['company', 'visit', 'created_at'], name='accept_act_rev_visit_idx'),
+        ]
+        verbose_name = 'Коригування акта приймання'
+        verbose_name_plural = 'Коригування актів приймання'
+
+    def __str__(self):
+        return f'Visit {self.visit_id} · revision {self.id}'

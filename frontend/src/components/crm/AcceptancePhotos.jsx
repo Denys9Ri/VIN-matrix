@@ -59,6 +59,16 @@ function PhotoModal({ photo, onClose }) {
 }
 
 
+const uploadErrorMessage = (error) => {
+  const status = Number(error?.response?.status || 0);
+  const detail = error?.response?.data?.detail || error?.response?.data?.error;
+  if (detail) return String(detail);
+  if (status === 413) return 'Фото завелике для сервера. Спробуйте інше фото або зменште його розмір.';
+  if (!error?.response) return 'Не вдалося передати фото на сервер. Перевірте інтернет і спробуйте ще раз.';
+  return `Не вдалося додати фото${status ? ` (помилка ${status})` : ''}.`;
+};
+
+
 export function AcceptancePhotoPicker({ visitId, category, title, completed = false }) {
   const cameraRef = useRef(null);
   const galleryRef = useRef(null);
@@ -92,13 +102,15 @@ export function AcceptancePhotoPicker({ visitId, category, title, completed = fa
       const form = new FormData();
       form.append('visit', String(visitId));
       form.append('category', category);
-      form.append('photo', file);
-      const response = await api.post('/api/visit-acceptance-photos/', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      form.append('photo', file, file.name || 'photo');
+
+      // Do not set Content-Type manually. Safari/iOS must generate the multipart
+      // boundary itself; forcing `multipart/form-data` can produce an invalid
+      // request that Django cannot parse.
+      const response = await api.post('/api/visit-acceptance-photos/', form);
       setPhotos((current) => [...current, response.data]);
     } catch (error) {
-      setMessage(error.response?.data?.detail || 'Не вдалося додати фото.');
+      setMessage(uploadErrorMessage(error));
     } finally {
       setUploading(false);
       if (cameraRef.current) cameraRef.current.value = '';
@@ -162,7 +174,7 @@ export function AcceptancePhotoPicker({ visitId, category, title, completed = fa
         </div>
       )}
 
-      {!locked && !message && <p className="mt-2 text-[11px] font-semibold text-slate-400">Підтримуються JPEG, PNG, WebP та фото HEIC/HEIF з iPhone.</p>}
+      {!locked && !message && <p className="mt-2 text-[11px] font-semibold text-slate-400">Фото з камери або галереї. Сумісні формати автоматично готуються для зберігання.</p>}
       {locked && photos.length === 0 && <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-400">Акт завершено без фото в цьому розділі.</p>}
       {message && <p className="mt-2 text-xs font-bold text-rose-600">{message}</p>}
       {preview && <PhotoModal photo={preview} onClose={() => setPreview(null)} />}

@@ -1,5 +1,6 @@
 import hashlib
 import os
+from collections import defaultdict
 from io import BytesIO
 from pathlib import Path
 
@@ -18,8 +19,8 @@ from rest_framework.views import APIView
 from apps.core.access_control import can_view_client_data
 from apps.core.models import Visit
 from apps.core.safe_crm_views import safe_ensure_company
-from apps.core.visit_workflow_views import ensure_visit_workflow_tables
-from .models import VisitAcceptancePhoto
+from apps.core.visit_workflow_views import ensure_visit_workflow_tables, row_to_dict
+from .models import VisitAcceptanceActRevision, VisitAcceptancePhoto
 
 
 # One evidence format across iPhone/Android/browser combinations. HEIC/HEIF and
@@ -266,6 +267,92 @@ class VisitAcceptancePhotoListCreateView(APIView):
         )
         photo = VisitAcceptancePhoto.objects.select_related('visit', 'created_by').get(pk=photo.pk)
         return Response(_photo_payload(photo, False), status=status.HTTP_201_CREATED)
+
+
+class VehicleConditionHistoryView(APIView):
+    """Return acceptance evidence for one vehicle, grouped by visit."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = _company(request)
+        if not company:
+            return Response([], status=status.HTTP_200_OK)
+        if not can_view_client_data(request.user):
+            return Response(
+                {'detail': 'У вас немає доступу до історії клієнта та авто.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        plate = str(request.query_params.get('plate') or '').strip()
+        phone = str(request.query_params.get('phone') or '').strip()
+        visits = Visit.objects.filter(company=company)
+        # Plate is the primary vehicle identity. Phone is only a fallback for old
+        # records without a usable plate so different cars of one client never mix.
+        if plate:
+            visits = visits.filter(plate__iexact=plate)
+        elif phone:
+            visits = visits.filter(phone=phone)
+        else:
+            return Response([], status=status.HTTP_200_OK)
+
+        visits = list(visits.order_by('-scheduled_datetime', '-created_at', '-id')[:100])
+        if not visits:
+            return Response([], status=status.HTTP_200_OK)
+        visit_ids = [visit.id for visit in visits]
+
+        ensure_visit_workflow_tables()
+        placeholders = ', '.join(['%s'] * len(visit_ids))
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT * FROM core_visitacceptanceact WHERE company_id = %s AND visit_id IN ({placeholders})',
+                [company.id, *visit_ids],
+            )
+            act_rows = [row_to_dict(cursor, row) for row in cursor.fetchall()]
+        acts = {row['visit_id']: row for row in act_rows if row}
+
+        revision_count = defaultdict(int)
+        for visit_id in VisitAcceptanceActRevision.objects.filter(
+            company=company,
+            visit_id__in=visit_ids,
+        ).values_list('visit_id', flat=True):
+            revision_count[visit_id] += 1
+
+        photos_by_visit = defaultdict(list)
+        photos = VisitAcceptancePhoto.objects.filter(
+            company=company,
+            visit_id__in=visit_ids,
+        ).select_related('visit', 'created_by').order_by('created_at', 'id')
+        for photo in photos:
+            act_completed = str((acts.get(photo.visit_id) or {}).get('status') or '').lower() == 'completed'
+            photos_by_visit[photo.visit_id].append(_photo_payload(photo, act_completed))
+
+        history = []
+        for visit in visits:
+            act = acts.get(visit.id) or {}
+            visit_photos = photos_by_visit.get(visit.id, [])
+            if not act and not visit_photos:
+                continue
+            if act:
+                act = dict(act)
+                act['locked'] = str(act.get('status') or '').lower() == 'completed'
+                act['revision_count'] = int(revision_count.get(visit.id, 0))
+            history.append({
+                'visit': {
+                    'id': visit.id,
+                    'plate': visit.plate or '',
+                    'vin_code': visit.vin_code or '',
+                    'client': visit.client or '',
+                    'phone': visit.phone or '',
+                    'status': visit.status or '',
+                    'scheduled_datetime': visit.scheduled_datetime.isoformat() if visit.scheduled_datetime else None,
+                    'created_at': visit.created_at.isoformat() if visit.created_at else None,
+                },
+                'act': act,
+                'photos': visit_photos,
+                'revision_count': int(revision_count.get(visit.id, 0)),
+            })
+        return Response(history, status=status.HTTP_200_OK)
 
 
 class VisitAcceptancePhotoDetailView(APIView):

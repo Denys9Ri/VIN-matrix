@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.core.models import Company, Visit
+from apps.core.models import Company, OrderPart, Visit
 
 from .models import WebPushDispatchLog, WebPushPreference, WebPushSubscription
 from .scheduler import process_scheduled_pushes
@@ -58,6 +58,36 @@ class OperationalPushTests(TestCase):
         self.assertIn(f'visit_id={visit.id}', payload['url'])
 
     @patch('apps.push_notifications.service.send_web_push', return_value=(True, None, ''))
+    def test_part_status_push_uses_ukrainian_labels_for_supplier_order_states(self, mocked_send):
+        visit = Visit.objects.create(
+            company=self.company,
+            plate='KA0001AA',
+            client='Клієнт',
+            phone='0501112233',
+            status='SELECTION',
+        )
+        part = OrderPart.objects.create(
+            visit=visit,
+            brand='KRAFT',
+            article='KF015',
+            name='Деталь',
+            buy_price=100,
+            sell_price=150,
+            supplier='Test',
+            status='WAITING',
+        )
+
+        part.status = 'ARRIVED'
+        part.save(update_fields=['status'])
+
+        self.assertEqual(mocked_send.call_count, 1)
+        payload = mocked_send.call_args.args[1]
+        self.assertIn('До замовлення', payload['body'])
+        self.assertIn('Отримано', payload['body'])
+        self.assertNotIn('ARRIVED', payload['body'])
+        self.assertNotIn('WAITING', payload['body'])
+
+    @patch('apps.push_notifications.service.send_web_push', return_value=(True, None, ''))
     def test_visit_reminder_is_sent_once_even_when_scheduler_runs_twice(self, mocked_send):
         now = timezone.now().replace(second=0, microsecond=0)
         visit = Visit.objects.create(
@@ -76,6 +106,44 @@ class OperationalPushTests(TestCase):
         self.assertEqual(second['visit_reminders'], 0)
         self.assertEqual(mocked_send.call_count, 1)
         self.assertEqual(WebPushDispatchLog.objects.filter(user=self.user, event_key__startswith=f'visit-reminder:{visit.id}:').count(), 1)
+
+    @patch('apps.push_notifications.service.send_web_push', return_value=(True, None, ''))
+    def test_visit_created_inside_reminder_window_is_not_missed(self, mocked_send):
+        now = timezone.now().replace(second=0, microsecond=0)
+        visit = Visit.objects.create(
+            company=self.company,
+            plate='AI3030AI',
+            client='Петро',
+            phone='0630000000',
+            status='SELECTION',
+            scheduled_datetime=now + timedelta(minutes=30),
+        )
+
+        result = process_scheduled_pushes(now=now)
+
+        self.assertEqual(result['visit_reminders'], 1)
+        self.assertEqual(mocked_send.call_count, 1)
+        payload = mocked_send.call_args.args[1]
+        self.assertIn('30 хв', payload['title'])
+        self.assertIn('запис на', payload['body'])
+        self.assertIn(f'visit_id={visit.id}', payload['url'])
+
+    @patch('apps.push_notifications.scheduler._company_debt_summary', return_value=(2, 1850.0))
+    @patch('apps.push_notifications.service.send_web_push', return_value=(True, None, ''))
+    def test_debt_reminder_survives_late_scheduler_tick(self, mocked_send, mocked_summary):
+        local_tz = timezone.get_current_timezone()
+        local_now = timezone.make_aware(datetime(2026, 8, 25, 10, 45), local_tz)
+
+        first = process_scheduled_pushes(now=local_now)
+        second = process_scheduled_pushes(now=local_now + timedelta(minutes=1))
+
+        self.assertEqual(first['debts'], 1)
+        self.assertEqual(second['debts'], 0)
+        self.assertGreaterEqual(mocked_summary.call_count, 1)
+        self.assertEqual(mocked_send.call_count, 1)
+        payload = mocked_send.call_args.args[1]
+        self.assertIn('незакриті борги', payload['title'])
+        self.assertIn('1 850.00 ₴', payload['body'])
 
     def test_automation_preferences_api_validates_and_saves_schedule(self):
         client = APIClient()

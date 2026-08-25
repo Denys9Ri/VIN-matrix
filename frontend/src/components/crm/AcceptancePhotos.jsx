@@ -158,10 +158,11 @@ export function AcceptancePhotoPicker({ visitId, category, title, completed = fa
             <ImagePlus size={15} /> Галерея
           </button>
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => upload(event.target.files?.[0])} />
-          <input ref={galleryRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => upload(event.target.files?.[0])} />
+          <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(event) => upload(event.target.files?.[0])} />
         </div>
       )}
 
+      {!locked && !message && <p className="mt-2 text-[11px] font-semibold text-slate-400">Підтримуються JPEG, PNG, WebP та фото HEIC/HEIF з iPhone.</p>}
       {locked && photos.length === 0 && <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-400">Акт завершено без фото в цьому розділі.</p>}
       {message && <p className="mt-2 text-xs font-bold text-rose-600">{message}</p>}
       {preview && <PhotoModal photo={preview} onClose={() => setPreview(null)} />}

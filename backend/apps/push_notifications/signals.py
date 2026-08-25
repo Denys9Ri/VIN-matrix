@@ -13,6 +13,8 @@ logger = logging.getLogger('vin_matrix.push')
 
 VISIT_STATUS_LABELS = {
     'SELECTION': 'В обробці',
+    'PENDING': 'Очікує',
+    'DRAFT': 'Чернетка',
     'ORDERED': 'Очікує товар',
     'IN_PROGRESS': 'В роботі',
     'DONE': 'Готово',
@@ -22,11 +24,15 @@ VISIT_STATUS_LABELS = {
 }
 
 PART_STATUS_LABELS = {
-    'WAITING': 'Очікується',
+    'WAITING': 'До замовлення',
     'ORDERED': 'Замовлено',
-    'IN_TRANSIT': 'У дорозі',
+    'IN_TRANSIT': 'В дорозі',
+    'ROAD': 'В дорозі',
+    'DELIVERY': 'В дорозі',
+    'ARRIVED': 'Отримано',
     'RECEIVED': 'Отримано',
     'INSTALLED': 'Встановлено',
+    'UNAVAILABLE': 'Відмова',
     'RETURNED': 'Повернено',
     'CANCELLED': 'Скасовано',
 }
@@ -47,6 +53,21 @@ PAYMENT_STATUS_LABELS = {
     'debt': 'Борг',
 }
 
+DELIVERY_STATUS_LABELS = {
+    'created': 'Створено',
+    'tracking': 'Відстежується',
+    'in_transit': 'В дорозі',
+    'transit': 'В дорозі',
+    'accepted': 'Прийнято перевізником',
+    'sent': 'Відправлено',
+    'arrived': 'Прибуло у відділення',
+    'received': 'Отримано',
+    'delivered': 'Доставлено',
+    'returned': 'Повернено',
+    'cancelled': 'Скасовано',
+    'deleted': 'Видалено',
+}
+
 
 def _remember_old(instance, model, fields):
     if not instance.pk:
@@ -60,12 +81,22 @@ def _remember_old(instance, model, fields):
 
 
 def _label(mapping, value):
-    return mapping.get(str(value or ''), str(value or '—'))
+    raw = str(value or '').strip()
+    if not raw:
+        return '—'
+    return mapping.get(raw, mapping.get(raw.upper(), mapping.get(raw.lower(), raw)))
 
 
 def _visit_name(visit):
     plate = str(getattr(visit, 'plate', '') or '').strip()
     return plate or f'Візит №{visit.id}'
+
+
+def _humanize_delivery_state(value):
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    return DELIVERY_STATUS_LABELS.get(text.lower(), text)
 
 
 def _delivery_state(value):
@@ -76,10 +107,10 @@ def _delivery_state(value):
         try:
             data = json.loads(value)
         except Exception:
-            return value.strip()[:120]
+            return _humanize_delivery_state(value.strip()[:120])
     if not isinstance(data, dict):
-        return str(data)[:120]
-    return str(
+        return _humanize_delivery_state(str(data)[:120])
+    state = str(
         data.get('delivery_status_text')
         or data.get('status_text')
         or data.get('delivery_status')
@@ -88,6 +119,7 @@ def _delivery_state(value):
         or data.get('tracking_number')
         or ''
     ).strip()[:120]
+    return _humanize_delivery_state(state)
 
 
 def _safe_send(company, payload, category):

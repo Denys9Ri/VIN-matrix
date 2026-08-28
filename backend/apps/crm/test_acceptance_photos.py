@@ -1,3 +1,4 @@
+import hashlib
 from io import BytesIO
 
 from PIL import Image
@@ -8,29 +9,37 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.core.models import Company, Employee, Visit
-from .models import VisitAcceptancePhoto
+from .models import VisitAcceptanceActRevision, VisitAcceptancePhoto
 
 
 register_heif_opener()
 User = get_user_model()
 
 
-def jpeg_file(name='car.jpg'):
+def image_file(name='car.jpg', image_format='JPEG', content_type='image/jpeg', size=(40, 30)):
     stream = BytesIO()
-    Image.new('RGB', (40, 30), (230, 230, 230)).save(stream, format='JPEG')
-    return SimpleUploadedFile(name, stream.getvalue(), content_type='image/jpeg')
+    Image.new('RGB', size, (220, 225, 230)).save(stream, format=image_format)
+    return SimpleUploadedFile(name, stream.getvalue(), content_type=content_type)
+
+
+def jpeg_file(name='car.jpg'):
+    return image_file(name, 'JPEG', 'image/jpeg', (40, 30))
+
+
+def png_file(name='android-photo.png'):
+    return image_file(name, 'PNG', 'image/png', (52, 38))
+
+
+def webp_file(name='android-photo.webp'):
+    return image_file(name, 'WEBP', 'image/webp', (54, 40))
 
 
 def heic_file(name='iphone-photo.HEIC'):
-    stream = BytesIO()
-    Image.new('RGB', (64, 48), (210, 220, 230)).save(stream, format='HEIF', quality=80)
-    return SimpleUploadedFile(name, stream.getvalue(), content_type='image/heic')
+    return image_file(name, 'HEIF', 'image/heic', (64, 48))
 
 
 def tiff_file(name='camera-container.tiff'):
-    stream = BytesIO()
-    Image.new('RGB', (56, 42), (205, 215, 225)).save(stream, format='TIFF')
-    return SimpleUploadedFile(name, stream.getvalue(), content_type='image/tiff')
+    return image_file(name, 'TIFF', 'image/tiff', (56, 42))
 
 
 class VisitAcceptancePhotoTests(TestCase):
@@ -62,19 +71,35 @@ class VisitAcceptancePhotoTests(TestCase):
             return photo
         return None
 
-    def upload_photo(self, category='damages'):
+    def upload_photo(self, category='damages', file=None):
         response = self.client.post(
             '/api/visit-acceptance-photos/',
-            {'visit': self.visit.id, 'category': category, 'photo': jpeg_file()},
+            {'visit': self.visit.id, 'category': category, 'photo': file or jpeg_file()},
             format='multipart',
         )
         self._remember_photo(response)
         return response
 
+    def complete_act(self, damages='Подряпина була при прийманні'):
+        return self.client.post(
+            '/api/visit-acceptance-act/',
+            {
+                'visit': self.visit.id,
+                'client': self.visit.client,
+                'phone': self.visit.phone,
+                'plate': self.visit.plate,
+                'damages': damages,
+                'exterior_note': 'Скол на капоті',
+                'status': 'completed',
+            },
+            format='json',
+        )
+
     def test_owner_can_upload_list_and_fetch_private_photo(self):
         upload = self.upload_photo('damages')
         self.assertEqual(upload.status_code, 201)
         self.assertEqual(upload.data['category_label'], 'Пошкодження кузова')
+        self.assertEqual(upload.data['content_type'], 'image/jpeg')
         self.assertEqual(len(upload.data['sha256']), 64)
 
         listing = self.client.get(f'/api/visit-acceptance-photos/?visit={self.visit.id}')
@@ -88,65 +113,81 @@ class VisitAcceptancePhotoTests(TestCase):
         self.assertEqual(file_response['Content-Type'], 'image/jpeg')
         self.assertEqual(file_response['Cache-Control'], 'private, max-age=300')
 
-    def test_iphone_heic_is_normalized_to_private_jpeg(self):
-        response = self.client.post(
-            '/api/visit-acceptance-photos/',
-            {'visit': self.visit.id, 'category': 'damages', 'photo': heic_file()},
-            format='multipart',
-        )
-        photo = self._remember_photo(response)
+    def test_every_supported_device_format_is_stored_as_jpeg(self):
+        cases = [
+            (png_file(), 'android-photo.png', (52, 38)),
+            (webp_file(), 'android-photo.webp', (54, 40)),
+            (heic_file(), 'iphone-photo.HEIC', (64, 48)),
+            (tiff_file(), 'camera-container.tiff', (56, 42)),
+        ]
+        for index, (upload_file, original_name, expected_size) in enumerate(cases):
+            response = self.upload_photo('exterior', upload_file)
+            photo = VisitAcceptancePhoto.objects.get(pk=response.data['id'])
+            self.assertEqual(response.status_code, 201)
+            self.assertEqual(response.data['original_name'], original_name)
+            self.assertEqual(response.data['content_type'], 'image/jpeg')
+            self.assertTrue(photo.image.name.lower().endswith('.jpg'))
+            file_response = self.client.get(response.data['file_endpoint'])
+            self.assertEqual(file_response.status_code, 200)
+            self.assertEqual(file_response['Content-Type'], 'image/jpeg')
+            with photo.image.open('rb') as stored:
+                normalized = Image.open(stored)
+                self.assertEqual(normalized.format, 'JPEG')
+                self.assertEqual(normalized.size, expected_size)
+            if photo not in self.created_photos:
+                self.created_photos.append(photo)
+            self.assertEqual(index + 1, VisitAcceptancePhoto.objects.filter(visit=self.visit).count())
 
-        self.assertEqual(response.status_code, 201)
-        self.assertIsNotNone(photo)
-        self.assertEqual(response.data['original_name'], 'iphone-photo.HEIC')
-        self.assertEqual(response.data['content_type'], 'image/jpeg')
-        self.assertTrue(photo.image.name.lower().endswith('.jpg'))
-        self.assertEqual(len(response.data['sha256']), 64)
+    def test_legacy_browser_formats_are_converted_to_jpeg_when_opened(self):
+        for index, (legacy_file, content_type) in enumerate([
+            (png_file('legacy.png'), 'image/png'),
+            (webp_file('legacy.webp'), 'image/webp'),
+        ]):
+            payload = legacy_file.read()
+            legacy_file.seek(0)
+            photo = VisitAcceptancePhoto.objects.create(
+                company=self.company,
+                visit=self.visit,
+                category='general',
+                image=legacy_file,
+                original_name=legacy_file.name,
+                content_type=content_type,
+                size_bytes=len(payload),
+                sha256=hashlib.sha256(payload).hexdigest(),
+                created_by=self.owner,
+            )
+            self.created_photos.append(photo)
 
-        file_response = self.client.get(response.data['file_endpoint'])
-        self.assertEqual(file_response.status_code, 200)
-        self.assertEqual(file_response['Content-Type'], 'image/jpeg')
+            response = self.client.get(f'/api/visit-acceptance-photos/{photo.id}/file/')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response['Content-Type'], 'image/jpeg')
+            converted = Image.open(BytesIO(b''.join(response.streaming_content)))
+            self.assertEqual(converted.format, 'JPEG')
+            self.assertEqual(index + 1, VisitAcceptancePhoto.objects.filter(visit=self.visit).count())
 
-        with photo.image.open('rb') as stored:
-            normalized = Image.open(stored)
-            self.assertEqual(normalized.format, 'JPEG')
-            self.assertEqual(normalized.size, (64, 48))
+    def test_missing_storage_file_returns_actionable_error(self):
+        upload = self.upload_photo('general')
+        self.assertEqual(upload.status_code, 201)
+        photo = VisitAcceptancePhoto.objects.get(pk=upload.data['id'])
+        photo.image.delete(save=False)
 
-    def test_unusual_but_valid_raster_format_is_normalized_to_jpeg(self):
-        response = self.client.post(
-            '/api/visit-acceptance-photos/',
-            {'visit': self.visit.id, 'category': 'exterior', 'photo': tiff_file()},
-            format='multipart',
-        )
-        photo = self._remember_photo(response)
-
-        self.assertEqual(response.status_code, 201)
-        self.assertIsNotNone(photo)
-        self.assertEqual(response.data['original_name'], 'camera-container.tiff')
-        self.assertEqual(response.data['content_type'], 'image/jpeg')
-        self.assertTrue(photo.image.name.lower().endswith('.jpg'))
-
-        with photo.image.open('rb') as stored:
-            normalized = Image.open(stored)
-            self.assertEqual(normalized.format, 'JPEG')
-            self.assertEqual(normalized.size, (56, 42))
+        response = self.client.get(upload.data['file_endpoint'])
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('persistent storage', response.data['detail'])
 
     def test_other_company_cannot_fetch_photo(self):
         upload = self.upload_photo('exterior')
         self.assertEqual(upload.status_code, 201)
-
         other = User.objects.create_user(username='other-owner', password='Strong-password-456')
         Company.objects.create(name='Other STO', owner=other)
         other_client = APIClient()
         other_client.force_authenticate(other)
-
         response = other_client.get(upload.data['file_endpoint'])
         self.assertEqual(response.status_code, 404)
 
     def test_client_history_requires_client_permission_for_mechanic(self):
         upload = self.upload_photo('interior')
         self.assertEqual(upload.status_code, 201)
-
         mechanic = User.objects.create_user(username='photo-mechanic', password='Strong-password-789')
         employee = Employee.objects.create(user=mechanic, company=self.company, role='mechanic', can_view_clients=False)
         mechanic_client = APIClient()
@@ -154,19 +195,14 @@ class VisitAcceptancePhotoTests(TestCase):
 
         denied = mechanic_client.get('/api/visit-acceptance-photos/?phone=0501112233')
         self.assertEqual(denied.status_code, 403)
+        denied_history = mechanic_client.get('/api/visit-acceptance-photos/vehicle-history/?plate=AA1234AA')
+        self.assertEqual(denied_history.status_code, 403)
+        self.assertEqual(mechanic_client.get(upload.data['file_endpoint']).status_code, 200)
 
-        # The mechanic may still inspect evidence for an active vehicle in the workshop.
-        active_file = mechanic_client.get(upload.data['file_endpoint'])
-        self.assertEqual(active_file.status_code, 200)
-
-        # Once the visit is closed, those photos are client history and direct ID
-        # enumeration must not bypass can_view_clients.
         self.visit.status = 'COMPLETED'
         self.visit.save(update_fields=['status', 'updated_at'])
-        closed_file = mechanic_client.get(upload.data['file_endpoint'])
-        self.assertEqual(closed_file.status_code, 404)
-        closed_visit_list = mechanic_client.get(f'/api/visit-acceptance-photos/?visit={self.visit.id}')
-        self.assertEqual(closed_visit_list.status_code, 403)
+        self.assertEqual(mechanic_client.get(upload.data['file_endpoint']).status_code, 404)
+        self.assertEqual(mechanic_client.get(f'/api/visit-acceptance-photos/?visit={self.visit.id}').status_code, 403)
 
         employee.can_view_clients = True
         employee.save(update_fields=['can_view_clients'])
@@ -174,53 +210,154 @@ class VisitAcceptancePhotoTests(TestCase):
         self.assertEqual(allowed.status_code, 200)
         self.assertEqual(len(allowed.data), 1)
         self.assertEqual(allowed.data[0]['visit_id'], self.visit.id)
-        allowed_file = mechanic_client.get(upload.data['file_endpoint'])
-        self.assertEqual(allowed_file.status_code, 200)
+        self.assertEqual(mechanic_client.get(upload.data['file_endpoint']).status_code, 200)
 
-    def test_completed_acceptance_act_locks_existing_photos_and_rejects_changes(self):
+    def test_completed_act_is_immutable_until_owner_opens_audited_correction(self):
         upload = self.upload_photo('damages')
         self.assertEqual(upload.status_code, 201)
         photo_id = upload.data['id']
+        act = self.complete_act()
+        self.assertEqual(act.status_code, 200)
+        self.assertEqual(act.data['status'], 'completed')
+        self.assertTrue(act.data['locked'])
+        self.assertTrue(act.data['can_correct'])
 
-        act = self.client.post(
+        photo = VisitAcceptancePhoto.objects.get(pk=photo_id)
+        self.assertIsNotNone(photo.locked_at)
+        self.assertEqual(photo.locked_by_id, self.owner.id)
+
+        delete = self.client.delete(f'/api/visit-acceptance-photos/{photo_id}/')
+        self.assertEqual(delete.status_code, 409)
+        self.assertEqual(self.upload_photo('exterior').status_code, 409)
+
+        tamper = self.client.post(
+            '/api/visit-acceptance-act/',
+            {'visit': self.visit.id, 'damages': 'Пошкоджень не було', 'status': 'draft'},
+            format='json',
+        )
+        self.assertEqual(tamper.status_code, 200)
+        self.assertEqual(tamper.data['status'], 'completed')
+        self.assertEqual(tamper.data['damages'], 'Подряпина була при прийманні')
+
+        reopen = self.client.post(
+            '/api/visit-acceptance-act/reopen/',
+            {'visit': self.visit.id, 'reason': 'Не внесли скол на дверях'},
+            format='json',
+        )
+        self.assertEqual(reopen.status_code, 200)
+        self.assertEqual(reopen.data['status'], 'draft')
+        self.assertEqual(reopen.data['revision_count'], 1)
+        revision = VisitAcceptanceActRevision.objects.get(visit=self.visit)
+        self.assertEqual(revision.reason, 'Не внесли скол на дверях')
+        self.assertEqual(revision.snapshot['damages'], 'Подряпина була при прийманні')
+        self.assertEqual(revision.snapshot['photos'][0]['id'], photo_id)
+
+        # Old evidence remains locked, but a new photo can be appended to the correction.
+        self.assertEqual(self.client.delete(f'/api/visit-acceptance-photos/{photo_id}/').status_code, 409)
+        new_upload = self.upload_photo('exterior', png_file('correction.png'))
+        self.assertEqual(new_upload.status_code, 201)
+        new_photo = VisitAcceptancePhoto.objects.get(pk=new_upload.data['id'])
+        self.assertIsNone(new_photo.locked_at)
+
+        corrected = self.client.post(
             '/api/visit-acceptance-act/',
             {
                 'visit': self.visit.id,
                 'client': self.visit.client,
                 'phone': self.visit.phone,
                 'plate': self.visit.plate,
-                'damages': 'Подряпина була при прийманні',
+                'damages': 'Подряпина та скол на дверях',
                 'status': 'completed',
             },
             format='json',
         )
-        self.assertEqual(act.status_code, 200)
-        self.assertEqual(act.data['status'], 'completed')
+        self.assertEqual(corrected.status_code, 200)
+        new_photo.refresh_from_db()
+        self.assertIsNotNone(new_photo.locked_at)
 
-        listing = self.client.get(f'/api/visit-acceptance-photos/?visit={self.visit.id}')
-        self.assertTrue(listing.data[0]['locked'])
-
-        delete = self.client.delete(f'/api/visit-acceptance-photos/{photo_id}/')
-        self.assertEqual(delete.status_code, 409)
-        self.assertTrue(VisitAcceptancePhoto.objects.filter(pk=photo_id).exists())
-
-        second_upload = self.upload_photo('exterior')
-        self.assertEqual(second_upload.status_code, 409)
-
-        # A direct API call cannot revert the evidence to draft or overwrite it.
-        tamper = self.client.post(
-            '/api/visit-acceptance-act/',
-            {
-                'visit': self.visit.id,
-                'damages': 'Пошкоджень не було',
-                'status': 'draft',
-            },
+    def test_mechanic_cannot_reopen_completed_evidence(self):
+        self.complete_act()
+        mechanic = User.objects.create_user(username='evidence-mechanic', password='Strong-password-321')
+        Employee.objects.create(user=mechanic, company=self.company, role='mechanic', can_view_clients=True)
+        mechanic_client = APIClient()
+        mechanic_client.force_authenticate(mechanic)
+        response = mechanic_client.post(
+            '/api/visit-acceptance-act/reopen/',
+            {'visit': self.visit.id, 'reason': 'Хочу змінити'},
             format='json',
         )
-        self.assertEqual(tamper.status_code, 200)
-        self.assertEqual(tamper.data['status'], 'completed')
-        self.assertEqual(tamper.data['damages'], 'Подряпина була при прийманні')
-        self.assertTrue(tamper.data['locked'])
+        self.assertEqual(response.status_code, 403)
+
+    def test_vehicle_history_is_plate_scoped_and_contains_damage_text_and_photos(self):
+        upload = self.upload_photo('damages')
+        self.assertEqual(upload.status_code, 201)
+        self.complete_act('Подряпина на правих дверях')
+
+        other_visit = Visit.objects.create(
+            company=self.company,
+            client='Олександр',
+            phone='0501112233',
+            plate='BB5678BB',
+            status='SELECTION',
+        )
+        other_upload = self.client.post(
+            '/api/visit-acceptance-photos/',
+            {'visit': other_visit.id, 'category': 'damages', 'photo': jpeg_file('other.jpg')},
+            format='multipart',
+        )
+        other_photo = self._remember_photo(other_upload)
+        self.assertIsNotNone(other_photo)
+
+        response = self.client.get('/api/visit-acceptance-photos/vehicle-history/?plate=AA1234AA')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['visit']['id'], self.visit.id)
+        self.assertEqual(response.data[0]['act']['damages'], 'Подряпина на правих дверях')
+        self.assertEqual(len(response.data[0]['photos']), 1)
+        self.assertEqual(response.data[0]['photos'][0]['id'], upload.data['id'])
+
+    def test_vehicle_history_uses_vin_and_phone_fallback_never_mixes_identified_cars(self):
+        vin_visit = Visit.objects.create(
+            company=self.company,
+            client='Олександр',
+            phone='0501112233',
+            plate='',
+            vin_code='WVWZZZ1JZXW000001',
+            status='SELECTION',
+        )
+        vin_upload = self.client.post(
+            '/api/visit-acceptance-photos/',
+            {'visit': vin_visit.id, 'category': 'exterior', 'photo': jpeg_file('vin-car.jpg')},
+            format='multipart',
+        )
+        self._remember_photo(vin_upload)
+        self.assertEqual(vin_upload.status_code, 201)
+
+        legacy_visit = Visit.objects.create(
+            company=self.company,
+            client='Олександр',
+            phone='0501112233',
+            plate='',
+            vin_code='',
+            status='SELECTION',
+        )
+        legacy_upload = self.client.post(
+            '/api/visit-acceptance-photos/',
+            {'visit': legacy_visit.id, 'category': 'general', 'photo': jpeg_file('legacy-car.jpg')},
+            format='multipart',
+        )
+        self._remember_photo(legacy_upload)
+        self.assertEqual(legacy_upload.status_code, 201)
+
+        by_vin = self.client.get(
+            '/api/visit-acceptance-photos/vehicle-history/?vin_code=WVWZZZ1JZXW000001'
+        )
+        self.assertEqual(by_vin.status_code, 200)
+        self.assertEqual([entry['visit']['id'] for entry in by_vin.data], [vin_visit.id])
+
+        by_phone = self.client.get('/api/visit-acceptance-photos/vehicle-history/?phone=0501112233')
+        self.assertEqual(by_phone.status_code, 200)
+        self.assertEqual([entry['visit']['id'] for entry in by_phone.data], [legacy_visit.id])
 
     def test_invalid_file_is_rejected(self):
         bad_file = SimpleUploadedFile('not-photo.jpg', b'not an image', content_type='image/jpeg')

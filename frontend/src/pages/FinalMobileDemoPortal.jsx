@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import {
   Bell,
   Box,
-  BriefcaseBusiness,
   CalendarDays,
   Car,
   ChevronLeft,

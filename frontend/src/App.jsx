@@ -1,11 +1,10 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import LandingRoute from './pages/LandingFinalStyled';
+import LandingRoute, { DemoTour } from './pages/LandingFinalStyled';
 import api from './api/axios';
 import GoogleAnalytics from './components/analytics/GoogleAnalytics';
 import SupportModeBanner from './components/support/SupportModeBanner';
 
-const DemoTour = lazy(() => import('./pages/LandingFinalStyled').then((module) => ({ default: module.DemoTour })));
 const MainLayout = lazy(() => import('./components/layout/MainLayout'));
 const DashboardOnboarding = lazy(() => import('./pages/DashboardOnboarding'));
 const UniversalSearch = lazy(() => import('./pages/UniversalSearch'));

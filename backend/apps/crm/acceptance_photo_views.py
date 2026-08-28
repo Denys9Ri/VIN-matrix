@@ -1,5 +1,6 @@
 import hashlib
 import os
+from collections import defaultdict
 from io import BytesIO
 from pathlib import Path
 
@@ -18,14 +19,12 @@ from rest_framework.views import APIView
 from apps.core.access_control import can_view_client_data
 from apps.core.models import Visit
 from apps.core.safe_crm_views import safe_ensure_company
-from apps.core.visit_workflow_views import ensure_visit_workflow_tables
-from .models import VisitAcceptancePhoto
+from apps.core.visit_workflow_views import ensure_visit_workflow_tables, row_to_dict
+from .models import VisitAcceptanceActRevision, VisitAcceptancePhoto
 
 
-# iPhone cameras commonly upload HEIC/HEIF. Register the Pillow decoder once at
-# module import time. Any valid raster format outside our native browser-safe
-# allow-list is normalized to JPEG before private storage, which also strips
-# EXIF/GPS metadata from the stored copy.
+# One evidence format across iPhone/Android/browser combinations. HEIC/HEIF and
+# every other Pillow-decodable still image are decoded here and stored as JPEG.
 register_heif_opener()
 
 MAX_PHOTO_BYTES = 12 * 1024 * 1024
@@ -33,11 +32,6 @@ MAX_PHOTOS_PER_CATEGORY = 20
 MAX_PHOTOS_PER_VISIT = 60
 MAX_NORMALIZED_EDGE = 4096
 CLOSED_VISIT_STATUSES = {'COMPLETED', 'CANCELLED'}
-ALLOWED_FORMATS = {
-    'JPEG': ('image/jpeg', '.jpg'),
-    'PNG': ('image/png', '.png'),
-    'WEBP': ('image/webp', '.webp'),
-}
 
 
 def _company(request):
@@ -54,12 +48,7 @@ def _visit_for_company(company, visit_id):
 
 
 def _can_open_visit_photos(user, visit):
-    """Client-history permission is required once a visit is closed.
-
-    Mechanics still need acceptance photos while a vehicle is actively in the
-    workshop. After the visit is completed/cancelled, those photos become part
-    of client history and follow can_view_clients.
-    """
+    """Client-history permission is required once a visit is closed."""
     if can_view_client_data(user):
         return True
     return str(getattr(visit, 'status', '') or '').upper() not in CLOSED_VISIT_STATUSES
@@ -82,10 +71,11 @@ def _user_label(user):
     return user.first_name or user.get_full_name() or user.username
 
 
-def _photo_payload(photo, locked=None):
-    if locked is None:
-        locked = _act_completed(photo.company_id, photo.visit_id)
+def _photo_payload(photo, act_completed=None):
+    if act_completed is None:
+        act_completed = _act_completed(photo.company_id, photo.visit_id)
     visit = photo.visit
+    locked = bool(photo.locked_at) or bool(act_completed)
     return {
         'id': photo.id,
         'visit_id': photo.visit_id,
@@ -93,12 +83,13 @@ def _photo_payload(photo, locked=None):
         'category_label': photo.get_category_display(),
         'file_endpoint': f'/api/visit-acceptance-photos/{photo.id}/file/',
         'original_name': photo.original_name,
-        'content_type': photo.content_type,
+        'content_type': 'image/jpeg',
         'size_bytes': int(photo.size_bytes or 0),
         'sha256': photo.sha256,
         'created_at': photo.created_at.isoformat(),
         'created_by': _user_label(photo.created_by),
-        'locked': bool(locked),
+        'locked': locked,
+        'locked_at': photo.locked_at.isoformat() if photo.locked_at else None,
         'visit': {
             'id': visit.id,
             'client': visit.client or '',
@@ -110,44 +101,39 @@ def _photo_payload(photo, locked=None):
     }
 
 
-def _sha256_upload(upload):
-    digest = hashlib.sha256()
-    upload.seek(0)
-    for chunk in upload.chunks():
-        digest.update(chunk)
-    upload.seek(0)
-    return digest.hexdigest()
+def _image_to_jpeg_bytes(source):
+    """Return a privacy-safe, browser-safe JPEG representation of an image."""
+    try:
+        source.seek(0)
+    except Exception:
+        pass
+
+    with Image.open(source) as opened:
+        try:
+            opened.seek(0)
+        except (EOFError, AttributeError):
+            pass
+        image = ImageOps.exif_transpose(opened).copy()
+
+    if max(image.size or (0, 0)) > MAX_NORMALIZED_EDGE:
+        image.thumbnail((MAX_NORMALIZED_EDGE, MAX_NORMALIZED_EDGE), Image.Resampling.LANCZOS)
+    if image.mode != 'RGB':
+        if 'A' in image.getbands():
+            background = Image.new('RGB', image.size, 'white')
+            alpha = image.getchannel('A')
+            background.paste(image.convert('RGB'), mask=alpha)
+            image = background
+        else:
+            image = image.convert('RGB')
+
+    output = BytesIO()
+    # EXIF is deliberately omitted, stripping GPS/device metadata from evidence.
+    image.save(output, format='JPEG', quality=90, optimize=True)
+    return output.getvalue()
 
 
 def _normalize_to_jpeg(upload, original_name):
-    """Decode any Pillow-supported still image and return a browser-safe JPEG."""
-    upload.seek(0)
-    with Image.open(upload) as source:
-        # Evidence is a still image. For multi-frame containers (for example
-        # MPO/GIF-like sources) deliberately use the first visual frame.
-        try:
-            source.seek(0)
-        except (EOFError, AttributeError):
-            pass
-        image = ImageOps.exif_transpose(source).copy()
-
-        if max(image.size or (0, 0)) > MAX_NORMALIZED_EDGE:
-            image.thumbnail((MAX_NORMALIZED_EDGE, MAX_NORMALIZED_EDGE), Image.Resampling.LANCZOS)
-        if image.mode != 'RGB':
-            if 'A' in image.getbands():
-                background = Image.new('RGB', image.size, 'white')
-                alpha = image.getchannel('A')
-                background.paste(image.convert('RGB'), mask=alpha)
-                image = background
-            else:
-                image = image.convert('RGB')
-
-        output = BytesIO()
-        # Saving without EXIF intentionally strips GPS/device metadata from the
-        # stored private copy while our own DB timestamp/author remain intact.
-        image.save(output, format='JPEG', quality=90, optimize=True)
-
-    payload = output.getvalue()
+    payload = _image_to_jpeg_bytes(upload)
     if not payload:
         raise ValueError('Не вдалося обробити фото.')
     if len(payload) > MAX_PHOTO_BYTES:
@@ -171,13 +157,15 @@ def _prepare_upload(upload):
         raise ValueError('Фото завелике. Максимальний розмір — 12 МБ.')
 
     original_name = Path(str(getattr(upload, 'name', '') or 'photo')).name[:255]
-
     try:
         upload.seek(0)
-        image = Image.open(upload)
-        image_format = str(image.format or '').upper()
-        image.verify()
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+        with Image.open(upload) as image:
+            image.verify()
+        upload.seek(0)
+        processed, digest = _normalize_to_jpeg(upload, original_name)
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+        if isinstance(exc, ValueError) and str(exc):
+            raise
         raise ValueError('Файл не є коректним зображенням.')
     finally:
         try:
@@ -185,23 +173,6 @@ def _prepare_upload(upload):
         except Exception:
             pass
 
-    if image_format in ALLOWED_FORMATS:
-        expected_content_type, extension = ALLOWED_FORMATS[image_format]
-        digest = _sha256_upload(upload)
-        base_name = os.path.splitext(original_name)[0][:180] or 'photo'
-        upload.name = f'{base_name}{extension}'
-        return upload, expected_content_type, digest, original_name
-
-    # iOS and browser file inputs can expose camera images using container
-    # formats other than the literal HEIC/HEIF labels (for example MPO/TIFF-like
-    # decodable raster containers). Do not reject a genuine image merely because
-    # Pillow reports a different format name: normalize it to JPEG instead.
-    try:
-        processed, digest = _normalize_to_jpeg(upload, original_name)
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
-        if isinstance(exc, ValueError) and str(exc):
-            raise
-        raise ValueError('Не вдалося обробити фото з цього пристрою.')
     return processed, 'image/jpeg', digest, original_name
 
 
@@ -228,19 +199,17 @@ class VisitAcceptancePhotoListCreateView(APIView):
             if not _can_open_visit_photos(request.user, visit):
                 return Response({'detail': 'У вас немає доступу до історії цього візиту.'}, status=status.HTTP_403_FORBIDDEN)
             queryset = queryset.filter(visit=visit)
-            locked_by_visit = {visit.id: _act_completed(company.id, visit.id)}
         else:
             if not can_view_client_data(request.user):
                 return Response({'detail': 'У вас немає доступу до історії клієнта.'}, status=status.HTTP_403_FORBIDDEN)
             if not phone and not plate:
                 return Response([], status=status.HTTP_200_OK)
             identity_filter = Q()
-            if phone:
-                identity_filter |= Q(visit__phone=phone)
             if plate:
                 identity_filter |= Q(visit__plate__iexact=plate)
+            if phone:
+                identity_filter |= Q(visit__phone=phone)
             queryset = queryset.filter(identity_filter)
-            locked_by_visit = {}
 
         if category:
             valid_categories = {key for key, _ in VisitAcceptancePhoto.CATEGORY_CHOICES}
@@ -249,10 +218,11 @@ class VisitAcceptancePhotoListCreateView(APIView):
             queryset = queryset.filter(category=category)
 
         photos = list(queryset.order_by('-visit__created_at', 'category', 'created_at', 'id')[:250])
+        completed_by_visit = {}
         for photo in photos:
-            if photo.visit_id not in locked_by_visit:
-                locked_by_visit[photo.visit_id] = _act_completed(company.id, photo.visit_id)
-        return Response([_photo_payload(photo, locked_by_visit[photo.visit_id]) for photo in photos])
+            if photo.visit_id not in completed_by_visit:
+                completed_by_visit[photo.visit_id] = _act_completed(company.id, photo.visit_id)
+        return Response([_photo_payload(photo, completed_by_visit[photo.visit_id]) for photo in photos])
 
     def post(self, request):
         company = _company(request)
@@ -269,17 +239,14 @@ class VisitAcceptancePhotoListCreateView(APIView):
 
         if _act_completed(company.id, visit.id):
             return Response(
-                {'detail': 'Акт уже завершений. Фото зафіксовані та заблоковані від змін.'},
+                {'detail': 'Акт зафіксовано. Спочатку відкрийте коригування акта.'},
                 status=status.HTTP_409_CONFLICT,
             )
 
         total_count = VisitAcceptancePhoto.objects.filter(company=company, visit=visit).count()
         category_count = VisitAcceptancePhoto.objects.filter(company=company, visit=visit, category=category).count()
         if total_count >= MAX_PHOTOS_PER_VISIT or category_count >= MAX_PHOTOS_PER_CATEGORY:
-            return Response(
-                {'detail': 'Досягнуто ліміт фото для цього акта.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({'detail': 'Досягнуто ліміт фото для цього акта.'}, status=status.HTTP_400_BAD_REQUEST)
 
         upload = request.FILES.get('photo')
         try:
@@ -302,6 +269,99 @@ class VisitAcceptancePhotoListCreateView(APIView):
         return Response(_photo_payload(photo, False), status=status.HTTP_201_CREATED)
 
 
+class VehicleConditionHistoryView(APIView):
+    """Return acceptance evidence for one vehicle, grouped by visit."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = _company(request)
+        if not company:
+            return Response([], status=status.HTTP_200_OK)
+        if not can_view_client_data(request.user):
+            return Response(
+                {'detail': 'У вас немає доступу до історії клієнта та авто.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        plate = str(request.query_params.get('plate') or '').strip()
+        vin_code = str(request.query_params.get('vin_code') or '').strip()
+        phone = str(request.query_params.get('phone') or '').strip()
+        visits = Visit.objects.filter(company=company)
+        # Plate is the primary vehicle identity and VIN is the safe fallback.
+        # Phone may only recover legacy rows that have neither vehicle identity;
+        # it must never pull another numbered/VIN vehicle owned by the same client.
+        if plate:
+            visits = visits.filter(plate__iexact=plate)
+        elif vin_code:
+            visits = visits.filter(vin_code__iexact=vin_code)
+        elif phone:
+            visits = visits.filter(phone=phone).filter(
+                Q(plate__isnull=True) | Q(plate=''),
+                Q(vin_code__isnull=True) | Q(vin_code=''),
+            )
+        else:
+            return Response([], status=status.HTTP_200_OK)
+
+        visits = list(visits.order_by('-scheduled_datetime', '-created_at', '-id')[:100])
+        if not visits:
+            return Response([], status=status.HTTP_200_OK)
+        visit_ids = [visit.id for visit in visits]
+
+        ensure_visit_workflow_tables()
+        placeholders = ', '.join(['%s'] * len(visit_ids))
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT * FROM core_visitacceptanceact WHERE company_id = %s AND visit_id IN ({placeholders})',
+                [company.id, *visit_ids],
+            )
+            act_rows = [row_to_dict(cursor, row) for row in cursor.fetchall()]
+        acts = {row['visit_id']: row for row in act_rows if row}
+
+        revision_count = defaultdict(int)
+        for visit_id in VisitAcceptanceActRevision.objects.filter(
+            company=company,
+            visit_id__in=visit_ids,
+        ).values_list('visit_id', flat=True):
+            revision_count[visit_id] += 1
+
+        photos_by_visit = defaultdict(list)
+        photos = VisitAcceptancePhoto.objects.filter(
+            company=company,
+            visit_id__in=visit_ids,
+        ).select_related('visit', 'created_by').order_by('created_at', 'id')
+        for photo in photos:
+            act_completed = str((acts.get(photo.visit_id) or {}).get('status') or '').lower() == 'completed'
+            photos_by_visit[photo.visit_id].append(_photo_payload(photo, act_completed))
+
+        history = []
+        for visit in visits:
+            act = acts.get(visit.id) or {}
+            visit_photos = photos_by_visit.get(visit.id, [])
+            if not act and not visit_photos:
+                continue
+            if act:
+                act = dict(act)
+                act['locked'] = str(act.get('status') or '').lower() == 'completed'
+                act['revision_count'] = int(revision_count.get(visit.id, 0))
+            history.append({
+                'visit': {
+                    'id': visit.id,
+                    'plate': visit.plate or '',
+                    'vin_code': visit.vin_code or '',
+                    'client': visit.client or '',
+                    'phone': visit.phone or '',
+                    'status': visit.status or '',
+                    'scheduled_datetime': visit.scheduled_datetime.isoformat() if visit.scheduled_datetime else None,
+                    'created_at': visit.created_at.isoformat() if visit.created_at else None,
+                },
+                'act': act,
+                'photos': visit_photos,
+                'revision_count': int(revision_count.get(visit.id, 0)),
+            })
+        return Response(history, status=status.HTTP_200_OK)
+
+
 class VisitAcceptancePhotoDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -312,9 +372,9 @@ class VisitAcceptancePhotoDetailView(APIView):
             return Response({'detail': 'Фото не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
         if not _can_open_visit_photos(request.user, photo.visit):
             return Response({'detail': 'Фото не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
-        if _act_completed(company.id, photo.visit_id):
+        if photo.locked_at or _act_completed(company.id, photo.visit_id):
             return Response(
-                {'detail': 'Акт уже завершений. Зафіксовані фото не можна видаляти.'},
+                {'detail': 'Це фото вже зафіксоване як доказ і не може бути видалене.'},
                 status=status.HTTP_409_CONFLICT,
             )
 
@@ -339,13 +399,30 @@ class VisitAcceptancePhotoFileView(APIView):
         try:
             handle = photo.image.open('rb')
         except (FileNotFoundError, OSError):
-            return Response({'detail': 'Файл фото недоступний.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'detail': 'Файл фото недоступний у сховищі. Перевірте persistent storage.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # New evidence is always JPEG. Legacy PNG/WebP/HEIC records are converted
+        # on read so old photos remain viewable on every iPhone/Android browser.
+        if str(photo.content_type or '').lower() != 'image/jpeg':
+            try:
+                payload = _image_to_jpeg_bytes(handle)
+                handle.close()
+                handle = BytesIO(payload)
+            except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+                return Response({'detail': 'Не вдалося прочитати старий файл фото.'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
         response = FileResponse(
             handle,
-            content_type=photo.content_type or 'application/octet-stream',
+            content_type='image/jpeg',
             as_attachment=False,
-            filename=photo.original_name or f'acceptance-photo-{photo.id}.jpg',
+            filename=f'acceptance-photo-{photo.id}.jpg',
         )
         response['Cache-Control'] = 'private, max-age=300'
         response['X-Content-Type-Options'] = 'nosniff'

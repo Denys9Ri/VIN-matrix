@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bell, Car, CheckCircle2, ClipboardList, Copy, CreditCard, History, KeyRound, MessageCircle, Package, Phone, PlusCircle, RefreshCcw, Repeat2, Search, Star, TrendingUp, UserCheck, UserRound, Wrench, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { VehicleConditionHistory } from '../components/crm/AcceptancePhotos';
 import { carDisplayName, primaryClientCar } from '../utils/clientCarIdentity';
 import { closeClientDebt, debtOrdersOf, isDebtOrder, orderDebtAmount } from '../utils/clientDebtPayments';
 
@@ -560,7 +561,7 @@ function ClientProfile({ client, tab, setTab, busy, onClose, onCloseDebt, onQuic
   const services = arr(client.services);
   const cars = arr(client.cars);
   const debts = orders.filter(isDebtOrder);
-  return <div className={`bg-white ${onClose ? 'min-h-[100dvh]' : 'xl:border xl:border-slate-200 xl:rounded-[34px] xl:shadow-sm'} overflow-visible flex flex-col`}><ProfileHeader client={client} busy={busy} onClose={onClose} onCloseDebt={onCloseDebt} onQuickAction={onQuickAction} cfg={cfg} /><Tabs active={tab} setActive={setTab} cfg={cfg} /><div className="p-4 md:p-5 bg-slate-50/60 overflow-visible flex-1">{tab === 'overview' && <Overview client={client} orders={orders} parts={parts} services={services} cars={cars} debts={debts} onQuickAction={onQuickAction} onRepeatPart={onRepeatPart} onCopy={onCopy} cfg={cfg} />}{tab === 'sales' && <SalesTab client={client} onQuickAction={onQuickAction} onRepeatPart={onRepeatPart} busy={busy} cfg={cfg} />}{tab === 'history' && <HistoryTab orders={orders} onRepeatPart={(part) => onRepeatPart(part, client)} busy={busy} cfg={cfg} />}{tab === 'cars' && <Cars cars={cars} onCopy={onCopy} />}{tab === 'debts' && <Debts debts={debts} onCloseDebt={() => onCloseDebt(client)} busy={busy} cfg={cfg} />}{tab === 'crm' && <CRMTab client={client} onSetStatus={onSetStatus} onQuickAction={onQuickAction} busy={busy} cfg={cfg} />}</div></div>;
+  return <div className={`bg-white ${onClose ? 'min-h-[100dvh]' : 'xl:border xl:border-slate-200 xl:rounded-[34px] xl:shadow-sm'} overflow-visible flex flex-col`}><ProfileHeader client={client} busy={busy} onClose={onClose} onCloseDebt={onCloseDebt} onQuickAction={onQuickAction} cfg={cfg} /><Tabs active={tab} setActive={setTab} cfg={cfg} /><div className="p-4 md:p-5 bg-slate-50/60 overflow-visible flex-1">{tab === 'overview' && <Overview client={client} orders={orders} parts={parts} services={services} cars={cars} debts={debts} onQuickAction={onQuickAction} onRepeatPart={onRepeatPart} onCopy={onCopy} cfg={cfg} />}{tab === 'sales' && <SalesTab client={client} onQuickAction={onQuickAction} onRepeatPart={onRepeatPart} busy={busy} cfg={cfg} />}{tab === 'history' && <HistoryTab orders={orders} onRepeatPart={(part) => onRepeatPart(part, client)} busy={busy} cfg={cfg} />}{tab === 'cars' && <VehicleEvidenceTab client={client} cars={cars} onCopy={onCopy} cfg={cfg} />}{tab === 'debts' && <Debts debts={debts} onCloseDebt={() => onCloseDebt(client)} busy={busy} cfg={cfg} />}{tab === 'crm' && <CRMTab client={client} onSetStatus={onSetStatus} onQuickAction={onQuickAction} busy={busy} cfg={cfg} />}</div></div>;
 }
 
 function ProfileHeader({ client, busy, onClose, onCloseDebt, onQuickAction, cfg }) {
@@ -593,6 +594,49 @@ function Cars({ cars, onCopy }) {
     return <div key={`${car.plate || car.vin_code || idx}`} className="bg-white border border-slate-200 rounded-[24px] p-4 shadow-sm"><p className="font-black text-slate-900 flex items-center gap-2"><Car size={16} className="text-blue-600" />{car.plate || 'Без номера'}</p><p className={`mt-2 text-sm font-black ${title ? 'text-slate-700' : 'text-slate-400'}`}>{title || 'Марка/модель не вказані'}</p><div className="mt-3 grid grid-cols-1 gap-2"><Mini label="VIN" value={car.vin_code || '—'} />{car.mileage && <Mini label="Пробіг" value={`${car.mileage} км`} />}</div><div className="mt-3 flex flex-wrap gap-2">{car.plate && <button type="button" onClick={() => onCopy?.(car.plate, 'Номер авто скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 inline-flex items-center gap-1"><Copy size={14}/> Номер</button>}{car.vin_code && <button type="button" onClick={() => onCopy?.(car.vin_code, 'VIN скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 inline-flex items-center gap-1"><Copy size={14}/> VIN</button>}</div></div>;
   })}</div>;
 }
+
+function VehicleEvidenceTab({ client, cars, onCopy, cfg }) {
+  const safe = arr(cars);
+  if (cfg.mode !== 'sto') return <Cars cars={safe} onCopy={onCopy} />;
+
+  const seen = new Set();
+  const identifiableCars = safe.filter((car) => {
+    const plate = String(car?.plate || '').trim().toUpperCase();
+    const vin = String(car?.vin_code || '').trim().toUpperCase();
+    const key = plate || vin;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const evidenceTargets = identifiableCars.length
+    ? identifiableCars.map((car) => ({
+        plate: String(car.plate || '').trim().toUpperCase(),
+        vin: String(car.vin_code || '').trim(),
+        phone: client?.phone || '',
+      }))
+    : [{ phone: client?.phone || '' }];
+
+  return (
+    <div className="space-y-5">
+      <Panel title="Автомобілі клієнта" icon={<Car size={17} className="text-blue-600" />}>
+        <Cars cars={safe} onCopy={onCopy} />
+      </Panel>
+
+      <div className="rounded-[28px] border border-blue-100 bg-blue-50/70 p-4 text-sm font-bold leading-relaxed text-blue-800">
+        Фотофіксація з актів приймання зберігається в історії конкретного авто. Тут можна через місяці або роки відкрити візит і показати, у якому стані автомобіль був прийнятий.
+      </div>
+
+      {evidenceTargets.map((target, index) => (
+        <VehicleConditionHistory
+          key={target.plate || target.vin || target.phone || index}
+          selectedGroup={target}
+        />
+      ))}
+    </div>
+  );
+}
+
 function Debts({ debts, onCloseDebt, busy, cfg }) { if (!debts.length) return <Empty text="Боргів немає" />; return <div className="space-y-3">{debts.map((order) => <div key={order.id} className="bg-white border border-rose-100 rounded-[24px] p-4"><div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><p className="font-black text-slate-900">{cfg.order === 'візит' ? 'Візит' : 'Замовлення'} №{order.id}</p><p className="text-xs font-bold text-slate-500 mt-1">{fmtDate(order.created_at)} · {order.payment_status}</p></div><div className="text-left md:text-right"><p className="text-2xl font-black text-rose-600">{money(order.debt_amount || order.revenue)}</p><button type="button" disabled={busy === 'debt'} onClick={onCloseDebt} className="mt-2 rounded-2xl bg-emerald-600 text-white px-4 py-2 text-[11px] font-black uppercase disabled:bg-slate-300">Закрити борг</button></div></div></div>)}</div>; }
 function PartList({ parts, onRepeatPart, busy, empty = 'Товарів немає' }) { const safe = arr(parts); if (!safe.length) return <Empty text={empty} />; return <div className="space-y-2">{safe.map((part, idx) => <div key={`${part.order_id || 'p'}-${part.id || idx}`} className="rounded-2xl bg-white border border-slate-200 p-3 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_120px_110px] gap-3 items-center"><div className="min-w-0"><p className="font-black text-slate-900 break-words">{part.brand} {part.article}</p><p className="text-xs font-bold text-slate-500 mt-1 break-words">{part.name}</p><PartSourceBadges part={part} /></div><Mini label="Продаж" value={money(part.sell_price || part.revenue)} good />{onRepeatPart && <button type="button" disabled={busy === `repeat:${part.order_id}-${part.id}`} onClick={() => onRepeatPart?.(part)} className="rounded-xl bg-blue-600 text-white px-3 py-2 text-[11px] font-black uppercase inline-flex items-center justify-center gap-1 disabled:bg-slate-300"><Repeat2 size={13}/> Повтор</button>}</div>)}</div>; }
 function PartSourceBadges({ part }) { if (!part || (!part.supplier && !part.supplier_account_name)) return null; return <div className="mt-2 flex flex-wrap gap-1.5">{part.supplier && <span className="inline-flex max-w-full items-center gap-1 rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700"><Package size={11} className="shrink-0"/><span className="break-words">{part.supplier}</span></span>}{part.supplier_account_name && <span className="inline-flex max-w-full items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700"><KeyRound size={11} className="shrink-0"/><span className="break-words">Акаунт: {part.supplier_account_name}</span></span>}</div>; }

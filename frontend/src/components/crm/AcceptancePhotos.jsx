@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, History, ImagePlus, Loader2, LockKeyhole, Maximize2, RefreshCw, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Camera, History, ImagePlus, Loader2, LockKeyhole, Maximize2, RefreshCw, ShieldCheck, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import api from '../../api/axios';
 
 
@@ -91,6 +91,70 @@ function SecurePhoto({ photo, className = '', onOpen }) {
 
 function PhotoModal({ photo, onClose }) {
   const canRender = Boolean(photo?.src) && typeof document !== 'undefined';
+  const viewportRef = useRef(null);
+  const imageRef = useRef(null);
+  const pointersRef = useRef(new Map());
+  const gestureRef = useRef({ lastCenter: null, lastDistance: 0, moved: false });
+  const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
+  const viewRef = useRef(view);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const clampView = (candidate) => {
+    const scale = Math.min(5, Math.max(1, candidate.scale));
+    if (scale === 1) return { scale: 1, x: 0, y: 0 };
+
+    const viewport = viewportRef.current;
+    const image = imageRef.current;
+    if (!viewport || !image) return { scale, x: candidate.x, y: candidate.y };
+
+    const maxX = Math.max(0, ((image.offsetWidth * scale) - viewport.clientWidth) / 2);
+    const maxY = Math.max(0, ((image.offsetHeight * scale) - viewport.clientHeight) / 2);
+    return {
+      scale,
+      x: Math.min(maxX, Math.max(-maxX, candidate.x)),
+      y: Math.min(maxY, Math.max(-maxY, candidate.y)),
+    };
+  };
+
+  const applyView = (candidate) => {
+    const next = clampView(candidate);
+    viewRef.current = next;
+    setView(next);
+  };
+
+  const zoomAt = (requestedScale, clientX, clientY) => {
+    const current = viewRef.current;
+    const nextScale = Math.min(5, Math.max(1, requestedScale));
+    if (nextScale === 1) {
+      applyView({ scale: 1, x: 0, y: 0 });
+      return;
+    }
+
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    const focusX = bounds && Number.isFinite(clientX) ? clientX - bounds.left - (bounds.width / 2) : 0;
+    const focusY = bounds && Number.isFinite(clientY) ? clientY - bounds.top - (bounds.height / 2) : 0;
+    const ratio = nextScale / current.scale;
+    applyView({
+      scale: nextScale,
+      x: focusX - ((focusX - current.x) * ratio),
+      y: focusY - ((focusY - current.y) * ratio),
+    });
+  };
+
+  const changeZoom = (delta) => {
+    const nextScale = Math.round((viewRef.current.scale + delta) * 10) / 10;
+    zoomAt(nextScale);
+  };
+
+  const resetView = () => applyView({ scale: 1, x: 0, y: 0 });
+
+  useEffect(() => {
+    const initialView = { scale: 1, x: 0, y: 0 };
+    viewRef.current = initialView;
+    setView(initialView);
+    pointersRef.current.clear();
+    gestureRef.current = { lastCenter: null, lastDistance: 0, moved: false };
+  }, [photo?.src]);
 
   useEffect(() => {
     if (!canRender) return undefined;
@@ -101,15 +165,103 @@ function PhotoModal({ photo, onClose }) {
 
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') onClose();
+      if (event.key === '0') resetView();
+      if (event.key === '+' || event.key === '=') changeZoom(0.5);
+      if (event.key === '-' || event.key === '_') changeZoom(-0.5);
     };
+    const fitAfterResize = () => applyView(viewRef.current);
     window.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('resize', fitAfterResize);
 
     return () => {
       window.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('resize', fitAfterResize);
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
     };
   }, [canRender, onClose]);
+
+  const points = () => Array.from(pointersRef.current.values());
+  const centerOf = (items) => ({
+    x: items.reduce((total, item) => total + item.x, 0) / items.length,
+    y: items.reduce((total, item) => total + item.y, 0) / items.length,
+  });
+  const distanceBetween = (items) => Math.hypot(items[0].x - items[1].x, items[0].y - items[1].y);
+
+  const handlePointerDown = (event) => {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const activePoints = points();
+    gestureRef.current.moved = false;
+    gestureRef.current.lastCenter = centerOf(activePoints);
+    gestureRef.current.lastDistance = activePoints.length > 1 ? distanceBetween(activePoints) : 0;
+    setIsDragging(viewRef.current.scale > 1 || activePoints.length > 1);
+  };
+
+  const handlePointerMove = (event) => {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    event.preventDefault();
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const activePoints = points();
+    const nextCenter = centerOf(activePoints);
+    const gesture = gestureRef.current;
+
+    if (activePoints.length > 1) {
+      const nextDistance = distanceBetween(activePoints);
+      const current = viewRef.current;
+      const ratio = gesture.lastDistance > 0 ? nextDistance / gesture.lastDistance : 1;
+      const nextScale = Math.min(5, Math.max(1, current.scale * ratio));
+      const bounds = viewportRef.current?.getBoundingClientRect();
+      const previousFocusX = bounds ? gesture.lastCenter.x - bounds.left - (bounds.width / 2) : 0;
+      const previousFocusY = bounds ? gesture.lastCenter.y - bounds.top - (bounds.height / 2) : 0;
+      const nextFocusX = bounds ? nextCenter.x - bounds.left - (bounds.width / 2) : 0;
+      const nextFocusY = bounds ? nextCenter.y - bounds.top - (bounds.height / 2) : 0;
+      const scaleRatio = nextScale / current.scale;
+      applyView({
+        scale: nextScale,
+        x: nextFocusX - ((previousFocusX - current.x) * scaleRatio),
+        y: nextFocusY - ((previousFocusY - current.y) * scaleRatio),
+      });
+      gesture.lastDistance = nextDistance;
+      gesture.moved = true;
+      setIsDragging(true);
+    } else if (viewRef.current.scale > 1 && gesture.lastCenter) {
+      const deltaX = nextCenter.x - gesture.lastCenter.x;
+      const deltaY = nextCenter.y - gesture.lastCenter.y;
+      if (Math.abs(deltaX) + Math.abs(deltaY) > 1) gesture.moved = true;
+      applyView({
+        ...viewRef.current,
+        x: viewRef.current.x + deltaX,
+        y: viewRef.current.y + deltaY,
+      });
+      setIsDragging(true);
+    }
+
+    gesture.lastCenter = nextCenter;
+  };
+
+  const handlePointerEnd = (event) => {
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    pointersRef.current.delete(event.pointerId);
+    const activePoints = points();
+    gestureRef.current.lastCenter = activePoints.length ? centerOf(activePoints) : null;
+    gestureRef.current.lastDistance = activePoints.length > 1 ? distanceBetween(activePoints) : 0;
+    if (!activePoints.length) setIsDragging(false);
+  };
+
+  const handleBackdropClick = (event) => {
+    if (gestureRef.current.moved) {
+      gestureRef.current.moved = false;
+      return;
+    }
+    if (event.target === event.currentTarget) onClose();
+  };
+
+  const handleWheel = (event) => {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.2 : (1 / 1.2);
+    zoomAt(viewRef.current.scale * factor, event.clientX, event.clientY);
+  };
 
   if (!canRender) return null;
   const modal = (
@@ -142,16 +294,73 @@ function PhotoModal({ photo, onClose }) {
 
       <div
         className="relative min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_center,rgba(51,65,85,0.42),rgba(2,6,23,0.96)_68%)]"
-        onClick={onClose}
       >
-        <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-5 md:p-8">
+        <div
+          ref={viewportRef}
+          className={`absolute inset-0 flex touch-none items-center justify-center overflow-hidden p-2 sm:p-5 md:p-8 ${view.scale > 1 ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'}`}
+          onClick={handleBackdropClick}
+          onDoubleClick={(event) => {
+            if (event.target === event.currentTarget) return;
+            event.preventDefault();
+            event.stopPropagation();
+            zoomAt(viewRef.current.scale > 1 ? 1 : 2.5, event.clientX, event.clientY);
+          }}
+          onWheel={handleWheel}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+        >
           <img
+            ref={imageRef}
             src={photo.src}
             alt={photo.category_label || 'Фото акта приймання'}
             draggable="false"
             onClick={(event) => event.stopPropagation()}
             className="block h-auto w-auto max-h-full max-w-full select-none rounded-xl object-contain shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:rounded-2xl"
+            style={{
+              transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`,
+              transformOrigin: 'center center',
+              transition: isDragging ? 'none' : 'transform 160ms ease-out',
+              willChange: 'transform',
+            }}
           />
+        </div>
+
+        <div
+          className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/15 bg-slate-950/85 p-1.5 shadow-2xl backdrop-blur-xl sm:bottom-5"
+          role="toolbar"
+          aria-label="Масштаб фото"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            disabled={view.scale <= 1}
+            onClick={() => changeZoom(-0.5)}
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/70 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label="Зменшити фото"
+          >
+            <ZoomOut size={20} />
+          </button>
+          <button
+            type="button"
+            onClick={resetView}
+            className="h-11 min-w-[68px] rounded-xl px-2 text-xs font-black tabular-nums text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/70"
+            aria-label="Скинути масштаб до 100 відсотків"
+            title="Скинути масштаб"
+          >
+            {Math.round(view.scale * 100)}%
+          </button>
+          <button
+            type="button"
+            disabled={view.scale >= 5}
+            onClick={() => changeZoom(0.5)}
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/70 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label="Збільшити фото"
+          >
+            <ZoomIn size={20} />
+          </button>
         </div>
       </div>
 

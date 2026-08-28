@@ -37,11 +37,23 @@ test('full screen evidence viewer is portaled outside clipped mobile panels', ()
   assert.match(photosSource, /Відкрити фото повністю/);
   assert.match(photosSource, /h-\[100dvh\]/);
   assert.match(photosSource, /relative min-h-0 flex-1 overflow-hidden/);
-  assert.match(photosSource, /absolute inset-0 flex items-center justify-center/);
+  assert.match(photosSource, /absolute inset-0 flex touch-none items-center justify-center/);
   assert.match(photosSource, /document\.body\.style\.overflow = 'hidden'/);
   assert.match(photosSource, /safe-area-inset-top/);
   assert.match(photosSource, /safe-area-inset-bottom/);
   assert.match(photosSource, /event\.key === 'Escape'/);
+});
+
+test('full screen evidence viewer supports bounded zoom and touch gestures', () => {
+  assert.match(photosSource, /aria-label="Збільшити фото"/);
+  assert.match(photosSource, /aria-label="Зменшити фото"/);
+  assert.match(photosSource, /Скинути масштаб до 100 відсотків/);
+  assert.match(photosSource, /Math\.min\(5, Math\.max\(1,/);
+  assert.match(photosSource, /onWheel=\{handleWheel\}/);
+  assert.match(photosSource, /onPointerMove=\{handlePointerMove\}/);
+  assert.match(photosSource, /touch-none/);
+  assert.match(photosSource, /translate3d\(/);
+  assert.match(photosSource, /event\.key === '0'/);
 });
 
 test('completed acceptance act has explicit audited correction flow', () => {

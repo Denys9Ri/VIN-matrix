@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.core.models import Category, Company, InventoryItem, ServiceCatalog, Supplier, VehicleRecommendation, Visit
+from apps.core.models import Category, Company, InventoryItem, OrderPart, ServiceCatalog, Supplier, VehicleRecommendation, Visit
 
 
 @override_settings(SECRET_KEY='test-secret-key', DEBUG=False, ALLOWED_HOSTS=['testserver'])
@@ -124,3 +124,84 @@ class ApiSmokeTests(TestCase):
         second = self.client.post('/api/visit-diagnostic-checklist/', payload, format='json')
         self.assertEqual(second.status_code, 200, second.data)
         self.assertEqual(VehicleRecommendation.objects.filter(visit=visit).count(), 1)
+
+    def _create_part(self, visit, status, suffix):
+        return OrderPart.objects.create(
+            visit=visit,
+            brand='TEST',
+            article=f'PART-{suffix}',
+            name=f'Part {suffix}',
+            buy_price='100.00',
+            sell_price='150.00',
+            quantity=1,
+            supplier='Supplier',
+            status=status,
+        )
+
+    def test_finishing_visit_auto_receives_only_unfinished_parts(self):
+        visit = Visit.objects.create(
+            company=self.company,
+            plate='AA9000BB',
+            client='Parts Client',
+            phone='+380501119999',
+            status='IN_PROGRESS',
+        )
+        auto_statuses = [
+            'WAITING', 'ORDERED', 'PENDING', 'DRAFT', 'SELECTION',
+            'PROCESSING', 'IN_PROCESS', 'IN_TRANSIT', 'ROAD', 'DELIVERY',
+        ]
+        protected_statuses = ['ARRIVED', 'RECEIVED', 'INSTALLED', 'UNAVAILABLE', 'RETURNED', 'CANCELLED']
+        parts = {}
+        for idx, status in enumerate(auto_statuses + protected_statuses):
+            parts[status] = self._create_part(visit, status, idx)
+
+        self.authenticate()
+        response = self.client.patch(f'/api/visits/{visit.id}/', {'status': 'DONE'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+
+        for status in auto_statuses:
+            parts[status].refresh_from_db()
+            self.assertEqual(parts[status].status, 'ARRIVED', status)
+        for status in protected_statuses:
+            parts[status].refresh_from_db()
+            self.assertEqual(parts[status].status, status)
+
+    def test_already_finished_visit_does_not_overwrite_later_manual_part_status(self):
+        visit = Visit.objects.create(
+            company=self.company,
+            plate='AA9001BB',
+            client='Manual Status Client',
+            phone='+380501118888',
+            status='IN_PROGRESS',
+        )
+        part = self._create_part(visit, 'WAITING', 'manual')
+        self.authenticate()
+
+        response = self.client.patch(f'/api/visits/{visit.id}/', {'status': 'DONE'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        part.refresh_from_db()
+        self.assertEqual(part.status, 'ARRIVED')
+
+        # A user may still deliberately control the part afterwards. A later
+        # unrelated save of an already-final visit must not force ARRIVED again.
+        OrderPart.objects.filter(pk=part.pk).update(status='IN_TRANSIT')
+        response = self.client.patch(f'/api/visits/{visit.id}/', {'comment': 'Контрольна примітка'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        part.refresh_from_db()
+        self.assertEqual(part.status, 'IN_TRANSIT')
+
+    def test_non_final_visit_status_change_keeps_part_logistics_untouched(self):
+        visit = Visit.objects.create(
+            company=self.company,
+            plate='AA9002BB',
+            client='Active Visit Client',
+            phone='+380501117777',
+            status='SELECTION',
+        )
+        part = self._create_part(visit, 'WAITING', 'active')
+        self.authenticate()
+
+        response = self.client.patch(f'/api/visits/{visit.id}/', {'status': 'IN_PROGRESS'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        part.refresh_from_db()
+        self.assertEqual(part.status, 'WAITING')

@@ -10,3 +10,4 @@ class CoreConfig(AppConfig):
         # all models. Importing the modules is enough to connect their signals.
         from . import service_catalog_sync  # noqa: F401
         from . import payroll_commissions  # noqa: F401
+        from . import visit_part_status_sync  # noqa: F401

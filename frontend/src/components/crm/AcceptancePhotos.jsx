@@ -90,30 +90,80 @@ function SecurePhoto({ photo, className = '', onOpen }) {
 
 
 function PhotoModal({ photo, onClose }) {
-  if (!photo?.src || typeof document === 'undefined') return null;
+  const canRender = Boolean(photo?.src) && typeof document !== 'undefined';
+
+  useEffect(() => {
+    if (!canRender) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape);
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscroll;
+    };
+  }, [canRender, onClose]);
+
+  if (!canRender) return null;
   const modal = (
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto bg-slate-950/95 p-3 md:p-8"
+      className="fixed inset-0 z-[10000] isolate flex h-[100dvh] w-screen flex-col overflow-hidden overscroll-contain bg-slate-950 text-white"
       role="dialog"
       aria-modal="true"
-      onClick={(event) => { event.preventDefault(); onClose(); }}
+      aria-labelledby="acceptance-photo-viewer-title"
     >
-      <button
-        type="button"
-        onClick={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
-        className="fixed right-4 top-[max(1rem,env(safe-area-inset-top))] z-[10001] flex h-12 w-12 items-center justify-center rounded-full bg-white text-slate-900 shadow-xl"
-        aria-label="Закрити фото"
+      <header className="relative z-10 shrink-0 border-b border-white/10 bg-slate-950/90 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl sm:px-5">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-slate-100"><Maximize2 size={18}/></span>
+            <div className="min-w-0">
+              <p id="acceptance-photo-viewer-title" className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Перегляд фото</p>
+              <p className="mt-0.5 truncate text-sm font-black text-white">{photo.category_label || 'Стан автомобіля'}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            autoFocus
+            onClick={onClose}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white shadow-lg transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/70"
+            aria-label="Закрити фото"
+          >
+            <X size={22} />
+          </button>
+        </div>
+      </header>
+
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_center,rgba(51,65,85,0.42),rgba(2,6,23,0.96)_68%)]"
+        onClick={onClose}
       >
-        <X size={22} />
-      </button>
-      <div className="flex max-h-full w-full max-w-5xl flex-col items-center" onClick={(event) => event.stopPropagation()}>
-        <img src={photo.src} alt={photo.category_label || 'Фото акта приймання'} className="max-h-[80dvh] max-w-full rounded-2xl object-contain shadow-2xl" />
-        <div className="mt-3 w-full max-w-3xl rounded-2xl bg-white/95 px-4 py-3 text-sm text-slate-700">
-          <p className="font-black">{photo.category_label}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{formatDate(photo.created_at)} {photo.created_by ? `· ${photo.created_by}` : ''}</p>
-          {photo.locked && <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase text-emerald-700"><ShieldCheck size={11}/> Зафіксоване фото</p>}
+        <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-5 md:p-8">
+          <img
+            src={photo.src}
+            alt={photo.category_label || 'Фото акта приймання'}
+            draggable="false"
+            onClick={(event) => event.stopPropagation()}
+            className="block h-auto w-auto max-h-full max-w-full select-none rounded-xl object-contain shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:rounded-2xl"
+          />
         </div>
       </div>
+
+      <footer className="relative z-10 shrink-0 border-t border-white/10 bg-slate-950/90 px-4 pb-[max(0.9rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-200">{formatDate(photo.created_at)}</p>
+            {photo.created_by && <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">Додав: {photo.created_by}</p>}
+          </div>
+          {photo.locked && <p className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[10px] font-black uppercase text-emerald-300"><ShieldCheck size={12}/> Зафіксоване фото</p>}
+        </div>
+      </footer>
     </div>
   );
   return createPortal(modal, document.body);

@@ -35,6 +35,13 @@ test('full screen evidence viewer is portaled outside clipped mobile panels', ()
   assert.match(photosSource, /document\.body/);
   assert.match(photosSource, /z-\[10000\]/);
   assert.match(photosSource, /Відкрити фото повністю/);
+  assert.match(photosSource, /h-\[100dvh\]/);
+  assert.match(photosSource, /relative min-h-0 flex-1 overflow-hidden/);
+  assert.match(photosSource, /absolute inset-0 flex items-center justify-center/);
+  assert.match(photosSource, /document\.body\.style\.overflow = 'hidden'/);
+  assert.match(photosSource, /safe-area-inset-top/);
+  assert.match(photosSource, /safe-area-inset-bottom/);
+  assert.match(photosSource, /event\.key === 'Escape'/);
 });
 
 test('completed acceptance act has explicit audited correction flow', () => {

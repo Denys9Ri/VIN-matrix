@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 from collections import defaultdict
 from io import BytesIO
 from pathlib import Path
@@ -32,10 +33,28 @@ MAX_PHOTOS_PER_CATEGORY = 20
 MAX_PHOTOS_PER_VISIT = 60
 MAX_NORMALIZED_EDGE = 4096
 CLOSED_VISIT_STATUSES = {'COMPLETED', 'CANCELLED'}
+PLATE_CONFUSABLES = {
+    'A': 'AА', 'А': 'AА', 'B': 'BВ', 'В': 'BВ', 'C': 'CС', 'С': 'CС',
+    'E': 'EЕ', 'Е': 'EЕ', 'H': 'HН', 'Н': 'HН', 'I': 'IІ', 'І': 'IІ',
+    'K': 'KК', 'К': 'KК', 'M': 'MМ', 'М': 'MМ', 'O': 'OО', 'О': 'OО',
+    'P': 'PР', 'Р': 'PР', 'T': 'TТ', 'Т': 'TТ', 'X': 'XХ', 'Х': 'XХ',
+}
 
 
 def _company(request):
     return safe_ensure_company(request.user)
+
+
+def _plate_regex(value):
+    """Match visually identical Ukrainian plates across Latin/Cyrillic input."""
+    compact = re.sub(r'[^0-9A-ZА-ЯІЇЄ]', '', str(value or '').upper())
+    if not compact:
+        return ''
+    tokens = []
+    for char in compact:
+        variants = PLATE_CONFUSABLES.get(char)
+        tokens.append(f'[{variants}]' if variants else re.escape(char))
+    return r'^\s*' + r'[\s-]*'.join(tokens) + r'\s*$'
 
 
 def _visit_for_company(company, visit_id):
@@ -287,12 +306,23 @@ class VehicleConditionHistoryView(APIView):
         plate = str(request.query_params.get('plate') or '').strip()
         vin_code = str(request.query_params.get('vin_code') or '').strip()
         phone = str(request.query_params.get('phone') or '').strip()
+        visit_ids = []
+        for raw_id in str(request.query_params.get('visit_ids') or '').split(',')[:100]:
+            try:
+                visit_id = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            if visit_id > 0:
+                visit_ids.append(visit_id)
         visits = Visit.objects.filter(company=company)
         # Plate is the primary vehicle identity and VIN is the safe fallback.
         # Phone may only recover legacy rows that have neither vehicle identity;
         # it must never pull another numbered/VIN vehicle owned by the same client.
-        if plate:
-            visits = visits.filter(plate__iexact=plate)
+        if visit_ids:
+            visits = visits.filter(id__in=visit_ids)
+        elif plate:
+            plate_pattern = _plate_regex(plate)
+            visits = visits.filter(plate__iregex=plate_pattern) if plate_pattern else visits.none()
         elif vin_code:
             visits = visits.filter(vin_code__iexact=vin_code)
         elif phone:

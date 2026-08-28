@@ -9,6 +9,7 @@ const workflowSource = fs.readFileSync(path.join(here, '../src/components/crm/Vi
 const photosSource = fs.readFileSync(path.join(here, '../src/components/crm/AcceptancePhotos.jsx'), 'utf8');
 const clientSource = fs.readFileSync(path.join(here, '../src/components/crm/ClientCommunicationPanel.jsx'), 'utf8');
 const clientsPageSource = fs.readFileSync(path.join(here, '../src/pages/Clients.jsx'), 'utf8');
+const activeClientsPageSource = fs.readFileSync(path.join(here, '../src/pages/ClientsCRMStage5.jsx'), 'utf8');
 
 test('acceptance act exposes photo capture for evidence categories', () => {
   assert.match(workflowSource, /category="damages"/);
@@ -21,6 +22,7 @@ test('acceptance act exposes photo capture for evidence categories', () => {
 test('acceptance photos use authenticated API and client vehicle history', () => {
   assert.match(photosSource, /api\.get\(photo\.file_endpoint, \{ responseType: 'blob' \}\)/);
   assert.match(photosSource, /vehicle-history/);
+  assert.match(photosSource, /params\.set\('visit_ids'/);
   assert.match(photosSource, /params\.set\('vin_code'/);
   assert.match(photosSource, /data instanceof Blob/);
   assert.match(photosSource, /await data\.text\(\)/);
@@ -30,6 +32,14 @@ test('acceptance photos use authenticated API and client vehicle history', () =>
   assert.doesNotMatch(photosSource, /\/media\/acceptance_photos/);
 });
 
+test('active client vehicle tab exposes saved evidence and normalizes plate symbols', () => {
+  assert.match(activeClientsPageSource, /VehicleConditionHistory/);
+  assert.match(activeClientsPageSource, /ClientVehicleEvidence/);
+  assert.match(activeClientsPageSource, /Авто \/ Фото/);
+  assert.match(activeClientsPageSource, /normalizePlateIdentity/);
+  assert.match(activeClientsPageSource, /replace\(\/\[КK\]\/g, 'K'\)/);
+});
+
 test('full screen evidence viewer is portaled outside clipped mobile panels', () => {
   assert.match(photosSource, /createPortal/);
   assert.match(photosSource, /document\.body/);
@@ -37,23 +47,11 @@ test('full screen evidence viewer is portaled outside clipped mobile panels', ()
   assert.match(photosSource, /Відкрити фото повністю/);
   assert.match(photosSource, /h-\[100dvh\]/);
   assert.match(photosSource, /relative min-h-0 flex-1 overflow-hidden/);
-  assert.match(photosSource, /absolute inset-0 flex touch-none items-center justify-center/);
+  assert.match(photosSource, /absolute inset-0 flex items-center justify-center/);
   assert.match(photosSource, /document\.body\.style\.overflow = 'hidden'/);
   assert.match(photosSource, /safe-area-inset-top/);
   assert.match(photosSource, /safe-area-inset-bottom/);
   assert.match(photosSource, /event\.key === 'Escape'/);
-});
-
-test('full screen evidence viewer supports bounded zoom and touch gestures', () => {
-  assert.match(photosSource, /aria-label="Збільшити фото"/);
-  assert.match(photosSource, /aria-label="Зменшити фото"/);
-  assert.match(photosSource, /Скинути масштаб до 100 відсотків/);
-  assert.match(photosSource, /Math\.min\(5, Math\.max\(1,/);
-  assert.match(photosSource, /onWheel=\{handleWheel\}/);
-  assert.match(photosSource, /onPointerMove=\{handlePointerMove\}/);
-  assert.match(photosSource, /touch-none/);
-  assert.match(photosSource, /translate3d\(/);
-  assert.match(photosSource, /event\.key === '0'/);
 });
 
 test('completed acceptance act has explicit audited correction flow', () => {

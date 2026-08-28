@@ -2,10 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bell, Car, CheckCircle2, ClipboardList, Copy, CreditCard, History, KeyRound, MessageCircle, Package, Phone, PlusCircle, RefreshCcw, Repeat2, Search, Star, TrendingUp, UserCheck, UserRound, Wrench, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { VehicleConditionHistory } from '../components/crm/AcceptancePhotos';
 import { carDisplayName, primaryClientCar } from '../utils/clientCarIdentity';
 import { closeClientDebt, debtOrdersOf, isDebtOrder, orderDebtAmount } from '../utils/clientDebtPayments';
 
 const arr = (value) => (Array.isArray(value) ? value : []);
+const normalizePlateIdentity = (value) => String(value || '')
+  .toUpperCase()
+  .replace(/[АA]/g, 'A').replace(/[ВB]/g, 'B').replace(/[СC]/g, 'C')
+  .replace(/[ЕE]/g, 'E').replace(/[НH]/g, 'H').replace(/[ІI]/g, 'I')
+  .replace(/[КK]/g, 'K').replace(/[МM]/g, 'M').replace(/[ОO]/g, 'O')
+  .replace(/[РP]/g, 'P').replace(/[ТT]/g, 'T').replace(/[ХX]/g, 'X')
+  .replace(/[^A-Z0-9]/g, '');
 const money = (value) => `${Number(value || 0).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
 const fmtDate = (value) => {
   if (!value) return '—';
@@ -560,7 +568,7 @@ function ClientProfile({ client, tab, setTab, busy, onClose, onCloseDebt, onQuic
   const services = arr(client.services);
   const cars = arr(client.cars);
   const debts = orders.filter(isDebtOrder);
-  return <div className={`bg-white ${onClose ? 'min-h-[100dvh]' : 'xl:border xl:border-slate-200 xl:rounded-[34px] xl:shadow-sm'} overflow-visible flex flex-col`}><ProfileHeader client={client} busy={busy} onClose={onClose} onCloseDebt={onCloseDebt} onQuickAction={onQuickAction} cfg={cfg} /><Tabs active={tab} setActive={setTab} cfg={cfg} /><div className="p-4 md:p-5 bg-slate-50/60 overflow-visible flex-1">{tab === 'overview' && <Overview client={client} orders={orders} parts={parts} services={services} cars={cars} debts={debts} onQuickAction={onQuickAction} onRepeatPart={onRepeatPart} onCopy={onCopy} cfg={cfg} />}{tab === 'sales' && <SalesTab client={client} onQuickAction={onQuickAction} onRepeatPart={onRepeatPart} busy={busy} cfg={cfg} />}{tab === 'history' && <HistoryTab orders={orders} onRepeatPart={(part) => onRepeatPart(part, client)} busy={busy} cfg={cfg} />}{tab === 'cars' && <Cars cars={cars} onCopy={onCopy} />}{tab === 'debts' && <Debts debts={debts} onCloseDebt={() => onCloseDebt(client)} busy={busy} cfg={cfg} />}{tab === 'crm' && <CRMTab client={client} onSetStatus={onSetStatus} onQuickAction={onQuickAction} busy={busy} cfg={cfg} />}</div></div>;
+  return <div className={`bg-white ${onClose ? 'min-h-[100dvh]' : 'xl:border xl:border-slate-200 xl:rounded-[34px] xl:shadow-sm'} overflow-visible flex flex-col`}><ProfileHeader client={client} busy={busy} onClose={onClose} onCloseDebt={onCloseDebt} onQuickAction={onQuickAction} cfg={cfg} /><Tabs active={tab} setActive={setTab} cfg={cfg} /><div className="p-4 md:p-5 bg-slate-50/60 overflow-visible flex-1">{tab === 'overview' && <Overview client={client} orders={orders} parts={parts} services={services} cars={cars} debts={debts} onQuickAction={onQuickAction} onRepeatPart={onRepeatPart} onCopy={onCopy} cfg={cfg} />}{tab === 'sales' && <SalesTab client={client} onQuickAction={onQuickAction} onRepeatPart={onRepeatPart} busy={busy} cfg={cfg} />}{tab === 'history' && <HistoryTab orders={orders} onRepeatPart={(part) => onRepeatPart(part, client)} busy={busy} cfg={cfg} />}{tab === 'cars' && <div className="space-y-5"><Cars cars={cars} onCopy={onCopy} />{cfg.mode === 'sto' && <ClientVehicleEvidence client={client} cars={cars} orders={orders} />}</div>}{tab === 'debts' && <Debts debts={debts} onCloseDebt={() => onCloseDebt(client)} busy={busy} cfg={cfg} />}{tab === 'crm' && <CRMTab client={client} onSetStatus={onSetStatus} onQuickAction={onQuickAction} busy={busy} cfg={cfg} />}</div></div>;
 }
 
 function ProfileHeader({ client, busy, onClose, onCloseDebt, onQuickAction, cfg }) {
@@ -569,7 +577,7 @@ function ProfileHeader({ client, busy, onClose, onCloseDebt, onQuickAction, cfg 
 }
 
 function QuickButton({ icon, label, onClick, busy }) { return <button type="button" disabled={busy} onClick={onClick} className="rounded-2xl bg-white/10 border border-white/15 text-white px-3 py-3 text-[11px] font-black uppercase inline-flex items-center justify-center gap-2 hover:bg-white/20 disabled:opacity-60 transition">{icon}{busy ? '...' : label}</button>; }
-function Tabs({ active, setActive, cfg }) { const tabs = [{ key: 'overview', label: 'Огляд', icon: UserRound }, { key: 'sales', label: cfg.salesTab, icon: cfg.mode === 'sto' ? Wrench : Repeat2 }, { key: 'history', label: cfg.historyTab, icon: History }, { key: 'cars', label: 'Авто', icon: Car }, { key: 'debts', label: 'Борги', icon: CreditCard }, { key: 'crm', label: 'CRM', icon: ClipboardList }]; return <div className="border-b border-slate-100 bg-white px-3 md:px-5 py-3 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"><div className="flex gap-2 min-w-max">{tabs.map((item) => { const Icon = item.icon; const isActive = active === item.key; return <button key={item.key} type="button" onClick={() => setActive(item.key)} className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-[11px] font-black uppercase transition-all border whitespace-nowrap ${isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-200 hover:text-blue-700'}`}><Icon size={15} /> {item.label}</button>; })}</div></div>; }
+function Tabs({ active, setActive, cfg }) { const tabs = [{ key: 'overview', label: 'Огляд', icon: UserRound }, { key: 'sales', label: cfg.salesTab, icon: cfg.mode === 'sto' ? Wrench : Repeat2 }, { key: 'history', label: cfg.historyTab, icon: History }, { key: 'cars', label: cfg.mode === 'sto' ? 'Авто / Фото' : 'Авто', icon: Car }, { key: 'debts', label: 'Борги', icon: CreditCard }, { key: 'crm', label: 'CRM', icon: ClipboardList }]; return <div className="border-b border-slate-100 bg-white px-3 md:px-5 py-3 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"><div className="flex gap-2 min-w-max">{tabs.map((item) => { const Icon = item.icon; const isActive = active === item.key; return <button key={item.key} type="button" onClick={() => setActive(item.key)} className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-[11px] font-black uppercase transition-all border whitespace-nowrap ${isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-blue-200 hover:text-blue-700'}`}><Icon size={15} /> {item.label}</button>; })}</div></div>; }
 
 function Overview({ client, orders, parts, services, cars, debts, onQuickAction, onRepeatPart, onCopy, cfg }) {
   const primaryItems = cfg.mode === 'sto' ? services.slice(0, 4) : parts.slice(0, 5);
@@ -591,6 +599,26 @@ function Cars({ cars, onCopy }) {
   return <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{safe.map((car, idx) => {
     const title = carDisplayName(car);
     return <div key={`${car.plate || car.vin_code || idx}`} className="bg-white border border-slate-200 rounded-[24px] p-4 shadow-sm"><p className="font-black text-slate-900 flex items-center gap-2"><Car size={16} className="text-blue-600" />{car.plate || 'Без номера'}</p><p className={`mt-2 text-sm font-black ${title ? 'text-slate-700' : 'text-slate-400'}`}>{title || 'Марка/модель не вказані'}</p><div className="mt-3 grid grid-cols-1 gap-2"><Mini label="VIN" value={car.vin_code || '—'} />{car.mileage && <Mini label="Пробіг" value={`${car.mileage} км`} />}</div><div className="mt-3 flex flex-wrap gap-2">{car.plate && <button type="button" onClick={() => onCopy?.(car.plate, 'Номер авто скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 inline-flex items-center gap-1"><Copy size={14}/> Номер</button>}{car.vin_code && <button type="button" onClick={() => onCopy?.(car.vin_code, 'VIN скопійовано.')} className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 inline-flex items-center gap-1"><Copy size={14}/> VIN</button>}</div></div>;
+  })}</div>;
+}
+function ClientVehicleEvidence({ client, cars, orders }) {
+  const vehicles = arr(cars);
+  const visits = arr(orders);
+  const targets = vehicles.length ? vehicles : [{ plate: '', vin_code: '' }];
+  return <div className="space-y-4">{targets.map((car, index) => {
+    const plateKey = normalizePlateIdentity(car.plate);
+    const vinKey = String(car.vin_code || '').trim().toUpperCase();
+    const matchingVisits = visits.filter((visit) => {
+      const visitPlate = normalizePlateIdentity(visit.plate || visit.car?.plate);
+      const visitVin = String(visit.vin_code || visit.car?.vin_code || '').trim().toUpperCase();
+      return (plateKey && visitPlate === plateKey) || (vinKey && visitVin === vinKey) || (targets.length === 1 && !plateKey && !vinKey);
+    });
+    return <VehicleConditionHistory key={`${plateKey || vinKey || 'legacy'}-${index}`} selectedGroup={{
+      plate: car.plate || '—',
+      vin: car.vin_code || '—',
+      phone: client.phone || '—',
+      visits: matchingVisits,
+    }} />;
   })}</div>;
 }
 function Debts({ debts, onCloseDebt, busy, cfg }) { if (!debts.length) return <Empty text="Боргів немає" />; return <div className="space-y-3">{debts.map((order) => <div key={order.id} className="bg-white border border-rose-100 rounded-[24px] p-4"><div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><p className="font-black text-slate-900">{cfg.order === 'візит' ? 'Візит' : 'Замовлення'} №{order.id}</p><p className="text-xs font-bold text-slate-500 mt-1">{fmtDate(order.created_at)} · {order.payment_status}</p></div><div className="text-left md:text-right"><p className="text-2xl font-black text-rose-600">{money(order.debt_amount || order.revenue)}</p><button type="button" disabled={busy === 'debt'} onClick={onCloseDebt} className="mt-2 rounded-2xl bg-emerald-600 text-white px-4 py-2 text-[11px] font-black uppercase disabled:bg-slate-300">Закрити борг</button></div></div></div>)}</div>; }

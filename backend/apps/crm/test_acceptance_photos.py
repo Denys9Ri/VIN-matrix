@@ -316,6 +316,39 @@ class VisitAcceptancePhotoTests(TestCase):
         self.assertEqual(len(response.data[0]['photos']), 1)
         self.assertEqual(response.data[0]['photos'][0]['id'], upload.data['id'])
 
+    def test_vehicle_history_matches_cyrillic_latin_plate_and_explicit_visit_ids(self):
+        upload = self.upload_photo('damages')
+        self.assertEqual(upload.status_code, 201)
+        self.visit.plate = 'КА 1234 АА'
+        self.visit.save(update_fields=['plate'])
+
+        by_equivalent_plate = self.client.get(
+            '/api/visit-acceptance-photos/vehicle-history/?plate=KA-1234-AA'
+        )
+        self.assertEqual(by_equivalent_plate.status_code, 200)
+        self.assertEqual([entry['visit']['id'] for entry in by_equivalent_plate.data], [self.visit.id])
+
+        by_visit_id = self.client.get(
+            f'/api/visit-acceptance-photos/vehicle-history/?visit_ids={self.visit.id}'
+        )
+        self.assertEqual(by_visit_id.status_code, 200)
+        self.assertEqual([entry['visit']['id'] for entry in by_visit_id.data], [self.visit.id])
+
+        other_owner = User.objects.create_user(username='other-evidence-owner', password='Strong-password-321')
+        other_company = Company.objects.create(name='Інше СТО', owner=other_owner)
+        hidden_visit = Visit.objects.create(
+            company=other_company,
+            client='Чужий клієнт',
+            phone='0990000000',
+            plate='KA1234AA',
+            status='SELECTION',
+        )
+        isolated = self.client.get(
+            f'/api/visit-acceptance-photos/vehicle-history/?visit_ids={hidden_visit.id}'
+        )
+        self.assertEqual(isolated.status_code, 200)
+        self.assertEqual(isolated.data, [])
+
     def test_vehicle_history_uses_vin_and_phone_fallback_never_mixes_identified_cars(self):
         vin_visit = Visit.objects.create(
             company=self.company,

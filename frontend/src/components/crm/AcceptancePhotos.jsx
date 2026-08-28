@@ -517,11 +517,15 @@ export function VehicleConditionHistory({ selectedGroup, compact = false }) {
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
+    const visitIds = Array.from(new Set((selectedGroup?.visits || [])
+      .map((visit) => Number(visit?.id || visit?.visit_id || 0))
+      .filter((visitId) => Number.isInteger(visitId) && visitId > 0)));
+    if (visitIds.length) params.set('visit_ids', visitIds.join(','));
     if (selectedGroup?.plate && selectedGroup.plate !== '—') params.set('plate', selectedGroup.plate);
     else if (selectedGroup?.vin && selectedGroup.vin !== '—') params.set('vin_code', selectedGroup.vin);
     else if (selectedGroup?.phone && selectedGroup.phone !== '—') params.set('phone', selectedGroup.phone);
     return params.toString();
-  }, [selectedGroup?.plate, selectedGroup?.vin, selectedGroup?.phone]);
+  }, [selectedGroup?.plate, selectedGroup?.vin, selectedGroup?.phone, selectedGroup?.visits]);
 
   const load = async () => {
     if (!query) {

@@ -1,3 +1,4 @@
+import hashlib
 from io import BytesIO
 
 from PIL import Image
@@ -136,6 +137,43 @@ class VisitAcceptancePhotoTests(TestCase):
             if photo not in self.created_photos:
                 self.created_photos.append(photo)
             self.assertEqual(index + 1, VisitAcceptancePhoto.objects.filter(visit=self.visit).count())
+
+    def test_legacy_browser_formats_are_converted_to_jpeg_when_opened(self):
+        for index, (legacy_file, content_type) in enumerate([
+            (png_file('legacy.png'), 'image/png'),
+            (webp_file('legacy.webp'), 'image/webp'),
+        ]):
+            payload = legacy_file.read()
+            legacy_file.seek(0)
+            photo = VisitAcceptancePhoto.objects.create(
+                company=self.company,
+                visit=self.visit,
+                category='general',
+                image=legacy_file,
+                original_name=legacy_file.name,
+                content_type=content_type,
+                size_bytes=len(payload),
+                sha256=hashlib.sha256(payload).hexdigest(),
+                created_by=self.owner,
+            )
+            self.created_photos.append(photo)
+
+            response = self.client.get(f'/api/visit-acceptance-photos/{photo.id}/file/')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response['Content-Type'], 'image/jpeg')
+            converted = Image.open(BytesIO(b''.join(response.streaming_content)))
+            self.assertEqual(converted.format, 'JPEG')
+            self.assertEqual(index + 1, VisitAcceptancePhoto.objects.filter(visit=self.visit).count())
+
+    def test_missing_storage_file_returns_actionable_error(self):
+        upload = self.upload_photo('general')
+        self.assertEqual(upload.status_code, 201)
+        photo = VisitAcceptancePhoto.objects.get(pk=upload.data['id'])
+        photo.image.delete(save=False)
+
+        response = self.client.get(upload.data['file_endpoint'])
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('persistent storage', response.data['detail'])
 
     def test_other_company_cannot_fetch_photo(self):
         upload = self.upload_photo('exterior')
@@ -277,6 +315,49 @@ class VisitAcceptancePhotoTests(TestCase):
         self.assertEqual(response.data[0]['act']['damages'], 'Подряпина на правих дверях')
         self.assertEqual(len(response.data[0]['photos']), 1)
         self.assertEqual(response.data[0]['photos'][0]['id'], upload.data['id'])
+
+    def test_vehicle_history_uses_vin_and_phone_fallback_never_mixes_identified_cars(self):
+        vin_visit = Visit.objects.create(
+            company=self.company,
+            client='Олександр',
+            phone='0501112233',
+            plate='',
+            vin_code='WVWZZZ1JZXW000001',
+            status='SELECTION',
+        )
+        vin_upload = self.client.post(
+            '/api/visit-acceptance-photos/',
+            {'visit': vin_visit.id, 'category': 'exterior', 'photo': jpeg_file('vin-car.jpg')},
+            format='multipart',
+        )
+        self._remember_photo(vin_upload)
+        self.assertEqual(vin_upload.status_code, 201)
+
+        legacy_visit = Visit.objects.create(
+            company=self.company,
+            client='Олександр',
+            phone='0501112233',
+            plate='',
+            vin_code='',
+            status='SELECTION',
+        )
+        legacy_upload = self.client.post(
+            '/api/visit-acceptance-photos/',
+            {'visit': legacy_visit.id, 'category': 'general', 'photo': jpeg_file('legacy-car.jpg')},
+            format='multipart',
+        )
+        self._remember_photo(legacy_upload)
+        self.assertEqual(legacy_upload.status_code, 201)
+
+        by_vin = self.client.get(
+            '/api/visit-acceptance-photos/vehicle-history/?vin_code=WVWZZZ1JZXW000001'
+        )
+        self.assertEqual(by_vin.status_code, 200)
+        self.assertEqual([entry['visit']['id'] for entry in by_vin.data], [vin_visit.id])
+
+        by_phone = self.client.get('/api/visit-acceptance-photos/vehicle-history/?phone=0501112233')
+        self.assertEqual(by_phone.status_code, 200)
+        self.assertEqual([entry['visit']['id'] for entry in by_phone.data], [legacy_visit.id])
 
     def test_invalid_file_is_rejected(self):
         bad_file = SimpleUploadedFile('not-photo.jpg', b'not an image', content_type='image/jpeg')

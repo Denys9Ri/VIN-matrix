@@ -11,6 +11,21 @@ const formatDate = (value) => {
 };
 
 
+const photoLoadErrorMessage = async (error) => {
+  const data = error?.response?.data;
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    try {
+      const text = await data.text();
+      const parsed = JSON.parse(text);
+      if (parsed?.detail || parsed?.error) return String(parsed.detail || parsed.error);
+    } catch {
+      // A proxy may return an HTML/text error page instead of the API JSON.
+    }
+  }
+  return data?.detail || data?.error || 'Фото недоступне';
+};
+
+
 function SecurePhoto({ photo, className = '', onOpen }) {
   const [src, setSrc] = useState('');
   const [failed, setFailed] = useState('');
@@ -28,9 +43,10 @@ function SecurePhoto({ photo, className = '', onOpen }) {
         objectUrl = URL.createObjectURL(response.data);
         setSrc(objectUrl);
       })
-      .catch((error) => {
+      .catch(async (error) => {
         if (!active) return;
-        setFailed(error?.response?.data?.detail || 'Фото недоступне');
+        const message = await photoLoadErrorMessage(error);
+        if (active) setFailed(message);
       });
 
     return () => {
@@ -243,9 +259,10 @@ export function VehicleConditionHistory({ selectedGroup, compact = false }) {
   const query = useMemo(() => {
     const params = new URLSearchParams();
     if (selectedGroup?.plate && selectedGroup.plate !== '—') params.set('plate', selectedGroup.plate);
+    else if (selectedGroup?.vin && selectedGroup.vin !== '—') params.set('vin_code', selectedGroup.vin);
     else if (selectedGroup?.phone && selectedGroup.phone !== '—') params.set('phone', selectedGroup.phone);
     return params.toString();
-  }, [selectedGroup?.plate, selectedGroup?.phone]);
+  }, [selectedGroup?.plate, selectedGroup?.vin, selectedGroup?.phone]);
 
   const load = async () => {
     if (!query) {

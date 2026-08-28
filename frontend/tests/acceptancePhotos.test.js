@@ -21,6 +21,9 @@ test('acceptance act exposes photo capture for evidence categories', () => {
 test('acceptance photos use authenticated API and client vehicle history', () => {
   assert.match(photosSource, /api\.get\(photo\.file_endpoint, \{ responseType: 'blob' \}\)/);
   assert.match(photosSource, /vehicle-history/);
+  assert.match(photosSource, /params\.set\('vin_code'/);
+  assert.match(photosSource, /data instanceof Blob/);
+  assert.match(photosSource, /await data\.text\(\)/);
   assert.match(clientSource, /ClientAcceptancePhotoHistory/);
   assert.match(clientsPageSource, /VehicleConditionHistory/);
   assert.match(clientsPageSource, /detailTab === 'auto'/);

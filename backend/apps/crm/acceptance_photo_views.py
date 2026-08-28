@@ -285,14 +285,21 @@ class VehicleConditionHistoryView(APIView):
             )
 
         plate = str(request.query_params.get('plate') or '').strip()
+        vin_code = str(request.query_params.get('vin_code') or '').strip()
         phone = str(request.query_params.get('phone') or '').strip()
         visits = Visit.objects.filter(company=company)
-        # Plate is the primary vehicle identity. Phone is only a fallback for old
-        # records without a usable plate so different cars of one client never mix.
+        # Plate is the primary vehicle identity and VIN is the safe fallback.
+        # Phone may only recover legacy rows that have neither vehicle identity;
+        # it must never pull another numbered/VIN vehicle owned by the same client.
         if plate:
             visits = visits.filter(plate__iexact=plate)
+        elif vin_code:
+            visits = visits.filter(vin_code__iexact=vin_code)
         elif phone:
-            visits = visits.filter(phone=phone)
+            visits = visits.filter(phone=phone).filter(
+                Q(plate__isnull=True) | Q(plate=''),
+                Q(vin_code__isnull=True) | Q(vin_code=''),
+            )
         else:
             return Response([], status=status.HTTP_200_OK)
 

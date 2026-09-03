@@ -8,6 +8,7 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
   const [defaultTerms, setDefaultTerms] = useState('');
   const [usesDefault, setUsesDefault] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
+  const [serverHasAct, setServerHasAct] = useState(false);
   const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -15,6 +16,7 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
 
   const dirty = terms !== savedTerms;
   const effectiveLocked = Boolean(locked);
+  const effectiveHasAct = Boolean(hasAct || serverHasAct);
 
   useEffect(() => {
     if (!visitId) return undefined;
@@ -31,6 +33,7 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
         setDefaultTerms(data.default_terms || '');
         setUsesDefault(Boolean(data.uses_default));
         setCanEdit(Boolean(data.can_edit));
+        setServerHasAct(Boolean(data.has_act));
       })
       .catch(() => {
         if (!cancelled) setNotice('Не вдалося завантажити текст для друкованого акта.');
@@ -57,6 +60,7 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
         save_as_default: saveAsDefault,
       });
       setSavedTerms(response.data?.terms_text ?? terms);
+      setServerHasAct(Boolean(response.data?.has_act ?? true));
       setUsesDefault(false);
       if (saveAsDefault) {
         setDefaultTerms(terms);
@@ -73,7 +77,7 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
   };
 
   const openDocument = async (autoPrint = false) => {
-    if (!visitId || !hasAct) {
+    if (!visitId || !effectiveHasAct) {
       setNotice('Спочатку збережіть чернетку акта приймання, щоб сформувати документ.');
       return;
     }
@@ -115,7 +119,7 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
           <h4 className="mt-1 text-base font-black text-slate-900">Готовий документ для клієнта і СТО</h4>
           <p className="mt-1 max-w-2xl text-xs font-semibold leading-relaxed text-slate-500">Дані про авто, пробіг, паливо, стан, скаргу та фото підтягуються автоматично з Акта вище — повторно нічого вводити не потрібно.</p>
         </div>
-        <span className={`w-fit rounded-full px-3 py-1.5 text-[10px] font-black uppercase ${hasAct ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{hasAct ? 'Можна формувати' : 'Збережіть чернетку'}</span>
+        <span className={`w-fit rounded-full px-3 py-1.5 text-[10px] font-black uppercase ${effectiveHasAct ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{effectiveHasAct ? 'Можна формувати' : 'Збережіть чернетку'}</span>
       </div>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
@@ -153,8 +157,8 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
       {notice && <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600">{notice}</div>}
 
       <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <button type="button" onClick={() => openDocument(false)} disabled={!hasAct} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-xs font-black uppercase text-blue-700 shadow-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"><Eye size={16}/>Переглянути акт</button>
-        <button type="button" onClick={() => openDocument(true)} disabled={!hasAct} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-md shadow-blue-100 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"><Printer size={16}/>Друк / PDF</button>
+        <button type="button" onClick={() => openDocument(false)} disabled={!effectiveHasAct} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-xs font-black uppercase text-blue-700 shadow-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"><Eye size={16}/>Переглянути акт</button>
+        <button type="button" onClick={() => openDocument(true)} disabled={!effectiveHasAct} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-md shadow-blue-100 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"><Printer size={16}/>Друк / PDF</button>
       </div>
     </section>
   );

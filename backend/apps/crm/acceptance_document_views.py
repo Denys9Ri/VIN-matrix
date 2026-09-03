@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from apps.core.access_control import CompanyOwnerOrPlatformAdmin, is_company_owner_or_platform_admin
 from apps.core.activity import log_activity
 from apps.core.company_phones import document_phone_text
+from apps.core.models import CompanyOption
 from apps.core.visit_workflow_views import ensure_visit_workflow_tables, get_visit_for_user, row_to_dict
 
 from .models import VisitAcceptanceActRevision, VisitAcceptancePhoto
@@ -22,6 +23,8 @@ from .models import VisitAcceptanceActRevision, VisitAcceptancePhoto
 
 PHOTO_CATEGORY_ORDER = ['damages', 'exterior', 'interior', 'general']
 PHOTO_CATEGORY_LABELS = dict(VisitAcceptancePhoto.CATEGORY_CHOICES)
+TERMS_TEMPLATE_GROUP = 'document_template'
+TERMS_TEMPLATE_KEY = 'acceptance_act_terms'
 
 
 def _txt(value, fallback='—'):
@@ -41,6 +44,32 @@ def _read_act(company_id, visit_id):
             [company_id, visit_id],
         )
         return row_to_dict(cursor, cursor.fetchone())
+
+
+def _default_terms(company):
+    option = CompanyOption.objects.filter(
+        company=company,
+        group=TERMS_TEMPLATE_GROUP,
+        key=TERMS_TEMPLATE_KEY,
+        is_active=True,
+    ).first()
+    return str(getattr(option, 'description', '') or '').strip()
+
+
+def _save_default_terms(company, terms):
+    CompanyOption.objects.update_or_create(
+        company=company,
+        group=TERMS_TEMPLATE_GROUP,
+        key=TERMS_TEMPLATE_KEY,
+        defaults={
+            'mode': CompanyOption.MODE_STO,
+            'label': 'Умови акта приймання',
+            'description': terms,
+            'is_active': True,
+            'is_system': True,
+            'sort_order': 900,
+        },
+    )
 
 
 def _format_datetime(value):
@@ -168,10 +197,10 @@ def build_acceptance_document_html(request, company, visit, act, auto_print=Fals
     revision_count = VisitAcceptanceActRevision.objects.filter(company=company, visit=visit).count()
     completed = str(act.get('status') or '').lower() == 'completed'
     terms = str(act.get('terms_text') or '').strip()
-    # Draft acts may still inherit the current company template. Completed acts
-    # never do: their saved snapshot must remain historically stable.
+    # A draft may inherit the current template. A completed act never does:
+    # its stored text is the immutable historical snapshot.
     if not completed and not terms:
-        terms = str(getattr(company, 'acceptance_act_terms', '') or '').strip()
+        terms = _default_terms(company)
 
     logo = ''
     try:
@@ -242,7 +271,7 @@ class AcceptanceActTermsView(APIView):
         act = _read_act(company.id, visit.id)
         completed = bool(act and str(act.get('status') or '').lower() == 'completed')
         saved_terms = str((act or {}).get('terms_text') or '').strip()
-        default_terms = str(getattr(company, 'acceptance_act_terms', '') or '').strip()
+        default_terms = _default_terms(company)
         terms = saved_terms if (completed or saved_terms) else default_terms
         return Response({
             'visit': visit.id,
@@ -282,8 +311,7 @@ class AcceptanceActTermsView(APIView):
                     [company.id, visit.id, visit.client, visit.phone, visit.plate, terms, request.user.id],
                 )
         if save_as_default:
-            company.acceptance_act_terms = terms
-            company.save(update_fields=['acceptance_act_terms'])
+            _save_default_terms(company, terms)
         return Response({'ok': True, 'terms_text': terms, 'saved_as_default': save_as_default, 'has_act': True})
 
 

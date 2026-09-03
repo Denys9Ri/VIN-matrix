@@ -1,6 +1,77 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Eye, FileSignature, Printer, Save, ShieldCheck } from 'lucide-react';
+import { Download, Eye, FileSignature, Printer, Save, Share2, ShieldCheck } from 'lucide-react';
 import api from '../../api/axios';
+
+const HTML2PDF_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+let html2pdfPromise = null;
+
+function ensureHtml2Pdf() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('PDF unavailable'));
+  if (window.html2pdf) return Promise.resolve(window.html2pdf);
+  if (html2pdfPromise) return html2pdfPromise;
+
+  html2pdfPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-vinmatrix-html2pdf="true"]');
+    if (existing) {
+      existing.addEventListener('load', () => window.html2pdf ? resolve(window.html2pdf) : reject(new Error('PDF library unavailable')), { once: true });
+      existing.addEventListener('error', () => reject(new Error('PDF library unavailable')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = HTML2PDF_SRC;
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.dataset.vinmatrixHtml2pdf = 'true';
+    script.onload = () => window.html2pdf ? resolve(window.html2pdf) : reject(new Error('PDF library unavailable'));
+    script.onerror = () => reject(new Error('PDF library unavailable'));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    html2pdfPromise = null;
+    throw error;
+  });
+
+  return html2pdfPromise;
+}
+
+function waitForIframeReady(iframe, html) {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error('Document render timeout')), 15000);
+    iframe.onload = async () => {
+      try {
+        const doc = iframe.contentDocument;
+        if (!doc) throw new Error('Document unavailable');
+        doc.querySelector('.toolbar')?.remove();
+        if (doc.fonts?.ready) await doc.fonts.ready.catch(() => {});
+        const images = Array.from(doc.images || []);
+        await Promise.all(images.map((image) => {
+          if (image.complete) return Promise.resolve();
+          return new Promise((done) => {
+            image.addEventListener('load', done, { once: true });
+            image.addEventListener('error', done, { once: true });
+          });
+        }));
+        window.clearTimeout(timeout);
+        resolve(doc);
+      } catch (error) {
+        window.clearTimeout(timeout);
+        reject(error);
+      }
+    };
+    iframe.srcdoc = html;
+  });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
 
 export default function AcceptanceActDocumentPanel({
   visitId,
@@ -18,11 +89,13 @@ export default function AcceptanceActDocumentPanel({
   const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pdfAction, setPdfAction] = useState('');
   const [notice, setNotice] = useState('');
 
   const dirty = terms !== savedTerms;
   const effectiveLocked = Boolean(locked);
   const effectiveHasAct = Boolean(hasAct || serverHasAct);
+  const pdfFilename = `Akt-pryimannia-${visitId || 'auto'}.pdf`;
 
   const changeTerms = (value) => {
     setTerms(value);
@@ -96,6 +169,19 @@ export default function AcceptanceActDocumentPanel({
     }
   };
 
+  const prepareDocument = async () => {
+    if (!visitId || !effectiveHasAct) {
+      setNotice('Спочатку збережіть чернетку акта приймання, щоб сформувати документ.');
+      return null;
+    }
+    if (dirty && canEdit && !effectiveLocked) {
+      const ok = await saveTerms({ silent: true });
+      if (!ok) return null;
+    }
+    const response = await api.get(`/api/visit-acceptance-act/document/${visitId}/`, { responseType: 'text' });
+    return response.data;
+  };
+
   const openDocument = async (autoPrint = false) => {
     if (!visitId || !effectiveHasAct) {
       setNotice('Спочатку збережіть чернетку акта приймання, щоб сформувати документ.');
@@ -111,15 +197,14 @@ export default function AcceptanceActDocumentPanel({
     popup.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Акт приймання</title></head><body style="font-family:Arial,sans-serif;padding:32px;color:#0f172a"><b>Формуємо акт приймання...</b></body></html>');
     popup.document.close();
 
-    if (dirty && canEdit && !effectiveLocked) {
-      const ok = await saveTerms({ silent: true });
-      if (!ok) {
-        popup.close();
-        return;
-      }
-    }
-
     try {
+      if (dirty && canEdit && !effectiveLocked) {
+        const ok = await saveTerms({ silent: true });
+        if (!ok) {
+          popup.close();
+          return;
+        }
+      }
       const suffix = autoPrint ? '?print=1' : '';
       const response = await api.get(`/api/visit-acceptance-act/document/${visitId}/${suffix}`, { responseType: 'text' });
       popup.document.open();
@@ -128,6 +213,96 @@ export default function AcceptanceActDocumentPanel({
     } catch (error) {
       popup.close();
       setNotice(error?.response?.data?.detail || 'Не вдалося сформувати акт приймання.');
+    }
+  };
+
+  const createPdfBlob = async () => {
+    const html = await prepareDocument();
+    if (!html) return null;
+    await ensureHtml2Pdf();
+
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.tabIndex = -1;
+    Object.assign(iframe.style, {
+      position: 'fixed',
+      left: '-12000px',
+      top: '0',
+      width: '794px',
+      height: '1123px',
+      border: '0',
+      opacity: '0.01',
+      pointerEvents: 'none',
+      zIndex: '-1',
+    });
+    document.body.appendChild(iframe);
+
+    try {
+      const doc = await waitForIframeReady(iframe, html);
+      const target = doc.querySelector('.sheet') || doc.body;
+      const worker = window.html2pdf().set({
+        margin: 0,
+        filename: pdfFilename,
+        image: { type: 'jpeg', quality: 0.96 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          logging: false,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: Math.max(target.scrollWidth || 794, 794),
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+        pagebreak: { mode: ['css', 'legacy'] },
+      }).from(target).toPdf();
+      return await worker.outputPdf('blob');
+    } finally {
+      iframe.remove();
+    }
+  };
+
+  const downloadPdf = async () => {
+    if (pdfAction) return;
+    setPdfAction('download');
+    setNotice('Формуємо PDF...');
+    try {
+      const blob = await createPdfBlob();
+      if (!blob) return;
+      downloadBlob(blob, pdfFilename);
+      setNotice('PDF готовий і завантажений на пристрій.');
+    } catch {
+      setNotice('Не вдалося створити PDF. Перевірте інтернет і спробуйте ще раз.');
+    } finally {
+      setPdfAction('');
+    }
+  };
+
+  const sharePdf = async () => {
+    if (pdfAction) return;
+    setPdfAction('share');
+    setNotice('Готуємо PDF для відправлення...');
+    try {
+      const blob = await createPdfBlob();
+      if (!blob) return;
+      const file = new File([blob], pdfFilename, { type: 'application/pdf' });
+      const canShareFile = Boolean(navigator.share) && (!navigator.canShare || navigator.canShare({ files: [file] }));
+      if (canShareFile) {
+        await navigator.share({
+          title: `Акт приймання №${visitId}`,
+          text: 'Акт приймання автомобіля',
+          files: [file],
+        });
+        setNotice('PDF передано в меню «Поділитися».');
+      } else {
+        downloadBlob(blob, pdfFilename);
+        setNotice('На цьому пристрої відправлення файлів не підтримується, тому PDF завантажено.');
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') setNotice('Не вдалося підготувати PDF для відправлення. Спробуйте ще раз.');
+    } finally {
+      setPdfAction('');
     }
   };
 
@@ -176,10 +351,13 @@ export default function AcceptanceActDocumentPanel({
 
       {notice && <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600">{notice}</div>}
 
-      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <button type="button" onClick={() => openDocument(false)} disabled={!effectiveHasAct} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-xs font-black uppercase text-blue-700 shadow-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"><Eye size={16}/>Переглянути акт</button>
-        <button type="button" onClick={() => openDocument(true)} disabled={!effectiveHasAct} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-md shadow-blue-100 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"><Printer size={16}/>Друк / PDF</button>
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <button type="button" onClick={() => openDocument(false)} disabled={!effectiveHasAct || Boolean(pdfAction)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-xs font-black uppercase text-blue-700 shadow-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"><Eye size={16}/>Переглянути</button>
+        <button type="button" onClick={() => openDocument(true)} disabled={!effectiveHasAct || Boolean(pdfAction)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><Printer size={16}/>Друк</button>
+        <button type="button" onClick={downloadPdf} disabled={!effectiveHasAct || Boolean(pdfAction)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-md shadow-blue-100 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"><Download size={16}/>{pdfAction === 'download' ? 'Формуємо...' : 'Завантажити PDF'}</button>
+        <button type="button" onClick={sharePdf} disabled={!effectiveHasAct || Boolean(pdfAction)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase text-white shadow-md shadow-emerald-100 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"><Share2 size={16}/>{pdfAction === 'share' ? 'Готуємо...' : 'Поділитися PDF'}</button>
       </div>
+      <p className="mt-3 text-[11px] font-semibold leading-relaxed text-slate-400">PDF формується локально у браузері з цього акта. На телефоні «Поділитися PDF» відкриває системне меню, де можна обрати Telegram, Viber, WhatsApp, пошту або інший застосунок.</p>
     </section>
   );
 }

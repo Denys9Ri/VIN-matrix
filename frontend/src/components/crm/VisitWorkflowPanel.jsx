@@ -48,6 +48,7 @@ const defaultAcceptance = {
   damages: '',
   customer_complaint: '',
   note: '',
+  terms_text: '',
   status: 'draft',
   locked: false,
   can_correct: false,
@@ -119,6 +120,7 @@ export default function VisitWorkflowPanel({
         damages: savedAcceptance.damages || '',
         customer_complaint: savedAcceptance.customer_complaint || '',
         note: savedAcceptance.note || '',
+        terms_text: savedAcceptance.terms_text || '',
         status: savedAcceptance.status || 'draft',
         locked: Boolean(savedAcceptance.locked),
         can_correct: Boolean(savedAcceptance.can_correct),
@@ -293,7 +295,13 @@ export default function VisitWorkflowPanel({
 
           <TextArea disabled={acceptanceLocked} label="Загальна примітка" value={acceptance.note} onChange={(value) => setAcceptance({ ...acceptance, note: value })} placeholder="Що важливо не забути" rows={2} />
 
-          <AcceptanceActDocumentPanel visitId={visitId} locked={acceptanceLocked} hasAct={Boolean(acceptance.id)} />
+          <AcceptanceActDocumentPanel
+            visitId={visitId}
+            locked={acceptanceLocked}
+            hasAct={Boolean(acceptance.id)}
+            termsText={acceptance.terms_text}
+            onTermsChange={(termsText) => setAcceptance((prev) => ({ ...prev, terms_text: termsText }))}
+          />
 
           {!acceptanceLocked && <div className="flex flex-col sm:flex-row gap-2 justify-end">
             <button type="submit" disabled={savingAcceptance} className="bg-slate-900 text-white rounded-xl px-4 py-3 text-xs font-black uppercase disabled:opacity-50 flex items-center justify-center gap-2"><Save size={15}/>{savingAcceptance ? 'Зберігаю...' : 'Зберегти чернетку'}</button>

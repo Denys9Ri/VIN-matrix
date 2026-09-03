@@ -2,9 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Eye, FileSignature, Printer, Save, ShieldCheck } from 'lucide-react';
 import api from '../../api/axios';
 
-export default function AcceptanceActDocumentPanel({ visitId, locked = false, hasAct = false }) {
-  const [terms, setTerms] = useState('');
-  const [savedTerms, setSavedTerms] = useState('');
+export default function AcceptanceActDocumentPanel({
+  visitId,
+  locked = false,
+  hasAct = false,
+  termsText = '',
+  onTermsChange,
+}) {
+  const [terms, setTerms] = useState(termsText || '');
+  const [savedTerms, setSavedTerms] = useState(termsText || '');
   const [defaultTerms, setDefaultTerms] = useState('');
   const [usesDefault, setUsesDefault] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -18,6 +24,11 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
   const effectiveLocked = Boolean(locked);
   const effectiveHasAct = Boolean(hasAct || serverHasAct);
 
+  const changeTerms = (value) => {
+    setTerms(value);
+    onTermsChange?.(value);
+  };
+
   useEffect(() => {
     if (!visitId) return undefined;
     let cancelled = false;
@@ -27,9 +38,10 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
       .then((response) => {
         if (cancelled) return;
         const data = response.data || {};
-        const value = data.terms_text || '';
+        const value = data.terms_text || termsText || '';
         setTerms(value);
         setSavedTerms(value);
+        onTermsChange?.(value);
         setDefaultTerms(data.default_terms || '');
         setUsesDefault(Boolean(data.uses_default));
         setCanEdit(Boolean(data.can_edit));
@@ -40,7 +52,12 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [visitId, locked]);
+  }, [visitId, locked]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (termsText === terms) return;
+    setTerms(termsText || '');
+  }, [termsText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const helperText = useMemo(() => {
     if (effectiveLocked) return 'Текст уже входить у зафіксовану версію акта і не змінюється заднім числом.';
@@ -59,11 +76,14 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
         terms_text: terms,
         save_as_default: saveAsDefault,
       });
-      setSavedTerms(response.data?.terms_text ?? terms);
+      const persisted = response.data?.terms_text ?? terms;
+      setSavedTerms(persisted);
+      setTerms(persisted);
+      onTermsChange?.(persisted);
       setServerHasAct(Boolean(response.data?.has_act ?? true));
       setUsesDefault(false);
       if (saveAsDefault) {
-        setDefaultTerms(terms);
+        setDefaultTerms(persisted);
         setSaveAsDefault(false);
       }
       if (!silent) setNotice(saveAsDefault ? 'Текст збережено і встановлено стандартним для наступних актів.' : 'Текст акта збережено.');
@@ -136,7 +156,7 @@ export default function AcceptanceActDocumentPanel({ visitId, locked = false, ha
             rows={5}
             disabled={effectiveLocked || !canEdit}
             value={terms}
-            onChange={(event) => setTerms(event.target.value)}
+            onChange={(event) => changeTerms(event.target.value)}
             placeholder="Власник СТО може додати тут власні умови, застереження або іншу примітку для друкованого акта."
             className="mt-3 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold leading-relaxed text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500"
           />

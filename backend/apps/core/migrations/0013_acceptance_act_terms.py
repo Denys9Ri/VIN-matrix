@@ -1,4 +1,4 @@
-from django.db import migrations, models
+from django.db import migrations
 
 
 def ensure_acceptance_terms_column(apps, schema_editor):
@@ -21,10 +21,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='company',
-            name='acceptance_act_terms',
-            field=models.TextField(blank=True, default='', verbose_name='Acceptance act terms'),
-        ),
         migrations.RunPython(ensure_acceptance_terms_column, migrations.RunPython.noop),
     ]
